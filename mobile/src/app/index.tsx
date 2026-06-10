@@ -4,16 +4,22 @@ import {
   StyleSheet,
   SafeAreaView,
   Platform,
+  Image,
+  TouchableOpacity,
+  useWindowDimensions,
 } from 'react-native'
 import { useRouter } from 'expo-router'
 import * as Haptics from 'expo-haptics'
 import { Colors } from '@/constants/Colors'
-import { Button } from '@/components/Button'
 import { useAuth } from '@/context/auth'
+
+const LOGO_URI = 'https://res.cloudinary.com/dzbazlq1o/image/upload/f_auto,q_auto/54340_ia8jsd'
 
 export default function WelcomeScreen() {
   const router = useRouter()
   const { setRole } = useAuth()
+  const { width } = useWindowDimensions()
+  const wide = width >= 600
 
   const pickRole = async (role: 'provider' | 'model') => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
@@ -29,43 +35,35 @@ export default function WelcomeScreen() {
   return (
     <View style={styles.container}>
       <SafeAreaView style={styles.safe}>
-        {/* Hero */}
         <View style={styles.hero}>
-          <View style={styles.logoMark}>
-            <Text style={styles.logoEmoji}>🐾</Text>
-          </View>
+          <Image source={{ uri: LOGO_URI }} style={styles.logo} resizeMode="contain" />
           <Text style={styles.appName}>Guinea Pig</Text>
-          <Text style={styles.tagline}>
-            Connect with beauty learners{'\n'}for free practice sessions
-          </Text>
+          <Text style={styles.tagline}>Someone's gotta be the guinea pig</Text>
         </View>
 
-        {/* Role selection */}
         <View style={styles.cards}>
-          <Text style={styles.prompt}>I am a…</Text>
-
-          <RoleCard
-            emoji="✂️"
-            title="Provider"
-            subtitle="I'm learning beauty and want to practise on models"
-            onPress={() => pickRole('provider')}
-            primary
-          />
-
-          <RoleCard
-            emoji="💆"
-            title="Model"
-            subtitle="I'd love free treatments and don't mind being a practice client"
-            onPress={() => pickRole('model')}
-          />
+          <Text style={styles.prompt}>I want to…</Text>
+          <View style={[styles.cardsInner, wide && styles.cardsInnerRow]}>
+            <RoleCard
+              emoji="✂️"
+              title="Provider"
+              subtitle="I'm learning beauty and want to practise on models"
+              onPress={() => pickRole('provider')}
+              wide={wide}
+            />
+            <RoleCard
+              emoji="💆"
+              title="Model"
+              subtitle="I'd love free treatments and don't mind being a practice client"
+              onPress={() => pickRole('model')}
+              wide={wide}
+            />
+          </View>
         </View>
 
-        {/* Login link */}
         <View style={styles.footer}>
           <Text style={styles.footerText}>Already have an account? </Text>
-          <Text style={styles.loginLink} onPress={goLogin}>
-            Log in
-          </Text>
+          <Text style={styles.loginLink} onPress={goLogin}>Log in</Text>
         </View>
       </SafeAreaView>
     </View>
@@ -77,32 +75,27 @@ function RoleCard({
   title,
   subtitle,
   onPress,
-  primary = false,
+  wide,
 }: {
   emoji: string
   title: string
   subtitle: string
   onPress: () => void
-  primary?: boolean
+  wide?: boolean
 }) {
   return (
-    <View
-      style={[styles.card, primary ? styles.cardPrimary : styles.cardSecondary]}
-      onTouchEnd={onPress}
+    <TouchableOpacity
+      style={[styles.card, wide && styles.cardWide]}
+      onPress={onPress}
+      activeOpacity={0.85}
     >
-      <View style={styles.cardInner}>
-        <Text style={styles.cardEmoji}>{emoji}</Text>
-        <View style={styles.cardText}>
-          <Text style={[styles.cardTitle, primary && styles.cardTitlePrimary]}>
-            {title}
-          </Text>
-          <Text style={[styles.cardSubtitle, primary && styles.cardSubtitlePrimary]}>
-            {subtitle}
-          </Text>
-        </View>
-        <Text style={[styles.chevron, primary && styles.chevronPrimary]}>›</Text>
+      <Text style={styles.cardEmoji}>{emoji}</Text>
+      <View style={styles.cardText}>
+        <Text style={styles.cardTitle}>{title}</Text>
+        <Text style={styles.cardSubtitle}>{subtitle}</Text>
       </View>
-    </View>
+      <Text style={styles.chevron}>›</Text>
+    </TouchableOpacity>
   )
 }
 
@@ -121,22 +114,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingTop: Platform.OS === 'android' ? 40 : 20,
   },
-  logoMark: {
+  logo: {
     width: 80,
     height: 80,
-    borderRadius: 24,
-    backgroundColor: Colors.roseDark,
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderRadius: 20,
     marginBottom: 16,
-    shadowColor: Colors.roseDark,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.3,
-    shadowRadius: 16,
-    elevation: 8,
-  },
-  logoEmoji: {
-    fontSize: 36,
   },
   appName: {
     fontSize: 32,
@@ -147,6 +129,7 @@ const styles = StyleSheet.create({
   },
   tagline: {
     fontSize: 15,
+    fontStyle: 'italic',
     color: Colors.muted,
     textAlign: 'center',
     lineHeight: 22,
@@ -163,62 +146,49 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     marginBottom: 4,
   },
+  cardsInner: {
+    gap: 12,
+  },
+  cardsInnerRow: {
+    flexDirection: 'row',
+  },
   card: {
-    borderRadius: 20,
-    padding: 20,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  cardPrimary: {
-    backgroundColor: Colors.roseDark,
-    shadowColor: Colors.roseDark,
-    shadowOpacity: 0.25,
-    shadowRadius: 12,
-    elevation: 6,
-  },
-  cardSecondary: {
-    backgroundColor: Colors.white,
-    shadowColor: Colors.warmDark,
-    borderWidth: 1.5,
-    borderColor: Colors.border,
-  },
-  cardInner: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 14,
+    gap: 12,
+    borderRadius: 16,
+    padding: 16,
+    backgroundColor: Colors.roseDark,
+    shadowColor: Colors.roseDark,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    elevation: 5,
+  },
+  cardWide: {
+    flex: 1,
   },
   cardEmoji: {
-    fontSize: 28,
+    fontSize: 24,
   },
   cardText: {
     flex: 1,
   },
   cardTitle: {
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: '700',
-    color: Colors.warmDark,
+    color: Colors.white,
     marginBottom: 2,
   },
-  cardTitlePrimary: {
-    color: Colors.white,
-  },
   cardSubtitle: {
-    fontSize: 13,
-    color: Colors.muted,
-    lineHeight: 18,
-  },
-  cardSubtitlePrimary: {
+    fontSize: 12,
     color: 'rgba(255,255,255,0.75)',
+    lineHeight: 16,
   },
   chevron: {
-    fontSize: 24,
-    color: Colors.muted,
-    fontWeight: '300',
-  },
-  chevronPrimary: {
+    fontSize: 22,
     color: 'rgba(255,255,255,0.6)',
+    fontWeight: '300',
   },
   footer: {
     flexDirection: 'row',

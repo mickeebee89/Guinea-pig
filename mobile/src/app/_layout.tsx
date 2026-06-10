@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { Stack, useRouter, useSegments } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
+import { StripeProvider } from '@stripe/stripe-react-native'
 import { AuthProvider, useAuth } from '@/context/auth'
 
 function RootRedirect() {
@@ -17,7 +18,7 @@ function RootRedirect() {
     if (!session && !inAuthGroup && segments[0] !== undefined) {
       router.replace('/')
     }
-    if (session && (inAuthGroup || segments[0] === undefined || segments[0] === '')) {
+    if (session && (inAuthGroup || segments[0] === undefined)) {
       router.replace('/(onboarding)/profile-pic')
     }
   }, [session, loading, segments])
@@ -27,15 +28,21 @@ function RootRedirect() {
 
 export default function RootLayout() {
   return (
-    <AuthProvider>
-      <RootRedirect />
-      <StatusBar style="dark" />
-      <Stack screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
-        <Stack.Screen name="index" />
-        <Stack.Screen name="(auth)" />
-        <Stack.Screen name="(onboarding)" />
-        <Stack.Screen name="(app)" />
-      </Stack>
-    </AuthProvider>
+    <StripeProvider
+      publishableKey={process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? ''}
+      merchantIdentifier="merchant.beauty.guineapig"
+      urlScheme="mobile"
+    >
+      <AuthProvider>
+        <RootRedirect />
+        <StatusBar style="dark" />
+        <Stack screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
+          <Stack.Screen name="index" />
+          <Stack.Screen name="(auth)" />
+          <Stack.Screen name="(onboarding)" />
+          <Stack.Screen name="(app)" />
+        </Stack>
+      </AuthProvider>
+    </StripeProvider>
   )
 }

@@ -1,0 +1,1023 @@
+import { useState, useCallback, useEffect, useRef } from 'react'
+import {
+  View,
+  Text,
+  StyleSheet,
+  FlatList,
+  TouchableOpacity,
+  TextInput,
+  Image,
+  Alert,
+  Modal,
+  KeyboardAvoidingView,
+  Platform,
+} from 'react-native'
+import { useLocalSearchParams, useRouter } from 'expo-router'
+import * as Haptics from 'expo-haptics'
+import { Ionicons } from '@expo/vector-icons'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { Colors } from '@/constants/Colors'
+import { useAuth } from '@/context/auth'
+import { supabase } from '@/lib/supabase'
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+type SessionDetail = {
+  id: string
+  provider_id: string
+  model_user_id: string
+  date: string
+  start_time: string
+  end_time: string
+  treatment_id: string | null
+  status: string
+}
+
+type OtherParty = {
+  name: string
+  picUrl: string | null
+  userId: string | null
+}
+
+type Treatment = {
+  id: string
+  name: string
+  category: string
+  materials_cost: number | null
+}
+
+type Message = {
+  id: string
+  session_id: string
+  sender_id: string
+  content: string
+  type: 'text' | 'system'
+  created_at: string
+  read_at: string | null
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+const CATEGORY_COLOR: Record<string, string> = {
+  Nails:       '#C8788A',
+  Lashes:      '#1D9E75',
+  Brows:       '#BA7517',
+  Hair:        '#7B5EA7',
+  Makeup:      '#E8845E',
+  'Spray Tan': '#C99A4E',
+}
+
+function formatTime(iso: string): string {
+  return new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+}
+
+function formatDate(iso: string): string {
+  const d         = new Date(iso)
+  const today     = new Date()
+  const yesterday = new Date(today)
+  yesterday.setDate(today.getDate() - 1)
+  if (d.toDateString() === today.toDateString())     return 'Today'
+  if (d.toDateString() === yesterday.toDateString()) return 'Yesterday'
+  return d.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })
+}
+
+function formatSessionDate(dateStr: string): string {
+  const [y, m, d] = dateStr.split('-').map(Number)
+  return new Date(y, m - 1, d).toLocaleDateString('en-GB', {
+    weekday: 'short', day: 'numeric', month: 'short',
+  })
+}
+
+// ── Screen ────────────────────────────────────────────────────────────────────
+
+export default function ChatScreen() {
+  const { sessionId } = useLocalSearchParams<{ sessionId: string }>()
+  const router         = useRouter()
+  const { session }    = useAuth()
+  const insets         = useSafeAreaInsets()
+  const userId         = session?.user?.id
+  const listRef        = useRef<FlatList>(null)
+
+  // ── State ──────────────────────────────────────────────────────────────────
+
+  const [chat,       setChat]       = useState<SessionDetail | null>(null)
+  const [treatment,  setTreatment]  = useState<Treatment | null>(null)
+  const [otherParty, setOtherParty] = useState<OtherParty | null>(null)
+  const [messages,   setMessages]   = useState<Message[]>([])
+  const [inputText,  setInputText]  = useState('')
+  const [sending,    setSending]    = useState(false)
+  const [loading,    setLoading]    = useState(true)
+  const [menuOpen,   setMenuOpen]   = useState(false)
+
+  // ── Load ───────────────────────────────────────────────────────────────────
+
+  const loadData = useCallback(async () => {
+    if (!sessionId || !userId) return
+    try {
+      // Session
+      const { data: sessionData } = await supabase
+        .from('sessions')
+        .select('id, provider_id, model_user_id, date, start_time, end_time, treatment_id, status')
+        .eq('id', sessionId)
+        .single()
+      if (!sessionData) return
+
+      const s        = sessionData as SessionDetail
+      const isModel  = s.model_user_id === userId
+      setChat(s)
+
+      // Treatment + other party in parallel
+      const [{ data: treatData }, otherData] = await Promise.all([
+        s.treatment_id
+          ? supabase
+              .from('provider_treatments')
+              .select('id, name, category, materials_cost')
+              .eq('id', s.treatment_id)
+              .maybeSingle()
+          : Promise.resolve({ data: null }),
+        isModel
+          ? supabase
+              .from('providers')
+              .select('id, name, profile_pic_url, user_id')
+              .eq('id', s.provider_id)
+              .single()
+          : supabase
+              .from('users')
+              .select('id, first_name, last_initial, profile_pic_url')
+              .eq('id', s.model_user_id)
+              .single(),
+      ])
+
+      if (treatData) setTreatment(treatData as Treatment)
+
+      const od = (otherData as any).data
+      if (od) {
+        setOtherParty(
+          isModel
+            ? { name: od.name ?? 'Provider', picUrl: od.profile_pic_url ?? null, userId: od.user_id ?? null }
+            : { name: od.first_name ? `${od.first_name} ${od.last_initial ?? ''}.`.trim() : 'Model', picUrl: od.profile_pic_url ?? null, userId: s.model_user_id }
+        )
+      }
+
+      // Messages (only if accepted)
+      if (s.status === 'accepted') {
+        const { data: msgData } = await supabase
+          .from('messages')
+          .select('id, session_id, sender_id, content, type, created_at, read_at')
+          .eq('session_id', sessionId)
+          .order('created_at', { ascending: false })  // newest first → inverted FlatList
+
+        setMessages((msgData ?? []) as Message[])
+
+        // Mark incoming messages as read
+        await supabase
+          .from('messages')
+          .update({ read_at: new Date().toISOString() })
+          .eq('session_id', sessionId)
+          .neq('sender_id', userId)
+          .is('read_at', null)
+          .then(() => {})
+      }
+    } catch {
+      // silent
+    } finally {
+      setLoading(false)
+    }
+  }, [sessionId, userId])
+
+  useEffect(() => { loadData() }, [loadData])
+
+  // ── Realtime ───────────────────────────────────────────────────────────────
+
+  useEffect(() => {
+    if (!sessionId || !userId || chat?.status !== 'accepted') return
+
+    const channel = supabase
+      .channel(`chat-${sessionId}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'messages', filter: `session_id=eq.${sessionId}` },
+        async (payload) => {
+          const newMsg = payload.new as Message
+          setMessages(prev => [newMsg, ...prev])
+          if (newMsg.sender_id !== userId) {
+            await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
+            supabase
+              .from('messages')
+              .update({ read_at: new Date().toISOString() })
+              .eq('id', newMsg.id)
+              .then(() => {})
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'messages', filter: `session_id=eq.${sessionId}` },
+        (payload) => {
+          const updated = payload.new as Message
+          setMessages(prev => prev.map(m => m.id === updated.id ? updated : m))
+        }
+      )
+      .subscribe()
+
+    return () => { supabase.removeChannel(channel) }
+  }, [sessionId, userId, chat?.status])
+
+  // ── Send message ───────────────────────────────────────────────────────────
+
+  const sendMessage = async () => {
+    const text = inputText.trim()
+    if (!text || !userId || !sessionId || sending) return
+    setSending(true)
+    setInputText('')
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
+
+    try {
+      await supabase.from('messages').insert({
+        session_id: sessionId,
+        sender_id:  userId,
+        content:    text,
+        type:       'text',
+      })
+    } catch {
+      setInputText(text)  // restore on failure
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)
+    } finally {
+      setSending(false)
+    }
+  }
+
+  // ── Block / Report ─────────────────────────────────────────────────────────
+
+  const handleBlock = async () => {
+    setMenuOpen(false)
+    const name = otherParty?.name ?? 'this user'
+    Alert.alert(
+      `Block ${name}?`,
+      "They won't be able to message you. You can unblock from settings.",
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Block',
+          style: 'destructive',
+          onPress: async () => {
+            await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning)
+            if (otherParty?.userId && userId) {
+              supabase.from('user_blocks')
+                .insert({ blocker_id: userId, blocked_id: otherParty.userId })
+                .then(() => {})
+            }
+            Alert.alert('Blocked', `${name} has been blocked.`)
+          },
+        },
+      ]
+    )
+  }
+
+  const handleReport = async () => {
+    setMenuOpen(false)
+    const name = otherParty?.name ?? 'this user'
+    Alert.alert(
+      `Report ${name}?`,
+      "We'll review this conversation and take action if our guidelines were broken.",
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Report',
+          style: 'destructive',
+          onPress: async () => {
+            await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning)
+            if (otherParty?.userId && userId) {
+              supabase.from('reports')
+                .insert({ reporter_id: userId, reported_id: otherParty.userId, session_id: sessionId })
+                .then(() => {})
+            }
+            Alert.alert('Reported', 'Thank you. Our team will review this.')
+          },
+        },
+      ]
+    )
+  }
+
+  const goBack = async () => {
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+    router.back()
+  }
+
+  // ── Derived ────────────────────────────────────────────────────────────────
+
+  const isAccepted     = chat?.status === 'accepted'
+  const hasMaterialCost = (treatment?.materials_cost ?? 0) > 0
+  const initials       = (otherParty?.name ?? '')
+    .split(' ').map(w => w[0] ?? '').join('').slice(0, 2).toUpperCase()
+
+  // Find the last message sent by the current user (for read receipt)
+  const lastSentIndex = messages.findIndex(m => m.sender_id === userId)
+  const lastSentIsRead = lastSentIndex >= 0 && messages[lastSentIndex].read_at !== null
+
+  // ── Loading ────────────────────────────────────────────────────────────────
+
+  if (loading) {
+    return (
+      <View style={[styles.container, styles.centred]}>
+        <View style={{ paddingTop: insets.top }} />
+        <Text style={styles.loadingText}>Loading…</Text>
+      </View>
+    )
+  }
+
+  // ── Locked state ───────────────────────────────────────────────────────────
+
+  if (!isAccepted) {
+    const statusLabel =
+      chat?.status === 'pending'  ? 'Awaiting acceptance' :
+      chat?.status === 'declined' ? 'Application not accepted' :
+      'Chat unavailable'
+
+    return (
+      <View style={styles.container}>
+        <View style={[styles.chatHeader, { paddingTop: insets.top + 8 }]}>
+          <TouchableOpacity style={styles.headerBackBtn} onPress={goBack} activeOpacity={0.75}>
+            <Ionicons name="chevron-back" size={20} color={Colors.roseDark} />
+          </TouchableOpacity>
+          <View style={styles.headerInfo}>
+            <Text style={styles.headerName} numberOfLines={1}>
+              {otherParty?.name ?? 'Chat'}
+            </Text>
+            {chat?.date && (
+              <Text style={styles.headerSub}>{formatSessionDate(chat.date)}</Text>
+            )}
+          </View>
+          <View style={styles.headerRight} />
+        </View>
+
+        <View style={[styles.lockedWrap, { paddingBottom: insets.bottom + 24 }]}>
+          <View style={styles.lockedIconCircle}>
+            <Ionicons name="lock-closed" size={36} color={Colors.muted} />
+          </View>
+          <Text style={styles.lockedTitle}>Chat locked</Text>
+          <Text style={styles.lockedSub}>
+            {chat?.status === 'pending'
+              ? `Your chat will unlock once ${otherParty?.name ?? 'the provider'} accepts your application.`
+              : 'This chat is no longer available.'}
+          </Text>
+          {chat?.date && treatment && (
+            <View style={styles.lockedMeta}>
+              <View style={[
+                styles.lockedMetaStripe,
+                { backgroundColor: CATEGORY_COLOR[treatment.category] ?? Colors.muted },
+              ]} />
+              <Text style={styles.lockedMetaText}>
+                {formatSessionDate(chat.date)} · {treatment.name}
+              </Text>
+            </View>
+          )}
+          <View style={styles.lockedStatusPill}>
+            <Text style={styles.lockedStatusText}>{statusLabel}</Text>
+          </View>
+        </View>
+      </View>
+    )
+  }
+
+  // ── Chat render ────────────────────────────────────────────────────────────
+
+  return (
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
+      {/* ── Header ── */}
+      <View style={[styles.chatHeader, { paddingTop: insets.top + 8 }]}>
+        <TouchableOpacity style={styles.headerBackBtn} onPress={goBack} activeOpacity={0.75}>
+          <Ionicons name="chevron-back" size={20} color={Colors.roseDark} />
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.headerInfo} activeOpacity={0.8}>
+          {otherParty?.picUrl ? (
+            <Image source={{ uri: otherParty.picUrl }} style={styles.headerAvatar} />
+          ) : (
+            <View style={styles.headerAvatarPlaceholder}>
+              <Text style={styles.headerAvatarInitials}>{initials}</Text>
+            </View>
+          )}
+          <View>
+            <Text style={styles.headerName} numberOfLines={1}>{otherParty?.name ?? 'Chat'}</Text>
+            {chat?.date && (
+              <Text style={styles.headerSub}>{formatSessionDate(chat.date)}</Text>
+            )}
+          </View>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.menuBtn}
+          onPress={async () => {
+            await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+            setMenuOpen(true)
+          }}
+          activeOpacity={0.75}
+        >
+          <Ionicons name="ellipsis-vertical" size={20} color={Colors.warmDark} />
+        </TouchableOpacity>
+      </View>
+
+      {/* ── Safety pill ── */}
+      <View style={styles.safetyPill}>
+        <Ionicons name="shield-checkmark-outline" size={14} color={Colors.roseDark} />
+        <Text style={styles.safetyText}>
+          Keep chats in Guinea Pig — it protects you both
+        </Text>
+      </View>
+
+      {/* ── Messages ── */}
+      <FlatList
+        ref={listRef}
+        inverted
+        data={messages}
+        keyExtractor={m => m.id}
+        style={styles.messageList}
+        contentContainerStyle={styles.messageContent}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        renderItem={({ item, index }) => {
+          const isMine  = item.sender_id === userId
+          const isFirst = index === messages.length - 1  // oldest visible = top
+          const prevMsg = index < messages.length - 1 ? messages[index + 1] : null
+          const showDate =
+            !prevMsg ||
+            new Date(prevMsg.created_at).toDateString() !== new Date(item.created_at).toDateString()
+          const showReadReceipt = isMine && index === lastSentIndex && lastSentIsRead
+
+          // Group: don't show avatar if same sender as next message (visually below in inverted)
+          const nextMsg      = index > 0 ? messages[index - 1] : null
+          const isGroupedTop = nextMsg?.sender_id === item.sender_id && item.type === 'text'
+
+          if (item.type === 'system') {
+            return (
+              <View style={styles.systemMsgWrap}>
+                <Text style={styles.systemMsgText}>{item.content}</Text>
+              </View>
+            )
+          }
+
+          return (
+            <>
+              {showDate && (
+                <View style={styles.dateSeparator}>
+                  <View style={styles.dateLine} />
+                  <Text style={styles.dateLabel}>{formatDate(item.created_at)}</Text>
+                  <View style={styles.dateLine} />
+                </View>
+              )}
+              <View style={[styles.bubbleRow, isMine && styles.bubbleRowMine]}>
+                {/* Received: show avatar placeholder when not grouped */}
+                {!isMine && !isGroupedTop ? (
+                  <View style={styles.bubbleSenderAvatar}>
+                    {otherParty?.picUrl ? (
+                      <Image source={{ uri: otherParty.picUrl }} style={styles.miniAvatar} />
+                    ) : (
+                      <View style={styles.miniAvatarPlaceholder}>
+                        <Text style={styles.miniAvatarInitials}>{initials[0] ?? '?'}</Text>
+                      </View>
+                    )}
+                  </View>
+                ) : !isMine ? (
+                  <View style={styles.avatarSpacer} />
+                ) : null}
+
+                <View style={styles.bubbleGroup}>
+                  <View style={[
+                    styles.bubble,
+                    isMine ? styles.bubbleMine : styles.bubbleTheirs,
+                    isGroupedTop && (isMine ? styles.bubbleMineGrouped : styles.bubbleTheirsGrouped),
+                  ]}>
+                    <Text style={[styles.bubbleText, isMine && styles.bubbleTextMine]}>
+                      {item.content}
+                    </Text>
+                  </View>
+                  <View style={[styles.bubbleMeta, isMine && styles.bubbleMetaMine]}>
+                    <Text style={styles.bubbleTime}>{formatTime(item.created_at)}</Text>
+                    {showReadReceipt && (
+                      <Text style={styles.readReceipt}> · Read</Text>
+                    )}
+                  </View>
+                </View>
+              </View>
+            </>
+          )
+        }}
+        ListFooterComponent={
+          hasMaterialCost ? (
+            <View style={styles.materialsNotice}>
+              <Ionicons name="information-circle-outline" size={16} color={Colors.roseDark} />
+              <Text style={styles.materialsText}>
+                Reminder: {treatment!.name} has a £{treatment!.materials_cost!.toFixed(2)} materials cost, payable to the provider at the session.
+              </Text>
+            </View>
+          ) : null
+        }
+      />
+
+      {/* ── Input bar ── */}
+      <View style={[styles.inputBar, { paddingBottom: Math.max(insets.bottom, 12) }]}>
+        <TextInput
+          style={styles.input}
+          value={inputText}
+          onChangeText={setInputText}
+          placeholder="Type a message…"
+          placeholderTextColor={Colors.muted}
+          multiline
+          maxLength={1000}
+          returnKeyType="default"
+        />
+        <TouchableOpacity
+          style={[styles.sendBtn, (!inputText.trim() || sending) && styles.sendBtnDisabled]}
+          disabled={!inputText.trim() || sending}
+          onPress={sendMessage}
+          activeOpacity={0.85}
+        >
+          <Ionicons name="send" size={18} color={Colors.white} />
+        </TouchableOpacity>
+      </View>
+
+      {/* ── Block / Report modal ── */}
+      <Modal
+        visible={menuOpen}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setMenuOpen(false)}
+      >
+        <View style={styles.menuOuter}>
+          <TouchableOpacity
+            style={styles.menuBackdrop}
+            onPress={() => setMenuOpen(false)}
+            activeOpacity={1}
+          />
+          <View style={[styles.menuSheet, { paddingBottom: Math.max(insets.bottom, 16) }]}>
+            <View style={styles.menuHandle} />
+            <Text style={styles.menuTitle}>{otherParty?.name ?? 'User'}</Text>
+
+            <TouchableOpacity style={styles.menuItem} onPress={handleBlock} activeOpacity={0.8}>
+              <View style={[styles.menuItemIcon, { backgroundColor: '#FEF2F2' }]}>
+                <Ionicons name="ban-outline" size={20} color="#DC2626" />
+              </View>
+              <View style={styles.menuItemText}>
+                <Text style={styles.menuItemLabel}>Block {otherParty?.name}</Text>
+                <Text style={styles.menuItemSub}>They won't be able to message you</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color={Colors.muted} />
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.menuItem} onPress={handleReport} activeOpacity={0.8}>
+              <View style={[styles.menuItemIcon, { backgroundColor: '#FFF7ED' }]}>
+                <Ionicons name="flag-outline" size={20} color="#EA580C" />
+              </View>
+              <View style={styles.menuItemText}>
+                <Text style={styles.menuItemLabel}>Report {otherParty?.name}</Text>
+                <Text style={styles.menuItemSub}>Report a safety or conduct concern</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color={Colors.muted} />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.menuCancel}
+              onPress={async () => {
+                await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+                setMenuOpen(false)
+              }}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.menuCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+    </KeyboardAvoidingView>
+  )
+}
+
+// ── Styles ────────────────────────────────────────────────────────────────────
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: Colors.cream },
+  centred:   { alignItems: 'center', justifyContent: 'center' },
+  loadingText: { fontSize: 15, color: Colors.muted },
+
+  // Header
+  chatHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+    backgroundColor: Colors.cream,
+    gap: 8,
+  },
+  headerBackBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: Colors.inputBg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerInfo: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  headerAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+  },
+  headerAvatarPlaceholder: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: Colors.softPink,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerAvatarInitials: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: Colors.roseDark,
+  },
+  headerName: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: Colors.warmDark,
+    letterSpacing: -0.2,
+  },
+  headerSub: {
+    fontSize: 11,
+    color: Colors.muted,
+    marginTop: 1,
+  },
+  headerRight: { width: 36 },
+  menuBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: Colors.inputBg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  // Safety pill
+  safetyPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginHorizontal: 12,
+    marginTop: 8,
+    marginBottom: 4,
+    backgroundColor: Colors.softPink + '35',
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderWidth: 1,
+    borderColor: Colors.softPink,
+  },
+  safetyText: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: '500',
+    color: Colors.roseDark,
+    lineHeight: 16,
+  },
+
+  // Message list
+  messageList:    { flex: 1 },
+  messageContent: { paddingHorizontal: 12, paddingVertical: 8 },
+
+  // Date separator
+  dateSeparator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 12,
+    gap: 8,
+  },
+  dateLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: Colors.border,
+  },
+  dateLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: Colors.muted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+
+  // Bubbles
+  bubbleRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    marginBottom: 4,
+    gap: 6,
+  },
+  bubbleRowMine: {
+    flexDirection: 'row-reverse',
+  },
+  bubbleSenderAvatar: {},
+  avatarSpacer: { width: 28 },
+  miniAvatar: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+  },
+  miniAvatarPlaceholder: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: Colors.softPink,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  miniAvatarInitials: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: Colors.roseDark,
+  },
+  bubbleGroup: { maxWidth: '72%' },
+  bubble: {
+    borderRadius: 18,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+  },
+  bubbleMine: {
+    backgroundColor: Colors.roseDark,
+    borderBottomRightRadius: 6,
+  },
+  bubbleMineGrouped: {
+    borderBottomRightRadius: 18,
+    borderTopRightRadius: 6,
+  },
+  bubbleTheirs: {
+    backgroundColor: Colors.white,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderBottomLeftRadius: 6,
+  },
+  bubbleTheirsGrouped: {
+    borderBottomLeftRadius: 18,
+    borderTopLeftRadius: 6,
+  },
+  bubbleText: {
+    fontSize: 15,
+    color: Colors.warmDark,
+    lineHeight: 21,
+  },
+  bubbleTextMine: {
+    color: Colors.white,
+  },
+  bubbleMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 3,
+    paddingHorizontal: 2,
+  },
+  bubbleMetaMine: { justifyContent: 'flex-end' },
+  bubbleTime: {
+    fontSize: 10,
+    color: Colors.muted,
+  },
+  readReceipt: {
+    fontSize: 10,
+    color: Colors.roseDark,
+    fontWeight: '600',
+  },
+
+  // System message
+  systemMsgWrap: {
+    alignItems: 'center',
+    marginVertical: 8,
+    paddingHorizontal: 20,
+  },
+  systemMsgText: {
+    fontSize: 12,
+    color: Colors.muted,
+    textAlign: 'center',
+    lineHeight: 16,
+    fontStyle: 'italic',
+  },
+
+  // Materials notice (FlatList footer = visual top of inverted list)
+  materialsNotice: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    backgroundColor: Colors.softPink + '30',
+    borderRadius: 14,
+    padding: 12,
+    marginTop: 8,
+    marginBottom: 4,
+    borderWidth: 1,
+    borderColor: Colors.softPink,
+  },
+  materialsText: {
+    flex: 1,
+    fontSize: 12,
+    color: Colors.roseDark,
+    lineHeight: 17,
+    fontWeight: '500',
+  },
+
+  // Input bar
+  inputBar: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+    backgroundColor: Colors.cream,
+  },
+  input: {
+    flex: 1,
+    backgroundColor: Colors.white,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    paddingHorizontal: 16,
+    paddingVertical: Platform.OS === 'android' ? 8 : 10,
+    fontSize: 15,
+    color: Colors.warmDark,
+    maxHeight: 100,
+    lineHeight: 20,
+  },
+  sendBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: Colors.roseDark,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: Colors.roseDark,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 3,
+    flexShrink: 0,
+  },
+  sendBtnDisabled: {
+    backgroundColor: Colors.muted,
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+
+  // Locked state
+  lockedWrap: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 36,
+  },
+  lockedIconCircle: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    backgroundColor: Colors.inputBg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+  },
+  lockedTitle: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: Colors.warmDark,
+    letterSpacing: -0.4,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  lockedSub: {
+    fontSize: 14,
+    color: Colors.muted,
+    textAlign: 'center',
+    lineHeight: 21,
+    marginBottom: 20,
+  },
+  lockedMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: Colors.white,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    marginBottom: 16,
+  },
+  lockedMetaStripe: {
+    width: 3,
+    height: 16,
+    borderRadius: 1.5,
+  },
+  lockedMetaText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: Colors.warmDark,
+  },
+  lockedStatusPill: {
+    backgroundColor: Colors.inputBg,
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  lockedStatusText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: Colors.muted,
+  },
+
+  // Block / Report modal
+  menuOuter: { flex: 1, justifyContent: 'flex-end' },
+  menuBackdrop: {
+    position: 'absolute',
+    top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+  },
+  menuSheet: {
+    backgroundColor: Colors.cream,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 16,
+  },
+  menuHandle: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: Colors.border,
+    alignSelf: 'center',
+    marginBottom: 16,
+  },
+  menuTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: Colors.warmDark,
+    letterSpacing: -0.3,
+    marginBottom: 12,
+    paddingHorizontal: 4,
+  },
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: Colors.white,
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  menuItemIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  menuItemText: { flex: 1 },
+  menuItemLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.warmDark,
+    marginBottom: 2,
+  },
+  menuItemSub: {
+    fontSize: 12,
+    color: Colors.muted,
+  },
+  menuCancel: {
+    backgroundColor: Colors.white,
+    borderRadius: 16,
+    paddingVertical: 16,
+    alignItems: 'center',
+    marginTop: 4,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  menuCancelText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: Colors.warmDark,
+  },
+})
