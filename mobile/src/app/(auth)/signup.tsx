@@ -65,14 +65,29 @@ export default function SignupScreen() {
     }
 
     if (data.user) {
+      const cleanFirst   = firstName.trim()
+      const cleanInitial = lastInitial.trim().toUpperCase().charAt(0)
+
       await supabase.from('users').insert({
         id:           data.user.id,
         email:        email.trim().toLowerCase(),
-        first_name:   firstName.trim(),
-        last_initial: lastInitial.trim().toUpperCase().charAt(0),
+        first_name:   cleanFirst,
+        last_initial: cleanInitial,
         role,
         region:       'UK',
       })
+
+      if (role === 'provider') {
+        await supabase.from('providers').insert({
+          user_id:      data.user.id,
+          name:         `${cleanFirst} ${cleanInitial}.`,
+          is_published: false,
+          is_verified:  false,
+          rating:       0,
+          review_count: 0,
+        })
+      }
+
       setRole(role)
     }
 

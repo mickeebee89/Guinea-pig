@@ -74,13 +74,11 @@ export default function ProfilePicScreen() {
     const fileName = `${session.user.id}/profile.${ext}`
     const contentType = `image/${ext === 'jpg' ? 'jpeg' : ext}`
 
-    const response = await fetch(imageUri)
-    const blob = await response.blob()
-    const arrayBuffer = await blob.arrayBuffer()
+    const blob = await (await fetch(imageUri)).blob()
 
     const { data: uploadData, error: uploadError } = await supabase.storage
       .from('profile-pics')
-      .upload(fileName, arrayBuffer, { contentType, upsert: true })
+      .upload(fileName, blob, { contentType, upsert: true })
 
     if (uploadError) {
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)

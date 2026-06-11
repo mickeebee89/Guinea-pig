@@ -175,13 +175,43 @@ export default function ProviderDashboardScreen() {
         .eq('user_id', userId)
         .single()
 
+      let resolvedProv = provData as Provider | null
+
       if (provErr || !provData) {
-        setLoading(false)
-        setRefreshing(false)
-        return
+        // Row missing — create it now using the user's name from the users table
+        const { data: userData } = await supabase
+          .from('users')
+          .select('first_name, last_initial')
+          .eq('id', userId)
+          .single()
+
+        const displayName = userData
+          ? `${(userData as any).first_name ?? ''} ${(userData as any).last_initial ?? ''}.`.trim()
+          : ''
+
+        const { data: created, error: createErr } = await supabase
+          .from('providers')
+          .insert({
+            user_id:      userId,
+            name:         displayName,
+            is_published: false,
+            is_verified:  false,
+            rating:       0,
+            review_count: 0,
+          })
+          .select('id, name, profile_pic_url, is_verified, rating, review_count, is_published')
+          .single()
+
+        if (createErr || !created) {
+          setLoading(false)
+          setRefreshing(false)
+          return
+        }
+        resolvedProv = created as Provider
       }
-      setProvider(provData as Provider)
-      const providerId = (provData as any).id
+
+      setProvider(resolvedProv!)
+      const providerId = (resolvedProv as any).id
 
       // Phase 2: parallel fetches
       const today = todayKey()

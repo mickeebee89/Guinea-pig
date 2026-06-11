@@ -127,11 +127,10 @@ export default function ModelProfileScreen() {
     const ext      = uri.split('.').pop()?.toLowerCase() ?? 'jpg'
     const fileName = `${userId}/profile.${ext}`
     try {
-      const blob   = await (await fetch(uri)).blob()
-      const buffer = await blob.arrayBuffer()
+      const blob = await (await fetch(uri)).blob()
       const { data: up, error } = await supabase.storage
         .from('profile-pics')
-        .upload(fileName, buffer, { contentType: `image/${ext === 'jpg' ? 'jpeg' : ext}`, upsert: true })
+        .upload(fileName, blob, { contentType: `image/${ext === 'jpg' ? 'jpeg' : ext}`, upsert: true })
       if (!error && up) {
         const { data: urlData } = supabase.storage.from('profile-pics').getPublicUrl(up.path)
         await supabase.from('users').update({ profile_pic_url: urlData.publicUrl }).eq('id', userId)
@@ -170,11 +169,10 @@ export default function ModelProfileScreen() {
       try {
         const ext      = asset.uri.split('.').pop()?.toLowerCase() ?? 'jpg'
         const fileName = `${userId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
-        const blob   = await (await fetch(asset.uri)).blob()
-        const buffer = await blob.arrayBuffer()
+        const blob = await (await fetch(asset.uri)).blob()
         const { data: up, error } = await supabase.storage
           .from('model-photos')
-          .upload(fileName, buffer, { contentType: `image/${ext === 'jpg' ? 'jpeg' : ext}` })
+          .upload(fileName, blob, { contentType: `image/${ext === 'jpg' ? 'jpeg' : ext}` })
         if (!error && up) {
           const { data: urlData } = supabase.storage.from('model-photos').getPublicUrl(up.path)
           const { data: inserted } = await supabase
