@@ -15,6 +15,7 @@ import { Colors } from '@/constants/Colors'
 import { Button } from '@/components/Button'
 import { Input } from '@/components/Input'
 import { supabase } from '@/lib/supabase'
+import { pendingAuth } from '@/lib/pendingAuth'
 import { useAuth } from '@/context/auth'
 
 export default function SignupScreen() {
@@ -93,7 +94,18 @@ export default function SignupScreen() {
 
     await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
     setLoading(false)
-    router.replace('/(onboarding)/profile-pic')
+
+    if (!data.session) {
+      // Supabase email confirmation is enabled — hold credentials in memory
+      // so the confirm-email screen can verify the user signed in after confirming
+      pendingAuth.set(email.trim().toLowerCase(), password)
+      router.replace({
+        pathname: '/(auth)/confirm-email' as any,
+        params:   { email: email.trim().toLowerCase(), role },
+      })
+    } else {
+      router.replace('/(onboarding)/profile-pic')
+    }
   }
 
   const goLogin = async () => {
