@@ -213,7 +213,7 @@ export default function ProviderShopScreen() {
         >
           <Text style={styles.backBtnFallbackText}>‹ Back</Text>
         </TouchableOpacity>
-        <Text style={styles.errorEmoji}>🐾</Text>
+        <Text style={styles.errorEmoji}>🐹</Text>
         <Text style={styles.errorTitle}>Provider not found</Text>
         <Text style={styles.errorSub}>This profile may no longer be available.</Text>
       </View>

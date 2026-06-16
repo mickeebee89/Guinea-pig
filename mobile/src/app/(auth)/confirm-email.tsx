@@ -18,7 +18,7 @@ import { useAuth } from '@/context/auth'
 export default function ConfirmEmailScreen() {
   const router = useRouter()
   const { setRole } = useAuth()
-  const { email, role } = useLocalSearchParams<{ email: string; role: string }>()
+  const { email, role, first, initial } = useLocalSearchParams<{ email: string; role: string; first: string; initial: string }>()
 
   const [checking,  setChecking]  = useState(false)
   const [resending, setResending] = useState(false)
@@ -65,6 +65,35 @@ export default function ConfirmEmailScreen() {
       if (data.session) {
         pendingAuth.clear()
         if (role) setRole(role as 'model' | 'provider')
+
+        // Ensure profile rows exist — they may have failed during signUp() if email
+        // confirmation was required (no session at that point, so RLS blocked the inserts)
+        try {
+          const uid = data.session.user.id
+          await supabase.from('users').upsert({
+            id:           uid,
+            email:        data.session.user.email ?? email ?? '',
+            role:         role || 'model',
+            first_name:   first || '',
+            last_initial: initial || null,
+            region:       'UK',
+          }, { onConflict: 'id', ignoreDuplicates: true })
+
+          if (role === 'provider') {
+            const displayName = first && initial ? `${first} ${initial}.` : (first || 'Stylist')
+            await supabase.from('providers').upsert({
+              user_id:      uid,
+              name:         displayName,
+              is_published: false,
+              is_verified:  false,
+              rating:       0,
+              review_count: 0,
+            }, { onConflict: 'user_id', ignoreDuplicates: true })
+          }
+        } catch (e) {
+          console.log('[ConfirmEmail] profile upsert error:', e)
+        }
+
         await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
         if (role === 'provider') {
           router.replace('/(app)/provider-dashboard' as any)

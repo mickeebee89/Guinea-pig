@@ -112,7 +112,7 @@ export default function SignupScreen() {
       pendingAuth.set(email.trim().toLowerCase(), password)
       router.replace({
         pathname: '/(auth)/confirm-email' as any,
-        params:   { email: email.trim().toLowerCase(), role },
+        params:   { email: email.trim().toLowerCase(), role, first: cleanFirst, initial: cleanInitial },
       })
     } else {
       if (role === 'provider') {

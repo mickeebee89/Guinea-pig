@@ -50,6 +50,15 @@ export default function ModelHomeScreen() {
   const { session, role: authRole } = useAuth()
   const userId = session?.user?.id
 
+  // Hard redirect — fires immediately if authRole is already 'provider' (e.g. on app restart
+  // or after login.tsx sets the role). This fires before fetchData and before the DB query.
+  useEffect(() => {
+    if (authRole === 'provider') {
+      console.log('[ModelHome] authRole=provider → hard redirect to provider-dashboard')
+      router.replace('/(app)/provider-dashboard' as any)
+    }
+  }, [authRole])
+
   const [providers, setProviders]         = useState<Provider[]>([])
   const [favouriteIds, setFavouriteIds]   = useState<Set<string>>(new Set())
   const [selectedCategory, setSelectedCategory] = useState('All')
@@ -61,17 +70,21 @@ export default function ModelHomeScreen() {
   const [unreadCount, setUnreadCount]     = useState(0)
 
   const fetchData = useCallback(async () => {
+    console.log('[ModelHome] fetchData — userId:', userId, 'authRole:', authRole)
     if (!userId) { setLoading(false); setRoleChecked(true); return }
 
     try {
       // Check role first — redirect providers before loading model home data
-      const { data: userData } = await supabase
+      const { data: userData, error: userErr } = await supabase
         .from('users')
         .select('role, profile_pic_url')
         .eq('id', userId)
         .single()
 
+      console.log('[ModelHome] users DB — role:', userData?.role, 'error:', userErr?.message)
+
       if (userData?.role === 'provider' || authRole === 'provider') {
+        console.log('[ModelHome] redirecting provider to dashboard')
         router.replace('/(app)/provider-dashboard' as any)
         return
       }
@@ -118,7 +131,7 @@ export default function ModelHomeScreen() {
     } finally {
       setLoading(false)
     }
-  }, [userId])
+  }, [userId, authRole])
 
   useEffect(() => { fetchData() }, [fetchData])
 
@@ -163,6 +176,15 @@ export default function ModelHomeScreen() {
   })
 
   const favouriteProviders = providers.filter(p => favouriteIds.has(p.id))
+
+  // Hard block — don't render model home UI if user is a provider
+  if (authRole === 'provider') {
+    return (
+      <View style={[styles.container, { alignItems: 'center', justifyContent: 'center' }]}>
+        <ActivityIndicator color={Colors.roseDark} />
+      </View>
+    )
+  }
 
   // Prevent flash of model home for providers while role check is in-flight
   if (!roleChecked) {
@@ -309,7 +331,7 @@ export default function ModelHomeScreen() {
               </View>
             ) : filtered.length === 0 ? (
               <View style={styles.emptyState}>
-                <Text style={styles.emptyStateEmoji}>✨</Text>
+                <Text style={styles.emptyStateEmoji}>🐹</Text>
                 <Text style={styles.emptyStateTitle}>No stylists yet</Text>
                 <Text style={styles.emptyStateText}>
                   We're growing! Check back soon — new stylists join every week.

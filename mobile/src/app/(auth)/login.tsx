@@ -59,7 +59,25 @@ export default function LoginScreen() {
         .eq('id', loginData.user?.id ?? '')
         .maybeSingle()
       userRole = ud?.role ?? null
-    } catch {}
+      console.log('[Login] users table role:', userRole, 'userId:', loginData.user?.id)
+    } catch (e) {
+      console.log('[Login] users table query error:', e)
+    }
+
+    // Fallback: no users row — check providers table directly
+    if (!userRole) {
+      try {
+        const { data: pd } = await supabase
+          .from('providers')
+          .select('id')
+          .eq('user_id', loginData.user?.id ?? '')
+          .maybeSingle()
+        if (pd) {
+          console.log('[Login] no users row but providers row exists → provider')
+          userRole = 'provider'
+        }
+      } catch {}
+    }
 
     if (userRole) setRole(userRole as any)
     await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)

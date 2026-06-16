@@ -11,6 +11,7 @@ function RootRedirect() {
 
   useEffect(() => {
     if (loading || !roleLoaded) return
+    console.log('[RootRedirect] role:', role, 'session:', !!session, 'segments:', segments)
     const inAuthGroup = segments[0] === '(auth)'
 
     if (!session && !inAuthGroup && segments[0] !== undefined) {
@@ -18,8 +19,10 @@ function RootRedirect() {
     }
     if (session && segments[0] !== '(app)') {
       if (role === 'provider') {
+        console.log('[RootRedirect] → provider-dashboard')
         router.replace('/(app)/provider-dashboard' as any)
       } else {
+        console.log('[RootRedirect] → model home')
         router.replace('/(app)')
       }
     }
