@@ -170,10 +170,19 @@ export default function ModelProfileScreen() {
     for (const asset of toAdd) {
       try {
         const fileName = `${userId}/${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`
-        const manipulated = await ImageManipulator.manipulateAsync(asset.uri, [], { base64: true })
+        const manipulated = await ImageManipulator.manipulateAsync(
+          asset.uri,
+          [{ resize: { width: 1080 } }],
+          { base64: true, compress: 0.8, format: ImageManipulator.SaveFormat.JPEG },
+        )
+        if (!manipulated.base64) {
+          anyFailed = true
+          Alert.alert('Upload failed', 'Could not process this image.')
+          continue
+        }
         const { data: up, error: uploadError } = await supabase.storage
           .from('model-photos')
-          .upload(fileName, decode(manipulated.base64!), { contentType: 'image/jpeg' })
+          .upload(fileName, decode(manipulated.base64), { contentType: 'image/jpeg' })
         if (uploadError) {
           anyFailed = true
           Alert.alert('Upload failed', uploadError.message)
@@ -278,10 +287,7 @@ export default function ModelProfileScreen() {
       {
         text: 'Sign out',
         style: 'destructive',
-        onPress: async () => {
-          await signOut()
-          router.replace('/')
-        },
+        onPress: () => { signOut() },
       },
     ])
   }

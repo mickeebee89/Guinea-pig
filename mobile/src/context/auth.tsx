@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react'
+import { createContext, useContext, useEffect, useRef, useState, ReactNode } from 'react'
 import { Session } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase'
 
@@ -22,6 +22,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(true)
   const [role, setRoleState] = useState<'model' | 'provider' | 'both' | null>(null)
+  const isSigningOut = useRef(false)
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -30,7 +31,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     })
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session)
+      if (!isSigningOut.current) {
+        setSession(session)
+      }
     })
 
     return () => subscription.unsubscribe()
@@ -39,14 +42,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const setRole = (r: 'model' | 'provider' | 'both') => setRoleState(r)
 
   const signOut = async () => {
+    isSigningOut.current = true
+    setSession(null)
+    setRoleState(null)
     try {
       await Promise.race([
         supabase.auth.signOut(),
         new Promise<void>(resolve => setTimeout(resolve, 5000)),
       ])
     } catch {}
-    setSession(null)
-    setRoleState(null)
+    isSigningOut.current = false
   }
 
   return (

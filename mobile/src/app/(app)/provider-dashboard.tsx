@@ -219,9 +219,11 @@ export default function ProviderDashboardScreen() {
           .eq('id', userId)
           .single()
 
-        const displayName = userData
-          ? `${(userData as any).first_name ?? ''} ${(userData as any).last_initial ?? ''}.`.trim()
-          : ''
+        const first   = (userData as any)?.first_name ?? ''
+        const initial = (userData as any)?.last_initial ?? ''
+        const displayName = first
+          ? `${first}${initial ? ` ${initial}.` : ''}`.trim()
+          : 'Provider'
 
         const { data: created } = await supabase
           .from('providers')
@@ -250,7 +252,12 @@ export default function ProviderDashboardScreen() {
       }
 
       setProvider(resolvedProv)
-      const providerId = (resolvedProv as any).id
+      if (!resolvedProv) {
+        setLoading(false)
+        setRefreshing(false)
+        return
+      }
+      const providerId = resolvedProv.id
 
       // Phase 2: parallel fetches
       const today = todayKey()

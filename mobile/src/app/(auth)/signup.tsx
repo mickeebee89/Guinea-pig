@@ -65,6 +65,14 @@ export default function SignupScreen() {
       return
     }
 
+    // Supabase silently "succeeds" for existing emails but returns no identities — detect this
+    if (data.user && (data.user.identities?.length ?? 0) === 0) {
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)
+      setErrors({ form: 'An account with this email already exists. Please log in instead.' })
+      setLoading(false)
+      return
+    }
+
     if (data.user) {
       const cleanFirst   = firstName.trim()
       const cleanInitial = lastInitial.trim().toUpperCase().charAt(0)

@@ -468,7 +468,7 @@ export default function SettingsScreen() {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
     Alert.alert('Sign out', 'Are you sure?', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Sign out', style: 'destructive', onPress: async () => { await signOut(); router.replace('/') } },
+      { text: 'Sign out', style: 'destructive', onPress: () => { signOut() } },
     ])
   }
 

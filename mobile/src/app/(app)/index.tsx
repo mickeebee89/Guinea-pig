@@ -61,7 +61,7 @@ export default function ModelHomeScreen() {
   const [unreadCount, setUnreadCount]     = useState(0)
 
   const fetchData = useCallback(async () => {
-    if (!userId) { setLoading(false); return }
+    if (!userId) { setLoading(false); setRoleChecked(true); return }
 
     try {
       // Check role first — redirect providers before loading model home data
@@ -74,6 +74,19 @@ export default function ModelHomeScreen() {
       if (userData?.role === 'provider') {
         router.replace('/(app)/provider-dashboard' as any)
         return
+      }
+
+      // Fallback for users whose row wasn't created at signup — check providers table directly
+      if (!userData) {
+        const { data: provRow } = await supabase
+          .from('providers')
+          .select('id')
+          .eq('user_id', userId)
+          .maybeSingle()
+        if (provRow) {
+          router.replace('/(app)/provider-dashboard' as any)
+          return
+        }
       }
 
       setProfilePicUrl(userData?.profile_pic_url ?? null)

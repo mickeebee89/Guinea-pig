@@ -32,36 +32,53 @@ export default function ConfirmEmailScreen() {
 
     const creds = pendingAuth.get()
     if (!creds) {
-      // Credentials expired (e.g. app was backgrounded) — ask to log in manually
       setChecking(false)
       setErrorMsg('Session expired. Please log in with your email and password.')
       return
     }
 
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email:    creds.email,
-      password: creds.password,
-    })
-
-    if (error) {
+    // 10s timeout so the spinner can never hang forever
+    const timeoutId = setTimeout(() => {
       setChecking(false)
-      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)
-      if (error.message.toLowerCase().includes('not confirmed') || error.message.toLowerCase().includes('email')) {
-        setErrorMsg("Your email hasn't been confirmed yet. Please tap the link in your inbox.")
-      } else {
-        setErrorMsg(error.message)
+      setErrorMsg('Request timed out. Please check your connection and try again.')
+    }, 10000)
+
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email:    creds.email,
+        password: creds.password,
+      })
+
+      clearTimeout(timeoutId)
+
+      if (error) {
+        setChecking(false)
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)
+        if (error.message.toLowerCase().includes('not confirmed') || error.message.toLowerCase().includes('email')) {
+          setErrorMsg("Your email hasn't been confirmed yet. Please tap the link in your inbox.")
+        } else {
+          setErrorMsg(error.message)
+        }
+        return
       }
-      return
-    }
 
-    if (data.session) {
-      pendingAuth.clear()
-      if (role) setRole(role as 'model' | 'provider')
-      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
-      router.replace('/(app)')
-    } else {
+      if (data.session) {
+        pendingAuth.clear()
+        if (role) setRole(role as 'model' | 'provider')
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
+        if (role === 'provider') {
+          router.replace('/(app)/provider-dashboard' as any)
+        } else {
+          router.replace('/(app)')
+        }
+      } else {
+        setChecking(false)
+        setErrorMsg("Your email hasn't been confirmed yet. Please tap the link in your inbox.")
+      }
+    } catch {
+      clearTimeout(timeoutId)
       setChecking(false)
-      setErrorMsg("Your email hasn't been confirmed yet. Please tap the link in your inbox.")
+      setErrorMsg('Something went wrong. Please try again.')
     }
   }
 
