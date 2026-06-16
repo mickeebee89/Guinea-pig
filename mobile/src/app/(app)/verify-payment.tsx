@@ -13,6 +13,8 @@ import {
 import { useRouter } from 'expo-router'
 import * as Haptics from 'expo-haptics'
 import * as ImagePicker from 'expo-image-picker'
+import * as ImageManipulator from 'expo-image-manipulator'
+import { decode } from 'base64-arraybuffer'
 import { Ionicons } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useStripe } from '@stripe/stripe-react-native'
@@ -156,13 +158,11 @@ export default function VerifyPaymentScreen() {
     // Upload selfie to private storage bucket (best-effort)
     let selfieStoragePath: string | null = null
     try {
-      const ext    = uri.split('.').pop()?.toLowerCase() ?? 'jpg'
-      const path   = `${userId}/selfie-${Date.now()}.${ext}`
-      const blob   = await (await fetch(uri)).blob()
-      const buffer = await blob.arrayBuffer()
+      const path   = `${userId}/selfie-${Date.now()}.jpg`
+      const manipulated = await ImageManipulator.manipulateAsync(uri, [], { base64: true })
       const { data: up } = await supabase.storage
         .from('verification-selfies')
-        .upload(path, buffer, { contentType: `image/${ext === 'jpg' ? 'jpeg' : ext}` })
+        .upload(path, decode(manipulated.base64!), { contentType: 'image/jpeg' })
       if (up) selfieStoragePath = up.path
     } catch { /* storage failure is non-blocking */ }
 

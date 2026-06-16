@@ -12,6 +12,8 @@ import {
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import * as Haptics from 'expo-haptics'
 import * as ImagePicker from 'expo-image-picker'
+import * as ImageManipulator from 'expo-image-manipulator'
+import { decode } from 'base64-arraybuffer'
 import { Ionicons } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Colors } from '@/constants/Colors'
@@ -327,14 +329,11 @@ export default function ApplySessionScreen() {
       const uploadedUrls: string[] = []
       for (const photo of pendingPhotos) {
         try {
-          const ext      = photo.uri.split('.').pop()?.toLowerCase() ?? 'jpg'
-          const fileName = `${userId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
-          const response = await fetch(photo.uri)
-          const blob     = await response.blob()
-          const buffer   = await blob.arrayBuffer()
+          const fileName = `${userId}/${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`
+          const manipulated = await ImageManipulator.manipulateAsync(photo.uri, [], { base64: true })
           const { data: up, error: upErr } = await supabase.storage
             .from('model-photos')
-            .upload(fileName, buffer, { contentType: `image/${ext === 'jpg' ? 'jpeg' : ext}` })
+            .upload(fileName, decode(manipulated.base64!), { contentType: 'image/jpeg' })
           if (!upErr && up) {
             const { data: urlData } = supabase.storage.from('model-photos').getPublicUrl(up.path)
             uploadedUrls.push(urlData.publicUrl)

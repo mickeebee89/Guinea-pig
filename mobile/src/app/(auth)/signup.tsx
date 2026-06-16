@@ -7,8 +7,8 @@ import {
   KeyboardAvoidingView,
   Platform,
   TouchableOpacity,
-  SafeAreaView,
 } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter, useLocalSearchParams } from 'expo-router'
 import * as Haptics from 'expo-haptics'
 import { Colors } from '@/constants/Colors'
@@ -69,25 +69,28 @@ export default function SignupScreen() {
       const cleanFirst   = firstName.trim()
       const cleanInitial = lastInitial.trim().toUpperCase().charAt(0)
 
-      await supabase.from('users').insert({
-        id:           data.user.id,
-        email:        email.trim().toLowerCase(),
-        first_name:   cleanFirst,
-        last_initial: cleanInitial,
-        role,
-        region:       'UK',
-      })
-
-      if (role === 'provider') {
-        await supabase.from('providers').insert({
-          user_id:      data.user.id,
-          name:         `${cleanFirst} ${cleanInitial}.`,
-          is_published: false,
-          is_verified:  false,
-          rating:       0,
-          review_count: 0,
+      try {
+        await supabase.from('users').insert({
+          id:           data.user.id,
+          email:        email.trim().toLowerCase(),
+          first_name:   cleanFirst,
+          last_initial: cleanInitial,
+          role,
+          region:       'UK',
         })
-      }
+
+        if (role === 'provider') {
+          await supabase.from('providers').insert({
+            user_id:      data.user.id,
+            name:         `${cleanFirst} ${cleanInitial}.`,
+            is_published: false,
+            is_verified:  false,
+            rating:       0,
+            review_count: 0,
+          })
+        }
+      } catch {}
+      // profile inserts failing must not block the auth flow
 
       setRole(role)
     }
@@ -104,7 +107,7 @@ export default function SignupScreen() {
         params:   { email: email.trim().toLowerCase(), role },
       })
     } else {
-      router.replace('/(onboarding)/profile-pic')
+      router.replace('/(app)')
     }
   }
 

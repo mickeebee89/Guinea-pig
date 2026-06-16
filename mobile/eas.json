@@ -7,15 +7,26 @@
     "development": {
       "developmentClient": true,
       "distribution": "internal",
+      "channel": "development",
+      "env": {
+        "GRADLE_OPTS": "-Xmx2g -XX:MaxMetaspaceSize=512m"
+      },
       "android": {
         "buildType": "apk",
-        "gradleCommand": ":app:assembleDebug"
-      },
+        "gradleCommand": ":app:assembleDebug --no-daemon"
+      }
     },
     "preview": {
       "distribution": "internal",
+      "channel": "preview",
+      "env": {
+        "GRADLE_OPTS": "-Xmx2g -XX:MaxMetaspaceSize=512m",
+        "EXPO_PUBLIC_SUPABASE_URL": "https://ptluekkhiopowuyvkgnd.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_g-YDwagWoZBMvrBoZPQmYQ_VXfWZ40T"
+      },
       "android": {
-        "buildType": "apk"
+        "buildType": "apk",
+        "gradleCommand": ":app:assembleRelease --no-daemon"
       }
     },
     "production": {

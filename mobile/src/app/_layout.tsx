@@ -18,31 +18,41 @@ function RootRedirect() {
     if (!session && !inAuthGroup && segments[0] !== undefined) {
       router.replace('/')
     }
-    if (session && (inAuthGroup || segments[0] === undefined)) {
-      router.replace('/(onboarding)/profile-pic')
+    // Any session-holding user not already in the app gets sent there —
+    // covers root, auth screens, and onboarding screen restored by Android task stack
+    if (session && segments[0] !== '(app)') {
+      router.replace('/(app)')
     }
   }, [session, loading, segments])
 
   return null
 }
 
+const stripeKey = process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? ''
+
 export default function RootLayout() {
+  const inner = (
+    <AuthProvider>
+      <RootRedirect />
+      <StatusBar style="dark" />
+      <Stack screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
+        <Stack.Screen name="index" />
+        <Stack.Screen name="(auth)" />
+        <Stack.Screen name="(onboarding)" />
+        <Stack.Screen name="(app)" />
+      </Stack>
+    </AuthProvider>
+  )
+
+  if (!stripeKey) return inner
+
   return (
     <StripeProvider
-      publishableKey={process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? ''}
+      publishableKey={stripeKey}
       merchantIdentifier="merchant.beauty.guineapig"
       urlScheme="mobile"
     >
-      <AuthProvider>
-        <RootRedirect />
-        <StatusBar style="dark" />
-        <Stack screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
-          <Stack.Screen name="index" />
-          <Stack.Screen name="(auth)" />
-          <Stack.Screen name="(onboarding)" />
-          <Stack.Screen name="(app)" />
-        </Stack>
-      </AuthProvider>
+      {inner}
     </StripeProvider>
   )
 }

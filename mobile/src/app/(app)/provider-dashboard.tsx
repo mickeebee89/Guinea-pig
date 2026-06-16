@@ -144,6 +144,41 @@ const statStyles = StyleSheet.create({
   },
 })
 
+// ── Provider not found — auto sign-out ────────────────────────────────────────
+
+function ProviderNotFound() {
+  const { signOut } = useAuth()
+  const router = useRouter()
+  const [countdown, setCountdown] = useState(3)
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCountdown(c => c - 1)
+    }, 1000)
+    const timeout = setTimeout(async () => {
+      clearInterval(interval)
+      await signOut()
+      router.replace('/')
+    }, 3000)
+    return () => { clearInterval(interval); clearTimeout(timeout) }
+  }, [])
+
+  return (
+    <View style={[styles.container, styles.centred]}>
+      <Ionicons name="refresh-circle-outline" size={48} color={Colors.rose} />
+      <Text style={[styles.emptyLabel, { marginTop: 16, fontSize: 17, color: Colors.warmDark }]}>
+        Setting up your account…
+      </Text>
+      <Text style={[styles.emptyLabel, { fontSize: 14, color: Colors.muted, marginTop: 8 }]}>
+        Please sign in again
+      </Text>
+      <Text style={[styles.emptyLabel, { fontSize: 13, color: Colors.muted, marginTop: 4 }]}>
+        Redirecting in {countdown}s
+      </Text>
+    </View>
+  )
+}
+
 // ── Screen ────────────────────────────────────────────────────────────────────
 
 export default function ProviderDashboardScreen() {
@@ -168,17 +203,16 @@ export default function ProviderDashboardScreen() {
     if (!isRefresh) setLoading(true)
 
     try {
-      // Phase 1: get provider record
-      const { data: provData, error: provErr } = await supabase
+      // Phase 1: get provider record, creating it if absent
+      const { data: provData } = await supabase
         .from('providers')
         .select('id, name, profile_pic_url, is_verified, rating, review_count, is_published')
         .eq('user_id', userId)
-        .single()
+        .maybeSingle()
 
       let resolvedProv = provData as Provider | null
 
-      if (provErr || !provData) {
-        // Row missing — create it now using the user's name from the users table
+      if (!resolvedProv) {
         const { data: userData } = await supabase
           .from('users')
           .select('first_name, last_initial')
@@ -189,7 +223,7 @@ export default function ProviderDashboardScreen() {
           ? `${(userData as any).first_name ?? ''} ${(userData as any).last_initial ?? ''}.`.trim()
           : ''
 
-        const { data: created, error: createErr } = await supabase
+        const { data: created } = await supabase
           .from('providers')
           .insert({
             user_id:      userId,
@@ -202,15 +236,20 @@ export default function ProviderDashboardScreen() {
           .select('id, name, profile_pic_url, is_verified, rating, review_count, is_published')
           .single()
 
-        if (createErr || !created) {
-          setLoading(false)
-          setRefreshing(false)
-          return
+        if (created) {
+          resolvedProv = created as Provider
+        } else {
+          // Insert may have raced — fetch one more time before giving up
+          const { data: refetched } = await supabase
+            .from('providers')
+            .select('id, name, profile_pic_url, is_verified, rating, review_count, is_published')
+            .eq('user_id', userId)
+            .maybeSingle()
+          resolvedProv = (refetched as Provider) ?? null
         }
-        resolvedProv = created as Provider
       }
 
-      setProvider(resolvedProv!)
+      setProvider(resolvedProv)
       const providerId = (resolvedProv as any).id
 
       // Phase 2: parallel fetches
@@ -449,12 +488,7 @@ export default function ProviderDashboardScreen() {
   }
 
   if (!provider) {
-    return (
-      <View style={[styles.container, styles.centred]}>
-        <Ionicons name="alert-circle-outline" size={40} color={Colors.muted} />
-        <Text style={styles.emptyLabel}>Provider profile not found</Text>
-      </View>
-    )
+    return <ProviderNotFound />
   }
 
   const isPublished = !!provider.is_published
@@ -768,6 +802,16 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.cream },
   centred:   { alignItems: 'center', justifyContent: 'center', gap: 12 },
   emptyLabel: { fontSize: 15, color: Colors.muted, fontWeight: '600' },
+  goBackBtn: {
+    marginTop: 8,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 14,
+    backgroundColor: Colors.white,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  goBackText: { fontSize: 15, fontWeight: '600', color: Colors.warmDark },
 
   topBar: {
     flexDirection: 'row',

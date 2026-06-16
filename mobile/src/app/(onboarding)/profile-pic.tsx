@@ -3,15 +3,16 @@ import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
   Image,
   TouchableOpacity,
-  Platform,
   Alert,
 } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import * as ImagePicker from 'expo-image-picker'
+import * as ImageManipulator from 'expo-image-manipulator'
 import * as Haptics from 'expo-haptics'
+import { decode } from 'base64-arraybuffer'
 import { Colors } from '@/constants/Colors'
 import { Button } from '@/components/Button'
 import { supabase } from '@/lib/supabase'
@@ -70,15 +71,14 @@ export default function ProfilePicScreen() {
     if (!imageUri || !session?.user) return
     setUploading(true)
 
-    const ext = imageUri.split('.').pop() ?? 'jpg'
-    const fileName = `${session.user.id}/profile.${ext}`
-    const contentType = `image/${ext === 'jpg' ? 'jpeg' : ext}`
+    const fileName = `${session.user.id}/profile.jpg`
 
-    const blob = await (await fetch(imageUri)).blob()
+    const manipulated = await ImageManipulator.manipulateAsync(imageUri, [], { base64: true })
+    const base64 = manipulated.base64!
 
     const { data: uploadData, error: uploadError } = await supabase.storage
       .from('profile-pics')
-      .upload(fileName, blob, { contentType, upsert: true })
+      .upload(fileName, decode(base64), { contentType: 'image/jpeg', upsert: true })
 
     if (uploadError) {
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)
@@ -106,12 +106,19 @@ export default function ProfilePicScreen() {
     router.replace('/(app)')
   }
 
+  const goBack = async () => {
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+    router.replace('/')
+  }
+
   return (
-    <View style={styles.container}>
-      <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={styles.container}>
         <View style={styles.content}>
           {/* Header */}
           <View style={styles.header}>
+            <TouchableOpacity onPress={goBack} style={styles.backButton}>
+              <Text style={styles.backButtonText}>‹ Back</Text>
+            </TouchableOpacity>
             <Text style={styles.step}>Step 1 of 1</Text>
             <Text style={styles.title}>Add a profile picture</Text>
             <Text style={styles.subtitle}>
@@ -174,17 +181,17 @@ export default function ProfilePicScreen() {
             variant="ghost"
           />
         </View>
-      </SafeAreaView>
-    </View>
+    </SafeAreaView>
   )
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.cream },
-  safe:      { flex: 1, paddingHorizontal: 24 },
+  container: { flex: 1, backgroundColor: Colors.cream, paddingHorizontal: 24 },
   content:   { flex: 1 },
+  backButton: { marginBottom: 12, alignSelf: 'flex-start' },
+  backButtonText: { fontSize: 17, color: Colors.rose, fontWeight: '500' },
   header: {
-    paddingTop: Platform.OS === 'android' ? 40 : 20,
+    paddingTop: 8,
     paddingBottom: 28,
   },
   step: {
@@ -283,7 +290,7 @@ const styles = StyleSheet.create({
     opacity: 0.8,
   },
   actions: {
-    paddingBottom: Platform.OS === 'android' ? 24 : 8,
+    paddingBottom: 8,
     gap: 4,
   },
   saveBtn: { marginBottom: 4 },

@@ -4,6 +4,14 @@
     "slug": "guinea-pig",
     "version": "1.0.0",
     "orientation": "portrait",
+    "updates": {
+      "url": "https://u.expo.dev/2552e7c0-8cc8-4dfe-ac8b-80b577e835a0",
+      "enabled": true,
+      "checkAutomatically": "ON_LOAD"
+    },
+    "runtimeVersion": {
+      "policy": "fingerprint"
+    },
     "icon": "./assets/images/icon.png",
     "scheme": "mobile",
     "userInterfaceStyle": "automatic",
@@ -26,6 +34,7 @@
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
+      "expo-updates",
       "expo-router",
       [
         "expo-splash-screen",
@@ -44,7 +53,10 @@
           "merchantIdentifier": "merchant.beauty.guineapig",
           "enableGooglePay": false
         }
-      ]
+      ],
+      "./plugins/withGradleJvmArgs",
+      "expo-font",
+      "expo-image"
     ],
     "experiments": {
       "typedRoutes": true,

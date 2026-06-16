@@ -5,9 +5,8 @@ import {
   StyleSheet,
   TouchableOpacity,
   ActivityIndicator,
-  Platform,
-  SafeAreaView,
 } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import * as Haptics from 'expo-haptics'
 import { Ionicons } from '@expo/vector-icons'
@@ -59,8 +58,7 @@ export default function ConfirmEmailScreen() {
       pendingAuth.clear()
       if (role) setRole(role as 'model' | 'provider')
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
-      // RootRedirect in _layout will fire and navigate to onboarding
-      router.replace('/(onboarding)/profile-pic')
+      router.replace('/(app)')
     } else {
       setChecking(false)
       setErrorMsg("Your email hasn't been confirmed yet. Please tap the link in your inbox.")
@@ -183,7 +181,7 @@ export default function ConfirmEmailScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.cream },
   safe:      { flex: 1, paddingHorizontal: 28 },
-  content:   { flex: 1, justifyContent: 'center', alignItems: 'center', paddingTop: Platform.OS === 'android' ? 40 : 0 },
+  content:   { flex: 1, justifyContent: 'center', alignItems: 'center' },
 
   iconWrap: {
     width: 96, height: 96, borderRadius: 48,
@@ -235,7 +233,7 @@ const styles = StyleSheet.create({
   successText: { fontSize: 13, color: '#1D9E75', fontWeight: '500' },
 
   actions: {
-    paddingBottom: Platform.OS === 'android' ? 28 : 12, gap: 10,
+    paddingBottom: 12, gap: 10,
   },
   primaryBtn: {
     height: 54, backgroundColor: Colors.roseDark, borderRadius: 16,

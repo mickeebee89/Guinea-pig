@@ -39,7 +39,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const setRole = (r: 'model' | 'provider' | 'both') => setRoleState(r)
 
   const signOut = async () => {
-    await supabase.auth.signOut()
+    try {
+      await Promise.race([
+        supabase.auth.signOut(),
+        new Promise<void>(resolve => setTimeout(resolve, 5000)),
+      ])
+    } catch {}
     setSession(null)
     setRoleState(null)
   }

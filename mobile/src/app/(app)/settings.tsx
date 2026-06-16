@@ -18,6 +18,8 @@ import {
 import { useRouter } from 'expo-router'
 import * as Haptics from 'expo-haptics'
 import * as ImagePicker from 'expo-image-picker'
+import * as ImageManipulator from 'expo-image-manipulator'
+import { decode } from 'base64-arraybuffer'
 import { Ionicons } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Colors } from '@/constants/Colors'
@@ -308,14 +310,12 @@ export default function SettingsScreen() {
     if (result.canceled || !result.assets[0]) return
     setUploadingPic(true)
     const { uri } = result.assets[0]
-    const ext = uri.split('.').pop()?.toLowerCase() ?? 'jpg'
     try {
-      const blob   = await (await fetch(uri)).blob()
-      const buffer = await blob.arrayBuffer()
+      const manipulated = await ImageManipulator.manipulateAsync(uri, [], { base64: true })
       const { data: up, error } = await supabase.storage
         .from('profile-pics')
-        .upload(`${userId}/profile.${ext}`, buffer, {
-          contentType: `image/${ext === 'jpg' ? 'jpeg' : ext}`, upsert: true,
+        .upload(`${userId}/profile.jpg`, decode(manipulated.base64!), {
+          contentType: 'image/jpeg', upsert: true,
         })
       if (!error && up) {
         const { data: urlData } = supabase.storage.from('profile-pics').getPublicUrl(up.path)

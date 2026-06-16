@@ -2,12 +2,11 @@ import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
-  Platform,
   Image,
   TouchableOpacity,
   useWindowDimensions,
 } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import * as Haptics from 'expo-haptics'
 import { Colors } from '@/constants/Colors'
@@ -17,9 +16,10 @@ const LOGO_URI = 'https://res.cloudinary.com/dzbazlq1o/image/upload/f_auto,q_aut
 
 export default function WelcomeScreen() {
   const router = useRouter()
-  const { setRole } = useAuth()
+  const { setRole, session, signOut } = useAuth()
   const { width } = useWindowDimensions()
   const wide = width >= 600
+  const logoSize = Math.min(width * 0.62, 280)
 
   const pickRole = async (role: 'provider' | 'model') => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
@@ -32,41 +32,66 @@ export default function WelcomeScreen() {
     router.push('/(auth)/login')
   }
 
+  const handleSignOut = async () => {
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+    await signOut()
+  }
+
   return (
-    <View style={styles.container}>
-      <SafeAreaView style={styles.safe}>
-        <View style={styles.hero}>
-          <Image source={{ uri: LOGO_URI }} style={styles.logo} resizeMode="contain" />
-          <Text style={styles.appName}>Guinea Pig</Text>
-          <Text style={styles.tagline}>Someone's gotta be the guinea pig</Text>
-        </View>
+    <SafeAreaView style={styles.safe}>
+      {/* Decorative background circles */}
+      <View style={styles.decorTop} />
+      <View style={styles.decorBottom} />
 
-        <View style={styles.cards}>
-          <Text style={styles.prompt}>I want to…</Text>
-          <View style={[styles.cardsInner, wide && styles.cardsInnerRow]}>
-            <RoleCard
-              emoji="✂️"
-              title="Provider"
-              subtitle="I'm learning beauty and want to practise on models"
-              onPress={() => pickRole('provider')}
-              wide={wide}
-            />
-            <RoleCard
-              emoji="💆"
-              title="Model"
-              subtitle="I'd love free treatments and don't mind being a practice client"
-              onPress={() => pickRole('model')}
-              wide={wide}
-            />
-          </View>
+      <View style={styles.hero}>
+        <View style={[styles.logoRing, { width: logoSize + 16, height: logoSize + 16, borderRadius: (logoSize + 16) / 2 }]}>
+          <Image
+            source={{ uri: LOGO_URI }}
+            style={{ width: logoSize, height: logoSize, borderRadius: logoSize / 2 }}
+            resizeMode="cover"
+          />
         </View>
+        <Text style={styles.tagline}>Someone's gotta be the guinea pig</Text>
+      </View>
 
-        <View style={styles.footer}>
-          <Text style={styles.footerText}>Already have an account? </Text>
-          <Text style={styles.loginLink} onPress={goLogin}>Log in</Text>
+      <View style={styles.cards}>
+        <Text style={styles.prompt}>I want to…</Text>
+        <View style={[styles.cardsInner, wide && styles.cardsInnerRow]}>
+          <RoleCard
+            emoji="✂️"
+            title="Provider"
+            subtitle="I'm learning beauty and want to practise on models"
+            onPress={() => pickRole('provider')}
+            wide={wide}
+          />
+          <RoleCard
+            emoji="💆"
+            title="Model"
+            subtitle="I'd love free treatments and don't mind being a practice client"
+            onPress={() => pickRole('model')}
+            wide={wide}
+          />
         </View>
-      </SafeAreaView>
-    </View>
+      </View>
+
+      <View style={styles.footer}>
+        {session ? (
+          <>
+            <Text style={styles.footerText}>Signed in — </Text>
+            <TouchableOpacity onPress={handleSignOut}>
+              <Text style={styles.signOutLink}>Sign out</Text>
+            </TouchableOpacity>
+          </>
+        ) : (
+          <>
+            <Text style={styles.footerText}>Already have an account? </Text>
+            <TouchableOpacity onPress={goLogin}>
+              <Text style={styles.loginLink}>Log in</Text>
+            </TouchableOpacity>
+          </>
+        )}
+      </View>
+    </SafeAreaView>
   )
 }
 
@@ -87,7 +112,7 @@ function RoleCard({
     <TouchableOpacity
       style={[styles.card, wide && styles.cardWide]}
       onPress={onPress}
-      activeOpacity={0.85}
+      activeOpacity={0.82}
     >
       <Text style={styles.cardEmoji}>{emoji}</Text>
       <View style={styles.cardText}>
@@ -100,39 +125,55 @@ function RoleCard({
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.cream,
-  },
   safe: {
     flex: 1,
+    backgroundColor: '#FFF5F7',
     paddingHorizontal: 24,
+    overflow: 'hidden',
+  },
+  decorTop: {
+    position: 'absolute',
+    top: -90,
+    right: -70,
+    width: 240,
+    height: 240,
+    borderRadius: 120,
+    backgroundColor: Colors.softPink,
+    opacity: 0.45,
+  },
+  decorBottom: {
+    position: 'absolute',
+    bottom: -110,
+    left: -80,
+    width: 280,
+    height: 280,
+    borderRadius: 140,
+    backgroundColor: Colors.rose,
+    opacity: 0.18,
   },
   hero: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingTop: Platform.OS === 'android' ? 40 : 20,
+    gap: 20,
   },
-  logo: {
-    width: 80,
-    height: 80,
-    borderRadius: 20,
-    marginBottom: 16,
-  },
-  appName: {
-    fontSize: 32,
-    fontWeight: '800',
-    color: Colors.warmDark,
-    letterSpacing: -0.5,
-    marginBottom: 8,
+  logoRing: {
+    backgroundColor: Colors.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: Colors.rose,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.28,
+    shadowRadius: 20,
+    elevation: 10,
   },
   tagline: {
-    fontSize: 15,
+    fontSize: 16,
     fontStyle: 'italic',
     color: Colors.muted,
     textAlign: 'center',
-    lineHeight: 22,
+    lineHeight: 24,
+    paddingHorizontal: 16,
   },
   cards: {
     paddingBottom: 16,
@@ -156,44 +197,45 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    borderRadius: 16,
-    padding: 16,
-    backgroundColor: Colors.roseDark,
-    shadowColor: Colors.roseDark,
+    borderRadius: 18,
+    padding: 18,
+    backgroundColor: Colors.rose,
+    shadowColor: Colors.rose,
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 10,
-    elevation: 5,
+    shadowOpacity: 0.32,
+    shadowRadius: 12,
+    elevation: 6,
   },
   cardWide: {
     flex: 1,
   },
   cardEmoji: {
-    fontSize: 24,
+    fontSize: 26,
   },
   cardText: {
     flex: 1,
   },
   cardTitle: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: '700',
     color: Colors.white,
-    marginBottom: 2,
+    marginBottom: 3,
   },
   cardSubtitle: {
     fontSize: 12,
-    color: 'rgba(255,255,255,0.75)',
-    lineHeight: 16,
+    color: 'rgba(255,255,255,0.82)',
+    lineHeight: 17,
   },
   chevron: {
-    fontSize: 22,
-    color: 'rgba(255,255,255,0.6)',
+    fontSize: 24,
+    color: 'rgba(255,255,255,0.65)',
     fontWeight: '300',
   },
   footer: {
     flexDirection: 'row',
     justifyContent: 'center',
-    paddingBottom: Platform.OS === 'android' ? 24 : 8,
+    alignItems: 'center',
+    paddingBottom: 8,
     paddingTop: 8,
   },
   footerText: {
@@ -204,5 +246,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: Colors.roseDark,
+  },
+  signOutLink: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.rose,
   },
 })

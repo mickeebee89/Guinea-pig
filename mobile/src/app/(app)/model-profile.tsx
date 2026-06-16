@@ -15,6 +15,8 @@ import {
 import { useRouter } from 'expo-router'
 import * as Haptics from 'expo-haptics'
 import * as ImagePicker from 'expo-image-picker'
+import * as ImageManipulator from 'expo-image-manipulator'
+import { decode } from 'base64-arraybuffer'
 import { Ionicons } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Colors } from '@/constants/Colors'
@@ -124,13 +126,12 @@ export default function ModelProfileScreen() {
 
     setUploading(true)
     const { uri } = result.assets[0]
-    const ext      = uri.split('.').pop()?.toLowerCase() ?? 'jpg'
-    const fileName = `${userId}/profile.${ext}`
+    const fileName = `${userId}/profile.jpg`
     try {
-      const blob = await (await fetch(uri)).blob()
+      const manipulated = await ImageManipulator.manipulateAsync(uri, [], { base64: true })
       const { data: up, error } = await supabase.storage
         .from('profile-pics')
-        .upload(fileName, blob, { contentType: `image/${ext === 'jpg' ? 'jpeg' : ext}`, upsert: true })
+        .upload(fileName, decode(manipulated.base64!), { contentType: 'image/jpeg', upsert: true })
       if (!error && up) {
         const { data: urlData } = supabase.storage.from('profile-pics').getPublicUrl(up.path)
         await supabase.from('users').update({ profile_pic_url: urlData.publicUrl }).eq('id', userId)
@@ -165,28 +166,39 @@ export default function ModelProfileScreen() {
 
     setAddingPhotos(true)
     const toAdd = result.assets.slice(0, MAX_PHOTOS - photos.length)
+    let anyFailed = false
     for (const asset of toAdd) {
       try {
-        const ext      = asset.uri.split('.').pop()?.toLowerCase() ?? 'jpg'
-        const fileName = `${userId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
-        const blob = await (await fetch(asset.uri)).blob()
-        const { data: up, error } = await supabase.storage
+        const fileName = `${userId}/${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`
+        const manipulated = await ImageManipulator.manipulateAsync(asset.uri, [], { base64: true })
+        const { data: up, error: uploadError } = await supabase.storage
           .from('model-photos')
-          .upload(fileName, blob, { contentType: `image/${ext === 'jpg' ? 'jpeg' : ext}` })
-        if (!error && up) {
+          .upload(fileName, decode(manipulated.base64!), { contentType: 'image/jpeg' })
+        if (uploadError) {
+          anyFailed = true
+          Alert.alert('Upload failed', uploadError.message)
+          continue
+        }
+        if (up) {
           const { data: urlData } = supabase.storage.from('model-photos').getPublicUrl(up.path)
-          const { data: inserted } = await supabase
+          const { data: inserted, error: insertError } = await supabase
             .from('model_photos')
             .insert({ user_id: userId, photo_url: urlData.publicUrl, caption: null })
             .select('id')
             .single()
-          if (inserted) {
+          if (insertError) {
+            anyFailed = true
+            Alert.alert('Save failed', insertError.message)
+          } else if (inserted) {
             setPhotos(prev => [...prev, { id: (inserted as any).id, photoUrl: urlData.publicUrl, caption: null }])
           }
         }
-      } catch {}
+      } catch (err: any) {
+        anyFailed = true
+        Alert.alert('Upload failed', err?.message ?? 'Could not upload photo.')
+      }
     }
-    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
+    if (!anyFailed) await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
     setAddingPhotos(false)
   }
 
