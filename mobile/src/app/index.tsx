@@ -58,9 +58,9 @@ export default function WelcomeScreen() {
         <Text style={styles.prompt}>I want to…</Text>
         <View style={[styles.cardsInner, wide && styles.cardsInnerRow]}>
           <RoleCard
-            emoji="✂️"
-            title="Provider"
-            subtitle="I'm learning beauty and want to practise on models"
+            emoji="✨"
+            title="Stylist"
+            subtitle="I offer beauty treatments and want to build my portfolio"
             onPress={() => pickRole('provider')}
             wide={wide}
           />

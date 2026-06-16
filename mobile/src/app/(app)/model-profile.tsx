@@ -287,7 +287,7 @@ export default function ModelProfileScreen() {
       {
         text: 'Sign out',
         style: 'destructive',
-        onPress: () => { signOut() },
+        onPress: () => { signOut(); router.replace('/') },
       },
     ])
   }
@@ -411,7 +411,7 @@ export default function ModelProfileScreen() {
           </View>
 
           <Text style={styles.sectionSub}>
-            Up to {MAX_PHOTOS} photos — providers see these when you apply for a session.
+            Up to {MAX_PHOTOS} photos — stylists see these when you apply for a session.
           </Text>
 
           {/* Grid */}

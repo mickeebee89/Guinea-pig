@@ -5,25 +5,25 @@ import { StripeProvider } from '@stripe/stripe-react-native'
 import { AuthProvider, useAuth } from '@/context/auth'
 
 function RootRedirect() {
-  const { session, loading } = useAuth()
+  const { session, loading, roleLoaded, role } = useAuth()
   const segments = useSegments()
   const router = useRouter()
 
   useEffect(() => {
-    if (loading) return
+    if (loading || !roleLoaded) return
     const inAuthGroup = segments[0] === '(auth)'
-    const inOnboarding = segments[0] === '(onboarding)'
-    const inApp = segments[0] === '(app)'
 
     if (!session && !inAuthGroup && segments[0] !== undefined) {
       router.replace('/')
     }
-    // Any session-holding user not already in the app gets sent there —
-    // covers root, auth screens, and onboarding screen restored by Android task stack
     if (session && segments[0] !== '(app)') {
-      router.replace('/(app)')
+      if (role === 'provider') {
+        router.replace('/(app)/provider-dashboard' as any)
+      } else {
+        router.replace('/(app)')
+      }
     }
-  }, [session, loading, segments])
+  }, [session, loading, roleLoaded, role, segments])
 
   return null
 }

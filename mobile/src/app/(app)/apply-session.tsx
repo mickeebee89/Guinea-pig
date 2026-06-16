@@ -55,8 +55,8 @@ const STEP_SUBS = [
   "Available dates are highlighted in rose — tap one to select",
   'Choose a time slot that works for you',
   "Pick the treatment you'd like at this session",
-  'Anything the provider should know? (optional)',
-  'Share photos to help the provider prepare (optional)',
+  'Anything the stylist should know? (optional)',
+  'Share photos to help the stylist prepare (optional)',
   'Please read and agree before confirming your application',
   'Check your details, then send your application',
 ]

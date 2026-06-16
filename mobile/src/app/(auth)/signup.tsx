@@ -115,7 +115,11 @@ export default function SignupScreen() {
         params:   { email: email.trim().toLowerCase(), role },
       })
     } else {
-      router.replace('/(app)')
+      if (role === 'provider') {
+        router.replace('/(app)/provider-dashboard' as any)
+      } else {
+        router.replace('/(app)')
+      }
     }
   }
 
@@ -129,7 +133,7 @@ export default function SignupScreen() {
     router.back()
   }
 
-  const roleLabel  = role === 'provider' ? 'Provider' : 'Model'
+  const roleLabel  = role === 'provider' ? 'Stylist' : 'Model'
   const roleColour = role === 'provider' ? Colors.roseDark : Colors.rose
 
   return (

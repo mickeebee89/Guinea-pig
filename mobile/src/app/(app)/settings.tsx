@@ -63,7 +63,7 @@ const DEFAULT_PREFS: NotifPrefs = {
 
 const NOTIF_ROWS: { key: keyof NotifPrefs; label: string; sub: string; icon: string }[] = [
   { key: 'session_updates',   label: 'Session updates',    sub: 'Accepted, declined, and upcoming reminders', icon: 'calendar-outline'    },
-  { key: 'new_messages',      label: 'New messages',       sub: 'Chat messages from providers',               icon: 'chatbubble-outline'  },
+  { key: 'new_messages',      label: 'New messages',       sub: 'Chat messages from stylists',                icon: 'chatbubble-outline'  },
   { key: 'review_reminders',  label: 'Review reminders',   sub: 'Prompts to rate completed sessions',         icon: 'star-outline'        },
   { key: 'promotions',        label: 'Promotions',         sub: 'Special offers and platform news',           icon: 'gift-outline'        },
 ]
@@ -468,7 +468,7 @@ export default function SettingsScreen() {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
     Alert.alert('Sign out', 'Are you sure?', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Sign out', style: 'destructive', onPress: () => { signOut() } },
+      { text: 'Sign out', style: 'destructive', onPress: () => { signOut(); router.replace('/') } },
     ])
   }
 
@@ -527,7 +527,7 @@ export default function SettingsScreen() {
   const isBoth     = dbRole === 'both'
   const isPaid     = !!userData?.subscription_status && userData.subscription_status !== 'free'
   const sub        = subscriptionLabel(userData?.subscription_status)
-  const activeView = authRole === 'provider' ? 'Provider' : 'Model'
+  const activeView = authRole === 'provider' ? 'Stylist' : 'Model'
 
   const displayName = userData
     ? `${userData.first_name}${userData.last_initial ? ` ${userData.last_initial}.` : ''}`
@@ -755,7 +755,7 @@ export default function SettingsScreen() {
                 rightEl={
                   <View style={styles.activePill}>
                     <Ionicons
-                      name={activeView === 'Provider' ? 'storefront' : 'person'}
+                      name={activeView === 'Stylist' ? 'storefront' : 'person'}
                       size={12}
                       color={Colors.roseDark}
                     />
@@ -764,9 +764,9 @@ export default function SettingsScreen() {
                 }
               />
               <Row
-                icon={activeView === 'Provider' ? 'person-outline' : 'storefront-outline'}
-                label={`Switch to ${activeView === 'Provider' ? 'Model' : 'Provider'} view`}
-                onPress={() => switchRole(activeView === 'Provider' ? 'model' : 'provider')}
+                icon={activeView === 'Stylist' ? 'person-outline' : 'storefront-outline'}
+                label={`Switch to ${activeView === 'Stylist' ? 'Model' : 'Stylist'} view`}
+                onPress={() => switchRole(activeView === 'Stylist' ? 'model' : 'provider')}
                 last
               />
             </View>

@@ -47,7 +47,7 @@ type Provider = {
 
 export default function ModelHomeScreen() {
   const router = useRouter()
-  const { session } = useAuth()
+  const { session, role: authRole } = useAuth()
   const userId = session?.user?.id
 
   const [providers, setProviders]         = useState<Provider[]>([])
@@ -71,7 +71,7 @@ export default function ModelHomeScreen() {
         .eq('id', userId)
         .single()
 
-      if (userData?.role === 'provider') {
+      if (userData?.role === 'provider' || authRole === 'provider') {
         router.replace('/(app)/provider-dashboard' as any)
         return
       }
@@ -210,7 +210,7 @@ export default function ModelHomeScreen() {
               <Ionicons name="search-outline" size={16} color={Colors.muted} />
               <TextInput
                 style={styles.searchInput}
-                placeholder="Search providers…"
+                placeholder="Search stylists…"
                 placeholderTextColor={Colors.muted}
                 value={search}
                 onChangeText={setSearch}
@@ -284,7 +284,7 @@ export default function ModelHomeScreen() {
               <View style={styles.emptyFavs}>
                 <Text style={styles.emptyFavsEmoji}>🤍</Text>
                 <Text style={styles.emptyFavsText}>
-                  Save providers you love — tap the heart on any profile
+                  Save stylists you love — tap the heart on any profile
                 </Text>
               </View>
             ) : (
@@ -302,17 +302,17 @@ export default function ModelHomeScreen() {
 
           {/* ── Nearby providers ── */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Nearby providers</Text>
+            <Text style={styles.sectionTitle}>Nearby stylists</Text>
             {loading ? (
               <View style={styles.emptyState}>
-                <Text style={styles.emptyStateText}>Finding providers near you…</Text>
+                <Text style={styles.emptyStateText}>Finding stylists near you…</Text>
               </View>
             ) : filtered.length === 0 ? (
               <View style={styles.emptyState}>
-                <Text style={styles.emptyStateEmoji}>🐾</Text>
-                <Text style={styles.emptyStateTitle}>No providers yet</Text>
+                <Text style={styles.emptyStateEmoji}>✨</Text>
+                <Text style={styles.emptyStateTitle}>No stylists yet</Text>
                 <Text style={styles.emptyStateText}>
-                  We're growing! Check back soon — new providers join every week.
+                  We're growing! Check back soon — new stylists join every week.
                 </Text>
               </View>
             ) : (

@@ -7,6 +7,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   TouchableOpacity,
+  Image,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
@@ -15,9 +16,13 @@ import { Colors } from '@/constants/Colors'
 import { Button } from '@/components/Button'
 import { Input } from '@/components/Input'
 import { supabase } from '@/lib/supabase'
+import { useAuth } from '@/context/auth'
+
+const LOGO_URI = 'https://res.cloudinary.com/dzbazlq1o/image/upload/f_auto,q_auto/54340_ia8jsd'
 
 export default function LoginScreen() {
   const router = useRouter()
+  const { setRole } = useAuth()
 
   const [email, setEmail]       = useState('')
   const [password, setPassword] = useState('')
@@ -33,7 +38,7 @@ export default function LoginScreen() {
     setError('')
     setLoading(true)
 
-    const { error: authError } = await supabase.auth.signInWithPassword({
+    const { data: loginData, error: authError } = await supabase.auth.signInWithPassword({
       email: email.trim().toLowerCase(),
       password,
     })
@@ -45,9 +50,25 @@ export default function LoginScreen() {
       return
     }
 
+    // Fetch role and route to the correct screen immediately
+    let userRole: string | null = null
+    try {
+      const { data: ud } = await supabase
+        .from('users')
+        .select('role')
+        .eq('id', loginData.user?.id ?? '')
+        .maybeSingle()
+      userRole = ud?.role ?? null
+    } catch {}
+
+    if (userRole) setRole(userRole as any)
     await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
     setLoading(false)
-    router.replace('/(app)')
+    if (userRole === 'provider') {
+      router.replace('/(app)/provider-dashboard' as any)
+    } else {
+      router.replace('/(app)')
+    }
   }
 
   const goSignup = async () => {
@@ -89,9 +110,11 @@ export default function LoginScreen() {
 
             {/* Logo mark */}
             <View style={styles.header}>
-              <View style={styles.logoMark}>
-                <Text style={styles.logoEmoji}>🐾</Text>
-              </View>
+              <Image
+                source={{ uri: LOGO_URI }}
+                style={styles.logo}
+                resizeMode="cover"
+              />
               <Text style={styles.title}>Welcome back</Text>
               <Text style={styles.subtitle}>Log in to your Guinea Pig account</Text>
             </View>
@@ -164,21 +187,17 @@ const styles = StyleSheet.create({
     paddingTop: 24,
     paddingBottom: 36,
   },
-  logoMark: {
-    width: 72,
-    height: 72,
-    borderRadius: 22,
-    backgroundColor: Colors.roseDark,
-    alignItems: 'center',
-    justifyContent: 'center',
+  logo: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
     marginBottom: 16,
-    shadowColor: Colors.roseDark,
+    shadowColor: Colors.rose,
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.25,
     shadowRadius: 12,
     elevation: 6,
   },
-  logoEmoji: { fontSize: 32 },
   title: {
     fontSize: 26,
     fontWeight: '800',
