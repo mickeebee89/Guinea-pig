@@ -11,10 +11,11 @@ import {
 import { useRouter } from 'expo-router'
 import * as Haptics from 'expo-haptics'
 import { Ionicons } from '@expo/vector-icons'
-import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { Colors } from '@/constants/Colors'
+import { Colors, CategoryColors } from '@/constants/Colors'
 import { useAuth } from '@/context/auth'
 import { supabase } from '@/lib/supabase'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import ScreenDecor from '@/components/ScreenDecor'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -36,7 +37,7 @@ type ConvItem = {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 const CATEGORY_COLOR: Record<string, string> = {
-  Nails:       '#C8788A',
+  Nails:       CategoryColors.nails,
   Lashes:      '#1D9E75',
   Brows:       '#BA7517',
   Hair:        '#7B5EA7',
@@ -245,6 +246,7 @@ export default function MessagesScreen() {
 
   return (
     <View style={styles.container}>
+      <ScreenDecor />
       {/* ── Header ── */}
       <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
         <TouchableOpacity style={styles.backBtn} onPress={goBack} activeOpacity={0.75}>
@@ -379,7 +381,7 @@ function ConvRow({
 // ── Styles ────────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.cream },
+  container: { flex: 1, backgroundColor: 'transparent', overflow: 'hidden' },
 
   header: {
     flexDirection: 'row',
@@ -401,10 +403,10 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
   },
   headerTitle: {
+    fontFamily: 'DancingScript_700Bold',
     flex: 1,
     textAlign: 'center',
-    fontSize: 17,
-    fontWeight: '800',
+    fontSize: 25,
     color: Colors.warmDark,
     letterSpacing: -0.3,
   },
@@ -422,8 +424,8 @@ const styles = StyleSheet.create({
   },
   emptyEmoji: { fontSize: 48, marginBottom: 16 },
   emptyTitle: {
-    fontSize: 20,
-    fontWeight: '800',
+    fontFamily: 'DancingScript_700Bold',
+    fontSize: 30,
     color: Colors.warmDark,
     letterSpacing: -0.3,
     marginBottom: 8,

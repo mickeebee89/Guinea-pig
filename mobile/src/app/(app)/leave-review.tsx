@@ -16,13 +16,13 @@ import { useLocalSearchParams, useRouter } from 'expo-router'
 import * as Haptics from 'expo-haptics'
 import { Ionicons } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { Colors } from '@/constants/Colors'
+import { Colors, CategoryColors } from '@/constants/Colors'
 import { useAuth } from '@/context/auth'
 import { supabase } from '@/lib/supabase'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const TAGS = [
+const PROVIDER_TAGS = [
   'So friendly',
   'Great results',
   'Lovely space',
@@ -31,13 +31,27 @@ const TAGS = [
   'Made me feel welcome',
 ] as const
 
-type Tag = typeof TAGS[number]
+const MODEL_TAGS = [
+  'On time',
+  'Easy to communicate with',
+  'Well-prepared',
+  'Receptive to direction',
+  'Professional attitude',
+  'Great to work with',
+] as const
 
-const SUB_RATINGS = [
+const PROVIDER_SUB_RATINGS = [
   { key: 'quality',      label: 'Quality',      icon: 'sparkles-outline' },
-  { key: 'friendliness', label: 'Friendliness',  icon: 'heart-outline'   },
-  { key: 'comfort',      label: 'Comfort',       icon: 'home-outline'    },
-  { key: 'punctuality',  label: 'Punctuality',   icon: 'time-outline'    },
+  { key: 'friendliness', label: 'Friendliness', icon: 'heart-outline'   },
+  { key: 'comfort',      label: 'Comfort',      icon: 'home-outline'    },
+  { key: 'punctuality',  label: 'Punctuality',  icon: 'time-outline'    },
+] as const
+
+const MODEL_SUB_RATINGS = [
+  { key: 'punctuality',    label: 'Punctuality',    icon: 'time-outline'          },
+  { key: 'communication',  label: 'Communication',  icon: 'chatbubble-outline'    },
+  { key: 'suitability',    label: 'Suitability',    icon: 'person-outline'        },
+  { key: 'receptiveness',  label: 'Receptiveness',  icon: 'sparkles-outline'      },
 ] as const
 
 const RATING_LABELS: Record<number, string> = {
@@ -52,7 +66,7 @@ const RATING_LABELS: Record<number, string> = {
 const COMMENT_MAX = 300
 
 const CATEGORY_COLORS: Record<string, string> = {
-  nails: '#C8788A', lashes: '#1D9E75', brows: '#BA7517',
+  nails: CategoryColors.nails, lashes: '#1D9E75', brows: '#BA7517',
   hair: '#7B5EA7', makeup: '#E8845E', 'spray tan': '#C99A4E',
 }
 
@@ -65,25 +79,15 @@ function categoryColor(cat: string | null | undefined) {
 type SessionData = {
   id: string
   provider_id: string
+  model_user_id: string
   date: string
   start_time: string
   end_time: string
   treatment_id: string | null
 }
 
-type ProviderData = {
-  id: string
-  name: string
-  profile_pic_url: string | null
-}
-
-type TreatmentData = {
-  id: string
-  name: string
-  category: string
-}
-
-type SubRatings = { quality: number; friendliness: number; comfort: number; punctuality: number }
+type SubRatingKey = 'quality' | 'friendliness' | 'comfort' | 'punctuality' | 'communication' | 'suitability' | 'receptiveness'
+type SubRatings = Partial<Record<SubRatingKey, number>>
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -106,12 +110,10 @@ function StarRow({
   rating,
   size,
   onRate,
-  color = '#F59E0B',
 }: {
   rating: number
   size: number
   onRate?: (r: number) => void
-  color?: string
 }) {
   return (
     <View style={{ flexDirection: 'row', gap: size > 24 ? 8 : 4 }}>
@@ -129,7 +131,7 @@ function StarRow({
           <Ionicons
             name={star <= rating ? 'star' : 'star-outline'}
             size={size}
-            color={star <= rating ? color : Colors.border}
+            color={star <= rating ? '#F59E0B' : Colors.border}
           />
         </TouchableOpacity>
       ))}
@@ -140,26 +142,32 @@ function StarRow({
 // ── Screen ────────────────────────────────────────────────────────────────────
 
 export default function LeaveReviewScreen() {
-  const { sessionId } = useLocalSearchParams<{ sessionId: string }>()
-  const router  = useRouter()
+  const { sessionId, revieweeType = 'provider' } =
+    useLocalSearchParams<{ sessionId: string; revieweeType?: string }>()
+  const router      = useRouter()
   const { session } = useAuth()
-  const insets  = useSafeAreaInsets()
-  const userId  = session?.user?.id
+  const insets      = useSafeAreaInsets()
+  const userId      = session?.user?.id
 
-  const [sessionData,    setSessionData]    = useState<SessionData | null>(null)
-  const [provider,       setProvider]       = useState<ProviderData | null>(null)
-  const [treatment,      setTreatment]      = useState<TreatmentData | null>(null)
-  const [loading,        setLoading]        = useState(true)
-  const [alreadyReviewed,setAlreadyReviewed]= useState(false)
-  const [posting,        setPosting]        = useState(false)
-  const [posted,         setPosted]         = useState(false)
+  const isReviewingModel = revieweeType === 'model'
 
-  const [overallRating,  setOverallRating]  = useState(0)
-  const [subRatings,     setSubRatings]     = useState<SubRatings>({
-    quality: 0, friendliness: 0, comfort: 0, punctuality: 0,
-  })
-  const [selectedTags,   setSelectedTags]   = useState<Set<Tag>>(new Set())
-  const [comment,        setComment]        = useState('')
+  // ── Reviewee info state ────────────────────────────────────────────────────
+  const [sessionData,      setSessionData]      = useState<SessionData | null>(null)
+  const [revieweeName,     setRevieweeName]     = useState<string>('')
+  const [revieweePicUrl,   setRevieweePicUrl]   = useState<string | null>(null)
+  const [revieweeUserId,   setRevieweeUserId]   = useState<string | null>(null)
+  const [treatmentName,    setTreatmentName]    = useState<string | null>(null)
+  const [treatmentCat,     setTreatmentCat]     = useState<string | null>(null)
+  const [loading,          setLoading]          = useState(true)
+  const [alreadyReviewed,  setAlreadyReviewed]  = useState(false)
+  const [posting,          setPosting]          = useState(false)
+  const [posted,           setPosted]           = useState(false)
+
+  // ── Form state ─────────────────────────────────────────────────────────────
+  const [overallRating, setOverallRating] = useState(0)
+  const [subRatings,    setSubRatings]    = useState<SubRatings>({})
+  const [selectedTags,  setSelectedTags]  = useState<Set<string>>(new Set())
+  const [comment,       setComment]       = useState('')
 
   // ── Load ───────────────────────────────────────────────────────────────────
 
@@ -168,44 +176,76 @@ export default function LeaveReviewScreen() {
     try {
       const { data: sd } = await supabase
         .from('sessions')
-        .select('id, provider_id, date, start_time, end_time, treatment_id')
+        .select('id, provider_id, model_user_id, date, start_time, end_time, treatment_id')
         .eq('id', sessionId)
         .single()
 
       if (!sd) { setLoading(false); return }
-      setSessionData(sd as SessionData)
+      const s = sd as SessionData
+      setSessionData(s)
 
-      const [
-        { data: pd },
-        { data: td },
-        { data: existingReview },
-      ] = await Promise.all([
-        supabase
-          .from('providers')
-          .select('id, name, profile_pic_url')
-          .eq('id', (sd as any).provider_id)
-          .single(),
-        (sd as any).treatment_id
-          ? supabase
-              .from('provider_treatments')
-              .select('id, name, category')
-              .eq('id', (sd as any).treatment_id)
-              .single()
-          : Promise.resolve({ data: null, error: null }),
+      // Fetch reviewee info + treatment + existing review in parallel
+      const promises: Promise<any>[] = [
+        // existing review check
         supabase
           .from('reviews')
           .select('id')
-          .eq('provider_id', (sd as any).provider_id)
+          .eq('session_id', sessionId)
           .eq('reviewer_id', userId)
           .maybeSingle(),
-      ])
+        // treatment (optional)
+        s.treatment_id
+          ? supabase
+              .from('provider_treatments')
+              .select('name, category')
+              .eq('id', s.treatment_id)
+              .single()
+          : Promise.resolve({ data: null }),
+      ]
 
-      setProvider(pd as ProviderData)
-      setTreatment(td as TreatmentData | null)
-      if (existingReview) setAlreadyReviewed(true)
+      if (isReviewingModel) {
+        promises.push(
+          supabase
+            .from('users')
+            .select('first_name, last_initial, profile_pic_url')
+            .eq('id', s.model_user_id)
+            .single()
+        )
+      } else {
+        promises.push(
+          supabase
+            .from('providers')
+            .select('name, profile_pic_url, user_id')
+            .eq('id', s.provider_id)
+            .single()
+        )
+      }
+
+      const [{ data: existRev }, { data: td }, { data: rd }] = await Promise.all(promises)
+
+      if (existRev) { setAlreadyReviewed(true) }
+      if (td) {
+        setTreatmentName((td as any).name ?? null)
+        setTreatmentCat((td as any).category ?? null)
+      }
+      if (rd) {
+        if (isReviewingModel) {
+          const u = rd as any
+          const name = u.first_name
+            ? `${u.first_name}${u.last_initial ? ` ${u.last_initial}.` : ''}`
+            : 'Model'
+          setRevieweeName(name)
+          setRevieweePicUrl(u.profile_pic_url ?? null)
+          setRevieweeUserId(s.model_user_id)
+        } else {
+          setRevieweeName((rd as any).name ?? 'Provider')
+          setRevieweePicUrl((rd as any).profile_pic_url ?? null)
+          setRevieweeUserId((rd as any).user_id ?? null)
+        }
+      }
     } catch {}
     setLoading(false)
-  }, [sessionId, userId])
+  }, [sessionId, userId, isReviewingModel])
 
   useEffect(() => { load() }, [load])
 
@@ -213,21 +253,24 @@ export default function LeaveReviewScreen() {
 
   const setOverall = async (rating: number) => {
     setOverallRating(rating)
-    // Pre-fill sub-ratings only if they're still at 0
-    setSubRatings(prev => ({
-      quality:      prev.quality      || rating,
-      friendliness: prev.friendliness || rating,
-      comfort:      prev.comfort      || rating,
-      punctuality:  prev.punctuality  || rating,
-    }))
+    const subKeys = isReviewingModel
+      ? ['punctuality', 'communication', 'suitability', 'receptiveness']
+      : ['quality', 'friendliness', 'comfort', 'punctuality']
+    setSubRatings(prev => {
+      const next = { ...prev }
+      for (const k of subKeys) {
+        if (!prev[k as SubRatingKey]) next[k as SubRatingKey] = rating
+      }
+      return next
+    })
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
   }
 
-  const setSubRating = (key: keyof SubRatings) => async (rating: number) => {
+  const setSubRating = (key: SubRatingKey) => async (rating: number) => {
     setSubRatings(prev => ({ ...prev, [key]: rating }))
   }
 
-  const toggleTag = async (tag: Tag) => {
+  const toggleTag = async (tag: string) => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
     setSelectedTags(prev => {
       const next = new Set(prev)
@@ -244,51 +287,22 @@ export default function LeaveReviewScreen() {
     setPosting(true)
 
     try {
-      const reviewPayload = {
-        provider_id: sessionData.provider_id,
-        reviewer_id: userId,
-        rating: overallRating,
-        comment: comment.trim() || null,
-        tags: [...selectedTags],
-        sub_ratings: {
-          quality:      subRatings.quality      || overallRating,
-          friendliness: subRatings.friendliness || overallRating,
-          comfort:      subRatings.comfort      || overallRating,
-          punctuality:  subRatings.punctuality  || overallRating,
-        },
+      const payload: Record<string, any> = {
+        session_id:     sessionId,
+        reviewer_id:    userId,
+        reviewee_id:    revieweeUserId,
+        overall_rating: overallRating,
+        tags:           selectedTags.size > 0 ? [...selectedTags] : [],
+        comment:        comment.trim() || null,
+        ...(subRatings.quality      != null ? { quality_rating:      subRatings.quality      || overallRating } : {}),
+        ...(subRatings.friendliness != null ? { friendliness_rating: subRatings.friendliness || overallRating } : {}),
+        ...(subRatings.comfort      != null ? { comfort_rating:      subRatings.comfort      || overallRating } : {}),
+        ...(subRatings.punctuality  != null ? { punctuality_rating:  subRatings.punctuality  || overallRating } : {}),
       }
 
-      const { error: insertErr } = await supabase.from('reviews').insert(reviewPayload)
+      const { data, error: insertErr } = await supabase.from('reviews').insert(payload)
 
-      if (insertErr) {
-        // Retry without sub_ratings if column doesn't exist
-        const { sub_ratings: _, ...basePayload } = reviewPayload
-        const { error: retryErr } = await supabase.from('reviews').insert(basePayload)
-        if (retryErr) throw retryErr
-      }
-
-      // Mark session as completed
-      try {
-        await supabase
-          .from('sessions')
-          .update({ status: 'completed' })
-          .eq('id', sessionData.id)
-      } catch {}
-
-      // Update provider rating average (best-effort)
-      try {
-        const { data: ratingData } = await supabase
-          .from('reviews')
-          .select('rating')
-          .eq('provider_id', sessionData.provider_id)
-        if (ratingData && ratingData.length > 0) {
-          const avg = ratingData.reduce((sum: number, r: any) => sum + r.rating, 0) / ratingData.length
-          await supabase
-            .from('providers')
-            .update({ rating: Math.round(avg * 10) / 10, review_count: ratingData.length })
-            .eq('id', sessionData.provider_id)
-        }
-      } catch {}
+      if (insertErr) throw insertErr
 
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
       setPosted(true)
@@ -309,15 +323,16 @@ export default function LeaveReviewScreen() {
     )
   }
 
+  const goBack = async () => {
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+    router.back()
+  }
+
   if (alreadyReviewed) {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
         <View style={[styles.topBar, { paddingTop: 8 }]}>
-          <TouchableOpacity
-            style={styles.backBtn}
-            onPress={async () => { await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.back() }}
-            activeOpacity={0.75}
-          >
+          <TouchableOpacity style={styles.backBtn} onPress={goBack} activeOpacity={0.75}>
             <Ionicons name="chevron-back" size={20} color={Colors.roseDark} />
           </TouchableOpacity>
           <Text style={styles.topBarTitle}>Leave a review</Text>
@@ -329,19 +344,13 @@ export default function LeaveReviewScreen() {
           </View>
           <Text style={styles.successTitle}>Already reviewed</Text>
           <Text style={styles.successSub}>You've already left a review for this session.</Text>
-          <TouchableOpacity
-            style={styles.doneBtn}
-            onPress={async () => { await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.back() }}
-            activeOpacity={0.9}
-          >
+          <TouchableOpacity style={styles.doneBtn} onPress={goBack} activeOpacity={0.9}>
             <Text style={styles.doneBtnText}>Back</Text>
           </TouchableOpacity>
         </View>
       </View>
     )
   }
-
-  // ── Success ────────────────────────────────────────────────────────────────
 
   if (posted) {
     return (
@@ -351,13 +360,11 @@ export default function LeaveReviewScreen() {
         </View>
         <Text style={styles.successTitle}>Review posted!</Text>
         <Text style={styles.successSub}>
-          Your review helps other models discover great providers. Thank you!
+          {isReviewingModel
+            ? 'Your feedback helps keep our community great. Thank you!'
+            : 'Your review helps other models discover great providers. Thank you!'}
         </Text>
-        <TouchableOpacity
-          style={styles.doneBtn}
-          onPress={async () => { await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.back() }}
-          activeOpacity={0.9}
-        >
+        <TouchableOpacity style={styles.doneBtn} onPress={goBack} activeOpacity={0.9}>
           <Text style={styles.doneBtnText}>Done</Text>
         </TouchableOpacity>
       </View>
@@ -366,23 +373,22 @@ export default function LeaveReviewScreen() {
 
   // ── Main form ──────────────────────────────────────────────────────────────
 
-  const catColor    = categoryColor(treatment?.category)
-  const provInitials = provider?.name
-    .split(' ').slice(0, 2).map(w => w[0] ?? '').join('').toUpperCase() ?? '?'
-  const canPost = overallRating > 0
+  const catColor     = categoryColor(treatmentCat)
+  const revieweeInit = revieweeName.split(' ').slice(0, 2).map(w => w[0] ?? '').join('').toUpperCase() || '?'
+  const canPost      = overallRating > 0
+  const TAGS         = isReviewingModel ? MODEL_TAGS : PROVIDER_TAGS
+  const SUB_RATINGS  = isReviewingModel ? MODEL_SUB_RATINGS : PROVIDER_SUB_RATINGS
 
   return (
     <View style={styles.container}>
       {/* ── Top bar ── */}
       <View style={[styles.topBar, { paddingTop: insets.top + 8 }]}>
-        <TouchableOpacity
-          style={styles.backBtn}
-          onPress={async () => { await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.back() }}
-          activeOpacity={0.75}
-        >
+        <TouchableOpacity style={styles.backBtn} onPress={goBack} activeOpacity={0.75}>
           <Ionicons name="chevron-back" size={20} color={Colors.roseDark} />
         </TouchableOpacity>
-        <Text style={styles.topBarTitle}>Leave a review</Text>
+        <Text style={styles.topBarTitle}>
+          {isReviewingModel ? 'Review model' : 'Leave a review'}
+        </Text>
         <View style={{ width: 36 }} />
       </View>
 
@@ -398,21 +404,21 @@ export default function LeaveReviewScreen() {
         >
           {/* ── Session recap card ── */}
           <View style={styles.recapCard}>
-            <View style={styles.recapStrip} />
+            <View style={[styles.recapStrip, { backgroundColor: isReviewingModel ? Colors.roseDark : catColor }]} />
             <View style={styles.recapBody}>
-              {provider?.profile_pic_url ? (
-                <Image source={{ uri: provider.profile_pic_url }} style={styles.recapAvatar} />
+              {revieweePicUrl ? (
+                <Image source={{ uri: revieweePicUrl }} style={styles.recapAvatar} />
               ) : (
                 <View style={styles.recapAvatarPlaceholder}>
-                  <Text style={styles.recapAvatarInitials}>{provInitials}</Text>
+                  <Text style={styles.recapAvatarInitials}>{revieweeInit}</Text>
                 </View>
               )}
               <View style={styles.recapInfo}>
-                <Text style={styles.recapName}>{provider?.name ?? 'Provider'}</Text>
-                {treatment && (
+                <Text style={styles.recapName}>{revieweeName || (isReviewingModel ? 'Model' : 'Provider')}</Text>
+                {!isReviewingModel && treatmentName && (
                   <View style={[styles.treatPill, { backgroundColor: catColor + '22' }]}>
                     <View style={[styles.treatDot, { backgroundColor: catColor }]} />
-                    <Text style={[styles.treatPillText, { color: catColor }]}>{treatment.name}</Text>
+                    <Text style={[styles.treatPillText, { color: catColor }]}>{treatmentName}</Text>
                   </View>
                 )}
                 {sessionData && (
@@ -431,15 +437,12 @@ export default function LeaveReviewScreen() {
             <View style={styles.starsLarge}>
               <StarRow rating={overallRating} size={44} onRate={setOverall} />
             </View>
-            <Text style={[
-              styles.ratingLabel,
-              overallRating > 0 && { color: Colors.warmDark, fontWeight: '700' },
-            ]}>
+            <Text style={[styles.ratingLabel, overallRating > 0 && { color: Colors.warmDark, fontWeight: '700' }]}>
               {RATING_LABELS[overallRating]}
             </Text>
           </View>
 
-          {/* ── Category ratings ── (shown after overall is set) */}
+          {/* ── Sub-ratings ── */}
           {overallRating > 0 && (
             <View style={styles.sectionCard}>
               <Text style={styles.sectionTitle}>Category ratings</Text>
@@ -451,9 +454,9 @@ export default function LeaveReviewScreen() {
                     <Text style={styles.subRatingLabel}>{label}</Text>
                   </View>
                   <StarRow
-                    rating={subRatings[key as keyof SubRatings]}
+                    rating={subRatings[key as SubRatingKey] ?? 0}
                     size={22}
-                    onRate={setSubRating(key as keyof SubRatings)}
+                    onRate={setSubRating(key as SubRatingKey)}
                   />
                 </View>
               ))}
@@ -477,9 +480,7 @@ export default function LeaveReviewScreen() {
                     {selected && (
                       <Ionicons name="checkmark" size={13} color={Colors.white} style={{ marginRight: 4 }} />
                     )}
-                    <Text style={[styles.tagChipText, selected && styles.tagChipTextSelected]}>
-                      {tag}
-                    </Text>
+                    <Text style={[styles.tagChipText, selected && styles.tagChipTextSelected]}>{tag}</Text>
                   </TouchableOpacity>
                 )
               })}
@@ -495,17 +496,17 @@ export default function LeaveReviewScreen() {
               multiline
               value={comment}
               onChangeText={t => setComment(t.slice(0, COMMENT_MAX))}
-              placeholder="What made this session memorable? Any tips for other models?"
+              placeholder={isReviewingModel
+                ? 'What was it like working with them? Any tips for other stylists?'
+                : 'What made this session memorable? Any tips for other models?'}
               placeholderTextColor={Colors.muted}
               textAlignVertical="top"
             />
-            <Text style={styles.commentCounter}>
-              {comment.length}/{COMMENT_MAX}
-            </Text>
+            <Text style={styles.commentCounter}>{comment.length}/{COMMENT_MAX}</Text>
           </View>
         </ScrollView>
 
-        {/* ── Bottom button bar ── */}
+        {/* ── Bottom bar ── */}
         <View style={[styles.bottomBar, { paddingBottom: Math.max(insets.bottom, 16) }]}>
           {!canPost && (
             <Text style={styles.rateHint}>Rate your experience to continue</Text>
@@ -534,7 +535,7 @@ export default function LeaveReviewScreen() {
 // ── Styles ────────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.cream },
+  container: { flex: 1, backgroundColor: 'transparent' },
   centred:   { alignItems: 'center', justifyContent: 'center', gap: 16 },
 
   topBar: {
@@ -547,287 +548,106 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.cream,
   },
   backBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 36, height: 36, borderRadius: 18,
     backgroundColor: Colors.white,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: Colors.border,
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: Colors.border,
   },
   topBarTitle: {
-    flex: 1,
-    textAlign: 'center',
-    fontSize: 17,
-    fontWeight: '800',
-    color: Colors.warmDark,
-    letterSpacing: -0.3,
+    flex: 1, textAlign: 'center',
+    fontSize: 17, fontWeight: '800',
+    color: Colors.warmDark, letterSpacing: -0.3,
   },
 
   scroll: { paddingHorizontal: 16, paddingTop: 20 },
 
-  // Recap card
   recapCard: {
-    backgroundColor: Colors.white,
-    borderRadius: 20,
-    marginBottom: 14,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: Colors.border,
-    shadowColor: Colors.warmDark,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 6,
-    elevation: 2,
+    backgroundColor: Colors.white, borderRadius: 20, marginBottom: 14,
+    overflow: 'hidden', borderWidth: 1, borderColor: Colors.border,
+    shadowColor: Colors.warmDark, shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05, shadowRadius: 6, elevation: 2,
   },
-  recapStrip: {
-    height: 6,
-    backgroundColor: Colors.roseDark,
-  },
-  recapBody: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 14,
-    padding: 16,
-  },
-  recapAvatar: {
-    width: 56,
-    height: 56,
-    borderRadius: 14,
-    flexShrink: 0,
-  },
+  recapStrip: { height: 6 },
+  recapBody: { flexDirection: 'row', alignItems: 'center', gap: 14, padding: 16 },
+  recapAvatar: { width: 56, height: 56, borderRadius: 14, flexShrink: 0 },
   recapAvatarPlaceholder: {
-    width: 56,
-    height: 56,
-    borderRadius: 14,
+    width: 56, height: 56, borderRadius: 14,
     backgroundColor: Colors.softPink,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
+    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
   },
-  recapAvatarInitials: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: Colors.roseDark,
-  },
+  recapAvatarInitials: { fontSize: 20, fontWeight: '700', color: Colors.roseDark },
   recapInfo: { flex: 1, gap: 6 },
-  recapName: {
-    fontSize: 17,
-    fontWeight: '800',
-    color: Colors.warmDark,
-    letterSpacing: -0.3,
-  },
-  treatPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    borderRadius: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    alignSelf: 'flex-start',
-  },
+  recapName: { fontSize: 17, fontWeight: '800', color: Colors.warmDark, letterSpacing: -0.3 },
+  treatPill: { flexDirection: 'row', alignItems: 'center', gap: 5, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3, alignSelf: 'flex-start' },
   treatDot: { width: 6, height: 6, borderRadius: 3 },
   treatPillText: { fontSize: 12, fontWeight: '700' },
-  recapDate: {
-    fontSize: 12,
-    color: Colors.muted,
-    fontWeight: '500',
-  },
+  recapDate: { fontSize: 12, color: Colors.muted, fontWeight: '500' },
 
-  // Section cards
   sectionCard: {
-    backgroundColor: Colors.white,
-    borderRadius: 20,
-    padding: 18,
-    marginBottom: 14,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    shadowColor: Colors.warmDark,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 6,
-    elevation: 1,
+    backgroundColor: Colors.white, borderRadius: 20, padding: 18, marginBottom: 14,
+    borderWidth: 1, borderColor: Colors.border,
+    shadowColor: Colors.warmDark, shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04, shadowRadius: 6, elevation: 1,
   },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: Colors.warmDark,
-    letterSpacing: -0.3,
-    marginBottom: 4,
-  },
-  sectionSub: {
-    fontSize: 12,
-    color: Colors.muted,
-    marginBottom: 14,
-  },
+  sectionTitle: { fontFamily: 'DancingScript_700Bold', fontSize: 24, color: Colors.warmDark, letterSpacing: -0.3, marginBottom: 4 },
+  sectionSub:   { fontSize: 12, color: Colors.muted, marginBottom: 14 },
 
-  // Overall stars
-  starsLarge: {
-    alignItems: 'center',
-    marginVertical: 16,
-  },
-  ratingLabel: {
-    textAlign: 'center',
-    fontSize: 14,
-    color: Colors.muted,
-    fontWeight: '500',
-    marginTop: 4,
-  },
+  starsLarge: { alignItems: 'center', marginVertical: 16 },
+  ratingLabel: { textAlign: 'center', fontSize: 14, color: Colors.muted, fontWeight: '500', marginTop: 4 },
 
-  // Sub-ratings
   subRatingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: Colors.border,
   },
-  subRatingLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  subRatingLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: Colors.warmDark,
-  },
+  subRatingLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  subRatingLabel: { fontSize: 14, fontWeight: '600', color: Colors.warmDark },
 
-  // Tag chips
-  tagGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
+  tagGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   tagChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-    borderRadius: 22,
-    borderWidth: 1.5,
-    borderColor: Colors.softPink,
-    backgroundColor: Colors.white,
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 14, paddingVertical: 9,
+    borderRadius: 22, borderWidth: 1.5,
+    borderColor: Colors.softPink, backgroundColor: Colors.white,
   },
-  tagChipSelected: {
-    backgroundColor: Colors.roseDark,
-    borderColor: Colors.roseDark,
-  },
-  tagChipText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: Colors.roseDark,
-  },
-  tagChipTextSelected: {
-    color: Colors.white,
-  },
+  tagChipSelected: { backgroundColor: Colors.roseDark, borderColor: Colors.roseDark },
+  tagChipText:     { fontSize: 13, fontWeight: '600', color: Colors.roseDark },
+  tagChipTextSelected: { color: Colors.white },
 
-  // Comment
   commentInput: {
-    backgroundColor: Colors.inputBg,
-    borderRadius: 14,
-    borderWidth: 1.5,
-    borderColor: Colors.border,
-    padding: 14,
-    fontSize: 14,
-    color: Colors.warmDark,
-    minHeight: 100,
-    lineHeight: 20,
+    backgroundColor: Colors.inputBg, borderRadius: 14, borderWidth: 1.5,
+    borderColor: Colors.border, padding: 14, fontSize: 14,
+    color: Colors.warmDark, minHeight: 100, lineHeight: 20,
   },
-  commentCounter: {
-    fontSize: 11,
-    color: Colors.muted,
-    textAlign: 'right',
-    marginTop: 6,
-  },
+  commentCounter: { fontSize: 11, color: Colors.muted, textAlign: 'right', marginTop: 6 },
 
-  // Bottom bar
   bottomBar: {
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: Colors.border,
-    backgroundColor: Colors.cream,
-    gap: 8,
+    paddingHorizontal: 16, paddingTop: 12,
+    borderTopWidth: 1, borderTopColor: Colors.border,
+    backgroundColor: Colors.cream, gap: 8,
   },
-  rateHint: {
-    textAlign: 'center',
-    fontSize: 12,
-    color: Colors.muted,
-    fontWeight: '500',
-  },
+  rateHint: { textAlign: 'center', fontSize: 12, color: Colors.muted, fontWeight: '500' },
   postBtn: {
-    height: 54,
-    backgroundColor: Colors.roseDark,
-    borderRadius: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    shadowColor: Colors.roseDark,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 4,
+    height: 54, backgroundColor: Colors.roseDark, borderRadius: 16,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    shadowColor: Colors.roseDark, shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3, shadowRadius: 8, elevation: 4,
   },
-  postBtnDisabled: {
-    backgroundColor: Colors.muted,
-    shadowOpacity: 0,
-    elevation: 0,
-  },
-  postBtnText: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: Colors.white,
-    letterSpacing: -0.2,
-  },
+  postBtnDisabled: { backgroundColor: Colors.muted, shadowOpacity: 0, elevation: 0 },
+  postBtnText: { fontSize: 16, fontWeight: '800', color: Colors.white, letterSpacing: -0.2 },
 
-  // Success / already reviewed
   successIconCircle: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
-    backgroundColor: Colors.roseDark,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: Colors.roseDark,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 6,
+    width: 88, height: 88, borderRadius: 44, backgroundColor: Colors.roseDark,
+    alignItems: 'center', justifyContent: 'center',
+    shadowColor: Colors.roseDark, shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3, shadowRadius: 12, elevation: 6,
   },
-  successTitle: {
-    fontSize: 24,
-    fontWeight: '800',
-    color: Colors.warmDark,
-    letterSpacing: -0.5,
-    textAlign: 'center',
-  },
-  successSub: {
-    fontSize: 15,
-    color: Colors.muted,
-    textAlign: 'center',
-    lineHeight: 22,
-  },
+  successTitle: { fontFamily: 'DancingScript_700Bold', fontSize: 35, color: Colors.warmDark, letterSpacing: -0.5, textAlign: 'center' },
+  successSub:   { fontSize: 15, color: Colors.muted, textAlign: 'center', lineHeight: 22 },
   doneBtn: {
-    marginTop: 8,
-    height: 54,
-    width: 180,
-    backgroundColor: Colors.roseDark,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: Colors.roseDark,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 4,
+    marginTop: 8, height: 54, width: 180, backgroundColor: Colors.roseDark,
+    borderRadius: 16, alignItems: 'center', justifyContent: 'center',
+    shadowColor: Colors.roseDark, shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25, shadowRadius: 8, elevation: 4,
   },
-  doneBtnText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: Colors.white,
-  },
+  doneBtnText: { fontSize: 16, fontWeight: '700', color: Colors.white },
 })

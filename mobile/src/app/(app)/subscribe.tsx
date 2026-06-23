@@ -252,16 +252,6 @@ const BENEFITS = [
     desc:  'Apply to as many sessions as you like — no cap.',
   },
   {
-    icon:  'star-outline',
-    title: 'Priority matching',
-    desc:  'Your applications appear at the top of provider inboxes.',
-  },
-  {
-    icon:  'shield-checkmark-outline',
-    title: 'Exclusive session access',
-    desc:  'Some providers accept Premium subscribers only.',
-  },
-  {
     icon:  'chatbubble-ellipses-outline',
     title: 'Direct messaging',
     desc:  'Message providers before committing to a booking.',
@@ -269,14 +259,14 @@ const BENEFITS = [
   {
     icon:  'analytics-outline',
     title: 'Session insights',
-    desc:  'Track your history, earnings, and review scores.',
+    desc:  'Track your session history and review scores.',
   },
 ]
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.cream },
+  container: { flex: 1, backgroundColor: 'transparent' },
   centred:   { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32, gap: 16 },
 
   topBar: {
@@ -291,7 +281,8 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: Colors.border,
   },
   topBarTitle: {
-    flex: 1, textAlign: 'center', fontSize: 17, fontWeight: '800',
+    fontFamily: 'DancingScript_700Bold',
+    flex: 1, textAlign: 'center', fontSize: 25,
     color: Colors.warmDark, letterSpacing: -0.3,
   },
 
@@ -310,11 +301,11 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
     marginBottom: 4,
   },
-  heroTitle: { fontSize: 24, fontWeight: '900', color: Colors.white, letterSpacing: -0.5 },
+  heroTitle: { fontFamily: 'DancingScript_700Bold', fontSize: 35, color: Colors.white, letterSpacing: -0.5 },
   heroSub:   { fontSize: 14, color: 'rgba(255,255,255,0.82)', textAlign: 'center', lineHeight: 20 },
 
   priceBadge:   { flexDirection: 'row', alignItems: 'baseline', marginTop: 4 },
-  priceAmount:  { fontSize: 38, fontWeight: '900', color: Colors.white, letterSpacing: -1 },
+  priceAmount:  { fontSize: 38, color: Colors.white, letterSpacing: -1 },
   pricePeriod:  { fontSize: 16, fontWeight: '600', color: 'rgba(255,255,255,0.75)' },
   cancelNote:   { fontSize: 12, color: 'rgba(255,255,255,0.6)', marginTop: 2 },
 
@@ -377,7 +368,8 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center', marginBottom: 8,
   },
   successTitle: {
-    fontSize: 24, fontWeight: '900', color: Colors.warmDark,
+    fontFamily: 'DancingScript_700Bold',
+    fontSize: 35, color: Colors.warmDark,
     textAlign: 'center', letterSpacing: -0.5,
   },
   successSub: {

@@ -8,17 +8,21 @@ import {
   Alert,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { useLocalSearchParams, useRouter } from 'expo-router'
 import * as Haptics from 'expo-haptics'
 import { Ionicons } from '@expo/vector-icons'
 import { Colors } from '@/constants/Colors'
 import { supabase } from '@/lib/supabase'
 import { pendingAuth } from '@/lib/pendingAuth'
 
-export default function ConfirmEmailScreen() {
-  const router = useRouter()
-  const { email, role, first, initial } = useLocalSearchParams<{ email: string; role: string; first: string; initial: string }>()
+interface Props {
+  email: string
+  role: string
+  first: string
+  initial: string
+  onBack: () => void
+}
 
+export default function ConfirmEmailScreen({ email, role, first, initial, onBack }: Props) {
   const [checking,  setChecking]  = useState(false)
   const [resending, setResending] = useState(false)
   const [resent,    setResent]    = useState(false)
@@ -32,11 +36,10 @@ export default function ConfirmEmailScreen() {
     const creds = pendingAuth.get()
     if (!creds) {
       setChecking(false)
-      setErrorMsg("Session expired — tap \"Use a different email address\" below to go back, then log in with your email and password.")
+      setErrorMsg('Session expired — tap "Use a different email address" below to go back, then log in with your email and password.')
       return
     }
 
-    // 10s timeout so the spinner can never hang forever
     const timeoutId = setTimeout(() => {
       setChecking(false)
       setErrorMsg('Request timed out. Please check your connection and try again.')
@@ -78,8 +81,6 @@ export default function ConfirmEmailScreen() {
           }, { onConflict: 'id', ignoreDuplicates: true })
 
           if (role === 'provider') {
-            // Check first to avoid duplicate insert — upsert with onConflict requires
-            // a UNIQUE index on user_id which may not exist.
             const { data: existingProv } = await supabase
               .from('providers')
               .select('id')
@@ -105,7 +106,7 @@ export default function ConfirmEmailScreen() {
                   location_text: '',
                 })
               if (provInsertErr) {
-                console.log('[ConfirmEmail] providers insert error:', provInsertErr.code, provInsertErr.message, provInsertErr.details)
+                console.log('[ConfirmEmail] providers insert error:', provInsertErr.code, provInsertErr.message)
                 Alert.alert(
                   'Provider row insert failed',
                   `code: ${provInsertErr.code}\nmessage: ${provInsertErr.message}\ndetails: ${provInsertErr.details ?? '—'}\nhint: ${provInsertErr.hint ?? '—'}`,
@@ -118,8 +119,7 @@ export default function ConfirmEmailScreen() {
         }
 
         await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
-        // AuthGate in _layout.tsx switches to the post-auth Stack automatically
-        // when session becomes non-null — no navigation call needed here.
+        // onAuthStateChange fires SIGNED_IN → AppEntry renders the app Stack automatically.
       } else {
         setChecking(false)
         setErrorMsg("Your email hasn't been confirmed yet. Please tap the link in your inbox.")
@@ -154,19 +154,17 @@ export default function ConfirmEmailScreen() {
   const handleBack = async () => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
     pendingAuth.clear()
-    router.replace('/(auth)/signup')
+    onBack()
   }
 
   return (
     <View style={styles.container}>
       <SafeAreaView style={styles.safe}>
         <View style={styles.content}>
-          {/* Icon */}
           <View style={styles.iconWrap}>
             <Ionicons name="mail" size={48} color={Colors.roseDark} />
           </View>
 
-          {/* Heading */}
           <Text style={styles.title}>Check your email</Text>
           <Text style={styles.body}>
             We've sent a confirmation link to{'\n'}
@@ -177,7 +175,6 @@ export default function ConfirmEmailScreen() {
             If the link opened a blank page in your browser, just come back here — your email is still confirmed.
           </Text>
 
-          {/* Steps */}
           <View style={styles.steps}>
             {[
               { n: '1', text: 'Open the email from Guinea Pig' },
@@ -193,7 +190,6 @@ export default function ConfirmEmailScreen() {
             ))}
           </View>
 
-          {/* Error */}
           {!!errorMsg && (
             <View style={styles.errorBox}>
               <Ionicons name="alert-circle-outline" size={16} color={Colors.error} />
@@ -201,7 +197,6 @@ export default function ConfirmEmailScreen() {
             </View>
           )}
 
-          {/* Resent confirmation */}
           {resent && (
             <View style={styles.successBox}>
               <Ionicons name="checkmark-circle-outline" size={16} color="#1D9E75" />
@@ -210,7 +205,6 @@ export default function ConfirmEmailScreen() {
           )}
         </View>
 
-        {/* Actions */}
         <View style={styles.actions}>
           <TouchableOpacity
             style={[styles.primaryBtn, checking && { opacity: 0.7 }]}
@@ -258,15 +252,14 @@ const styles = StyleSheet.create({
   },
 
   title: {
-    fontSize: 26, fontWeight: '800', color: Colors.warmDark,
+    fontFamily: 'DancingScript_700Bold',
+    fontSize: 39, color: Colors.warmDark,
     letterSpacing: -0.5, textAlign: 'center', marginBottom: 12,
   },
   body: {
     fontSize: 15, color: Colors.muted, textAlign: 'center', lineHeight: 23, marginBottom: 8,
   },
-  emailHighlight: {
-    fontWeight: '700', color: Colors.warmDark,
-  },
+  emailHighlight: { fontWeight: '700', color: Colors.warmDark },
   hint: {
     fontSize: 13, color: Colors.muted, textAlign: 'center', lineHeight: 19, marginBottom: 28,
   },
@@ -299,9 +292,7 @@ const styles = StyleSheet.create({
   },
   successText: { fontSize: 13, color: '#1D9E75', fontWeight: '500' },
 
-  actions: {
-    paddingBottom: 12, gap: 10,
-  },
+  actions: { paddingBottom: 12, gap: 10 },
   primaryBtn: {
     height: 54, backgroundColor: Colors.roseDark, borderRadius: 16,
     alignItems: 'center', justifyContent: 'center',

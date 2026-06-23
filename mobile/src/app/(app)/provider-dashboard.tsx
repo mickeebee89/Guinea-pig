@@ -10,19 +10,22 @@ import {
   ActivityIndicator,
   Alert,
   Switch,
+  TextInput,
 } from 'react-native'
 import { useRouter } from 'expo-router'
 import * as Haptics from 'expo-haptics'
+import * as Location from 'expo-location'
 import { Ionicons } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { Colors } from '@/constants/Colors'
+import { Colors, CategoryColors } from '@/constants/Colors'
 import { useAuth } from '@/context/auth'
 import { supabase } from '@/lib/supabase'
+import ScreenDecor from '@/components/ScreenDecor'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const CATEGORY_COLORS: Record<string, string> = {
-  nails:      '#C8788A',
+  nails:      CategoryColors.nails,
   lashes:     '#1D9E75',
   brows:      '#BA7517',
   hair:       '#7B5EA7',
@@ -44,6 +47,21 @@ type Provider = {
   rating: number | null
   review_count: number | null
   is_published: boolean | null
+  shop_handle: string | null
+}
+
+type ModelCard = {
+  id: string
+  name: string
+  profile_pic_url: string | null
+  hair_colour: string | null
+  hair_type: string | null
+  hair_length: string | null
+  skin_tone: string | null
+  is_verified: boolean
+  latitude: number | null
+  longitude: number | null
+  distance: number | null
 }
 
 type SessionCard = {
@@ -77,6 +95,21 @@ function todayKey() {
   return `${y}-${m}-${day}`
 }
 
+function haversine(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 3958.8
+  const dLat = (lat2 - lat1) * Math.PI / 180
+  const dLon = (lon2 - lon1) * Math.PI / 180
+  const a = Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+}
+
+function formatDistance(d: number): string {
+  if (d < 0.1) return 'nearby'
+  if (d < 10) return `${d.toFixed(1)} mi`
+  return `${Math.round(d)} mi`
+}
+
 function formatSessionDate(dateStr: string): string {
   const [y, m, d] = dateStr.split('-').map(Number)
   return new Date(y, m - 1, d).toLocaleDateString('en-GB', {
@@ -103,12 +136,13 @@ function timeAgo(iso: string): string {
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
-function StatCard({ label, value, icon }: { label: string; value: string; icon: string }) {
+function StatCard({ label, value, icon, hint }: { label: string; value: string; icon: string; hint?: string }) {
   return (
     <View style={statStyles.card}>
       <Ionicons name={icon as any} size={20} color={Colors.roseDark} />
       <Text style={statStyles.value}>{value}</Text>
       <Text style={statStyles.label}>{label}</Text>
+      {hint ? <Text style={statStyles.hint}>{hint}</Text> : null}
     </View>
   )
 }
@@ -142,39 +176,31 @@ const statStyles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
+  hint: {
+    fontSize: 10,
+    color: Colors.roseDark,
+    fontWeight: '600',
+  },
 })
 
 // ── Provider not found — auto sign-out ────────────────────────────────────────
 
-function ProviderNotFound() {
-  const { signOut } = useAuth()
-  const router = useRouter()
-  const [countdown, setCountdown] = useState(3)
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setCountdown(c => c - 1)
-    }, 1000)
-    const timeout = setTimeout(async () => {
-      clearInterval(interval)
-      await signOut()
-      router.replace('/')
-    }, 3000)
-    return () => { clearInterval(interval); clearTimeout(timeout) }
-  }, [])
-
+function ProviderNotFound({ onRetry }: { onRetry: () => void }) {
   return (
     <View style={[styles.container, styles.centred]}>
       <Ionicons name="refresh-circle-outline" size={48} color={Colors.rose} />
       <Text style={[styles.emptyLabel, { marginTop: 16, fontSize: 17, color: Colors.warmDark }]}>
-        Setting up your account…
+        Setting up your profile…
       </Text>
-      <Text style={[styles.emptyLabel, { fontSize: 14, color: Colors.muted, marginTop: 8 }]}>
-        Please sign in again
+      <Text style={[styles.emptyLabel, { fontSize: 14, color: Colors.muted, marginTop: 8, textAlign: 'center', paddingHorizontal: 32 }]}>
+        Your stylist profile couldn't be created yet. Pull to refresh or tap below to try again.
       </Text>
-      <Text style={[styles.emptyLabel, { fontSize: 13, color: Colors.muted, marginTop: 4 }]}>
-        Redirecting in {countdown}s
-      </Text>
+      <TouchableOpacity
+        style={[styles.goBackBtn, { marginTop: 20 }]}
+        onPress={onRetry}
+      >
+        <Text style={styles.goBackText}>Try again</Text>
+      </TouchableOpacity>
     </View>
   )
 }
@@ -191,6 +217,17 @@ export default function ProviderDashboardScreen() {
   const [pendingSessions,   setPendingSessions]   = useState<SessionCard[]>([])
   const [upcomingSessions,  setUpcomingSessions]  = useState<SessionCard[]>([])
   const [stats,             setStats]             = useState<Stats>({ totalSessions: 0, portfolioCount: 0 })
+  const [nearbyModels,      setNearbyModels]      = useState<ModelCard[]>([])
+  const [modelSearch,       setModelSearch]       = useState('')
+  const [showModelFilters,  setShowModelFilters]  = useState(false)
+  const [filterHairColour,  setFilterHairColour]  = useState<string | null>(null)
+  const [filterHairType,    setFilterHairType]    = useState<string | null>(null)
+  const [filterHairLength,  setFilterHairLength]  = useState<string | null>(null)
+  const [filterSkinTone,    setFilterSkinTone]    = useState<string | null>(null)
+  const [filterDistanceMi,  setFilterDistanceMi]  = useState<number | null>(null)
+  const [filterVerified,    setFilterVerified]    = useState(false)
+  const [providerLat,       setProviderLat]       = useState<number | null>(null)
+  const [providerLng,       setProviderLng]       = useState<number | null>(null)
   const [loading,           setLoading]           = useState(true)
   const [refreshing,        setRefreshing]        = useState(false)
   const [publishLoading,    setPublishLoading]    = useState(false)
@@ -203,51 +240,76 @@ export default function ProviderDashboardScreen() {
     if (!isRefresh) setLoading(true)
 
     try {
-      // Phase 1: get provider record, creating it if absent
-      const { data: provData } = await supabase
-        .from('providers')
-        .select('id, name, profile_pic_url, is_verified, rating, review_count, is_published')
-        .eq('user_id', userId)
-        .maybeSingle()
+      // Phase 1: fetch user profile + provider row in parallel; derive display name from users
+      const [{ data: userRow }, { data: provRow }] = await Promise.all([
+        supabase.from('users').select('first_name, last_initial, profile_pic_url').eq('id', userId).single(),
+        supabase.from('providers').select('id, user_id, bio, is_published, shop_handle, rating, review_count').eq('user_id', userId).maybeSingle(),
+      ])
 
-      let resolvedProv = provData as Provider | null
+      const first       = (userRow as any)?.first_name ?? ''
+      const initial     = (userRow as any)?.last_initial ?? ''
+      const displayName = first ? `${first}${initial ? ` ${initial}.` : ''}`.trim() : 'Stylist'
+      const userPic     = (userRow as any)?.profile_pic_url ?? null
 
-      if (!resolvedProv) {
-        const { data: userData } = await supabase
-          .from('users')
-          .select('first_name, last_initial')
-          .eq('id', userId)
-          .single()
+      let resolvedProv: Provider | null = null
 
-        const first   = (userData as any)?.first_name ?? ''
-        const initial = (userData as any)?.last_initial ?? ''
-        const displayName = first
-          ? `${first}${initial ? ` ${initial}.` : ''}`.trim()
-          : 'Provider'
+      const buildProvider = (id: string, isPublished: boolean | null = null, shopHandle: string | null = null, rating: number | null = null, reviewCount: number | null = null): Provider => ({
+        id,
+        name:            displayName,
+        profile_pic_url: userPic,
+        is_verified:     null,
+        rating,
+        review_count:    reviewCount,
+        is_published:    isPublished,
+        shop_handle:     shopHandle,
+      } as unknown as Provider)
 
-        const { data: created } = await supabase
+      if (provRow) {
+        resolvedProv = buildProvider(
+          (provRow as any).id,
+          (provRow as any).is_published ?? null,
+          (provRow as any).shop_handle ?? null,
+          (provRow as any).rating ?? null,
+          (provRow as any).review_count ?? null,
+        )
+      } else {
+        const handle = `${first}${initial ? '-' + initial : ''}`
+          .toLowerCase()
+          .replace(/[^a-z0-9-]/g, '')
+          .replace(/-+/g, '-')
+          .replace(/^-|-$/g, '') || 'stylist'
+
+        const { data: created, error: insertErr } = await supabase
           .from('providers')
           .insert({
-            user_id:      userId,
-            name:         displayName,
-            is_published: false,
-            is_verified:  false,
-            rating:       0,
-            review_count: 0,
+            user_id:       userId,
+            shop_handle:   handle,
+            level:         'beginner',
+            region:        'UK',
+            name:          displayName,
+            is_published:  true,
+            location_text: '',
           })
-          .select('id, name, profile_pic_url, is_verified, rating, review_count, is_published')
+          .select('id')
           .single()
 
+        if (insertErr) {
+          Alert.alert(
+            'Provider row insert failed',
+            `code: ${insertErr.code}\nmessage: ${insertErr.message}\ndetails: ${insertErr.details ?? '—'}\nhint: ${insertErr.hint ?? '—'}`,
+          )
+        }
+
         if (created) {
-          resolvedProv = created as Provider
+          resolvedProv = buildProvider((created as any).id, true, handle)
         } else {
           // Insert may have raced — fetch one more time before giving up
           const { data: refetched } = await supabase
             .from('providers')
-            .select('id, name, profile_pic_url, is_verified, rating, review_count, is_published')
+            .select('id, shop_handle')
             .eq('user_id', userId)
             .maybeSingle()
-          resolvedProv = (refetched as Provider) ?? null
+          if (refetched) resolvedProv = buildProvider((refetched as any).id, null, (refetched as any).shop_handle ?? null)
         }
       }
 
@@ -287,7 +349,7 @@ export default function ProviderDashboardScreen() {
           .eq('provider_id', providerId)
           .in('status', ['accepted', 'completed']),
         supabase
-          .from('provider_portfolio')
+          .from('portfolio_items')
           .select('id', { count: 'exact', head: true })
           .eq('provider_id', providerId),
       ])
@@ -296,6 +358,31 @@ export default function ProviderDashboardScreen() {
         totalSessions: totalCount ?? 0,
         portfolioCount: portfolioCount ?? 0,
       })
+
+      // Fetch nearby models with attributes
+      const { data: modelUsersData } = await supabase
+        .from('users')
+        .select('id, first_name, last_initial, profile_pic_url, is_verified, latitude, longitude, model_attributes(hair_colour, hair_type, hair_length, skin_tone)')
+        .eq('role', 'model')
+        .limit(200)
+      if (modelUsersData) {
+        setNearbyModels((modelUsersData as any[]).map(m => {
+          const attrs = Array.isArray(m.model_attributes) ? m.model_attributes[0] : m.model_attributes
+          return {
+            id:              m.id,
+            name:            `${m.first_name ?? ''}${m.last_initial ? ' ' + m.last_initial + '.' : ''}`.trim() || 'Model',
+            profile_pic_url: m.profile_pic_url ?? null,
+            hair_colour:     attrs?.hair_colour ?? null,
+            hair_type:       attrs?.hair_type ?? null,
+            hair_length:     attrs?.hair_length ?? null,
+            skin_tone:       attrs?.skin_tone ?? null,
+            is_verified:     !!(m.is_verified),
+            latitude:        m.latitude ?? null,
+            longitude:       m.longitude ?? null,
+            distance:        null,
+          }
+        }))
+      }
 
       // Phase 3: enrich sessions with model + treatment info
       const allSessions = [...(pendingData ?? []), ...(upcomingData ?? [])]
@@ -362,6 +449,23 @@ export default function ProviderDashboardScreen() {
 
   useEffect(() => { load() }, [load])
 
+  useEffect(() => {
+    if (!userId) return
+    Location.requestForegroundPermissionsAsync().then(({ status }) => {
+      if (status !== 'granted') return
+      Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }).then(async loc => {
+        const lat = loc.coords.latitude
+        const lng = loc.coords.longitude
+        setProviderLat(lat)
+        setProviderLng(lng)
+        await Promise.all([
+          supabase.from('users').update({ latitude: lat, longitude: lng }).eq('id', userId),
+          supabase.from('providers').update({ latitude: lat, longitude: lng }).eq('user_id', userId),
+        ]).catch(() => {})
+      }).catch(() => {})
+    }).catch(() => {})
+  }, [userId])
+
   const onRefresh = () => {
     setRefreshing(true)
     load(true)
@@ -388,15 +492,14 @@ export default function ProviderDashboardScreen() {
           type: 'session_accepted',
           title: 'Session accepted! 🎉',
           body: `Your booking for ${formatSessionDate(s.date)} has been confirmed.`,
-          data: { session_id: s.id },
-          read: false,
+          session_id: s.id,
         })
       } catch {}
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
       setPendingSessions(prev => prev.filter(x => x.id !== s.id))
       if (s.date >= todayKey()) {
         setUpcomingSessions(prev =>
-          [...prev, { ...s, status: 'accepted' }].sort((a, b) => a.date.localeCompare(b.date))
+          [...prev, { ...s, status: 'accepted' as const }].sort((a, b) => a.date.localeCompare(b.date))
         )
       }
     } catch {
@@ -426,8 +529,7 @@ export default function ProviderDashboardScreen() {
                   type: 'session_declined',
                   title: 'Session update',
                   body: `Your booking for ${formatSessionDate(s.date)} was not confirmed.`,
-                  data: { session_id: s.id },
-                  read: false,
+                  session_id: s.id,
                 })
               } catch {}
               setPendingSessions(prev => prev.filter(x => x.id !== s.id))
@@ -445,13 +547,33 @@ export default function ProviderDashboardScreen() {
 
   const togglePublished = async (value: boolean) => {
     if (!provider) return
+
+    if (value) {
+      const { count } = await supabase
+        .from('provider_treatments')
+        .select('id', { count: 'exact', head: true })
+        .eq('provider_id', provider.id)
+      if (!count || count === 0) {
+        Alert.alert(
+          'Add treatments first',
+          'You need to add at least one treatment before going live so models know what you offer.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Edit Shop', onPress: goEditShop },
+          ],
+        )
+        return
+      }
+    }
+
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
     setPublishLoading(true)
     try {
-      await supabase
+      const { error: toggleErr } = await supabase
         .from('providers')
         .update({ is_published: value })
         .eq('id', provider.id)
+      if (toggleErr) throw toggleErr
       setProvider(p => p ? { ...p, is_published: value } : p)
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
     } catch {
@@ -462,9 +584,39 @@ export default function ProviderDashboardScreen() {
 
   // ── Quick links ────────────────────────────────────────────────────────────
 
+  const handleInvite = async (m: ModelCard) => {
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+    const { error } = await supabase.from('notifications').insert({
+      user_id:    m.id,
+      type:       'stylist_invite',
+      title:      `${provider?.name ?? 'A stylist'} wants you as their model`,
+      body:       'Tap to view their shop',
+      session_id: null,
+      data:       { provider_id: provider?.id ?? null, shop_handle: provider?.shop_handle ?? null },
+    })
+    if (error) {
+      console.error('[handleInvite] insert error:', error.message)
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)
+      Alert.alert('Invite failed', error.message)
+      return
+    }
+    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
+    Alert.alert('Invite sent!', `We'll let ${m.name.split(' ')[0]} know you're available.`)
+  }
+
   const goAvailability = async () => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
     router.push('/(app)/availability' as any)
+  }
+
+  const goEditShop = async () => {
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+    router.push('/(app)/edit-shop' as any)
+  }
+
+  const goPortfolio = async () => {
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+    router.push('/(app)/portfolio' as any)
   }
 
   const goShop = async () => {
@@ -472,8 +624,13 @@ export default function ProviderDashboardScreen() {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
     router.push({
       pathname: '/(app)/provider/[id]' as any,
-      params: { id: provider.id },
+      params: { id: provider.id, ownShop: '1' },
     })
+  }
+
+  const goModelProfile = async (modelId: string) => {
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+    router.push({ pathname: '/(app)/model/[id]' as any, params: { id: modelId } })
   }
 
   const goChat = async (sessionId: string) => {
@@ -495,7 +652,7 @@ export default function ProviderDashboardScreen() {
   }
 
   if (!provider) {
-    return <ProviderNotFound />
+    return <ProviderNotFound onRetry={() => load()} />
   }
 
   const isPublished = !!provider.is_published
@@ -510,6 +667,7 @@ export default function ProviderDashboardScreen() {
 
   return (
     <View style={styles.container}>
+      <ScreenDecor />
       {/* ── Header bar ── */}
       <View style={[styles.topBar, { paddingTop: insets.top + 8 }]}>
         <View style={styles.topBarLeft}>
@@ -582,21 +740,39 @@ export default function ProviderDashboardScreen() {
 
         {/* ── Stats ── */}
         <View style={styles.statsRow}>
-          <StatCard
-            label="Sessions"
-            value={stats.totalSessions.toString()}
-            icon="calendar-outline"
-          />
-          <StatCard
-            label="Rating"
-            value={provider.rating != null ? provider.rating.toFixed(1) : '—'}
-            icon="star-outline"
-          />
-          <StatCard
-            label="Portfolio"
-            value={stats.portfolioCount.toString()}
-            icon="images-outline"
-          />
+          <TouchableOpacity
+            onPress={async () => { await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push('/(app)/sessions' as any) }}
+            activeOpacity={0.8}
+            style={{ flex: 1 }}
+          >
+            <StatCard
+              label="Sessions"
+              value={stats.totalSessions.toString()}
+              icon="calendar-outline"
+            />
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={async () => {
+              await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+              router.push(`/(app)/reviews/${userId}` as any)
+            }}
+            activeOpacity={0.8}
+            style={{ flex: 1 }}
+          >
+            <StatCard
+              label="Rating"
+              value={provider.rating != null ? provider.rating.toFixed(1) : '—'}
+              icon="star-outline"
+              hint="View all"
+            />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={goPortfolio} activeOpacity={0.8} style={{ flex: 1 }}>
+            <StatCard
+              label="Portfolio"
+              value={stats.portfolioCount.toString()}
+              icon="images-outline"
+            />
+          </TouchableOpacity>
         </View>
 
         {/* ── Pending applications ── */}
@@ -673,7 +849,156 @@ export default function ProviderDashboardScreen() {
             </View>
             <Ionicons name="chevron-forward" size={18} color={Colors.muted} />
           </TouchableOpacity>
+
+          <TouchableOpacity style={styles.quickLinkBtn} onPress={goEditShop} activeOpacity={0.85}>
+            <View style={[styles.quickLinkIcon, { backgroundColor: '#E8845E26' }]}>
+              <Ionicons name="pencil-outline" size={22} color="#E8845E" />
+            </View>
+            <View style={styles.quickLinkText}>
+              <Text style={styles.quickLinkTitle}>Edit Shop</Text>
+              <Text style={styles.quickLinkSub}>Update bio, name & location</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={Colors.muted} />
+          </TouchableOpacity>
         </View>
+
+        {/* ── Nearby models ── */}
+        <View style={[styles.sectionHeader, { marginTop: 24 }]}>
+          <Text style={styles.sectionTitle}>Nearby models</Text>
+          <TouchableOpacity
+            style={[nearbyStyles.filterToggle, showModelFilters && nearbyStyles.filterToggleActive]}
+            onPress={() => setShowModelFilters(v => !v)}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="options-outline" size={14} color={showModelFilters ? Colors.white : Colors.roseDark} />
+            <Text style={[nearbyStyles.filterToggleText, showModelFilters && { color: Colors.white }]}>Filter</Text>
+            {(filterHairColour || filterHairType || filterHairLength || filterSkinTone || filterDistanceMi || filterVerified) && (
+              <View style={nearbyStyles.filterDot} />
+            )}
+          </TouchableOpacity>
+        </View>
+
+        {/* Model search */}
+        <View style={styles.modelSearchBar}>
+          <Ionicons name="search-outline" size={15} color={Colors.muted} />
+          <TextInput
+            style={styles.modelSearchInput}
+            placeholder="Search models by name…"
+            placeholderTextColor={Colors.muted}
+            value={modelSearch}
+            onChangeText={setModelSearch}
+          />
+          {modelSearch.length > 0 && (
+            <TouchableOpacity onPress={() => setModelSearch('')}>
+              <Ionicons name="close-circle" size={15} color={Colors.muted} />
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {/* Filter panel */}
+        {showModelFilters && (
+          <View style={nearbyStyles.filterPanel}>
+            <FilterChips
+              label="Hair colour"
+              options={['Black','Dark Brown','Medium Brown','Light Brown','Blonde','Platinum Blonde','Red','Auburn','Grey','White','Dyed']}
+              selected={filterHairColour}
+              onSelect={v => setFilterHairColour(v === filterHairColour ? null : v)}
+            />
+            <FilterChips
+              label="Hair type"
+              options={['Straight','Wavy','Curly','Coily']}
+              selected={filterHairType}
+              onSelect={v => setFilterHairType(v === filterHairType ? null : v)}
+            />
+            <FilterChips
+              label="Hair length"
+              options={['Short','Medium','Long','Very Long']}
+              selected={filterHairLength}
+              onSelect={v => setFilterHairLength(v === filterHairLength ? null : v)}
+            />
+            <FilterChips
+              label="Skin tone"
+              options={['Fair','Light','Medium','Olive','Brown','Dark Brown','Deep']}
+              selected={filterSkinTone}
+              onSelect={v => setFilterSkinTone(v === filterSkinTone ? null : v)}
+            />
+            <FilterChips
+              label="Distance"
+              options={['1 mi','2 mi','4 mi','10 mi','20 mi']}
+              selected={filterDistanceMi != null ? `${filterDistanceMi} mi` : null}
+              onSelect={v => {
+                const parsed = v ? parseInt(v) : null
+                setFilterDistanceMi(parsed === filterDistanceMi ? null : parsed)
+              }}
+            />
+            <View style={nearbyStyles.filterRow}>
+              <Text style={nearbyStyles.filterLabel}>Verified only</Text>
+              <Switch
+                value={filterVerified}
+                onValueChange={setFilterVerified}
+                trackColor={{ false: Colors.border, true: Colors.rose }}
+                thumbColor={filterVerified ? Colors.roseDark : Colors.muted}
+                ios_backgroundColor={Colors.border}
+              />
+            </View>
+            <TouchableOpacity
+              style={nearbyStyles.clearFiltersBtn}
+              onPress={() => {
+                setFilterHairColour(null); setFilterHairType(null)
+                setFilterHairLength(null); setFilterSkinTone(null)
+                setFilterDistanceMi(null); setFilterVerified(false)
+              }}
+            >
+              <Text style={nearbyStyles.clearFiltersText}>Clear all filters</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {(() => {
+          const modelsWithDist = nearbyModels.map(m => ({
+            ...m,
+            distance: providerLat != null && providerLng != null && m.latitude != null && m.longitude != null
+              ? haversine(providerLat, providerLng, m.latitude, m.longitude)
+              : null,
+          }))
+          const q = modelSearch.trim().toLowerCase()
+          const filtered = modelsWithDist
+            .filter(m => {
+              if (q && !m.name.toLowerCase().includes(q)) return false
+              if (filterHairColour && m.hair_colour !== filterHairColour) return false
+              if (filterHairType && m.hair_type !== filterHairType) return false
+              if (filterHairLength && m.hair_length !== filterHairLength) return false
+              if (filterSkinTone && m.skin_tone !== filterSkinTone) return false
+              if (filterVerified && !m.is_verified) return false
+              if (filterDistanceMi != null && (m.distance == null || m.distance > filterDistanceMi)) return false
+              return true
+            })
+            .sort((a, b) => (a.distance ?? Infinity) - (b.distance ?? Infinity))
+          const hasActiveFilter = !!(q || filterHairColour || filterHairType || filterHairLength || filterSkinTone || filterVerified || filterDistanceMi != null)
+          return filtered.length === 0 ? (
+            <View style={styles.emptyCard}>
+              <Ionicons name="people-outline" size={32} color={Colors.muted} />
+              <Text style={styles.emptyCardText}>
+                {hasActiveFilter ? 'No models match your filters' : 'No models nearby yet — share Guinea Pig to grow your community'}
+              </Text>
+            </View>
+          ) : (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.modelsStrip}
+            >
+              {filtered.map(m => (
+                <NearbyModelCard
+                  key={m.id}
+                  model={m}
+                  onInvite={() => handleInvite(m)}
+                  onViewProfile={() => goModelProfile(m.id)}
+                />
+              ))}
+            </ScrollView>
+          )
+        })()}
       </ScrollView>
     </View>
   )
@@ -803,10 +1128,214 @@ function UpcomingCard({
   )
 }
 
+// ── Filter chips ──────────────────────────────────────────────────────────────
+
+function FilterChips({
+  label,
+  options,
+  selected,
+  onSelect,
+}: {
+  label: string
+  options: string[]
+  selected: string | null
+  onSelect: (v: string) => void
+}) {
+  return (
+    <View style={nearbyStyles.filterGroup}>
+      <Text style={nearbyStyles.filterLabel}>{label}</Text>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, paddingRight: 4 }}>
+        {options.map(opt => {
+          const active = selected === opt
+          return (
+            <TouchableOpacity
+              key={opt}
+              style={[nearbyStyles.chip, active && nearbyStyles.chipActive]}
+              onPress={() => onSelect(opt)}
+              activeOpacity={0.8}
+            >
+              <Text style={[nearbyStyles.chipText, active && nearbyStyles.chipTextActive]}>{opt}</Text>
+            </TouchableOpacity>
+          )
+        })}
+      </ScrollView>
+    </View>
+  )
+}
+
+// ── Nearby model card (horizontal strip) ──────────────────────────────────────
+
+function NearbyModelCard({ model, onInvite, onViewProfile }: { model: ModelCard; onInvite: () => void; onViewProfile: () => void }) {
+  const initials = model.name.split(' ').slice(0, 2).map(w => w[0] ?? '').join('').toUpperCase()
+  const firstName = model.name.split(' ')[0] ?? model.name
+  return (
+    <TouchableOpacity style={nearbyStyles.card} onPress={onViewProfile} activeOpacity={0.88}>
+      <View style={{ alignItems: 'center' }}>
+        {model.profile_pic_url ? (
+          <Image source={{ uri: model.profile_pic_url }} style={nearbyStyles.avatar} />
+        ) : (
+          <View style={nearbyStyles.avatarPlaceholder}>
+            <Text style={nearbyStyles.avatarInitials}>{initials}</Text>
+          </View>
+        )}
+        {model.is_verified && (
+          <View style={nearbyStyles.verifiedBadge}>
+            <Ionicons name="checkmark" size={8} color={Colors.white} />
+          </View>
+        )}
+      </View>
+      <Text style={nearbyStyles.name} numberOfLines={1}>{firstName}</Text>
+      {model.distance != null && (
+        <Text style={nearbyStyles.distanceText}>{formatDistance(model.distance)}</Text>
+      )}
+      <View style={nearbyStyles.attrChips}>
+        {model.hair_colour && (
+          <View style={nearbyStyles.attrChip}>
+            <Text style={nearbyStyles.attrChipText} numberOfLines={1}>{model.hair_colour}</Text>
+          </View>
+        )}
+        {model.skin_tone && (
+          <View style={[nearbyStyles.attrChip, { backgroundColor: '#E8845E18' }]}>
+            <Text style={[nearbyStyles.attrChipText, { color: '#B5603A' }]} numberOfLines={1}>{model.skin_tone}</Text>
+          </View>
+        )}
+      </View>
+      <TouchableOpacity
+        style={nearbyStyles.inviteBtn}
+        onPress={e => { (e as any).stopPropagation?.(); onInvite() }}
+        activeOpacity={0.85}
+      >
+        <Text style={nearbyStyles.inviteBtnText}>Invite</Text>
+      </TouchableOpacity>
+    </TouchableOpacity>
+  )
+}
+
+const nearbyStyles = StyleSheet.create({
+  card: {
+    backgroundColor: Colors.white,
+    borderRadius: 16,
+    padding: 12,
+    width: 130,
+    alignItems: 'center',
+    gap: 6,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    shadowColor: Colors.warmDark,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  avatar: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    borderWidth: 2,
+    borderColor: Colors.softPink,
+  },
+  avatarPlaceholder: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: Colors.softPink,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarInitials: { fontSize: 20, fontWeight: '700', color: Colors.roseDark },
+  verifiedBadge: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#1D9E75',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: Colors.white,
+  },
+  name: { fontSize: 13, fontWeight: '700', color: Colors.warmDark, textAlign: 'center' },
+  distanceText: { fontSize: 11, color: Colors.muted, fontWeight: '500' },
+  attrChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, justifyContent: 'center' },
+  attrChip: {
+    backgroundColor: Colors.softPink + '40',
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    maxWidth: 104,
+  },
+  attrChipText: { fontSize: 10, fontWeight: '600', color: Colors.roseDark },
+  inviteBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 10,
+    backgroundColor: Colors.softPink + '60',
+    borderWidth: 1,
+    borderColor: Colors.rose + '40',
+    marginTop: 2,
+  },
+  inviteBtnText: { fontSize: 12, fontWeight: '700', color: Colors.roseDark },
+
+  // Filter panel
+  filterToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 10,
+    backgroundColor: Colors.softPink + '40',
+    borderWidth: 1,
+    borderColor: Colors.rose + '40',
+    marginLeft: 'auto',
+  },
+  filterToggleActive: {
+    backgroundColor: Colors.roseDark,
+    borderColor: Colors.roseDark,
+  },
+  filterToggleText: { fontSize: 12, fontWeight: '700', color: Colors.roseDark },
+  filterDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: Colors.rose,
+  },
+  filterPanel: {
+    backgroundColor: Colors.white,
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    gap: 12,
+  },
+  filterGroup: { gap: 6 },
+  filterLabel: { fontSize: 12, fontWeight: '700', color: Colors.muted, textTransform: 'uppercase', letterSpacing: 0.5 },
+  filterRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  chip: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 20,
+    backgroundColor: Colors.inputBg,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  chipActive: {
+    backgroundColor: Colors.roseDark,
+    borderColor: Colors.roseDark,
+  },
+  chipText: { fontSize: 12, fontWeight: '600', color: Colors.warmDark },
+  chipTextActive: { color: Colors.white },
+  clearFiltersBtn: { alignSelf: 'center', paddingVertical: 4 },
+  clearFiltersText: { fontSize: 13, fontWeight: '600', color: Colors.rose },
+})
+
 // ── Styles ────────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.cream },
+  container: { flex: 1, backgroundColor: 'transparent', overflow: 'hidden' },
   centred:   { alignItems: 'center', justifyContent: 'center', gap: 12 },
   emptyLabel: { fontSize: 15, color: Colors.muted, fontWeight: '600' },
   goBackBtn: {
@@ -831,7 +1360,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.cream,
   },
   topBarLeft: { gap: 2 },
-  greeting:  { fontSize: 22, fontWeight: '800', color: Colors.warmDark, letterSpacing: -0.5 },
+  greeting:  { fontFamily: 'DancingScript_700Bold', fontSize: 33, color: Colors.warmDark, letterSpacing: -0.5 },
   subGreeting: { fontSize: 13, color: Colors.muted },
   topBarRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   settingsBtn: {
@@ -914,8 +1443,8 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   sectionTitle: {
-    fontSize: 17,
-    fontWeight: '800',
+    fontFamily: 'DancingScript_700Bold',
+    fontSize: 25,
     color: Colors.warmDark,
     letterSpacing: -0.3,
   },
@@ -1122,5 +1651,19 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: Colors.muted,
     marginTop: 2,
+  },
+
+  modelSearchBar: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: Colors.white, borderRadius: 12,
+    borderWidth: 1, borderColor: Colors.border,
+    paddingHorizontal: 12, paddingVertical: 8,
+    marginBottom: 12,
+  },
+  modelSearchInput: {
+    flex: 1, fontSize: 14, color: Colors.warmDark, padding: 0,
+  },
+  modelsStrip: {
+    paddingBottom: 4, gap: 10,
   },
 })

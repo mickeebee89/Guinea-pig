@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import {
   View,
   Text,
@@ -8,7 +8,6 @@ import {
   Image,
   ActivityIndicator,
   Alert,
-  Animated,
 } from 'react-native'
 import { useRouter } from 'expo-router'
 import * as Haptics from 'expo-haptics'
@@ -22,98 +21,27 @@ import { Colors } from '@/constants/Colors'
 import { useAuth } from '@/context/auth'
 import { supabase } from '@/lib/supabase'
 
-// ── Types ─────────────────────────────────────────────────────────────────────
-
-type Step =
-  | 'loading'
-  | 'locked'
-  | 'instructions'
-  | 'verifying'
-  | 'ready_to_pay'
-  | 'confirming'
-  | 'success'
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-function formatCountdown(ms: number): string {
-  const totalSecs = Math.ceil(ms / 1000)
-  const h = Math.floor(totalSecs / 3600)
-  const m = Math.floor((totalSecs % 3600) / 60)
-  return h > 0 ? `${h}h ${m}m` : `${m}m`
-}
-
-// ── Screen ────────────────────────────────────────────────────────────────────
+type Step = 'loading' | 'instructions' | 'camera' | 'uploading' | 'submitted' | 'approved_pay' | 'confirming' | 'success' | 'rejected'
 
 export default function VerifyPaymentScreen() {
-  const router   = useRouter()
+  const router  = useRouter()
   const { session } = useAuth()
-  const insets   = useSafeAreaInsets()
-  const userId   = session?.user?.id
+  const insets  = useSafeAreaInsets()
+  const userId  = session?.user?.id
+  const userRole = session?.user?.user_metadata?.role as string | undefined
+  const isProvider = userRole === 'provider'
   const { initPaymentSheet, presentPaymentSheet } = useStripe()
 
   const [step,           setStep]           = useState<Step>('loading')
   const [selfieUri,      setSelfieUri]       = useState<string | null>(null)
-  const [attemptId,      setAttemptId]       = useState<string | null>(null)
-  const [lockoutUntil,   setLockoutUntil]    = useState<Date | null>(null)
-  const [countdown,      setCountdown]       = useState('')
-  const [paymentLoading, setPaymentLoading]  = useState(false)
+  const [requestNotes,   setRequestNotes]   = useState<string | null>(null)
+  const [paymentLoading, setPaymentLoading] = useState(false)
 
-  // Pulse animation for verifying step
-  const pulse = useRef(new Animated.Value(1)).current
-  useEffect(() => {
-    if (step !== 'verifying') return
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulse, { toValue: 1.08, duration: 600, useNativeDriver: true }),
-        Animated.timing(pulse, { toValue: 1,    duration: 600, useNativeDriver: true }),
-      ])
-    )
-    loop.start()
-    return () => loop.stop()
-  }, [step, pulse])
-
-  // ── Lockout countdown ticker ───────────────────────────────────────────────
-
-  useEffect(() => {
-    if (!lockoutUntil) return
-    const tick = () => {
-      const ms = lockoutUntil.getTime() - Date.now()
-      if (ms <= 0) { setStep('instructions'); setLockoutUntil(null) }
-      else setCountdown(formatCountdown(ms))
-    }
-    tick()
-    const id = setInterval(tick, 30_000)
-    return () => clearInterval(id)
-  }, [lockoutUntil])
-
-  // ── Check lockout + existing verification ─────────────────────────────────
-
-  const checkLockout = useCallback(async () => {
-    if (!userId) return
-    const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
-    const { data: attempts } = await supabase
-      .from('verification_attempts')
-      .select('created_at, passed')
-      .eq('user_id', userId)
-      .gte('created_at', cutoff)
-      .order('created_at', { ascending: true })
-
-    const failed = (attempts ?? []).filter((a: any) => !a.passed)
-    if (failed.length >= 3) {
-      // Lockout expires 24h after the OLDEST recent failure
-      const oldest = new Date(failed[0].created_at)
-      const expiry = new Date(oldest.getTime() + 24 * 60 * 60 * 1000)
-      setLockoutUntil(expiry)
-      setCountdown(formatCountdown(expiry.getTime() - Date.now()))
-      return true
-    }
-    return false
-  }, [userId])
+  // ── Check existing request ─────────────────────────────────────────────────
 
   const load = useCallback(async () => {
     if (!userId) return
     try {
-      // Already verified?
       const { data: ud } = await supabase
         .from('users')
         .select('is_verified')
@@ -124,17 +52,46 @@ export default function VerifyPaymentScreen() {
         router.back()
         return
       }
-      // Locked out?
-      const locked = await checkLockout()
-      setStep(locked ? 'locked' : 'instructions')
+
+      const { data: existing } = await supabase
+        .from('verification_requests')
+        .select('status, notes')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      if (!existing) {
+        setStep('instructions')
+        return
+      }
+
+      const status = (existing as any).status as string
+      if (status === 'pending') {
+        setStep('submitted')
+      } else if (status === 'approved') {
+        // Model: auto-verify, Provider: show payment
+        if (isProvider) {
+          setStep('approved_pay')
+        } else {
+          // Auto-verify model
+          await supabase.from('users').update({ is_verified: true }).eq('id', userId)
+          setStep('success')
+        }
+      } else if (status === 'rejected') {
+        setRequestNotes((existing as any).notes ?? null)
+        setStep('rejected')
+      } else {
+        setStep('instructions')
+      }
     } catch {
       setStep('instructions')
     }
-  }, [userId, checkLockout, router])
+  }, [userId, isProvider, router])
 
   useEffect(() => { load() }, [load])
 
-  // ── Selfie ─────────────────────────────────────────────────────────────────
+  // ── Take selfie ────────────────────────────────────────────────────────────
 
   const takeSelfie = async () => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
@@ -144,52 +101,64 @@ export default function VerifyPaymentScreen() {
       return
     }
     const result = await ImagePicker.launchCameraAsync({
-      cameraType:   ImagePicker.CameraType.front,
+      cameraType:    ImagePicker.CameraType.front,
       allowsEditing: true,
-      aspect:        [1, 1],
+      aspect:        [3, 4],
       quality:       0.85,
     })
     if (result.canceled || !result.assets[0]) return
-
-    const { uri } = result.assets[0]
-    setSelfieUri(uri)
-    setStep('verifying')
-
-    // Upload selfie to private storage bucket (best-effort)
-    let selfieStoragePath: string | null = null
-    try {
-      const path   = `${userId}/selfie-${Date.now()}.jpg`
-      const manipulated = await ImageManipulator.manipulateAsync(uri, [], { base64: true })
-      const { data: up } = await supabase.storage
-        .from('verification-selfies')
-        .upload(path, decode(manipulated.base64!), { contentType: 'image/jpeg' })
-      if (up) selfieStoragePath = up.path
-    } catch { /* storage failure is non-blocking */ }
-
-    // Record attempt row (passed=false until payment succeeds)
-    try {
-      const { data: newAttempt } = await supabase
-        .from('verification_attempts')
-        .insert({ user_id: userId, passed: false, selfie_url: selfieStoragePath })
-        .select('id')
-        .single()
-      if (newAttempt) setAttemptId((newAttempt as any).id)
-    } catch {}
-
-    // Simulate identity check (real API would go here)
-    await new Promise(r => setTimeout(r, 2200))
-    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
-    setStep('ready_to_pay')
+    setSelfieUri(result.assets[0].uri)
+    setStep('camera')
   }
 
-  // ── Payment ────────────────────────────────────────────────────────────────
+  const submitSelfie = async () => {
+    if (!selfieUri || !userId) return
+    setStep('uploading')
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
+
+    try {
+      const manipulated = await ImageManipulator.manipulateAsync(
+        selfieUri,
+        [{ resize: { width: 1080 } }],
+        { base64: true, compress: 0.85, format: ImageManipulator.SaveFormat.JPEG },
+      )
+      if (!manipulated.base64) throw new Error('Image processing failed')
+
+      const path = `${userId}/selfie-${Date.now()}.jpg`
+      const { data: up, error: uploadErr } = await supabase.storage
+        .from('verification-selfies')
+        .upload(path, decode(manipulated.base64), { contentType: 'image/jpeg' })
+      if (uploadErr) throw uploadErr
+
+      const { data: urlData } = supabase.storage
+        .from('verification-selfies')
+        .getPublicUrl(up.path)
+
+      // Delete any previous rejected request so we can submit fresh
+      await supabase.from('verification_requests').delete().eq('user_id', userId)
+
+      const { error: insertErr } = await supabase.from('verification_requests').insert({
+        user_id:    userId,
+        selfie_url: urlData.publicUrl,
+        status:     'pending',
+      })
+      if (insertErr) throw insertErr
+
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
+      setStep('submitted')
+    } catch (e: any) {
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)
+      Alert.alert('Upload failed', e?.message ?? 'Could not submit your selfie. Please try again.')
+      setStep('camera')
+    }
+  }
+
+  // ── Provider payment ───────────────────────────────────────────────────────
 
   const handlePayment = async () => {
     setPaymentLoading(true)
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
-
     try {
-      // Get client secret from edge function
       const { data: intentData, error: fnErr } = await supabase.functions.invoke(
         'stripe-payment',
         { body: { action: 'create_verification_intent' } },
@@ -198,58 +167,37 @@ export default function VerifyPaymentScreen() {
         throw new Error(fnErr?.message ?? 'Could not start payment. Please try again.')
       }
 
-      // Init payment sheet with brand colours
       const { error: initErr } = await initPaymentSheet({
-        merchantDisplayName: 'Guinea Pig',
-        paymentIntentClientSecret: intentData.clientSecret,
-        returnURL: 'mobile://stripe-return',
-        defaultBillingDetails: { email: session?.user?.email },
+        merchantDisplayName:        'Guinea Pig',
+        paymentIntentClientSecret:  intentData.clientSecret,
+        returnURL:                  'mobile://stripe-return',
+        defaultBillingDetails:      { email: session?.user?.email },
         appearance: {
-          colors:  { primary: Colors.roseDark },
-          shapes:  { borderRadius: 14 },
+          colors: { primary: Colors.roseDark },
+          shapes: { borderRadius: 14 },
         },
       })
       if (initErr) throw new Error(initErr.message)
 
       setPaymentLoading(false)
 
-      // Present
       const { error: presentErr } = await presentPaymentSheet()
       if (presentErr) {
         if (presentErr.code === 'Canceled') return
         throw new Error(presentErr.message)
       }
 
-      // Confirmed on Stripe side — now confirm on our server
       setStep('confirming')
-      const { error: confirmErr } = await supabase.functions.invoke('stripe-payment', {
-        body: { action: 'confirm_verification', paymentIntentId: intentData.paymentIntentId },
+      await supabase.functions.invoke('stripe-payment', {
+        body: { action: 'confirm_verification', userId },
       })
 
-      if (confirmErr) {
-        // Payment went through but server update failed.
-        // In production the Stripe webhook handles this; show success anyway.
-        console.warn('[verify-payment] confirm_verification failed:', confirmErr.message)
-      }
-
+      await supabase.from('users').update({ is_verified: true }).eq('id', userId)
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
       setStep('success')
     } catch (err: any) {
       setPaymentLoading(false)
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)
-
-      // Mark this attempt as failed
-      if (attemptId) {
-        await supabase
-          .from('verification_attempts')
-          .update({ passed: false })
-          .eq('id', attemptId)
-      }
-
-      // Re-check lockout — this failure might trip the limit
-      const nowLocked = await checkLockout()
-      if (nowLocked) setStep('locked')
-
       Alert.alert('Payment failed', err.message ?? 'Please try a different card or contact support.')
     }
   }
@@ -277,50 +225,32 @@ export default function VerifyPaymentScreen() {
         </View>
       )}
 
-      {/* ── LOCKED ── */}
-      {step === 'locked' && (
-        <View style={styles.centred}>
-          <View style={[styles.bigIcon, { backgroundColor: '#FEF2F2' }]}>
-            <Ionicons name="lock-closed" size={36} color={Colors.error} />
-          </View>
-          <Text style={styles.centredTitle}>Temporarily locked</Text>
-          <Text style={styles.centredSub}>
-            You've had 3 failed verification attempts.{'\n'}Try again in{' '}
-            <Text style={{ fontWeight: '800', color: Colors.warmDark }}>{countdown || '…'}</Text>.
-          </Text>
-          <TouchableOpacity
-            style={styles.ghostBtn}
-            onPress={async () => { await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.back() }}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.ghostBtnText}>Back to settings</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
       {/* ── INSTRUCTIONS ── */}
       {step === 'instructions' && (
         <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 32 }]}>
-          {/* Header */}
           <View style={styles.heroCard}>
             <View style={styles.heroIconCircle}>
               <Ionicons name="shield-checkmark" size={44} color={Colors.white} />
             </View>
             <Text style={styles.heroTitle}>Identity check</Text>
             <Text style={styles.heroSub}>
-              A one-time selfie confirms you're a real person. The check is instant — we don't store your photo beyond the review.
+              Take a selfie holding a piece of paper with your first name and{' '}
+              <Text style={{ fontWeight: '800', color: Colors.warmDark }}>"Guinea Pig"</Text>
+              {' '}written on it. Our team reviews within 24 hours.
             </Text>
-            <View style={styles.priceTag}>
-              <Text style={styles.priceTagText}>£4.99 one-off payment after the check</Text>
-            </View>
+            {isProvider && (
+              <View style={styles.priceTag}>
+                <Text style={styles.priceTagText}>£4.99 one-off fee after approval</Text>
+              </View>
+            )}
           </View>
 
-          {/* Steps */}
-          <Text style={styles.sectionLabel}>What to expect</Text>
+          <Text style={styles.sectionLabel}>What to do</Text>
           {[
-            { icon: 'camera-outline',       step: '1', text: 'Take a quick selfie — face clearly visible, good lighting' },
-            { icon: 'checkmark-circle-outline', step: '2', text: 'We verify your identity in seconds (free)' },
-            { icon: 'card-outline',         step: '3', text: 'Pay £4.99 — your verified badge is applied immediately' },
+            { icon: 'pencil-outline',          step: '1', text: 'Write your first name and "Guinea Pig" on a piece of paper' },
+            { icon: 'camera-outline',           step: '2', text: 'Take a clear selfie holding the paper — face and writing both visible' },
+            { icon: 'cloud-upload-outline',     step: '3', text: 'Submit — our team reviews within 24 hours' },
+            { icon: 'notifications-outline',    step: '4', text: isProvider ? 'Get notified then complete £4.99 payment to activate your badge' : 'Get notified when approved — badge activates automatically (included in your subscription)' },
           ].map(item => (
             <View key={item.step} style={styles.stepRow}>
               <View style={styles.stepNum}>
@@ -331,64 +261,74 @@ export default function VerifyPaymentScreen() {
             </View>
           ))}
 
-          {/* Benefits */}
-          <Text style={styles.sectionLabel}>What you get</Text>
-          <View style={styles.benefitsCard}>
-            {[
-              'Verified badge on your profile',
-              'Priority matching with providers',
-              'Increased trust from the community',
-              'Access to exclusive sessions',
-            ].map(b => (
-              <View key={b} style={styles.benefitRow}>
-                <Ionicons name="checkmark-circle" size={18} color="#1D9E75" />
-                <Text style={styles.benefitText}>{b}</Text>
-              </View>
-            ))}
-          </View>
-
-          <TouchableOpacity
-            style={styles.primaryBtn}
-            onPress={takeSelfie}
-            activeOpacity={0.9}
-          >
+          <TouchableOpacity style={styles.primaryBtn} onPress={takeSelfie} activeOpacity={0.9}>
             <Ionicons name="camera" size={20} color={Colors.white} />
             <Text style={styles.primaryBtnText}>Take selfie</Text>
           </TouchableOpacity>
 
           <Text style={styles.legalNote}>
-            By continuing you agree to our identity verification policy. Your selfie is used only for verification and deleted after review.
+            Your selfie is stored securely and only used for identity verification.
           </Text>
         </ScrollView>
       )}
 
-      {/* ── VERIFYING ── */}
-      {step === 'verifying' && (
+      {/* ── PREVIEW SELFIE ── */}
+      {step === 'camera' && selfieUri && (
         <View style={styles.centred}>
-          {selfieUri && (
-            <Animated.View style={[styles.selfiePreview, { transform: [{ scale: pulse }] }]}>
-              <Image source={{ uri: selfieUri }} style={styles.selfieImg} />
-              <View style={styles.selfieOverlay}>
-                <ActivityIndicator color={Colors.white} />
-              </View>
-            </Animated.View>
-          )}
-          <Text style={styles.centredTitle}>Verifying your identity…</Text>
-          <Text style={styles.centredSub}>This usually takes a few seconds.</Text>
+          <Image source={{ uri: selfieUri }} style={styles.selfiePreview} />
+          <Text style={styles.centredTitle}>Looks good?</Text>
+          <Text style={styles.centredSub}>
+            Make sure your face and the handwritten paper are both clearly visible.
+          </Text>
+          <TouchableOpacity style={styles.primaryBtn} onPress={submitSelfie} activeOpacity={0.9}>
+            <Ionicons name="checkmark-circle-outline" size={20} color={Colors.white} />
+            <Text style={styles.primaryBtnText}>Submit for review</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.ghostBtn} onPress={takeSelfie} activeOpacity={0.85}>
+            <Text style={styles.ghostBtnText}>Retake photo</Text>
+          </TouchableOpacity>
         </View>
       )}
 
-      {/* ── READY TO PAY ── */}
-      {step === 'ready_to_pay' && (
+      {/* ── UPLOADING ── */}
+      {step === 'uploading' && (
+        <View style={styles.centred}>
+          <ActivityIndicator color={Colors.roseDark} size="large" />
+          <Text style={styles.centredTitle}>Uploading…</Text>
+        </View>
+      )}
+
+      {/* ── SUBMITTED / PENDING ── */}
+      {step === 'submitted' && (
+        <View style={styles.centred}>
+          <View style={[styles.bigIcon, { backgroundColor: Colors.softPink + '40' }]}>
+            <Ionicons name="time-outline" size={44} color={Colors.roseDark} />
+          </View>
+          <Text style={styles.centredTitle}>Under review</Text>
+          <Text style={styles.centredSub}>
+            Your verification selfie has been submitted.{'\n'}
+            Our team will review it within 24 hours and notify you when done.
+          </Text>
+          <TouchableOpacity
+            style={styles.ghostBtn}
+            onPress={async () => { await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.back() }}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.ghostBtnText}>Back to settings</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* ── APPROVED — PROVIDER PAYS ── */}
+      {step === 'approved_pay' && (
         <View style={styles.centred}>
           <View style={[styles.bigIcon, { backgroundColor: '#ECFDF5' }]}>
             <Ionicons name="checkmark-circle" size={44} color="#1D9E75" />
           </View>
-          <Text style={styles.centredTitle}>Identity confirmed ✓</Text>
+          <Text style={styles.centredTitle}>Identity approved ✓</Text>
           <Text style={styles.centredSub}>
-            One last step — pay the £4.99 verification fee to activate your badge.
+            One last step — pay the £4.99 verification fee to activate your verified badge.
           </Text>
-
           <View style={styles.payCard}>
             <Ionicons name="shield-checkmark" size={28} color={Colors.roseDark} />
             <View style={{ flex: 1 }}>
@@ -397,7 +337,6 @@ export default function VerifyPaymentScreen() {
             </View>
             <Text style={styles.payCardPrice}>£4.99</Text>
           </View>
-
           <TouchableOpacity
             style={[styles.primaryBtn, paymentLoading && { opacity: 0.7 }]}
             onPress={handlePayment}
@@ -412,10 +351,7 @@ export default function VerifyPaymentScreen() {
                 </>
             }
           </TouchableOpacity>
-
-          <Text style={styles.legalNote}>
-            Secured by Stripe. Your card details are never stored on our servers.
-          </Text>
+          <Text style={styles.legalNote}>Secured by Stripe. Your card details are never stored on our servers.</Text>
         </View>
       )}
 
@@ -435,7 +371,7 @@ export default function VerifyPaymentScreen() {
           </View>
           <Text style={styles.centredTitle}>You're verified! 🎉</Text>
           <Text style={styles.centredSub}>
-            Your verified badge is now active. Providers and models will see it on your profile.
+            Your verified badge is now active on your profile.
           </Text>
           <TouchableOpacity
             style={styles.primaryBtn}
@@ -446,14 +382,31 @@ export default function VerifyPaymentScreen() {
           </TouchableOpacity>
         </View>
       )}
+
+      {/* ── REJECTED ── */}
+      {step === 'rejected' && (
+        <View style={styles.centred}>
+          <View style={[styles.bigIcon, { backgroundColor: '#FEF2F2' }]}>
+            <Ionicons name="close-circle" size={44} color={Colors.error} />
+          </View>
+          <Text style={styles.centredTitle}>Not approved</Text>
+          <Text style={styles.centredSub}>
+            {requestNotes
+              ? requestNotes
+              : 'We couldn\'t verify your identity from the photo. Please resubmit with a clearer image showing your face and the handwritten paper.'}
+          </Text>
+          <TouchableOpacity style={styles.primaryBtn} onPress={() => { setSelfieUri(null); setStep('instructions') }} activeOpacity={0.9}>
+            <Ionicons name="refresh" size={20} color={Colors.white} />
+            <Text style={styles.primaryBtnText}>Try again</Text>
+          </TouchableOpacity>
+        </View>
+      )}
     </View>
   )
 }
 
-// ── Styles ────────────────────────────────────────────────────────────────────
-
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.cream },
+  container: { flex: 1, backgroundColor: 'transparent' },
   centred:   { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32, gap: 16 },
 
   topBar: {
@@ -468,74 +421,52 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: Colors.border,
   },
   topBarTitle: {
-    flex: 1, textAlign: 'center', fontSize: 17, fontWeight: '800',
+    fontFamily: 'DancingScript_700Bold',
+    flex: 1, textAlign: 'center', fontSize: 25,
     color: Colors.warmDark, letterSpacing: -0.3,
   },
 
   scroll: { paddingHorizontal: 20, paddingTop: 20 },
 
-  // Hero
   heroCard: {
     backgroundColor: Colors.white, borderRadius: 24, padding: 24,
     alignItems: 'center', gap: 12, marginBottom: 24,
     borderWidth: 1, borderColor: Colors.border,
-    shadowColor: Colors.warmDark, shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.06, shadowRadius: 10, elevation: 2,
   },
   heroIconCircle: {
     width: 80, height: 80, borderRadius: 40, backgroundColor: Colors.roseDark,
     alignItems: 'center', justifyContent: 'center',
-    shadowColor: Colors.roseDark, shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3, shadowRadius: 10, elevation: 5,
   },
-  heroTitle:   { fontSize: 22, fontWeight: '800', color: Colors.warmDark, letterSpacing: -0.4 },
-  heroSub:     { fontSize: 14, color: Colors.muted, textAlign: 'center', lineHeight: 20 },
+  heroTitle: { fontFamily: 'DancingScript_700Bold', fontSize: 33, color: Colors.warmDark, letterSpacing: -0.4 },
+  heroSub:   { fontSize: 14, color: Colors.muted, textAlign: 'center', lineHeight: 20 },
   priceTag: {
     backgroundColor: Colors.inputBg, borderRadius: 20,
     paddingHorizontal: 16, paddingVertical: 7,
   },
   priceTagText: { fontSize: 13, fontWeight: '600', color: Colors.warmDark },
 
-  // Steps
   sectionLabel: {
     fontSize: 11, fontWeight: '700', color: Colors.muted,
     textTransform: 'uppercase', letterSpacing: 0.8,
     marginBottom: 10, paddingHorizontal: 2,
   },
   stepRow: {
-    flexDirection: 'row', alignItems: 'center', gap: 4,
+    flexDirection: 'row', alignItems: 'flex-start', gap: 4,
     backgroundColor: Colors.white, borderRadius: 14, padding: 14,
     marginBottom: 8, borderWidth: 1, borderColor: Colors.border,
   },
   stepNum: {
     width: 24, height: 24, borderRadius: 12, backgroundColor: Colors.softPink + '50',
-    alignItems: 'center', justifyContent: 'center', marginRight: 4,
+    alignItems: 'center', justifyContent: 'center', marginRight: 4, flexShrink: 0,
   },
   stepNumText: { fontSize: 12, fontWeight: '800', color: Colors.roseDark },
   stepText:    { flex: 1, fontSize: 13, color: Colors.warmDark, lineHeight: 18 },
 
-  // Benefits
-  benefitsCard: {
-    backgroundColor: Colors.white, borderRadius: 14,
-    padding: 16, gap: 12, marginBottom: 20,
-    borderWidth: 1, borderColor: Colors.border,
-  },
-  benefitRow:  { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  benefitText: { flex: 1, fontSize: 14, color: Colors.warmDark, fontWeight: '500' },
-
-  // Verifying
   selfiePreview: {
-    width: 120, height: 120, borderRadius: 60, overflow: 'hidden',
-    borderWidth: 3, borderColor: Colors.roseDark, position: 'relative',
-    marginBottom: 8,
-  },
-  selfieImg:     { width: '100%', height: '100%' },
-  selfieOverlay: {
-    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-    backgroundColor: 'rgba(140,74,88,0.4)', alignItems: 'center', justifyContent: 'center',
+    width: 220, height: 280, borderRadius: 20,
+    borderWidth: 3, borderColor: Colors.roseDark, marginBottom: 8,
   },
 
-  // Ready to pay
   payCard: {
     flexDirection: 'row', alignItems: 'center', gap: 14,
     backgroundColor: Colors.white, borderRadius: 18,
@@ -546,26 +477,13 @@ const styles = StyleSheet.create({
   payCardSub:   { fontSize: 12, color: Colors.muted, marginTop: 2 },
   payCardPrice: { fontSize: 20, fontWeight: '800', color: Colors.roseDark },
 
-  // Lockout / success
   bigIcon: {
     width: 80, height: 80, borderRadius: 40,
     alignItems: 'center', justifyContent: 'center',
   },
-  centredTitle: {
-    fontSize: 22, fontWeight: '800', color: Colors.warmDark,
-    textAlign: 'center', letterSpacing: -0.4,
-  },
-  centredSub: {
-    fontSize: 14, color: Colors.muted, textAlign: 'center', lineHeight: 21,
-  },
-  ghostBtn: {
-    marginTop: 8, paddingVertical: 14, paddingHorizontal: 32,
-    borderRadius: 14, borderWidth: 1.5, borderColor: Colors.border,
-    backgroundColor: Colors.white,
-  },
-  ghostBtnText: { fontSize: 15, fontWeight: '600', color: Colors.warmDark },
+  centredTitle: { fontFamily: 'DancingScript_700Bold', fontSize: 33, color: Colors.warmDark, textAlign: 'center', letterSpacing: -0.4 },
+  centredSub:   { fontSize: 14, color: Colors.muted, textAlign: 'center', lineHeight: 21 },
 
-  // Shared
   primaryBtn: {
     width: '100%', height: 54, backgroundColor: Colors.roseDark,
     borderRadius: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
@@ -573,6 +491,12 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3, shadowRadius: 8, elevation: 4, marginTop: 4,
   },
   primaryBtnText: { fontSize: 16, fontWeight: '800', color: Colors.white, letterSpacing: -0.2 },
+  ghostBtn: {
+    paddingVertical: 14, paddingHorizontal: 32,
+    borderRadius: 14, borderWidth: 1.5, borderColor: Colors.border,
+    backgroundColor: Colors.white,
+  },
+  ghostBtnText: { fontSize: 15, fontWeight: '600', color: Colors.warmDark },
   legalNote: {
     fontSize: 11, color: Colors.muted, textAlign: 'center',
     lineHeight: 16, marginTop: 8, paddingHorizontal: 8,

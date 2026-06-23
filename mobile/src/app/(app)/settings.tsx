@@ -25,6 +25,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Colors } from '@/constants/Colors'
 import { useAuth } from '@/context/auth'
 import { supabase } from '@/lib/supabase'
+import ScreenDecor from '@/components/ScreenDecor'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -32,7 +33,6 @@ type UserRole = 'model' | 'provider' | 'both' | null
 
 type NotifPrefs = {
   session_updates: boolean
-  new_messages:    boolean
   review_reminders:boolean
   promotions:      boolean
 }
@@ -56,16 +56,14 @@ type EditField   = 'first_name' | 'last_initial' | 'email' | 'bio'
 
 const DEFAULT_PREFS: NotifPrefs = {
   session_updates:  true,
-  new_messages:     true,
   review_reminders: true,
   promotions:       false,
 }
 
 const NOTIF_ROWS: { key: keyof NotifPrefs; label: string; sub: string; icon: string }[] = [
-  { key: 'session_updates',   label: 'Session updates',    sub: 'Accepted, declined, and upcoming reminders', icon: 'calendar-outline'    },
-  { key: 'new_messages',      label: 'New messages',       sub: 'Chat messages from stylists',                icon: 'chatbubble-outline'  },
-  { key: 'review_reminders',  label: 'Review reminders',   sub: 'Prompts to rate completed sessions',         icon: 'star-outline'        },
-  { key: 'promotions',        label: 'Promotions',         sub: 'Special offers and platform news',           icon: 'gift-outline'        },
+  { key: 'session_updates',   label: 'Session updates',    sub: 'Accepted, declined, and upcoming reminders', icon: 'calendar-outline' },
+  { key: 'review_reminders',  label: 'Review reminders',   sub: 'Prompts to rate completed sessions',         icon: 'star-outline'     },
+  { key: 'promotions',        label: 'Promotions',         sub: 'Special offers and platform news',           icon: 'gift-outline'     },
 ]
 
 const LEGAL_LINKS = [
@@ -210,7 +208,7 @@ function TogRow({
 
 export default function SettingsScreen() {
   const router  = useRouter()
-  const { session, role: authRole, setRole, signOut } = useAuth()
+  const { session, signOut } = useAuth()
   const insets  = useSafeAreaInsets()
   const userId  = session?.user?.id
 
@@ -454,9 +452,8 @@ export default function SettingsScreen() {
 
   const switchRole = async (target: 'model' | 'provider') => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
-    setRole(target)
     if (target === 'provider') {
-      router.replace('/(app)/provider-dashboard' as any)
+      router.replace('/provider-dashboard')
     } else {
       router.replace('/(app)' as any)
     }
@@ -468,7 +465,7 @@ export default function SettingsScreen() {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
     Alert.alert('Sign out', 'Are you sure?', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Sign out', style: 'destructive', onPress: () => { signOut(); router.replace('/') } },
+      { text: 'Sign out', style: 'destructive', onPress: () => signOut() },
     ])
   }
 
@@ -497,7 +494,6 @@ export default function SettingsScreen() {
                         deleted_at: new Date().toISOString(),
                       }).eq('id', userId)
                       await signOut()
-                      router.replace('/')
                     } catch {
                       Alert.alert('Error', 'Could not delete account. Contact support@guineapig.beauty.')
                     }
@@ -527,7 +523,6 @@ export default function SettingsScreen() {
   const isBoth     = dbRole === 'both'
   const isPaid     = !!userData?.subscription_status && userData.subscription_status !== 'free'
   const sub        = subscriptionLabel(userData?.subscription_status)
-  const activeView = authRole === 'provider' ? 'Stylist' : 'Model'
 
   const displayName = userData
     ? `${userData.first_name}${userData.last_initial ? ` ${userData.last_initial}.` : ''}`
@@ -537,6 +532,7 @@ export default function SettingsScreen() {
 
   return (
     <View style={styles.container}>
+      <ScreenDecor />
       {/* ── Top bar ── */}
       <View style={[styles.topBar, { paddingTop: insets.top + 8 }]}>
         <TouchableOpacity
@@ -750,23 +746,14 @@ export default function SettingsScreen() {
             <Text style={styles.sectionTitle}>Mode</Text>
             <View style={styles.card}>
               <Row
-                icon="swap-horizontal-outline"
-                label={`Viewing as ${activeView}`}
-                rightEl={
-                  <View style={styles.activePill}>
-                    <Ionicons
-                      name={activeView === 'Stylist' ? 'storefront' : 'person'}
-                      size={12}
-                      color={Colors.roseDark}
-                    />
-                    <Text style={styles.activePillText}>{activeView}</Text>
-                  </View>
-                }
+                icon="person-outline"
+                label="Switch to Model view"
+                onPress={() => switchRole('model')}
               />
               <Row
-                icon={activeView === 'Stylist' ? 'person-outline' : 'storefront-outline'}
-                label={`Switch to ${activeView === 'Stylist' ? 'Model' : 'Stylist'} view`}
-                onPress={() => switchRole(activeView === 'Stylist' ? 'model' : 'provider')}
+                icon="storefront-outline"
+                label="Switch to Stylist view"
+                onPress={() => switchRole('provider')}
                 last
               />
             </View>
@@ -978,7 +965,7 @@ export default function SettingsScreen() {
 // ── Styles ────────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.cream },
+  container: { flex: 1, backgroundColor: 'transparent', overflow: 'hidden' },
   centred:   { alignItems: 'center', justifyContent: 'center' },
 
   topBar: {
@@ -996,7 +983,8 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: Colors.border,
   },
   topBarTitle: {
-    flex: 1, textAlign: 'center', fontSize: 17, fontWeight: '800',
+    fontFamily: 'DancingScript_700Bold',
+    flex: 1, textAlign: 'center', fontSize: 25,
     color: Colors.warmDark, letterSpacing: -0.3,
   },
 
@@ -1095,7 +1083,8 @@ const styles = StyleSheet.create({
     alignSelf: 'center', marginBottom: 16,
   },
   modalTitle: {
-    fontSize: 17, fontWeight: '800', color: Colors.warmDark,
+    fontFamily: 'DancingScript_700Bold',
+    fontSize: 25, color: Colors.warmDark,
     marginBottom: 14, paddingHorizontal: 2,
   },
 

@@ -4,30 +4,55 @@ import {
   Text,
   StyleSheet,
   ScrollView,
+  FlatList,
   TouchableOpacity,
   TextInput,
   Image,
   RefreshControl,
   Platform,
   ActivityIndicator,
+  Switch,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import * as Haptics from 'expo-haptics'
+import * as Location from 'expo-location'
 import { Ionicons } from '@expo/vector-icons'
-import { Colors } from '@/constants/Colors'
+import { Colors, CategoryColors } from '@/constants/Colors'
 import { useAuth } from '@/context/auth'
 import { supabase } from '@/lib/supabase'
+import { isModelVerified } from '@/lib/verification'
+import ScreenDecor from '@/components/ScreenDecor'
+import { useAppRole } from '@/components/AppEntry'
+import ProviderDashboardScreen from './provider-dashboard'
 
 const CATEGORIES = [
   { name: 'All',       color: Colors.muted   },
-  { name: 'Nails',     color: '#C8788A'      },
+  { name: 'Nails',     color: CategoryColors.nails },
   { name: 'Lashes',    color: '#1D9E75'      },
   { name: 'Brows',     color: '#BA7517'      },
   { name: 'Hair',      color: '#7B5EA7'      },
   { name: 'Makeup',    color: '#E8845E'      },
   { name: 'Spray Tan', color: '#C99A4E'      },
 ] as const
+
+const DISTANCE_OPTIONS = ['Any', '1 mi', '2 mi', '4 mi', '10 mi', '20 mi'] as const
+type DistanceOption = typeof DISTANCE_OPTIONS[number]
+
+function haversine(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 3958.8
+  const dLat = (lat2 - lat1) * Math.PI / 180
+  const dLon = (lon2 - lon1) * Math.PI / 180
+  const a = Math.sin(dLat/2) ** 2 +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon/2) ** 2
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+}
+
+function formatDistance(d: number): string {
+  if (d < 0.1) return 'nearby'
+  if (d < 10) return `${d.toFixed(1)} mi`
+  return `${Math.round(d)} mi`
+}
 
 const CATEGORY_COLOR: Record<string, string> = Object.fromEntries(
   CATEGORIES.filter(c => c.name !== 'All').map(c => [c.name, c.color])
@@ -43,73 +68,126 @@ type Provider = {
   rating: number | null
   profile_pic_url: string | null
   provider_treatments: ProviderTreatment[]
+  latitude: number | null
+  longitude: number | null
+  distance: number | null
 }
 
-export default function ModelHomeScreen() {
+type UpcomingSession = {
+  id: string
+  provider_id: string
+  provider_name: string
+  provider_pic: string | null
+  date: string
+  start_time: string
+  treatment_name: string | null
+  treatment_category: string | null
+  location_type: string | null
+}
+
+type PendingApp = {
+  id: string
+  provider_id: string
+  provider_name: string
+  provider_pic: string | null
+  date: string
+  start_time: string
+  treatment_name: string | null
+  treatment_category: string | null
+}
+
+type Invite = {
+  id: string
+  title: string
+  body: string
+  data: { provider_id?: string; shop_handle?: string }
+  created_at: string
+}
+
+type SubscriptionInfo = { status: string; periodEnd: string | null }
+type ImpactInfo      = { completed: number; distinctProviders: number }
+
+function formatSessDate(dateStr: string, timeStr: string): string {
+  const [y, m, d] = dateStr.split('-').map(Number)
+  const label = new Date(y, m - 1, d).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })
+  const [h, min] = timeStr.split(':').map(Number)
+  return `${label} · ${h % 12 || 12}:${String(min).padStart(2, '0')}${h >= 12 ? 'pm' : 'am'}`
+}
+
+function formatPeriodEnd(iso: string): string {
+  return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+}
+
+// Role is fetched once in RoleRouter (components/RoleRouter.tsx) and provided
+// via context. This screen reads it and renders the appropriate content directly
+// — no navigation calls, no Redirect.
+export default function AppHome() {
+  const role = useAppRole()
+  if (role === 'provider') return <ProviderDashboardScreen />
+  return <ModelHomeContent />
+}
+
+function ModelHomeContent() {
   const router = useRouter()
-  const { session, role: authRole } = useAuth()
+  const { session } = useAuth()
   const userId = session?.user?.id
 
-  // Hard redirect — fires immediately if authRole is already 'provider' (e.g. on app restart
-  // or after login.tsx sets the role). This fires before fetchData and before the DB query.
-  useEffect(() => {
-    if (authRole === 'provider') {
-      console.log('[ModelHome] authRole=provider → hard redirect to provider-dashboard')
-      router.replace('/(app)/provider-dashboard' as any)
-    }
-  }, [authRole])
-
-  const [providers, setProviders]         = useState<Provider[]>([])
-  const [favouriteIds, setFavouriteIds]   = useState<Set<string>>(new Set())
+  const [providers, setProviders]               = useState<Provider[]>([])
+  const [favouriteIds, setFavouriteIds]         = useState<Set<string>>(new Set())
   const [selectedCategory, setSelectedCategory] = useState('All')
-  const [search, setSearch]               = useState('')
-  const [refreshing, setRefreshing]       = useState(false)
-  const [loading, setLoading]             = useState(true)
-  const [roleChecked, setRoleChecked]     = useState(false)
-  const [profilePicUrl, setProfilePicUrl] = useState<string | null>(null)
-  const [unreadCount, setUnreadCount]     = useState(0)
+  const [search, setSearch]                     = useState('')
+  const [distanceFilter, setDistanceFilter]     = useState<DistanceOption>('Any')
+  const [verifiedOnly, setVerifiedOnly]         = useState(false)
+  const [showFilters, setShowFilters]           = useState(false)
+  const [userLat, setUserLat]                   = useState<number | null>(null)
+  const [userLng, setUserLng]                   = useState<number | null>(null)
+  const [refreshing, setRefreshing]             = useState(false)
+  const [loading, setLoading]                   = useState(true)
+  const [profilePicUrl, setProfilePicUrl]       = useState<string | null>(null)
+  const [unreadCount, setUnreadCount]           = useState(0)
+  const [upcomingSessions, setUpcomingSessions] = useState<UpcomingSession[]>([])
+  const [pendingApps,      setPendingApps]      = useState<PendingApp[]>([])
+  const [invites,          setInvites]          = useState<Invite[]>([])
+  const [subscription,     setSubscription]     = useState<SubscriptionInfo | null>(null)
+  const [isVerified,       setIsVerified]       = useState(false)
+  const [impact,           setImpact]           = useState<ImpactInfo | null>(null)
 
   const fetchData = useCallback(async () => {
-    console.log('[ModelHome] fetchData — userId:', userId, 'authRole:', authRole)
-    if (!userId) { setLoading(false); setRoleChecked(true); return }
+    if (!userId) { setLoading(false); return }
 
     try {
-      // Check role first — redirect providers before loading model home data
-      const { data: userData, error: userErr } = await supabase
+      const { data: userData } = await supabase
         .from('users')
-        .select('role, profile_pic_url')
+        .select('profile_pic_url, latitude, longitude')
         .eq('id', userId)
         .single()
 
-      console.log('[ModelHome] users DB — role:', userData?.role, 'error:', userErr?.message)
-
-      if (userData?.role === 'provider' || authRole === 'provider') {
-        console.log('[ModelHome] redirecting provider to dashboard')
-        router.replace('/(app)/provider-dashboard' as any)
-        return
+      setProfilePicUrl((userData as any)?.profile_pic_url ?? null)
+      // Use stored GPS immediately so distance shows without waiting for device GPS
+      if ((userData as any)?.latitude != null && (userData as any)?.longitude != null) {
+        setUserLat((userData as any).latitude)
+        setUserLng((userData as any).longitude)
       }
 
-      // Fallback for users whose row wasn't created at signup — check providers table directly
-      if (!userData) {
-        const { data: provRow } = await supabase
-          .from('providers')
-          .select('id')
-          .eq('user_id', userId)
-          .maybeSingle()
-        if (provRow) {
-          router.replace('/(app)/provider-dashboard' as any)
-          return
+      // GPS — request and store in background, don't block provider load
+      Location.requestForegroundPermissionsAsync().then(({ status }) => {
+        if (status === 'granted') {
+          Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }).then(loc => {
+            setUserLat(loc.coords.latitude)
+            setUserLng(loc.coords.longitude)
+            supabase.from('users').update({
+              latitude: loc.coords.latitude,
+              longitude: loc.coords.longitude,
+            }).eq('id', userId).then(() => {})
+          }).catch(() => {})
         }
-      }
-
-      setProfilePicUrl(userData?.profile_pic_url ?? null)
-      setRoleChecked(true)
+      }).catch(() => {})
 
       const [{ data: provData }, { data: favData }, { count: unread }] = await Promise.all([
         supabase
           .from('providers')
-          .select('id, name, location, is_verified, rating, profile_pic_url, provider_treatments(category)')
-          .order('rating', { ascending: false }),
+          .select('id, name, profile_pic_url, is_verified, rating, location_text, latitude, longitude, provider_treatments(category)')
+          .eq('is_published', true),
         supabase
           .from('favourites')
           .select('provider_id')
@@ -118,20 +196,110 @@ export default function ModelHomeScreen() {
           .from('notifications')
           .select('id', { count: 'exact', head: true })
           .eq('user_id', userId)
-          .eq('read', false),
+          .is('read_at', null),
       ])
 
-      if (provData) setProviders(provData as Provider[])
+      if (provData) {
+        setProviders((provData as any[]).map(p => ({
+          id:                  p.id,
+          name:                (p.name as string) || 'Stylist',
+          location:            (p.location_text as string | null) || null,
+          is_verified:         !!(p.is_verified),
+          rating:              (p.rating as number | null) ?? null,
+          profile_pic_url:     (p.profile_pic_url as string | null) ?? null,
+          provider_treatments: Array.isArray(p.provider_treatments) ? p.provider_treatments : [],
+          latitude:            (p.latitude as number | null) ?? null,
+          longitude:           (p.longitude as number | null) ?? null,
+          distance:            null,
+        })))
+      }
       if (favData) {
         setFavouriteIds(new Set((favData as { provider_id: string }[]).map(f => f.provider_id)))
       }
       setUnreadCount(unread ?? 0)
+
+      // ── Dashboard data ────────────────────────────────────────────────────
+      const todayStr = (() => {
+        const d = new Date()
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+      })()
+
+      const [
+        { data: upcomingRaw },
+        { data: pendingRaw },
+        { data: inviteRaw },
+        { data: subRaw },
+        { data: completedRaw },
+        verifiedResult,
+      ] = await Promise.all([
+        supabase.from('sessions').select('id, provider_id, date, start_time, treatment_id, location_type').eq('model_user_id', userId).eq('status', 'accepted').gte('date', todayStr).order('date').order('start_time').limit(5),
+        supabase.from('sessions').select('id, provider_id, date, start_time, treatment_id').eq('model_user_id', userId).eq('status', 'pending').order('created_at', { ascending: false }).limit(10),
+        supabase.from('notifications').select('id, title, body, data, created_at').eq('user_id', userId).eq('type', 'stylist_invite').is('read_at', null).order('created_at', { ascending: false }).limit(10),
+        supabase.from('subscriptions').select('*').eq('user_id', userId).eq('status', 'active').maybeSingle(),
+        supabase.from('sessions').select('provider_id').eq('model_user_id', userId).eq('status', 'completed'),
+        isModelVerified(userId).catch(() => false),
+      ])
+
+      const allProviderIds = [...new Set([...(upcomingRaw ?? []).map((s: any) => s.provider_id), ...(pendingRaw ?? []).map((s: any) => s.provider_id)])]
+      const allTreatmentIds = [...new Set([...(upcomingRaw ?? []).map((s: any) => s.treatment_id), ...(pendingRaw ?? []).map((s: any) => s.treatment_id)].filter(Boolean) as string[])]
+
+      const [{ data: sessProviders }, { data: sessTreats }] = await Promise.all([
+        allProviderIds.length > 0 ? supabase.from('providers').select('id, name, profile_pic_url').in('id', allProviderIds) : Promise.resolve({ data: [] as any[] }),
+        allTreatmentIds.length > 0 ? supabase.from('provider_treatments').select('id, name, category').in('id', allTreatmentIds) : Promise.resolve({ data: [] as any[] }),
+      ])
+
+      const provMap: Record<string, { name: string; pic: string | null }> = Object.fromEntries(
+        (sessProviders ?? []).map((p: any) => [p.id, { name: p.name as string, pic: (p.profile_pic_url as string | null) ?? null }])
+      )
+      const treatMap: Record<string, { name: string; category: string }> = Object.fromEntries(
+        (sessTreats ?? []).map((t: any) => [t.id, { name: t.name as string, category: t.category as string }])
+      )
+
+      setUpcomingSessions((upcomingRaw ?? []).map((s: any) => ({
+        id:                 s.id,
+        provider_id:        s.provider_id,
+        provider_name:      provMap[s.provider_id]?.name ?? 'Stylist',
+        provider_pic:       provMap[s.provider_id]?.pic ?? null,
+        date:               s.date,
+        start_time:         s.start_time,
+        treatment_name:     s.treatment_id ? (treatMap[s.treatment_id]?.name ?? null) : null,
+        treatment_category: s.treatment_id ? (treatMap[s.treatment_id]?.category ?? null) : null,
+        location_type:      s.location_type ?? null,
+      })))
+
+      setPendingApps((pendingRaw ?? []).map((s: any) => ({
+        id:                 s.id,
+        provider_id:        s.provider_id,
+        provider_name:      provMap[s.provider_id]?.name ?? 'Stylist',
+        provider_pic:       provMap[s.provider_id]?.pic ?? null,
+        date:               s.date,
+        start_time:         s.start_time,
+        treatment_name:     s.treatment_id ? (treatMap[s.treatment_id]?.name ?? null) : null,
+        treatment_category: s.treatment_id ? (treatMap[s.treatment_id]?.category ?? null) : null,
+      })))
+
+      setInvites((inviteRaw ?? []).map((n: any) => ({
+        id:         n.id,
+        title:      n.title as string,
+        body:       n.body as string,
+        data:       (n.data ?? {}) as Invite['data'],
+        created_at: n.created_at as string,
+      })))
+
+      const periodEnd = (subRaw as any)?.current_period_end ?? (subRaw as any)?.period_end ?? (subRaw as any)?.expires_at ?? null
+      setSubscription(subRaw ? { status: (subRaw as any).status as string, periodEnd: periodEnd ? String(periodEnd) : null } : null)
+      setIsVerified(verifiedResult as boolean)
+
+      const completedList = completedRaw ?? []
+      setImpact({
+        completed:         completedList.length,
+        distinctProviders: new Set(completedList.map((s: any) => s.provider_id as string)).size,
+      })
     } catch {
-      setRoleChecked(true)
     } finally {
       setLoading(false)
     }
-  }, [userId, authRole])
+  }, [userId])
 
   useEffect(() => { fetchData() }, [fetchData])
 
@@ -153,50 +321,50 @@ export default function ModelHomeScreen() {
     }
   }
 
-  const selectCategory = async (cat: string) => {
-    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
-    setSelectedCategory(cat)
-  }
-
   const openProvider = async (id: string) => {
-    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
     router.push({ pathname: '/(app)/provider/[id]', params: { id } })
   }
 
-  const filtered = providers.filter(p => {
-    const matchesCategory =
-      selectedCategory === 'All' ||
-      p.provider_treatments.some(t => t.category === selectedCategory)
-    const q = search.trim().toLowerCase()
-    const matchesSearch =
-      !q ||
-      p.name.toLowerCase().includes(q) ||
-      (p.location ?? '').toLowerCase().includes(q)
-    return matchesCategory && matchesSearch
-  })
+  // Enrich providers with distance when we have GPS
+  const providersWithDist = providers.map(p => ({
+    ...p,
+    distance: (userLat != null && userLng != null && p.latitude != null && p.longitude != null)
+      ? haversine(userLat, userLng, p.latitude, p.longitude)
+      : null,
+  }))
 
-  const favouriteProviders = providers.filter(p => favouriteIds.has(p.id))
+  const hasActiveFilter = selectedCategory !== 'All' || distanceFilter !== 'Any' || verifiedOnly
 
-  // Hard block — don't render model home UI if user is a provider
-  if (authRole === 'provider') {
-    return (
-      <View style={[styles.container, { alignItems: 'center', justifyContent: 'center' }]}>
-        <ActivityIndicator color={Colors.roseDark} />
-      </View>
-    )
-  }
+  const distanceMiles = distanceFilter === 'Any' ? null : parseInt(distanceFilter)
 
-  // Prevent flash of model home for providers while role check is in-flight
-  if (!roleChecked) {
-    return (
-      <View style={[styles.container, { alignItems: 'center', justifyContent: 'center' }]}>
-        <ActivityIndicator color={Colors.roseDark} />
-      </View>
-    )
-  }
+  const filtered = providersWithDist
+    .filter(p => {
+      const matchesCategory =
+        selectedCategory === 'All' ||
+        p.provider_treatments.some(t => t.category === selectedCategory)
+      const q = search.trim().toLowerCase()
+      const matchesSearch =
+        !q ||
+        p.name.toLowerCase().includes(q) ||
+        (p.location ?? '').toLowerCase().includes(q)
+      const matchesDistance =
+        distanceMiles == null || p.distance == null || p.distance <= distanceMiles
+      const matchesVerified = !verifiedOnly || p.is_verified
+      return matchesCategory && matchesSearch && matchesDistance && matchesVerified
+    })
+    .sort((a, b) => (a.distance ?? Infinity) - (b.distance ?? Infinity))
+
+  // Fallback: if all filters produce no results, show all providers sorted by distance
+  const displayProviders = filtered.length === 0 && providers.length > 0
+    ? [...providersWithDist].sort((a, b) => (a.distance ?? Infinity) - (b.distance ?? Infinity))
+    : filtered
+
+  const favouriteProviders = providersWithDist.filter(p => favouriteIds.has(p.id))
 
   return (
     <View style={styles.container}>
+      <ScreenDecor />
       <SafeAreaView style={styles.safe}>
         <ScrollView
           showsVerticalScrollIndicator={false}
@@ -271,33 +439,207 @@ export default function ModelHomeScreen() {
             </TouchableOpacity>
           </View>
 
-          {/* ── Category chips ── */}
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.chips}
-          >
-            {CATEGORIES.map(cat => {
-              const active = selectedCategory === cat.name
-              return (
+          {/* ── Upcoming sessions ── */}
+          {upcomingSessions.length > 0 && (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Upcoming sessions</Text>
+              {upcomingSessions.map(s => (
                 <TouchableOpacity
-                  key={cat.name}
-                  style={[
-                    styles.chip,
-                    active
-                      ? { backgroundColor: cat.color, borderColor: cat.color }
-                      : { borderColor: cat.color },
-                  ]}
-                  onPress={() => selectCategory(cat.name)}
-                  activeOpacity={0.75}
+                  key={s.id}
+                  style={styles.dashCard}
+                  onPress={async () => {
+                    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+                    router.push({ pathname: '/(app)/chat/[sessionId]' as any, params: { sessionId: s.id } })
+                  }}
+                  activeOpacity={0.85}
                 >
-                  <Text style={[styles.chipText, active ? styles.chipTextActive : { color: cat.color }]}>
-                    {cat.name}
-                  </Text>
+                  <View style={styles.dashAvatarWrap}>
+                    {s.provider_pic ? (
+                      <Image source={{ uri: s.provider_pic }} style={styles.dashAvatar} />
+                    ) : (
+                      <View style={[styles.dashAvatarPlaceholder, { backgroundColor: Colors.softPink }]}>
+                        <Text style={styles.dashAvatarInitial}>{s.provider_name[0]?.toUpperCase() ?? '?'}</Text>
+                      </View>
+                    )}
+                  </View>
+                  <View style={styles.dashInfo}>
+                    <Text style={styles.dashTitle}>{s.provider_name}</Text>
+                    <Text style={styles.dashMeta}>{formatSessDate(s.date, s.start_time)}</Text>
+                    {s.treatment_name ? (
+                      <Text style={[styles.dashTag, { color: CATEGORY_COLOR[s.treatment_category ?? ''] ?? Colors.roseDark }]}>
+                        {s.treatment_name}
+                      </Text>
+                    ) : null}
+                  </View>
+                  <View style={styles.dashStatusBadge}>
+                    <Text style={styles.dashStatusText}>Confirmed</Text>
+                  </View>
                 </TouchableOpacity>
-              )
-            })}
-          </ScrollView>
+              ))}
+            </View>
+          )}
+
+          {/* ── Needs your attention ── */}
+          {(pendingApps.length > 0 || invites.length > 0) && (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Needs your attention</Text>
+
+              {pendingApps.length > 0 && (
+                <>
+                  <Text style={styles.attentionLabel}>Pending applications</Text>
+                  {pendingApps.map(s => (
+                    <TouchableOpacity
+                      key={s.id}
+                      style={styles.dashCard}
+                      onPress={async () => {
+                        await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+                        router.push({ pathname: '/(app)/chat/[sessionId]' as any, params: { sessionId: s.id } })
+                      }}
+                      activeOpacity={0.85}
+                    >
+                      <View style={styles.dashAvatarWrap}>
+                        {s.provider_pic ? (
+                          <Image source={{ uri: s.provider_pic }} style={styles.dashAvatar} />
+                        ) : (
+                          <View style={[styles.dashAvatarPlaceholder, { backgroundColor: Colors.softPink }]}>
+                            <Text style={styles.dashAvatarInitial}>{s.provider_name[0]?.toUpperCase() ?? '?'}</Text>
+                          </View>
+                        )}
+                      </View>
+                      <View style={styles.dashInfo}>
+                        <Text style={styles.dashTitle}>{s.provider_name}</Text>
+                        <Text style={styles.dashMeta}>{formatSessDate(s.date, s.start_time)}</Text>
+                        {s.treatment_name ? (
+                          <Text style={[styles.dashTag, { color: CATEGORY_COLOR[s.treatment_category ?? ''] ?? Colors.roseDark }]}>
+                            {s.treatment_name}
+                          </Text>
+                        ) : null}
+                      </View>
+                      <View style={[styles.dashStatusBadge, styles.dashStatusPending]}>
+                        <Text style={[styles.dashStatusText, styles.dashStatusTextPending]}>Awaiting reply</Text>
+                      </View>
+                    </TouchableOpacity>
+                  ))}
+                </>
+              )}
+
+              {invites.length > 0 && (
+                <>
+                  <Text style={[styles.attentionLabel, pendingApps.length > 0 && { marginTop: 12 }]}>
+                    Invites from stylists
+                  </Text>
+                  {invites.map(n => {
+                    const provId = n.data?.provider_id
+                    return (
+                      <TouchableOpacity
+                        key={n.id}
+                        style={styles.dashCard}
+                        onPress={async () => {
+                          await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+                          if (provId) router.push({ pathname: '/(app)/provider/[id]' as any, params: { id: provId } })
+                          else router.push('/(app)/notifications' as any)
+                        }}
+                        activeOpacity={0.85}
+                      >
+                        <View style={[styles.dashAvatarWrap, { backgroundColor: Colors.roseDark + '18' }]}>
+                          <Ionicons name="mail-outline" size={22} color={Colors.roseDark} />
+                        </View>
+                        <View style={styles.dashInfo}>
+                          <Text style={styles.dashTitle}>{n.title}</Text>
+                          <Text style={styles.dashMeta} numberOfLines={2}>{n.body}</Text>
+                        </View>
+                        <Ionicons name="chevron-forward" size={16} color={Colors.muted} />
+                      </TouchableOpacity>
+                    )
+                  })}
+                </>
+              )}
+            </View>
+          )}
+
+          {/* ── Filter bar ── */}
+          <View style={styles.filterBar}>
+            <TouchableOpacity
+              style={[styles.filterToggleBtn, (showFilters || hasActiveFilter) && { backgroundColor: Colors.roseDark }]}
+              onPress={async () => {
+                await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+                setShowFilters(f => !f)
+              }}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="options-outline" size={18} color={(showFilters || hasActiveFilter) ? Colors.white : Colors.warmDark} />
+            </TouchableOpacity>
+            {hasActiveFilter && (
+              <Text style={styles.filterSummary}>
+                {[
+                  selectedCategory !== 'All' && selectedCategory,
+                  distanceFilter !== 'Any' && `within ${distanceFilter}`,
+                  verifiedOnly && 'verified only',
+                ].filter(Boolean).join(' · ')}
+              </Text>
+            )}
+          </View>
+
+          {/* ── Filter panel ── */}
+          {showFilters && (
+            <View style={styles.filterPanel}>
+              <Text style={styles.filterPanelLabel}>Treatment</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, paddingBottom: 2 }}>
+                {CATEGORIES.map(cat => {
+                  const active = selectedCategory === cat.name
+                  return (
+                    <TouchableOpacity
+                      key={cat.name}
+                      style={[
+                        styles.distChip,
+                        active
+                          ? { backgroundColor: cat.color, borderColor: cat.color }
+                          : { borderColor: cat.color },
+                      ]}
+                      onPress={async () => {
+                        await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+                        setSelectedCategory(cat.name)
+                      }}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={[styles.distChipText, active ? styles.distChipTextActive : { color: cat.color }]}>
+                        {cat.name}
+                      </Text>
+                    </TouchableOpacity>
+                  )
+                })}
+              </ScrollView>
+              <Text style={styles.filterPanelLabel}>Distance</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, paddingBottom: 2 }}>
+                {DISTANCE_OPTIONS.map(opt => (
+                  <TouchableOpacity
+                    key={opt}
+                    style={[styles.distChip, distanceFilter === opt && styles.distChipActive]}
+                    onPress={async () => {
+                      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+                      setDistanceFilter(opt)
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[styles.distChipText, distanceFilter === opt && styles.distChipTextActive]}>{opt}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+              <View style={styles.verifiedToggleRow}>
+                <Text style={styles.verifiedToggleLabel}>Verified only</Text>
+                <Switch
+                  value={verifiedOnly}
+                  onValueChange={async v => {
+                    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+                    setVerifiedOnly(v)
+                  }}
+                  trackColor={{ false: Colors.border, true: Colors.rose }}
+                  thumbColor={verifiedOnly ? Colors.roseDark : Colors.muted}
+                  ios_backgroundColor={Colors.border}
+                />
+              </View>
+            </View>
+          )}
 
           {/* ── Favourites ── */}
           <View style={styles.section}>
@@ -306,7 +648,7 @@ export default function ModelHomeScreen() {
               <View style={styles.emptyFavs}>
                 <Text style={styles.emptyFavsEmoji}>🤍</Text>
                 <Text style={styles.emptyFavsText}>
-                  Save stylists you love — tap the heart on any profile
+                  Save models you love — tap the heart on any profile
                 </Text>
               </View>
             ) : (
@@ -322,14 +664,14 @@ export default function ModelHomeScreen() {
             )}
           </View>
 
-          {/* ── Nearby providers ── */}
+          {/* ── Nearby stylists ── */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Nearby stylists</Text>
             {loading ? (
               <View style={styles.emptyState}>
                 <Text style={styles.emptyStateText}>Finding stylists near you…</Text>
               </View>
-            ) : filtered.length === 0 ? (
+            ) : displayProviders.length === 0 ? (
               <View style={styles.emptyState}>
                 <Text style={styles.emptyStateEmoji}>🐹</Text>
                 <Text style={styles.emptyStateTitle}>No stylists yet</Text>
@@ -338,24 +680,110 @@ export default function ModelHomeScreen() {
                 </Text>
               </View>
             ) : (
-              filtered.map(p => (
-                <ProviderCard
-                  key={p.id}
-                  provider={p}
-                  isFavourite={favouriteIds.has(p.id)}
-                  onPress={() => openProvider(p.id)}
-                  onToggleFavourite={() => toggleFavourite(p.id)}
-                />
-              ))
+              <FlatList
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                data={displayProviders}
+                keyExtractor={p => p.id}
+                contentContainerStyle={styles.nearbyRow}
+                renderItem={({ item: p }) => (
+                  <TouchableOpacity
+                    style={styles.nearbyCard}
+                    onPress={() => openProvider(p.id)}
+                    activeOpacity={0.85}
+                  >
+                    <View style={styles.nearbyAvatarWrap}>
+                      {p.profile_pic_url ? (
+                        <Image source={{ uri: p.profile_pic_url }} style={styles.nearbyAvatar} />
+                      ) : (
+                        <View style={styles.nearbyAvatarPlaceholder}>
+                          <Text style={styles.nearbyAvatarInitial}>{p.name[0]?.toUpperCase() ?? '?'}</Text>
+                        </View>
+                      )}
+                      {p.is_verified && (
+                        <Ionicons name="checkmark-circle" size={14} color="#1D9E75" style={styles.nearbyVerified} />
+                      )}
+                    </View>
+                    <Text style={styles.nearbyName} numberOfLines={1}>{p.name}</Text>
+                    {p.distance != null && (
+                      <View style={styles.nearbyDistRow}>
+                        <Ionicons name="location" size={10} color={Colors.roseDark} />
+                        <Text style={styles.nearbyDist}>{formatDistance(p.distance)}</Text>
+                      </View>
+                    )}
+                    {p.rating != null && (
+                      <View style={styles.nearbyRatingRow}>
+                        <Ionicons name="star" size={10} color="#F59E0B" />
+                        <Text style={styles.nearbyRating}>{p.rating.toFixed(1)}</Text>
+                      </View>
+                    )}
+                    {p.provider_treatments.length > 0 && (
+                      <View style={[styles.nearbyPill, {
+                        backgroundColor: (CATEGORY_COLOR[p.provider_treatments[0].category] ?? Colors.muted) + '22',
+                      }]}>
+                        <Text style={[styles.nearbyPillText, {
+                          color: CATEGORY_COLOR[p.provider_treatments[0].category] ?? Colors.muted,
+                        }]} numberOfLines={1}>
+                          {p.provider_treatments[0].category}
+                        </Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                )}
+              />
             )}
           </View>
+
+          {/* ── Subscription status ── */}
+          {isVerified && (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Subscription</Text>
+              <View style={styles.subCard}>
+                <View style={styles.subIconWrap}>
+                  <Ionicons name="diamond-outline" size={22} color={Colors.roseDark} />
+                </View>
+                <View style={styles.subInfo}>
+                  <Text style={styles.subStatusText}>Verified</Text>
+                  {subscription?.periodEnd ? (
+                    <Text style={styles.subRenew}>Renews {formatPeriodEnd(subscription.periodEnd)}</Text>
+                  ) : null}
+                </View>
+                <View style={styles.subBadge}>
+                  <Text style={styles.subBadgeText}>Verified</Text>
+                </View>
+              </View>
+            </View>
+          )}
+
+          {/* ── Your impact ── */}
+          {impact != null && impact.completed > 0 && (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Your impact</Text>
+              <View style={styles.impactRow}>
+                <View style={styles.impactStat}>
+                  <Text style={styles.impactNum}>{impact.completed}</Text>
+                  <Text style={styles.impactLabel}>
+                    {impact.completed === 1 ? 'session' : 'sessions'}{'\n'}completed
+                  </Text>
+                </View>
+                {impact.distinctProviders > 0 && (
+                  <View style={styles.impactStat}>
+                    <Text style={styles.impactNum}>{impact.distinctProviders}</Text>
+                    <Text style={styles.impactLabel}>
+                      {impact.distinctProviders === 1 ? 'stylist' : 'stylists'}{'\n'}helped
+                    </Text>
+                  </View>
+                )}
+              </View>
+            </View>
+          )}
 
           <View style={styles.bottomPad} />
         </ScrollView>
       </SafeAreaView>
     </View>
   )
-}
+}  // end ModelHomeContent
 
 // ── Favourite strip card ─────────────────────────────────────────────────────
 
@@ -382,87 +810,10 @@ function FavouriteCard({ provider, onPress }: { provider: Provider; onPress: () 
   )
 }
 
-// ── Provider discovery card ──────────────────────────────────────────────────
-
-function ProviderCard({
-  provider,
-  isFavourite,
-  onPress,
-  onToggleFavourite,
-}: {
-  provider: Provider
-  isFavourite: boolean
-  onPress: () => void
-  onToggleFavourite: () => void
-}) {
-  const cats = provider.provider_treatments.map(t => t.category)
-
-  return (
-    <TouchableOpacity style={styles.providerCard} onPress={onPress} activeOpacity={0.9}>
-      {provider.profile_pic_url ? (
-        <Image source={{ uri: provider.profile_pic_url }} style={styles.providerAvatar} />
-      ) : (
-        <View style={styles.providerAvatarPlaceholder}>
-          <Text style={styles.providerAvatarInitial}>{provider.name[0]?.toUpperCase() ?? '?'}</Text>
-        </View>
-      )}
-
-      <View style={styles.providerInfo}>
-        <View style={styles.providerNameRow}>
-          <Text style={styles.providerName} numberOfLines={1}>{provider.name}</Text>
-          {provider.is_verified && (
-            <Ionicons name="checkmark-circle" size={15} color="#1D9E75" style={styles.verifiedIcon} />
-          )}
-        </View>
-
-        {provider.location ? (
-          <View style={styles.locationRow}>
-            <Ionicons name="location-outline" size={12} color={Colors.muted} />
-            <Text style={styles.locationText}>{provider.location}</Text>
-          </View>
-        ) : null}
-
-        {cats.length > 0 && (
-          <View style={styles.pillsRow}>
-            {cats.slice(0, 4).map(cat => (
-              <View
-                key={cat}
-                style={[styles.pill, { backgroundColor: (CATEGORY_COLOR[cat] ?? Colors.muted) + '22' }]}
-              >
-                <View style={[styles.pillStripe, { backgroundColor: CATEGORY_COLOR[cat] ?? Colors.muted }]} />
-                <Text style={[styles.pillText, { color: CATEGORY_COLOR[cat] ?? Colors.muted }]}>{cat}</Text>
-              </View>
-            ))}
-          </View>
-        )}
-
-        {provider.rating != null && (
-          <View style={styles.ratingRow}>
-            <Ionicons name="star" size={12} color="#F59E0B" />
-            <Text style={styles.ratingText}> {provider.rating.toFixed(1)}</Text>
-          </View>
-        )}
-      </View>
-
-      <TouchableOpacity
-        style={styles.heartBtn}
-        onPress={onToggleFavourite}
-        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-      >
-        <Ionicons
-          name={isFavourite ? 'heart' : 'heart-outline'}
-          size={22}
-          color={isFavourite ? Colors.rose : Colors.muted}
-        />
-      </TouchableOpacity>
-    </TouchableOpacity>
-  )
-}
-
 // ── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.cream },
+  container: { flex: 1, backgroundColor: 'transparent', overflow: 'hidden' },
   safe:      { flex: 1 },
   scroll:    { paddingBottom: 24 },
 
@@ -544,32 +895,73 @@ const styles = StyleSheet.create({
     letterSpacing: -0.2,
   },
 
-  chips: {
-    paddingHorizontal: 16,
-    paddingBottom: 4,
-    gap: 8,
+  // Nearby horizontal list
+  nearbyRow: { gap: 12, paddingBottom: 4 },
+  nearbyCard: {
+    width: 120, backgroundColor: Colors.white, borderRadius: 18,
+    padding: 12, alignItems: 'center', gap: 5,
+    borderWidth: 1, borderColor: Colors.border,
+    shadowColor: Colors.warmDark, shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.07, shadowRadius: 6, elevation: 2,
   },
-  chip: {
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    borderRadius: 20,
-    borderWidth: 1.5,
+  nearbyAvatarWrap: { position: 'relative' },
+  nearbyAvatar: { width: 64, height: 64, borderRadius: 32 },
+  nearbyAvatarPlaceholder: {
+    width: 64, height: 64, borderRadius: 32,
+    backgroundColor: Colors.softPink, alignItems: 'center', justifyContent: 'center',
   },
-  chipText: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  chipTextActive: {
-    color: Colors.white,
-  },
+  nearbyAvatarInitial: { fontSize: 22, fontWeight: '700', color: Colors.roseDark },
+  nearbyVerified: { position: 'absolute', bottom: 0, right: -2 },
+  nearbyName: { fontSize: 13, fontWeight: '700', color: Colors.warmDark, textAlign: 'center' },
+  nearbyDistRow: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  nearbyDist: { fontSize: 11, color: Colors.roseDark, fontWeight: '600' },
+  nearbyRatingRow: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  nearbyRating: { fontSize: 11, fontWeight: '600', color: Colors.warmDark },
+  nearbyPill: { borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3, maxWidth: 100 },
+  nearbyPillText: { fontSize: 10, fontWeight: '700', textAlign: 'center' },
 
+  // Filter bar
+  filterBar: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 16, paddingVertical: 6, gap: 10,
+  },
+  filterSummary: {
+    fontSize: 13, fontWeight: '600', color: Colors.roseDark, flex: 1,
+  },
+  filterToggleBtn: {
+    width: 36, height: 36, borderRadius: 18, flexShrink: 0,
+    backgroundColor: Colors.white, alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: Colors.border,
+    shadowColor: Colors.warmDark, shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06, shadowRadius: 4, elevation: 1,
+  },
+  filterPanel: {
+    backgroundColor: Colors.white, marginHorizontal: 16, marginTop: 8,
+    borderRadius: 16, padding: 14, borderWidth: 1, borderColor: Colors.border,
+    gap: 10,
+  },
+  filterPanelLabel: {
+    fontSize: 11, fontWeight: '700', color: Colors.muted,
+    textTransform: 'uppercase', letterSpacing: 0.6,
+  },
+  distChip: {
+    paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20,
+    borderWidth: 1.5, borderColor: Colors.border, backgroundColor: Colors.inputBg,
+  },
+  distChipActive: { backgroundColor: Colors.roseDark, borderColor: Colors.roseDark },
+  distChipText: { fontSize: 13, fontWeight: '600', color: Colors.muted },
+  distChipTextActive: { color: Colors.white },
+  verifiedToggleRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+  },
+  verifiedToggleLabel: { fontSize: 14, fontWeight: '600', color: Colors.warmDark },
   section: {
     marginTop: 20,
     paddingHorizontal: 16,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: '800',
+    fontFamily: 'DancingScript_700Bold',
+    fontSize: 26,
     color: Colors.warmDark,
     letterSpacing: -0.3,
     marginBottom: 12,
@@ -673,104 +1065,145 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
 
-  providerCard: {
+  // ── Dashboard cards ──
+  dashCard: {
     flexDirection: 'row',
-    backgroundColor: Colors.white,
-    borderRadius: 18,
-    padding: 14,
-    marginBottom: 12,
-    shadowColor: Colors.warmDark,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.07,
-    shadowRadius: 8,
+    alignItems: 'center',
+    backgroundColor: Colors.card,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 10,
+    gap: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 3,
     elevation: 2,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    alignItems: 'flex-start',
   },
-  providerAvatar: {
-    width: 56,
-    height: 56,
-    borderRadius: 14,
-    marginRight: 12,
-  },
-  providerAvatarPlaceholder: {
-    width: 56,
-    height: 56,
-    borderRadius: 14,
-    backgroundColor: Colors.softPink,
+  dashAvatarWrap: { width: 44, height: 44, borderRadius: 22, overflow: 'hidden' },
+  dashAvatar: { width: 44, height: 44, borderRadius: 22 },
+  dashAvatarPlaceholder: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: Colors.roseLightest,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
   },
-  providerAvatarInitial: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: Colors.roseDark,
-  },
-  providerInfo: {
-    flex: 1,
-    gap: 4,
-  },
-  providerNameRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  providerName: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: Colors.warmDark,
-    flexShrink: 1,
-  },
-  verifiedIcon: {
-    marginLeft: 4,
-  },
-  locationRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 2,
-  },
-  locationText: {
-    fontSize: 12,
-    color: Colors.muted,
-  },
-  pillsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-    marginTop: 2,
-  },
-  pill: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  dashAvatarInitial: { fontSize: 18, fontWeight: '700', color: Colors.roseDark },
+  dashInfo: { flex: 1, gap: 3 },
+  dashTitle: { fontSize: 15, fontWeight: '600', color: Colors.text },
+  dashMeta: { fontSize: 13, color: Colors.muted },
+  dashTag: {
+    alignSelf: 'flex-start',
+    backgroundColor: Colors.roseLightest,
     borderRadius: 6,
     paddingHorizontal: 7,
-    paddingVertical: 3,
-    gap: 4,
-  },
-  pillStripe: {
-    width: 3,
-    height: 10,
-    borderRadius: 2,
-  },
-  pillText: {
+    paddingVertical: 2,
+    marginTop: 2,
     fontSize: 11,
     fontWeight: '600',
+    overflow: 'hidden',
   },
-  ratingRow: {
+  dashStatusBadge: {
+    backgroundColor: Colors.roseLight,
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  dashStatusText: { fontSize: 11, fontWeight: '700', color: Colors.roseDark },
+  dashStatusPending: { backgroundColor: '#FFF3CD' },
+  dashStatusTextPending: { color: '#856404' },
+
+  attentionLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: Colors.muted,
+    marginTop: 4,
+    marginBottom: 8,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+
+  // ── Subscription card ──
+  subCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 2,
+    backgroundColor: Colors.card,
+    borderRadius: 12,
+    padding: 14,
+    gap: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 3,
+    elevation: 2,
   },
-  ratingText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: Colors.warmDark,
+  subIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: Colors.roseLightest,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  heartBtn: {
-    padding: 4,
-    marginLeft: 4,
+  subInfo: { flex: 1 },
+  subStatusText: { fontSize: 15, fontWeight: '600', color: Colors.text },
+  subRenew: { fontSize: 13, color: Colors.muted, marginTop: 2 },
+  subBadge: {
+    backgroundColor: Colors.roseDark,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  subBadgeText: { fontSize: 12, fontWeight: '700', color: '#fff' },
+
+  // ── Impact stats ──
+  impactRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  impactStat: {
+    flex: 1,
+    backgroundColor: Colors.card,
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  impactNum: { fontSize: 32, fontWeight: '800', color: Colors.roseDark },
+  impactLabel: {
+    fontSize: 13,
+    color: Colors.muted,
+    textAlign: 'center',
+    marginTop: 4,
+    lineHeight: 18,
   },
 
   bottomPad: { height: 20 },
+  wrongScreenBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: Colors.roseDark,
+    borderRadius: 18,
+    paddingVertical: 18,
+    paddingHorizontal: 20,
+    shadowColor: Colors.roseDark,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  wrongScreenText: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '700',
+    color: Colors.white,
+    lineHeight: 21,
+  },
 })

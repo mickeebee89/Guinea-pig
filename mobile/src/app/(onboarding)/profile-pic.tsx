@@ -108,7 +108,7 @@ export default function ProfilePicScreen() {
 
   const goBack = async () => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
-    router.replace('/')
+    router.replace('/(app)')
   }
 
   return (
@@ -203,8 +203,8 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   title: {
-    fontSize: 26,
-    fontWeight: '800',
+    fontFamily: 'DancingScript_700Bold',
+    fontSize: 39,
     color: Colors.warmDark,
     letterSpacing: -0.5,
     marginBottom: 8,

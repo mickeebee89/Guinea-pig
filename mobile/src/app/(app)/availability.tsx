@@ -7,19 +7,20 @@ import {
   TouchableOpacity,
   Modal,
   Platform,
+  Alert,
 } from 'react-native'
 import { useRouter } from 'expo-router'
 import * as Haptics from 'expo-haptics'
 import { Ionicons } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { Colors } from '@/constants/Colors'
+import { Colors, CategoryColors } from '@/constants/Colors'
 import { useAuth } from '@/context/auth'
 import { supabase } from '@/lib/supabase'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const CATEGORY_COLOR: Record<string, string> = {
-  Nails:       '#C8788A',
+  Nails:       CategoryColors.nails,
   Lashes:      '#1D9E75',
   Brows:       '#BA7517',
   Hair:        '#7B5EA7',
@@ -129,7 +130,44 @@ export default function AvailabilityScreen() {
           .select('id')
           .eq('user_id', userId)
           .single()
-        if (prov) setProviderId(prov.id)
+        if (prov) {
+          setProviderId(prov.id)
+
+          // Load saved availability from DB (future dates only)
+          // Table: `availability` — one row per time slot
+          const today = dateKey(new Date())
+          const { data: avData } = await supabase
+            .from('availability')
+            .select('date, start_time, end_time, active_treatments')
+            .eq('provider_id', prov.id)
+            .gte('date', today)
+            .order('date')
+            .order('start_time')
+
+          if (avData && avData.length > 0) {
+            const newDates = new Set<string>()
+            const newSlots: DaySlots = {}
+            const newTreatments: DayTreatments = {}
+            for (const row of avData as any[]) {
+              const d = (row.date as string).substring(0, 10)  // strip timestamp if any
+              newDates.add(d)
+              if (!newSlots[d]) newSlots[d] = []
+              newSlots[d].push({
+                id:           newSlotId(),
+                startTime:    (row.start_time as string).substring(0, 5),
+                endTime:      (row.end_time as string).substring(0, 5),
+                treatmentIds: (row.active_treatments as string[]) || [],
+              })
+              if (!newTreatments[d]) newTreatments[d] = []
+              const treatSet = new Set(newTreatments[d])
+              for (const tid of (row.active_treatments || []) as string[]) treatSet.add(tid)
+              newTreatments[d] = [...treatSet]
+            }
+            setSelectedDates(newDates)
+            setDaySlots(newSlots)
+            setDayTreatments(newTreatments)
+          }
+        }
 
         const { data: treats } = await supabase
           .from('provider_treatments')
@@ -247,31 +285,133 @@ export default function AvailabilityScreen() {
 
   // ── Save ──────────────────────────────────────────────────────────────────
 
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
   const handleSave = async () => {
     if (!providerId) return
     setSaving(true)
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
     try {
-      const rows = datesWithTreatments
-        .filter(d => (daySlots[d]?.length ?? 0) > 0)
-        .map(d => ({
-          provider_id: providerId,
-          date: d,
-          slots: daySlots[d].map(s => ({
-            start_time:    s.startTime,
-            end_time:      s.endTime,
-            treatment_ids: s.treatmentIds,
-          })),
-        }))
+      const datesWithSlots = datesWithTreatments.filter(d => (daySlots[d]?.length ?? 0) > 0)
 
-      await supabase
-        .from('provider_availability')
-        .upsert(rows, { onConflict: 'provider_id,date' })
+      // Collect any non-UUID treatment IDs (slug strings from DEFAULT_TREATMENTS)
+      // and resolve them to real UUIDs from treatment_categories before saving.
+      const allTreatIds = new Set<string>()
+      for (const d of datesWithSlots) {
+        for (const s of daySlots[d]) {
+          for (const id of s.treatmentIds) allTreatIds.add(id)
+        }
+      }
+      const slugsToLookup = [...allTreatIds].filter(id => !UUID_RE.test(id))
+      const slugToUuid: Record<string, string> = {}
+      if (slugsToLookup.length > 0) {
+        const { data: catData } = await supabase
+          .from('treatment_categories')
+          .select('id, slug')
+          .in('slug', slugsToLookup)
+        for (const cat of (catData ?? []) as any[]) {
+          slugToUuid[cat.slug as string] = cat.id as string
+        }
+      }
+      const resolveId = (id: string): string | null =>
+        UUID_RE.test(id) ? id : (slugToUuid[id] ?? null)
+
+      // Normalize "HH:MM" → "HH:MM:SS" so the payload matches the stored time
+      // format and the unique index (provider_id, date, start_time, end_time)
+      // detects the conflict. Guard against an already-"HH:MM:SS" value.
+      const toHHMMSS = (t: string) => (t.length === 5 ? `${t}:00` : t)
+
+      // Desired set of slots from the current UI state.
+      const rows = datesWithSlots.flatMap(d =>
+        daySlots[d].map(s => ({
+          provider_id:       providerId,
+          date:              d,
+          start_time:        toHHMMSS(s.startTime),
+          end_time:          toHHMMSS(s.endTime),
+          active_treatments: s.treatmentIds.map(resolveId).filter(Boolean) as string[],
+          is_taken:          false,
+        }))
+      )
+
+      // 1) Upsert the desired slots FIRST. Insert new slots; on conflict
+      //    (provider_id, date, start_time, end_time) do nothing. No blanket
+      //    delete up front, so if this fails the day is never left emptied.
+      if (rows.length > 0) {
+        const onConflict = 'provider_id,date,start_time,end_time'
+        const { error: upsertErr } = await supabase
+          .from('availability')
+          .upsert(rows, {
+            onConflict,
+            ignoreDuplicates: true,
+          })
+        if (upsertErr) throw upsertErr
+      }
+
+      // 2) Delete ONLY the slots the provider actually removed: diff what's now
+      //    in the DB for these dates against the desired set. Runs after the
+      //    upsert succeeds, so a save failure can't destroy existing slots.
+      //    Reconcile EVERY date the provider touched this session — including
+      //    dates emptied to zero slots — so a fully-cleared day gets its old
+      //    rows deleted (cleared days aren't in datesWithSlots). daySlots keeps
+      //    a key for cleared days (empty array); selectedDates covers loaded ones.
+      const reconcileDates = Array.from(new Set<string>([
+        ...datesWithSlots,
+        ...selectedDates,
+        ...Object.keys(daySlots),
+      ]))
+
+      const { data: existingRows, error: fetchErr } = await supabase
+        .from('availability')
+        .select('id, date, start_time, end_time')
+        .eq('provider_id', providerId)
+        .in('date', reconcileDates)
+      if (fetchErr) throw fetchErr
+
+      const hhmm = (t: string) => t.substring(0, 5)
+      const desiredKeys = new Set(
+        rows.map(r => `${r.date}|${hhmm(r.start_time)}|${hhmm(r.end_time)}`)
+      )
+      const idsToRemove = (existingRows ?? [])
+        .filter(r => !desiredKeys.has(
+          `${(r.date as string).substring(0, 10)}|${hhmm(r.start_time as string)}|${hhmm(r.end_time as string)}`
+        ))
+        .map(r => (r as any).id)
+
+      if (idsToRemove.length > 0) {
+        const { error: delErr } = await supabase
+          .from('availability')
+          .delete()
+          .in('id', idsToRemove)
+        if (delErr) throw delErr
+      }
 
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
+
+      // Notify models who have favourited this provider
+      try {
+        const [{ data: provData }, { data: favData }] = await Promise.all([
+          supabase.from('providers').select('name').eq('id', providerId).single(),
+          supabase.from('favourites').select('user_id').eq('provider_id', providerId),
+        ])
+        const providerName = (provData as any)?.name ?? 'A stylist'
+        if (favData && (favData as any[]).length > 0) {
+          await supabase.from('notifications').insert(
+            (favData as any[]).map(f => ({
+              user_id:    f.user_id,
+              type:       'new_availability',
+              title:      'New availability posted',
+              body:       `${providerName} has new slots available — tap to view their shop`,
+              session_id: providerId,
+            }))
+          )
+        }
+      } catch {}
+
       router.back()
-    } catch {
+    } catch (e: any) {
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)
+      console.error('availability save failed:', e)
+      Alert.alert('Couldn’t save', 'Couldn’t save your availability, please try again.')
     } finally {
       setSaving(false)
     }
@@ -743,7 +883,7 @@ function SlotPickerModal({
 // ── Styles ────────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.cream },
+  container: { flex: 1, backgroundColor: 'transparent' },
 
   // Top bar
   topBar: {
@@ -825,8 +965,8 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   stepTitle: {
-    fontSize: 24,
-    fontWeight: '800',
+    fontFamily: 'DancingScript_700Bold',
+    fontSize: 35,
     color: Colors.warmDark,
     letterSpacing: -0.5,
     marginBottom: 4,
@@ -1105,8 +1245,8 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   modalTitle: {
-    fontSize: 17,
-    fontWeight: '800',
+    fontFamily: 'DancingScript_700Bold',
+    fontSize: 25,
     color: Colors.warmDark,
     marginBottom: 16,
     letterSpacing: -0.3,

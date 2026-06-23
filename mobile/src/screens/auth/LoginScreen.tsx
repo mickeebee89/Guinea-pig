@@ -10,7 +10,6 @@ import {
   Image,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { useRouter } from 'expo-router'
 import * as Haptics from 'expo-haptics'
 import { Colors } from '@/constants/Colors'
 import { Button } from '@/components/Button'
@@ -19,9 +18,12 @@ import { supabase } from '@/lib/supabase'
 
 const LOGO_URI = 'https://res.cloudinary.com/dzbazlq1o/image/upload/c_fill,g_north,ar_1:1/f_auto,q_auto/54340_ia8jsd'
 
-export default function LoginScreen() {
-  const router = useRouter()
+interface Props {
+  onBack: () => void
+  onGoSignup: () => void
+}
 
+export default function LoginScreen({ onBack, onGoSignup }: Props) {
   const [email, setEmail]       = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading]   = useState(false)
@@ -50,17 +52,17 @@ export default function LoginScreen() {
 
     await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
     setLoading(false)
-    router.replace('/(app)')
-  }
-
-  const goSignup = async () => {
-    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
-    router.replace('/')
+    // onAuthStateChange fires SIGNED_IN → AppEntry renders the app Stack automatically.
   }
 
   const goBack = async () => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
-    router.back()
+    onBack()
+  }
+
+  const goSignup = async () => {
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+    onGoSignup()
   }
 
   const forgotPassword = async () => {
@@ -90,7 +92,6 @@ export default function LoginScreen() {
               <Text style={styles.backText}>‹ Back</Text>
             </TouchableOpacity>
 
-            {/* Logo mark */}
             <View style={styles.header}>
               <Image
                 source={{ uri: LOGO_URI }}
@@ -181,16 +182,13 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   title: {
-    fontSize: 26,
-    fontWeight: '800',
+    fontFamily: 'DancingScript_700Bold',
+    fontSize: 39,
     color: Colors.warmDark,
     letterSpacing: -0.5,
     marginBottom: 6,
   },
-  subtitle: {
-    fontSize: 15,
-    color: Colors.muted,
-  },
+  subtitle: { fontSize: 15, color: Colors.muted },
   form: {},
   errorBox: {
     backgroundColor: '#FEE2E2',
@@ -198,10 +196,7 @@ const styles = StyleSheet.create({
     padding: 12,
     marginBottom: 16,
   },
-  errorText: {
-    color: Colors.error,
-    fontSize: 14,
-  },
+  errorText: { color: Colors.error, fontSize: 14 },
   forgotRow: {
     alignSelf: 'flex-end',
     marginTop: -8,

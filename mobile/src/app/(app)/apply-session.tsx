@@ -16,27 +16,23 @@ import * as ImageManipulator from 'expo-image-manipulator'
 import { decode } from 'base64-arraybuffer'
 import { Ionicons } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { Colors } from '@/constants/Colors'
+import { Colors, CategoryColors } from '@/constants/Colors'
+import { isModelVerified } from '@/lib/verification'
 import { useAuth } from '@/context/auth'
 import { supabase } from '@/lib/supabase'
 import { ConsentGate } from '@/components/ConsentGate'
+import AvailabilityCalendar, { dateKey } from '@/components/AvailabilityCalendar'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const CATEGORY_COLOR: Record<string, string> = {
-  Nails:       '#C8788A',
+  Nails:       CategoryColors.nails,
   Lashes:      '#1D9E75',
   Brows:       '#BA7517',
   Hair:        '#7B5EA7',
   Makeup:      '#E8845E',
   'Spray Tan': '#C99A4E',
 }
-
-const DAYS_SHORT  = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
-const MONTH_NAMES = [
-  'January','February','March','April','May','June',
-  'July','August','September','October','November','December',
-]
 
 const TOTAL_STEPS = 7
 const NOTE_MAX    = 300
@@ -63,28 +59,12 @@ const STEP_SUBS = [
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type AvailabilitySlot = { start_time: string; end_time: string; treatment_ids: string[] }
-type AvailabilityRow  = { date: string; slots: AvailabilitySlot[] }
+type AvailabilitySlot = { id: string; date: string; start_time: string; end_time: string }
 type Treatment        = { id: string; name: string; category: string }
 type ExistingPhoto    = { id: string; photoUrl: string }
 type PendingPhoto     = { uri: string }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-function dateKey(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
-
-function calendarRows(year: number, month: number): (Date | null)[][] {
-  const startDow  = (new Date(year, month, 1).getDay() + 6) % 7
-  const totalDays = new Date(year, month + 1, 0).getDate()
-  const cells: (Date | null)[] = [
-    ...Array<null>(startDow).fill(null),
-    ...Array.from({ length: totalDays }, (_, i) => new Date(year, month, i + 1)),
-  ]
-  while (cells.length % 7 !== 0) cells.push(null)
-  return Array.from({ length: cells.length / 7 }, (_, i) => cells.slice(i * 7, i * 7 + 7))
-}
 
 function formatDayLabel(key: string): string {
   const [y, m, d] = key.split('-').map(Number)
@@ -103,8 +83,8 @@ function formatDateShort(key: string): string {
 // ── Screen ────────────────────────────────────────────────────────────────────
 
 export default function ApplySessionScreen() {
-  const { providerId, providerName } =
-    useLocalSearchParams<{ providerId: string; providerName: string }>()
+  const { providerId, providerName, preDate } =
+    useLocalSearchParams<{ providerId: string; providerName: string; preDate?: string }>()
   const router   = useRouter()
   const { session } = useAuth()
   const insets   = useSafeAreaInsets()
@@ -117,7 +97,7 @@ export default function ApplySessionScreen() {
   // ── Data state ─────────────────────────────────────────────────────────────
 
   const [loading,         setLoading]         = useState(true)
-  const [availRows,       setAvailRows]       = useState<AvailabilityRow[]>([])
+  const [availRows,       setAvailRows]       = useState<AvailabilitySlot[]>([])
   const [treatments,      setTreatments]      = useState<Treatment[]>([])
   const [existingPhotos,  setExistingPhotos]  = useState<ExistingPhoto[]>([])
   const [selectedPhotoIds,setSelectedPhotoIds]= useState<Set<string>>(new Set())
@@ -126,43 +106,44 @@ export default function ApplySessionScreen() {
 
   // ── Wizard state ───────────────────────────────────────────────────────────
 
-  const [step,          setStep]         = useState<1|2|3|4|5|6|7>(1)
-  const [viewYear,      setViewYear]     = useState(today.getFullYear())
-  const [viewMonth,     setViewMonth]    = useState(today.getMonth())
-  const [selectedDate,  setSelectedDate] = useState<string | null>(null)
+  const [step,          setStep]         = useState<1|2|3|4|5|6|7>(preDate ? 2 : 1)
+  const [selectedDate,  setSelectedDate] = useState<string | null>(preDate || null)
   const [selectedSlot,  setSelectedSlot] = useState<AvailabilitySlot | null>(null)
   const [selectedTreatId,setSelectedTreatId]= useState<string | null>(null)
   const [note,          setNote]         = useState('')
   const [submitting,    setSubmitting]   = useState(false)
   const [submitted,     setSubmitted]    = useState(false)
+  const [patchTestAgreed, setPatchTestAgreed] = useState(false)
 
   // ── Load data ──────────────────────────────────────────────────────────────
 
   useEffect(() => {
     if (!providerId || !userId) return
     async function load() {
-      // Gate: models must have an active subscription to apply
+      // Gate: models must be verified (active subscription OR is_verified) to apply
       try {
-        const { data: sub } = await supabase
-          .from('subscriptions')
-          .select('status')
-          .eq('user_id', userId)
-          .eq('status', 'active')
-          .maybeSingle()
-        if (!sub) {
+        const verified = await isModelVerified(userId!)
+        if (!verified) {
           router.replace({
             pathname: '/(app)/subscribe' as any,
             params:   { providerId, providerName },
           })
           return
         }
-      } catch { /* if query fails let them through rather than blocking */ }
+      } catch (e) {
+        console.error('apply-session verification check failed:', e)
+        router.replace({
+          pathname: '/(app)/subscribe' as any,
+          params:   { providerId, providerName },
+        })
+        return
+      }
 
       try {
-        const [{ data: availData }, { data: treatData }, { data: provData }] = await Promise.all([
+        const [{ data: availData, error: availError }, { data: treatData, error: treatError }, { data: provData }] = await Promise.all([
           supabase
-            .from('provider_availability')
-            .select('date, slots')
+            .from('availability')
+            .select('id, date, start_time, end_time')
             .eq('provider_id', providerId)
             .gte('date', todayKey)
             .order('date'),
@@ -201,14 +182,12 @@ export default function ApplySessionScreen() {
   const availDateSet = useMemo(() => new Set(availRows.map(r => r.date)), [availRows])
 
   const slotsForDate = useMemo(
-    () => availRows.find(r => r.date === selectedDate)?.slots ?? [],
+    () => availRows.filter(r => r.date === selectedDate),
     [availRows, selectedDate]
   )
 
   const treatmentsInSlot = useMemo(
-    () => selectedSlot
-      ? treatments.filter(t => selectedSlot.treatment_ids.includes(t.id))
-      : [],
+    () => selectedSlot ? treatments : [],
     [selectedSlot, treatments]
   )
 
@@ -216,8 +195,6 @@ export default function ApplySessionScreen() {
     () => treatments.find(t => t.id === selectedTreatId) ?? null,
     [treatments, selectedTreatId]
   )
-
-  const calRows = useMemo(() => calendarRows(viewYear, viewMonth), [viewYear, viewMonth])
 
   const canNext = useMemo(() => {
     switch (step) {
@@ -276,18 +253,6 @@ export default function ApplySessionScreen() {
     setSelectedTreatId(id)
   }
 
-  const prevMonth = async () => {
-    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
-    if (viewMonth === 0) { setViewMonth(11); setViewYear(y => y - 1) }
-    else setViewMonth(m => m - 1)
-  }
-
-  const nextMonth = async () => {
-    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
-    if (viewMonth === 11) { setViewMonth(0); setViewYear(y => y + 1) }
-    else setViewMonth(m => m + 1)
-  }
-
   // ── Photo handlers ─────────────────────────────────────────────────────────
 
   const toggleExistingPhoto = async (id: string) => {
@@ -325,6 +290,8 @@ export default function ApplySessionScreen() {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
 
     try {
+      // The selected slot is a real `availability` row; use its id directly.
+      const resolvedAvailId = selectedSlot.id
       // Upload pending photos, silently skip failures
       const uploadedUrls: string[] = []
       for (const photo of pendingPhotos) {
@@ -349,37 +316,49 @@ export default function ApplySessionScreen() {
         .map(p => p.photoUrl)
       const allPhotoUrls = [...selectedExistingUrls, ...uploadedUrls]
 
-      const { data: sessionData, error: sessionErr } = await supabase
+      const payload = {
+        provider_id:      providerId,
+        model_user_id:    userId,
+        model_id:         userId,
+        availability_id:  resolvedAvailId,
+        date:             selectedDate,
+        start_time:       selectedSlot.start_time,
+        end_time:         selectedSlot.end_time,
+        scheduled_at:     `${selectedDate}T${selectedSlot.start_time}`,
+        duration_minutes: (() => {
+          const [sh, sm] = selectedSlot.start_time.split(':').map(Number)
+          const [eh, em] = selectedSlot.end_time.split(':').map(Number)
+          return (eh * 60 + em) - (sh * 60 + sm)
+        })(),
+        treatment_id:     selectedTreatId,
+        location_type:    'either',
+        note:             note.trim() || null,
+        photo_urls:       allPhotoUrls.length > 0 ? allPhotoUrls : null,
+        status:           'pending',
+      }
+
+      const { data, error } = await supabase
         .from('sessions')
-        .insert({
-          provider_id:   providerId,
-          model_user_id: userId,
-          date:          selectedDate,
-          start_time:    selectedSlot.start_time,
-          end_time:      selectedSlot.end_time,
-          treatment_id:  selectedTreatId,
-          note:          note.trim() || null,
-          photo_urls:    allPhotoUrls.length > 0 ? allPhotoUrls : null,
-          status:        'pending',
-        })
+        .insert(payload)
         .select('id')
         .single()
 
-      if (sessionErr) throw sessionErr
+      const sessionData = data
+      const sessionErr  = error
 
-      // Notify provider (silent fail)
+      let consentErr: any = null
       if (providerUserId && sessionData) {
-        try {
-          await supabase.from('notifications').insert({
-            user_id: providerUserId,
-            type:    'session_application',
-            title:   'New session application',
-            body:    `A model has applied for ${selectedTreatment?.name ?? 'a session'} on ${formatDateShort(selectedDate)} at ${selectedSlot.start_time}`,
-            data:    { session_id: sessionData.id, provider_id: providerId },
-            read:    false,
-          })
-        } catch {}
+        const { error: notifErr } = await supabase.from('notifications').insert({
+          user_id: providerUserId,
+          type:    'session_application',
+          title:   'New session application',
+          body:    `A model has applied for ${selectedTreatment?.name ?? 'a session'} on ${formatDateShort(selectedDate)} at ${selectedSlot.start_time}`,
+          data:    { session_id: sessionData.id, provider_id: providerId },
+          read:    false,
+        })
+        consentErr = notifErr
       }
+      if (sessionErr) throw sessionErr
 
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
       setSubmitted(true)
@@ -468,75 +447,12 @@ export default function ApplySessionScreen() {
             </View>
           ) : (
             <View style={styles.card}>
-              {/* Month nav */}
-              <View style={styles.monthNav}>
-                <TouchableOpacity style={styles.monthNavBtn} onPress={prevMonth} activeOpacity={0.7}>
-                  <Ionicons name="chevron-back" size={18} color={Colors.warmDark} />
-                </TouchableOpacity>
-                <Text style={styles.monthTitle}>{MONTH_NAMES[viewMonth]} {viewYear}</Text>
-                <TouchableOpacity style={styles.monthNavBtn} onPress={nextMonth} activeOpacity={0.7}>
-                  <Ionicons name="chevron-forward" size={18} color={Colors.warmDark} />
-                </TouchableOpacity>
-              </View>
-
-              {/* Day headers */}
-              <View style={styles.calHeaders}>
-                {DAYS_SHORT.map(d => (
-                  <Text key={d} style={styles.calHeader}>{d}</Text>
-                ))}
-              </View>
-
-              {/* Date grid */}
-              {calRows.map((row, ri) => (
-                <View key={ri} style={styles.calRow}>
-                  {row.map((date, ci) => {
-                    if (!date) return <View key={ci} style={styles.calCell} />
-                    const key        = dateKey(date)
-                    const isPast     = key < todayKey
-                    const isAvail    = availDateSet.has(key) && !isPast
-                    const isSelected = key === selectedDate
-                    const isToday    = key === todayKey
-                    return (
-                      <TouchableOpacity
-                        key={ci}
-                        style={[
-                          styles.calCell,
-                          isToday    && !isSelected && styles.calCellToday,
-                          isAvail    && !isSelected && styles.calCellAvail,
-                          isSelected && styles.calCellSelected,
-                          isPast     && styles.calCellPast,
-                        ]}
-                        onPress={() => selectDate(key)}
-                        disabled={isPast || !isAvail}
-                        activeOpacity={0.75}
-                      >
-                        <Text style={[
-                          styles.calCellText,
-                          isToday    && !isSelected && styles.calCellTextToday,
-                          isAvail    && !isSelected && styles.calCellTextAvail,
-                          isSelected && styles.calCellTextSelected,
-                          isPast     && styles.calCellTextPast,
-                        ]}>
-                          {date.getDate()}
-                        </Text>
-                      </TouchableOpacity>
-                    )
-                  })}
-                </View>
-              ))}
-
-              {/* Legend + selection */}
-              <View style={styles.legendRow}>
-                <View style={styles.legendItem}>
-                  <View style={[styles.legendDot, { backgroundColor: Colors.rose + '55' }]} />
-                  <Text style={styles.legendText}>Available</Text>
-                </View>
-                <View style={styles.legendItem}>
-                  <View style={[styles.legendDot, { backgroundColor: Colors.roseDark }]} />
-                  <Text style={styles.legendText}>Selected</Text>
-                </View>
-              </View>
-
+              <AvailabilityCalendar
+                availableDates={availDateSet}
+                todayKey={todayKey}
+                selectedDate={selectedDate}
+                onSelectDate={selectDate}
+              />
               {selectedDate && (
                 <View style={styles.selectionBanner}>
                   <Ionicons name="calendar-outline" size={14} color={Colors.roseDark} />
@@ -553,13 +469,12 @@ export default function ApplySessionScreen() {
             {slotsForDate.length === 0 ? (
               <Text style={styles.emptyHint}>No time slots available for this date.</Text>
             ) : (
-              slotsForDate.map((slot, i) => {
-                const isSelected = selectedSlot?.start_time === slot.start_time &&
-                                   selectedSlot?.end_time   === slot.end_time
-                const slotTreats = treatments.filter(t => slot.treatment_ids.includes(t.id))
+              slotsForDate.map((slot) => {
+                const isSelected = selectedSlot?.id === slot.id
+                const slotTreats = treatments
                 return (
                   <TouchableOpacity
-                    key={i}
+                    key={slot.id}
                     style={[styles.slotPill, isSelected && styles.slotPillSelected]}
                     onPress={() => selectSlot(slot)}
                     activeOpacity={0.85}
@@ -713,6 +628,7 @@ export default function ApplySessionScreen() {
 
         {/* ════ STEP 7 — CONFIRMATION ══════════════════════════════════════ */}
         {step === 7 && selectedDate && selectedSlot && selectedTreatment && (
+          <>
           <View style={styles.card}>
             <Text style={styles.confirmSectionTitle}>Session details</Text>
 
@@ -749,6 +665,25 @@ export default function ApplySessionScreen() {
               <ConfirmRow icon="images-outline" label="Photos" value="No photos shared" muted />
             )}
           </View>
+
+          <TouchableOpacity
+            style={[styles.patchTestRow, patchTestAgreed && styles.patchTestRowAgreed]}
+            onPress={async () => {
+              await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+              setPatchTestAgreed(v => !v)
+            }}
+            activeOpacity={0.8}
+          >
+            <Ionicons
+              name={patchTestAgreed ? 'checkbox' : 'square-outline'}
+              size={22}
+              color={patchTestAgreed ? Colors.roseDark : Colors.muted}
+            />
+            <Text style={styles.patchTestText}>
+              A patch test may be required before some treatments. Please book with enough time in advance for one to be carried out if needed.
+            </Text>
+          </TouchableOpacity>
+          </>
         )}
 
         <View style={{ height: 16 }} />
@@ -769,8 +704,8 @@ export default function ApplySessionScreen() {
             </TouchableOpacity>
           ) : (
             <TouchableOpacity
-              style={[styles.actionBtn, submitting && styles.actionBtnDisabled]}
-              disabled={submitting}
+              style={[styles.actionBtn, (submitting || !patchTestAgreed) && styles.actionBtnDisabled]}
+              disabled={submitting || !patchTestAgreed}
               onPress={handleSubmit}
               activeOpacity={0.9}
             >
@@ -819,7 +754,7 @@ function ConfirmRow({
 // ── Styles ────────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.cream },
+  container: { flex: 1, backgroundColor: 'transparent' },
 
   // Success
   successContainer: { justifyContent: 'center' },
@@ -839,8 +774,8 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   successTitle: {
-    fontSize: 26,
-    fontWeight: '800',
+    fontFamily: 'DancingScript_700Bold',
+    fontSize: 39,
     color: Colors.warmDark,
     letterSpacing: -0.5,
     marginBottom: 10,
@@ -930,8 +865,8 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   stepTitle: {
-    fontSize: 24,
-    fontWeight: '800',
+    fontFamily: 'DancingScript_700Bold',
+    fontSize: 35,
     color: Colors.warmDark,
     letterSpacing: -0.5,
     marginBottom: 4,
@@ -998,90 +933,6 @@ const styles = StyleSheet.create({
     color: Colors.muted,
     textAlign: 'center',
     paddingVertical: 12,
-  },
-
-  // Calendar
-  monthNav: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 14,
-  },
-  monthNavBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: Colors.inputBg,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  monthTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: Colors.warmDark,
-  },
-  calHeaders: {
-    flexDirection: 'row',
-    marginBottom: 6,
-  },
-  calHeader: {
-    flex: 1,
-    textAlign: 'center',
-    fontSize: 11,
-    fontWeight: '600',
-    color: Colors.muted,
-    textTransform: 'uppercase',
-  },
-  calRow: {
-    flexDirection: 'row',
-    marginBottom: 4,
-  },
-  calCell: {
-    flex: 1,
-    height: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 20,
-  },
-  calCellToday: {
-    borderWidth: 1.5,
-    borderColor: Colors.rose,
-  },
-  calCellAvail: {
-    backgroundColor: Colors.rose + '28',
-  },
-  calCellSelected: {
-    backgroundColor: Colors.roseDark,
-  },
-  calCellPast: { opacity: 0.3 },
-  calCellText: { fontSize: 14, color: Colors.warmDark },
-  calCellTextToday:    { color: Colors.roseDark, fontWeight: '700' },
-  calCellTextAvail:    { color: Colors.roseDark, fontWeight: '600' },
-  calCellTextSelected: { color: Colors.white, fontWeight: '700' },
-  calCellTextPast:     { color: Colors.muted },
-
-  legendRow: {
-    flexDirection: 'row',
-    gap: 16,
-    marginTop: 12,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: Colors.border,
-  },
-  legendItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  legendDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-  },
-  legendText: {
-    fontSize: 12,
-    color: Colors.muted,
-    fontWeight: '500',
   },
 
   selectionBanner: {
@@ -1293,6 +1144,29 @@ const styles = StyleSheet.create({
     height: 18,
     borderRadius: 2,
     flexShrink: 0,
+  },
+
+  // Patch-test disclaimer
+  patchTestRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    padding: 14,
+    marginBottom: 4,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: Colors.rose,
+    backgroundColor: Colors.softPink + '40',
+  },
+  patchTestRowAgreed: {
+    borderColor: Colors.roseDark,
+    backgroundColor: Colors.softPink + '66',
+  },
+  patchTestText: {
+    flex: 1,
+    fontSize: 13,
+    color: Colors.warmDark,
+    lineHeight: 19,
   },
 
   // Bottom bar

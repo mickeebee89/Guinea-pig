@@ -9,7 +9,6 @@ import {
   TouchableOpacity,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { useRouter, useLocalSearchParams } from 'expo-router'
 import * as Haptics from 'expo-haptics'
 import { Colors } from '@/constants/Colors'
 import { Button } from '@/components/Button'
@@ -17,19 +16,28 @@ import { Input } from '@/components/Input'
 import { supabase } from '@/lib/supabase'
 import { pendingAuth } from '@/lib/pendingAuth'
 
-export default function SignupScreen() {
-  const router = useRouter()
-  const params = useLocalSearchParams<{ role?: string }>()
+interface ConfirmParams {
+  email: string
+  role: string
+  first: string
+  initial: string
+}
 
-  const role = (params.role ?? 'model') as 'model' | 'provider'
+interface Props {
+  role: 'model' | 'provider'
+  onBack: () => void
+  onGoLogin: () => void
+  onNeedConfirmation: (params: ConfirmParams) => void
+}
 
-  const [firstName, setFirstName]   = useState('')
+export default function SignupScreen({ role, onBack, onGoLogin, onNeedConfirmation }: Props) {
+  const [firstName, setFirstName]     = useState('')
   const [lastInitial, setLastInitial] = useState('')
-  const [email, setEmail]           = useState('')
-  const [password, setPassword]     = useState('')
-  const [loading, setLoading]       = useState(false)
-  const [errors, setErrors]         = useState<Record<string, string>>({})
-  const [cooldown, setCooldown]     = useState(0)
+  const [email, setEmail]             = useState('')
+  const [password, setPassword]       = useState('')
+  const [loading, setLoading]         = useState(false)
+  const [errors, setErrors]           = useState<Record<string, string>>({})
+  const [cooldown, setCooldown]       = useState(0)
 
   useEffect(() => {
     if (cooldown <= 0) return
@@ -39,12 +47,12 @@ export default function SignupScreen() {
 
   function validate() {
     const e: Record<string, string> = {}
-    if (!firstName.trim())    e.firstName   = 'Enter your first name'
-    if (!lastInitial.trim())  e.lastInitial = 'Enter your last initial'
-    if (lastInitial.length > 1) e.lastInitial = 'Just one letter'
-    if (!email.trim())        e.email       = 'Enter your email'
-    if (!email.includes('@')) e.email       = 'Enter a valid email'
-    if (password.length < 8) e.password    = 'At least 8 characters'
+    if (!firstName.trim())       e.firstName   = 'Enter your first name'
+    if (!lastInitial.trim())     e.lastInitial = 'Enter your last initial'
+    if (lastInitial.length > 1)  e.lastInitial = 'Just one letter'
+    if (!email.trim())           e.email       = 'Enter your email'
+    if (!email.includes('@'))    e.email       = 'Enter a valid email'
+    if (password.length < 8)     e.password    = 'At least 8 characters'
     return e
   }
 
@@ -85,7 +93,6 @@ export default function SignupScreen() {
     const cleanInitial = lastInitial.trim().toUpperCase().charAt(0)
 
     if (data.user) {
-
       try {
         await supabase.from('users').insert({
           id:           data.user.id,
@@ -95,38 +102,36 @@ export default function SignupScreen() {
           role,
           region:       'UK',
         })
-
         if (role === 'provider') {
           await supabase.from('providers').insert({ user_id: data.user.id })
         }
       } catch {}
-      // profile inserts failing must not block the auth flow
     }
 
     await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
     setLoading(false)
 
     if (!data.session) {
-      // Supabase email confirmation is enabled — hold credentials in memory
-      // so the confirm-email screen can verify the user signed in after confirming
       pendingAuth.set(email.trim().toLowerCase(), password)
-      router.replace({
-        pathname: '/(auth)/confirm-email' as any,
-        params:   { email: email.trim().toLowerCase(), role, first: cleanFirst, initial: cleanInitial },
+      onNeedConfirmation({
+        email:   email.trim().toLowerCase(),
+        role,
+        first:   cleanFirst,
+        initial: cleanInitial,
       })
     }
-    // If data.session is set (no email confirmation required), AuthGate in
-    // _layout.tsx switches to the post-auth Stack automatically — no navigation needed.
+    // If data.session is set (no email confirmation required), onAuthStateChange
+    // fires SIGNED_IN → AppEntry renders the app Stack automatically.
   }
 
   const goLogin = async () => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
-    router.replace('/(auth)/login')
+    onGoLogin()
   }
 
   const goBack = async () => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
-    router.back()
+    onBack()
   }
 
   const roleLabel  = role === 'provider' ? 'Stylist' : 'Model'
@@ -144,12 +149,10 @@ export default function SignupScreen() {
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >
-            {/* Back */}
             <TouchableOpacity onPress={goBack} style={styles.back}>
               <Text style={styles.backText}>‹ Back</Text>
             </TouchableOpacity>
 
-            {/* Header */}
             <View style={styles.header}>
               <View style={[styles.rolePill, { backgroundColor: roleColour }]}>
                 <Text style={styles.rolePillText}>{roleLabel}</Text>
@@ -160,7 +163,6 @@ export default function SignupScreen() {
               </Text>
             </View>
 
-            {/* Form */}
             <View style={styles.form}>
               {errors.form && (
                 <View style={styles.formError}>
@@ -241,19 +243,9 @@ const styles = StyleSheet.create({
   safe:      { flex: 1 },
   kav:       { flex: 1 },
   scroll:    { paddingHorizontal: 24, paddingBottom: 40 },
-  back: {
-    paddingTop: 12,
-    paddingBottom: 8,
-  },
-  backText: {
-    fontSize: 17,
-    color: Colors.roseDark,
-    fontWeight: '500',
-  },
-  header: {
-    paddingTop: 12,
-    paddingBottom: 28,
-  },
+  back: { paddingTop: 12, paddingBottom: 8 },
+  backText: { fontSize: 17, color: Colors.roseDark, fontWeight: '500' },
+  header: { paddingTop: 12, paddingBottom: 28 },
   rolePill: {
     alignSelf: 'flex-start',
     paddingHorizontal: 12,
@@ -261,24 +253,15 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     marginBottom: 12,
   },
-  rolePillText: {
-    color: Colors.white,
-    fontSize: 12,
-    fontWeight: '700',
-    letterSpacing: 0.5,
-  },
+  rolePillText: { color: Colors.white, fontSize: 12, fontWeight: '700', letterSpacing: 0.5 },
   title: {
-    fontSize: 28,
-    fontWeight: '800',
+    fontFamily: 'DancingScript_700Bold',
+    fontSize: 42,
     color: Colors.warmDark,
     letterSpacing: -0.5,
     marginBottom: 6,
   },
-  subtitle: {
-    fontSize: 15,
-    color: Colors.muted,
-    lineHeight: 22,
-  },
+  subtitle: { fontSize: 15, color: Colors.muted, lineHeight: 22 },
   form: {},
   formError: {
     backgroundColor: '#FEE2E2',
@@ -286,14 +269,8 @@ const styles = StyleSheet.create({
     padding: 12,
     marginBottom: 16,
   },
-  formErrorText: {
-    color: Colors.error,
-    fontSize: 14,
-  },
-  nameRow: {
-    flexDirection: 'row',
-    gap: 12,
-  },
+  formErrorText: { color: Colors.error, fontSize: 14 },
+  nameRow:   { flexDirection: 'row', gap: 12 },
   nameFirst:   { flex: 1 },
   nameInitial: { width: 80 },
   submitBtn: { marginTop: 8, marginBottom: 16 },
@@ -304,10 +281,5 @@ const styles = StyleSheet.create({
   },
   switchText: { fontSize: 14, color: Colors.muted },
   switchLink: { fontSize: 14, fontWeight: '600', color: Colors.roseDark },
-  terms: {
-    fontSize: 12,
-    color: Colors.muted,
-    textAlign: 'center',
-    lineHeight: 18,
-  },
+  terms: { fontSize: 12, color: Colors.muted, textAlign: 'center', lineHeight: 18 },
 })

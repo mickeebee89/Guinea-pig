@@ -14,14 +14,15 @@ import { useLocalSearchParams, useRouter } from 'expo-router'
 import * as Haptics from 'expo-haptics'
 import { Ionicons } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { Colors } from '@/constants/Colors'
+import { Colors, CategoryColors } from '@/constants/Colors'
 import { useAuth } from '@/context/auth'
 import { supabase } from '@/lib/supabase'
+import AvailabilityCalendar from '@/components/AvailabilityCalendar'
 
-const BANNER_HEIGHT = 220
+const BANNER_HEIGHT = 165
 
 const CATEGORY_COLOR: Record<string, string> = {
-  Nails:      '#C8788A',
+  Nails:      CategoryColors.nails,
   Lashes:     '#1D9E75',
   Brows:      '#BA7517',
   Hair:       '#7B5EA7',
@@ -41,10 +42,8 @@ type Provider = {
   review_count: number | null
   profile_pic_url: string | null
   banner_url: string | null
-  status_message: string | null
-  status_expiry: string | null
-  skill_level: string | null
-  response_time: string | null
+  status_text: string | null
+  status_expires_at: string | null
 }
 
 type Treatment = {
@@ -57,9 +56,10 @@ type Treatment = {
 
 type PortfolioItem = {
   id: string
-  category: string
   media_url: string
   media_type: 'photo' | 'video'
+  category_name: string | null
+  category_id: string | null
 }
 
 type Review = {
@@ -68,7 +68,14 @@ type Review = {
   comment: string | null
   tags: string[] | null
   created_at: string
-  reviewer: { name: string | null; profile_pic_url: string | null } | null
+  reviewer_id: string
+  reviewer_name: string
+}
+
+type AvailabilitySlot = {
+  date: string
+  start_time: string
+  end_time: string
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -86,60 +93,130 @@ function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
+function formatTime12(t: string): string {
+  const [h, min] = t.split(':')
+  const hour = parseInt(h, 10)
+  return `${hour % 12 || 12}:${min}${hour >= 12 ? 'pm' : 'am'}`
+}
+
+function todayKey(): string {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+// Group portfolio items by category
+function groupPortfolio(items: PortfolioItem[]): { label: string; items: PortfolioItem[] }[] {
+  const grouped: Record<string, PortfolioItem[]> = {}
+  const order: string[] = []
+  for (const item of items) {
+    const key = item.category_name ?? 'Other'
+    if (!grouped[key]) { grouped[key] = []; order.push(key) }
+    grouped[key].push(item)
+  }
+  return order.map(label => ({ label, items: grouped[label] }))
+}
+
 // ── Screen ────────────────────────────────────────────────────────────────────
 
 export default function ProviderShopScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>()
+  const { id, ownShop } = useLocalSearchParams<{ id: string; ownShop?: string }>()
   const router = useRouter()
   const { session } = useAuth()
   const insets = useSafeAreaInsets()
   const userId = session?.user?.id
 
-  const [provider,    setProvider]    = useState<Provider | null>(null)
-  const [treatments,  setTreatments]  = useState<Treatment[]>([])
-  const [portfolio,   setPortfolio]   = useState<PortfolioItem[]>([])
-  const [reviews,     setReviews]     = useState<Review[]>([])
-  const [isFavourite, setIsFavourite] = useState(false)
-  const [refreshing,  setRefreshing]  = useState(false)
-  const [loading,     setLoading]     = useState(true)
+  const [provider,      setProvider]      = useState<Provider | null>(null)
+  const [treatments,    setTreatments]    = useState<Treatment[]>([])
+  const [portfolio,     setPortfolio]     = useState<PortfolioItem[]>([])
+  const [reviews,       setReviews]       = useState<Review[]>([])
+  const [availability,  setAvailability]  = useState<AvailabilitySlot[]>([])
+  const [isFavourite,   setIsFavourite]   = useState(false)
+  const [refreshing,    setRefreshing]    = useState(false)
+  const [loading,       setLoading]       = useState(true)
+  const [shopDate,      setShopDate]      = useState<string | null>(null)
 
   const fetchAll = useCallback(async () => {
     if (!id) return
     try {
-      const [{ data: provData }, { data: treatData }, { data: portData }, { data: revData }] =
-        await Promise.all([
-          supabase
-            .from('providers')
-            .select('id, name, location, bio, is_verified, rating, review_count, profile_pic_url, banner_url, status_message, status_expiry, skill_level, response_time')
-            .eq('id', id)
-            .single(),
-          supabase
-            .from('provider_treatments')
-            .select('id, name, category, duration_mins, materials_cost')
-            .eq('provider_id', id),
-          supabase
-            .from('provider_portfolio')
-            .select('id, category, media_url, media_type')
-            .eq('provider_id', id),
-          supabase
-            .from('reviews')
-            .select('id, rating, comment, tags, created_at, reviewer:reviewer_id(name, profile_pic_url)')
-            .eq('provider_id', id)
-            .order('created_at', { ascending: false }),
-        ])
+      const today = todayKey()
+      const [
+        { data: provData },
+        { data: treatData },
+        { data: portData },
+        { data: avData },
+      ] = await Promise.all([
+        supabase
+          .from('providers')
+          .select('id, name, location, bio, is_verified, rating, review_count, profile_pic_url, banner_url, status_text, status_expires_at, user_id')
+          .eq('id', id)
+          .single(),
+        supabase
+          .from('provider_treatments')
+          .select('id, name, category, duration_mins, materials_cost')
+          .eq('provider_id', id),
+        supabase
+          .from('portfolio_items')
+          .select('id, media_url, media_type, category_id, portfolio_categories(name)')
+          .eq('provider_id', id),
+        supabase
+          .from('availability')
+          .select('date, start_time, end_time')
+          .eq('provider_id', id)
+          .gte('date', today)
+          .order('date')
+          .order('start_time')
+          .limit(30),
+      ])
 
       if (provData)  setProvider(provData as Provider)
       if (treatData) setTreatments(treatData as Treatment[])
-      if (portData)  setPortfolio(portData as PortfolioItem[])
-      if (revData) {
-        // Supabase infers one-to-one FK joins as arrays; normalise to single object
-        const normalised = (revData as any[]).map(r => ({
-          ...r,
-          reviewer: Array.isArray(r.reviewer) ? (r.reviewer[0] ?? null) : r.reviewer,
+      if (portData) {
+        const normPort = (portData as any[]).map(item => ({
+          id:            item.id,
+          media_url:     item.media_url,
+          media_type:    item.media_type,
+          category_id:   item.category_id ?? null,
+          category_name: item.portfolio_categories?.name ?? null,
         }))
-        setReviews(normalised as Review[])
+        setPortfolio(normPort as PortfolioItem[])
       }
-    } catch {}
+      if (avData) setAvailability(avData as AvailabilitySlot[])
+
+      // Fetch reviews using the provider's auth user_id as reviewee_id
+      const providerUserId = (provData as any)?.user_id
+      if (providerUserId) {
+        try {
+          const { data: revData, error: revErr } = await supabase
+            .from('reviews')
+            .select('id, rating:overall_rating, comment, tags, created_at, reviewer_id')
+            .eq('reviewee_id', providerUserId)
+            .order('created_at', { ascending: false })
+
+          if (revData && (revData as any[]).length > 0) {
+            const reviewerIds = [...new Set((revData as any[]).map((r: any) => r.reviewer_id))]
+            const { data: reviewerUsers, error: reviewerErr } = await supabase
+              .from('users')
+              .select('id, first_name, last_initial')
+              .in('id', reviewerIds)
+            if (reviewerErr) console.warn('PROVIDER REVIEWS users lookup →', reviewerErr)
+            const userMap: Record<string, string> = {}
+            ;(reviewerUsers as any[] ?? []).forEach((u: any) => {
+              const name = `${u.first_name ?? ''}${u.last_initial ? ' ' + u.last_initial + '.' : ''}`.trim()
+              userMap[u.id] = name || 'Anonymous'
+            })
+            setReviews((revData as any[]).map((r: any) => ({
+              id:            r.id,
+              rating:        r.rating,
+              comment:       r.comment ?? null,
+              tags:          Array.isArray(r.tags) ? r.tags : [],
+              created_at:    r.created_at,
+              reviewer_id:   r.reviewer_id,
+              reviewer_name: userMap[r.reviewer_id] ?? 'Anonymous',
+            })))
+          }
+        } catch {}
+      }
+    } catch (e) { console.error('provider load failed:', e) }
 
     if (userId) {
       try {
@@ -185,16 +262,9 @@ export default function ProviderShopScreen() {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
     router.push({
       pathname: '/(app)/apply-session' as any,
-      params: { providerId: id, providerName: provider?.name ?? '' },
+      params: { providerId: id, providerName: provider?.name ?? '', preDate: shopDate ?? '' },
     })
   }
-
-  const portfolioByCategory = portfolio.reduce<Record<string, PortfolioItem[]>>((acc, item) => {
-    const cat = item.category || 'General'
-    if (!acc[cat]) acc[cat] = []
-    acc[cat].push(item)
-    return acc
-  }, {})
 
   if (loading) {
     return (
@@ -204,7 +274,8 @@ export default function ProviderShopScreen() {
     )
   }
 
-  if (!provider) {
+  const shopIsEmpty = !provider?.bio && treatments.length === 0 && portfolio.length === 0
+  if (!provider || (ownShop === '1' && shopIsEmpty)) {
     return (
       <View style={[styles.container, styles.centred]}>
         <TouchableOpacity
@@ -214,11 +285,23 @@ export default function ProviderShopScreen() {
           <Text style={styles.backBtnFallbackText}>‹ Back</Text>
         </TouchableOpacity>
         <Text style={styles.errorEmoji}>🐹</Text>
-        <Text style={styles.errorTitle}>Provider not found</Text>
-        <Text style={styles.errorSub}>This profile may no longer be available.</Text>
+        {ownShop === '1' ? (
+          <>
+            <Text style={styles.errorTitle}>Your shop isn't set up yet</Text>
+            <Text style={styles.errorSub}>Add your bio, treatments and photos to get started</Text>
+          </>
+        ) : (
+          <>
+            <Text style={styles.errorTitle}>Stylist not found</Text>
+            <Text style={styles.errorSub}>This profile may no longer be available.</Text>
+          </>
+        )}
       </View>
     )
   }
+
+  const portfolioGroups = groupPortfolio(portfolio)
+  const availDateSet = new Set(availability.map(s => s.date))
 
   return (
     <View style={styles.container}>
@@ -226,12 +309,7 @@ export default function ProviderShopScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: insets.bottom + 88 }}
         refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor={Colors.rose}
-            colors={[Colors.rose]}
-          />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.rose} colors={[Colors.rose]} />
         }
       >
         {/* ── Banner ── */}
@@ -271,7 +349,6 @@ export default function ProviderShopScreen() {
               </View>
             )}
           </View>
-
           <View style={styles.profileMeta}>
             <View style={styles.nameRow}>
               <Text style={styles.providerName} numberOfLines={1}>{provider.name}</Text>
@@ -299,28 +376,20 @@ export default function ProviderShopScreen() {
 
         <View style={styles.body}>
           {/* ── Status bar ── */}
-          {provider.status_message ? (
+          {provider.status_text ? (
             <View style={styles.statusBar}>
               <PulsingDot />
-              <Text style={styles.statusText} numberOfLines={2}>{provider.status_message}</Text>
-              {provider.status_expiry ? (
-                <Text style={styles.statusExpiry}>{formatExpiry(provider.status_expiry)}</Text>
+              <Text style={styles.statusText} numberOfLines={2}>{provider.status_text}</Text>
+              {provider.status_expires_at ? (
+                <Text style={styles.statusExpiry}>{formatExpiry(provider.status_expires_at)}</Text>
               ) : null}
             </View>
           ) : null}
 
           {/* ── Badges ── */}
-          {(provider.skill_level || provider.is_verified || provider.response_time) ? (
+          {provider.is_verified ? (
             <View style={styles.badgesRow}>
-              {provider.skill_level ? (
-                <BadgeChip icon="ribbon-outline" label={provider.skill_level} color={Colors.roseDark} />
-              ) : null}
-              {provider.is_verified ? (
-                <BadgeChip icon="shield-checkmark-outline" label="Verified" color="#1D9E75" />
-              ) : null}
-              {provider.response_time ? (
-                <BadgeChip icon="time-outline" label={provider.response_time} color="#7B5EA7" />
-              ) : null}
+              <BadgeChip icon="shield-checkmark-outline" label="Verified" color="#1D9E75" />
             </View>
           ) : null}
 
@@ -332,6 +401,17 @@ export default function ProviderShopScreen() {
             </View>
           ) : null}
 
+          {/* ── Availability ── */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Availability</Text>
+            <AvailabilityCalendar
+              availableDates={availDateSet}
+              todayKey={todayKey()}
+              selectedDate={shopDate}
+              onSelectDate={setShopDate}
+            />
+          </View>
+
           {/* ── Treatments ── */}
           {treatments.length > 0 ? (
             <View style={styles.section}>
@@ -342,21 +422,19 @@ export default function ProviderShopScreen() {
             </View>
           ) : null}
 
-          {/* ── Portfolio ── */}
-          {portfolio.length > 0 ? (
+          {/* ── Portfolio (grouped by category) ── */}
+          {portfolioGroups.length > 0 ? (
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Portfolio</Text>
-              {Object.entries(portfolioByCategory).map(([cat, items]) => (
-                <View key={cat} style={styles.portfolioCatBlock}>
-                  <Text style={[styles.portfolioCatLabel, { color: CATEGORY_COLOR[cat] ?? Colors.muted }]}>
-                    {cat}
-                  </Text>
+              {portfolioGroups.map(group => (
+                <View key={group.label} style={styles.portfolioCatBlock}>
+                  <Text style={styles.portfolioCatLabel}>{group.label}</Text>
                   <ScrollView
                     horizontal
                     showsHorizontalScrollIndicator={false}
                     contentContainerStyle={styles.portfolioRow}
                   >
-                    {items.map(item => (
+                    {group.items.map(item => (
                       <TouchableOpacity
                         key={item.id}
                         style={styles.portfolioThumb}
@@ -393,12 +471,14 @@ export default function ProviderShopScreen() {
       </ScrollView>
 
       {/* ── Sticky apply bar ── */}
-      <View style={[styles.stickyBar, { paddingBottom: Math.max(insets.bottom, 16) }]}>
-        <TouchableOpacity style={styles.applyBtn} onPress={handleApply} activeOpacity={0.9}>
-          <Ionicons name="calendar-outline" size={18} color={Colors.white} />
-          <Text style={styles.applyBtnText}>Apply for session</Text>
-        </TouchableOpacity>
-      </View>
+      {ownShop !== '1' && (
+        <View style={[styles.stickyBar, { paddingBottom: Math.max(insets.bottom, 16) }]}>
+          <TouchableOpacity style={styles.applyBtn} onPress={handleApply} activeOpacity={0.9}>
+            <Ionicons name="calendar-outline" size={18} color={Colors.white} />
+            <Text style={styles.applyBtnText}>Apply for session</Text>
+          </TouchableOpacity>
+        </View>
+      )}
     </View>
   )
 }
@@ -407,7 +487,6 @@ export default function ProviderShopScreen() {
 
 function PulsingDot() {
   const anim = useRef(new Animated.Value(1)).current
-
   useEffect(() => {
     const loop = Animated.loop(
       Animated.sequence([
@@ -418,7 +497,6 @@ function PulsingDot() {
     loop.start()
     return () => loop.stop()
   }, [anim])
-
   return <Animated.View style={[styles.pulsingDot, { opacity: anim }]} />
 }
 
@@ -473,19 +551,14 @@ function TreatmentRow({ treatment }: { treatment: Treatment }) {
 }
 
 function ReviewCard({ review }: { review: Review }) {
-  const name = review.reviewer?.name ?? 'Anonymous'
+  const name = review.reviewer_name
   const initials = name.split(' ').map(w => w[0] ?? '').join('').slice(0, 2).toUpperCase()
-
   return (
     <View style={styles.reviewCard}>
       <View style={styles.reviewHeader}>
-        {review.reviewer?.profile_pic_url ? (
-          <Image source={{ uri: review.reviewer.profile_pic_url }} style={styles.reviewerAvatar} />
-        ) : (
-          <View style={styles.reviewerAvatarPlaceholder}>
-            <Text style={styles.reviewerInitials}>{initials}</Text>
-          </View>
-        )}
+        <View style={styles.reviewerAvatarPlaceholder}>
+          <Text style={styles.reviewerInitials}>{initials}</Text>
+        </View>
         <View style={styles.reviewerMeta}>
           <Text style={styles.reviewerName}>{name}</Text>
           <View style={styles.reviewRatingRow}>
@@ -513,7 +586,7 @@ function ReviewCard({ review }: { review: Review }) {
 // ── Styles ────────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.cream },
+  container: { flex: 1, backgroundColor: 'transparent' },
   centred:   { alignItems: 'center', justifyContent: 'center' },
   loadingText: { fontSize: 15, color: Colors.muted },
 
@@ -523,368 +596,133 @@ const styles = StyleSheet.create({
   errorTitle: { fontSize: 18, fontWeight: '700', color: Colors.warmDark, marginBottom: 6 },
   errorSub:   { fontSize: 14, color: Colors.muted },
 
-  // Banner
-  bannerWrapper: {
-    height: BANNER_HEIGHT,
-  },
-  bannerImage: {
-    width: '100%',
-    height: BANNER_HEIGHT,
-  },
-  bannerPlaceholder: {
-    width: '100%',
-    height: BANNER_HEIGHT,
-    backgroundColor: Colors.roseDark,
-  },
+  bannerWrapper: { height: BANNER_HEIGHT },
+  bannerImage: { width: '100%', height: BANNER_HEIGHT },
+  bannerPlaceholder: { width: '100%', height: BANNER_HEIGHT, backgroundColor: Colors.roseDark },
   bannerControls: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
+    position: 'absolute', top: 0, left: 0, right: 0,
+    flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 16,
   },
   bannerIconBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 38, height: 38, borderRadius: 19,
     backgroundColor: 'rgba(0,0,0,0.35)',
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: 'center', justifyContent: 'center',
   },
 
-  // Profile row
   profileRow: {
-    flexDirection: 'row',
-    paddingHorizontal: 20,
-    paddingBottom: 16,
-    alignItems: 'flex-end',
-    marginTop: -44,
+    flexDirection: 'row', paddingHorizontal: 20, paddingBottom: 16,
+    alignItems: 'flex-start',
   },
-  avatarWrapper: {
-    position: 'relative',
-    marginRight: 14,
-  },
-  avatar: {
-    width: 88,
-    height: 88,
-    borderRadius: 22,
-    borderWidth: 3,
-    borderColor: Colors.cream,
-  },
+  avatarWrapper: { position: 'relative', marginRight: 14, marginTop: -44 },
+  avatar: { width: 88, height: 88, borderRadius: 22, borderWidth: 3, borderColor: Colors.cream },
   avatarPlaceholder: {
-    width: 88,
-    height: 88,
-    borderRadius: 22,
-    backgroundColor: Colors.softPink,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 3,
-    borderColor: Colors.cream,
+    width: 88, height: 88, borderRadius: 22,
+    backgroundColor: Colors.softPink, alignItems: 'center', justifyContent: 'center',
+    borderWidth: 3, borderColor: Colors.cream,
   },
-  avatarInitial: {
-    fontSize: 30,
-    fontWeight: '700',
-    color: Colors.roseDark,
-  },
+  avatarInitial: { fontSize: 30, fontWeight: '700', color: Colors.roseDark },
   verifiedBadge: {
-    position: 'absolute',
-    bottom: 2,
-    right: 2,
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: '#1D9E75',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: Colors.cream,
+    position: 'absolute', bottom: 2, right: 2,
+    width: 20, height: 20, borderRadius: 10,
+    backgroundColor: '#1D9E75', alignItems: 'center', justifyContent: 'center',
+    borderWidth: 2, borderColor: Colors.cream,
   },
-  profileMeta: {
-    flex: 1,
-    paddingBottom: 6,
-    gap: 3,
-  },
-  nameRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  providerName: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: Colors.warmDark,
-    letterSpacing: -0.4,
-    flexShrink: 1,
-  },
+  profileMeta: { flex: 1, paddingBottom: 6, gap: 3 },
+  nameRow: { flexDirection: 'row', alignItems: 'center' },
+  providerName: { fontFamily: 'DancingScript_700Bold', fontSize: 30, color: Colors.warmDark, letterSpacing: -0.4, flexShrink: 1 },
   verifiedIcon: { marginLeft: 4 },
-  locationRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
+  locationRow: { flexDirection: 'row', alignItems: 'center' },
   locationText: { fontSize: 13, color: Colors.muted },
-  ratingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  ratingNum: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: Colors.warmDark,
-  },
+  ratingRow: { flexDirection: 'row', alignItems: 'center' },
+  ratingNum: { fontSize: 13, fontWeight: '700', color: Colors.warmDark },
   reviewCount: { fontSize: 12, color: Colors.muted },
 
   body: { paddingHorizontal: 20 },
 
-  // Status bar
   statusBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FEF3C7',
-    borderRadius: 14,
-    padding: 14,
-    gap: 10,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#F59E0B22',
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: '#FEF3C7', borderRadius: 14, padding: 14, gap: 10, marginBottom: 16,
+    borderWidth: 1, borderColor: '#F59E0B22',
   },
-  pulsingDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: '#F59E0B',
-    flexShrink: 0,
-  },
-  statusText: {
-    flex: 1,
-    fontSize: 14,
-    color: '#92400E',
-    lineHeight: 19,
-  },
-  statusExpiry: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#D97706',
-    flexShrink: 0,
-  },
+  pulsingDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#F59E0B', flexShrink: 0 },
+  statusText: { flex: 1, fontSize: 14, color: '#92400E', lineHeight: 19 },
+  statusExpiry: { fontSize: 11, fontWeight: '600', color: '#D97706', flexShrink: 0 },
 
-  // Badges
-  badgesRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 20,
-  },
-  badge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 20,
-  },
-  badgeText: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
+  badgesRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 20 },
+  badge: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20 },
+  badgeText: { fontSize: 13, fontWeight: '600' },
 
-  // Section
   section: { marginBottom: 24 },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: Colors.warmDark,
-    letterSpacing: -0.3,
-    marginBottom: 12,
-  },
+  sectionTitle: { fontFamily: 'DancingScript_700Bold', fontSize: 26, color: Colors.warmDark, letterSpacing: -0.3, marginBottom: 12 },
 
-  // Bio
-  bioText: {
-    fontSize: 15,
-    color: Colors.warmDark,
-    lineHeight: 23,
-    opacity: 0.85,
-  },
+  bioText: { fontSize: 15, color: Colors.warmDark, lineHeight: 23, opacity: 0.85 },
 
   // Treatments
   treatmentRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.white,
-    borderRadius: 14,
-    marginBottom: 8,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: Colors.border,
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: Colors.white, borderRadius: 14, marginBottom: 8,
+    overflow: 'hidden', borderWidth: 1, borderColor: Colors.border,
   },
-  treatmentStripe: {
-    width: 4,
-    alignSelf: 'stretch',
-  },
-  treatmentInfo: {
-    flex: 1,
-    padding: 12,
-    gap: 4,
-  },
-  treatmentName: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: Colors.warmDark,
-  },
-  treatmentMeta: {
-    flexDirection: 'row',
-    gap: 12,
-    alignItems: 'center',
-  },
-  treatmentMetaItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
+  treatmentStripe: { width: 4, alignSelf: 'stretch' },
+  treatmentInfo: { flex: 1, padding: 12, gap: 4 },
+  treatmentName: { fontSize: 15, fontWeight: '600', color: Colors.warmDark },
+  treatmentMeta: { flexDirection: 'row', gap: 12, alignItems: 'center' },
+  treatmentMetaItem: { flexDirection: 'row', alignItems: 'center' },
   treatmentMetaText: { fontSize: 12, color: Colors.muted },
-  treatmentCost:     { fontSize: 12, color: Colors.muted },
-  treatmentCatPill: {
-    marginRight: 12,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
+  treatmentCost: { fontSize: 12, color: Colors.muted },
+  treatmentCatPill: { marginRight: 12, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
   treatmentCatText: { fontSize: 11, fontWeight: '600' },
 
   // Portfolio
   portfolioCatBlock: { marginBottom: 16 },
   portfolioCatLabel: {
-    fontSize: 13,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: 8,
+    fontSize: 13, fontWeight: '700', color: Colors.muted,
+    textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8,
   },
   portfolioRow: { gap: 10 },
-  portfolioThumb: {
-    width: 110,
-    height: 110,
-    borderRadius: 14,
-    overflow: 'hidden',
-  },
+  portfolioThumb: { width: 110, height: 110, borderRadius: 14, overflow: 'hidden' },
   portfolioImg: { width: 110, height: 110 },
   playOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    alignItems: 'center',
-    justifyContent: 'center',
+    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+    alignItems: 'center', justifyContent: 'center',
     backgroundColor: 'rgba(0,0,0,0.25)',
   },
 
   // Reviews
-  emptyReviews: {
-    fontSize: 14,
-    color: Colors.muted,
-    textAlign: 'center',
-    paddingVertical: 20,
-  },
+  emptyReviews: { fontSize: 14, color: Colors.muted, textAlign: 'center', paddingVertical: 20 },
   reviewCard: {
-    backgroundColor: Colors.white,
-    borderRadius: 16,
-    padding: 14,
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: Colors.border,
+    backgroundColor: Colors.white, borderRadius: 16, padding: 14, marginBottom: 10,
+    borderWidth: 1, borderColor: Colors.border,
   },
-  reviewHeader: {
-    flexDirection: 'row',
-    gap: 10,
-    marginBottom: 8,
-  },
-  reviewerAvatar: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-  },
+  reviewHeader: { flexDirection: 'row', gap: 10, marginBottom: 8 },
+  reviewerAvatar: { width: 38, height: 38, borderRadius: 19 },
   reviewerAvatarPlaceholder: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: Colors.softPink,
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: 38, height: 38, borderRadius: 19,
+    backgroundColor: Colors.softPink, alignItems: 'center', justifyContent: 'center',
   },
-  reviewerInitials: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: Colors.roseDark,
-  },
+  reviewerInitials: { fontSize: 13, fontWeight: '700', color: Colors.roseDark },
   reviewerMeta: { gap: 3 },
-  reviewerName: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: Colors.warmDark,
-  },
-  reviewRatingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
+  reviewerName: { fontSize: 14, fontWeight: '600', color: Colors.warmDark },
+  reviewRatingRow: { flexDirection: 'row', alignItems: 'center' },
   reviewDate: { fontSize: 11, color: Colors.muted },
-  reviewTags: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-    marginBottom: 8,
-  },
-  reviewTag: {
-    backgroundColor: Colors.inputBg,
-    borderRadius: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
-  reviewTagText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: Colors.muted,
-  },
-  reviewComment: {
-    fontSize: 14,
-    color: Colors.warmDark,
-    lineHeight: 20,
-    opacity: 0.85,
-  },
+  reviewTags: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 8 },
+  reviewTag: { backgroundColor: Colors.inputBg, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },
+  reviewTagText: { fontSize: 11, fontWeight: '600', color: Colors.muted },
+  reviewComment: { fontSize: 14, color: Colors.warmDark, lineHeight: 20, opacity: 0.85 },
 
-  // Stars
   stars: { flexDirection: 'row', gap: 2 },
 
-  // Sticky bar
   stickyBar: {
-    backgroundColor: Colors.cream,
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: Colors.border,
-    shadowColor: Colors.warmDark,
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 8,
+    backgroundColor: Colors.cream, paddingHorizontal: 20, paddingTop: 12,
+    borderTopWidth: 1, borderTopColor: Colors.border,
+    shadowColor: Colors.warmDark, shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.06, shadowRadius: 8, elevation: 8,
   },
   applyBtn: {
-    backgroundColor: Colors.roseDark,
-    borderRadius: 16,
-    paddingVertical: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    shadowColor: Colors.roseDark,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
-    elevation: 5,
+    backgroundColor: Colors.roseDark, borderRadius: 16, paddingVertical: 16,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    shadowColor: Colors.roseDark, shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3, shadowRadius: 10, elevation: 5,
   },
-  applyBtnText: {
-    color: Colors.white,
-    fontSize: 16,
-    fontWeight: '700',
-    letterSpacing: -0.2,
-  },
+  applyBtnText: { color: Colors.white, fontSize: 16, fontWeight: '700', letterSpacing: -0.2 },
 })

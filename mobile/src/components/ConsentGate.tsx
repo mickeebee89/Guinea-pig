@@ -112,8 +112,8 @@ const styles = StyleSheet.create({
   },
 
   title: {
-    fontSize: 22,
-    fontWeight: '800',
+    fontFamily: 'DancingScript_700Bold',
+    fontSize: 33,
     color: Colors.warmDark,
     letterSpacing: -0.4,
     marginBottom: 6,

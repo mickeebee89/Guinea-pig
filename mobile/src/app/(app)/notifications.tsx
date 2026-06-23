@@ -15,6 +15,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Colors } from '@/constants/Colors'
 import { useAuth } from '@/context/auth'
 import { supabase } from '@/lib/supabase'
+import ScreenDecor from '@/components/ScreenDecor'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -25,8 +26,9 @@ type Notification = {
   type: NotifType
   title: string
   body: string
-  data: { session_id?: string; provider_id?: string } | null
-  read: boolean
+  session_id: string | null
+  data: Record<string, any> | null
+  read_at: string | null
   created_at: string
 }
 
@@ -37,13 +39,15 @@ type Filter = 'All' | 'Sessions' | 'Activity'
 type IconCfg = { icon: string; color: string; bg: string; filter: 'Sessions' | 'Activity' }
 
 const TYPE_CFG: Record<string, IconCfg> = {
-  session_accepted: { icon: 'checkmark-circle',  color: '#1D9E75',      bg: '#ECFDF5',         filter: 'Sessions' },
-  session_declined: { icon: 'close-circle',       color: Colors.error,   bg: '#FEF2F2',         filter: 'Sessions' },
+  session_accepted: { icon: 'checkmark-circle',  color: '#1D9E75',      bg: '#ECFDF5',              filter: 'Sessions' },
+  session_declined: { icon: 'close-circle',       color: Colors.error,   bg: '#FEF2F2',              filter: 'Sessions' },
   session_applied:  { icon: 'person-add',         color: Colors.roseDark,bg: Colors.softPink + '40', filter: 'Sessions' },
   new_message:      { icon: 'chatbubble',         color: Colors.rose,    bg: Colors.softPink + '30', filter: 'Activity' },
-  review_reminder:  { icon: 'star',               color: '#F59E0B',      bg: '#FFFBEB',         filter: 'Activity' },
-  verification:     { icon: 'shield-checkmark',   color: '#1D9E75',      bg: '#ECFDF5',         filter: 'Activity' },
-  system:           { icon: 'information-circle', color: Colors.muted,   bg: Colors.inputBg,    filter: 'Activity' },
+  review_reminder:  { icon: 'star',               color: '#F59E0B',      bg: '#FFFBEB',              filter: 'Activity' },
+  verification:     { icon: 'shield-checkmark',   color: '#1D9E75',      bg: '#ECFDF5',              filter: 'Activity' },
+  new_availability: { icon: 'calendar',           color: Colors.roseDark,bg: Colors.softPink + '40', filter: 'Activity' },
+  stylist_invite:   { icon: 'sparkles',           color: '#7B5EA7',      bg: '#7B5EA720',            filter: 'Activity' },
+  system:           { icon: 'information-circle', color: Colors.muted,   bg: Colors.inputBg,         filter: 'Activity' },
 }
 
 const DEFAULT_CFG: IconCfg = {
@@ -96,21 +100,26 @@ export default function NotificationsScreen() {
   const [loading,       setLoading]       = useState(true)
   const [refreshing,    setRefreshing]    = useState(false)
   const [markingAll,    setMarkingAll]    = useState(false)
+  const [fetchError,    setFetchError]    = useState<string | null>(null)
 
   // ── Load ───────────────────────────────────────────────────────────────────
 
   const load = useCallback(async (isRefresh = false) => {
     if (!userId) { setLoading(false); return }
     if (!isRefresh) setLoading(true)
-    try {
-      const { data } = await supabase
-        .from('notifications')
-        .select('id, type, title, body, data, read, created_at')
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false })
-        .limit(100)
+    const { data, error } = await supabase
+      .from('notifications')
+      .select('id, type, title, body, session_id, data, read_at, created_at')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(100)
+    if (error) {
+      console.error('[notifications] fetch error:', error.message)
+      setFetchError(error.message)
+    } else {
+      setFetchError(null)
       setNotifications((data ?? []) as Notification[])
-    } catch {}
+    }
     setLoading(false)
     setRefreshing(false)
   }, [userId])
@@ -122,24 +131,26 @@ export default function NotificationsScreen() {
   // ── Mark as read ───────────────────────────────────────────────────────────
 
   const markRead = useCallback(async (id: string) => {
-    setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n))
+    const now = new Date().toISOString()
+    setNotifications(prev => prev.map(n => n.id === id ? { ...n, read_at: now } : n))
     try {
-      await supabase.from('notifications').update({ read: true }).eq('id', id)
+      await supabase.from('notifications').update({ read_at: now }).eq('id', id)
     } catch {}
   }, [])
 
   const markAllRead = async () => {
-    const hasUnread = notifications.some(n => !n.read)
+    const hasUnread = notifications.some(n => !n.read_at)
     if (!hasUnread) return
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
     setMarkingAll(true)
-    setNotifications(prev => prev.map(n => ({ ...n, read: true })))
+    const now = new Date().toISOString()
+    setNotifications(prev => prev.map(n => ({ ...n, read_at: now })))
     try {
       await supabase
         .from('notifications')
-        .update({ read: true })
+        .update({ read_at: now })
         .eq('user_id', userId)
-        .eq('read', false)
+        .is('read_at', null)
     } catch {}
     setMarkingAll(false)
   }
@@ -147,11 +158,10 @@ export default function NotificationsScreen() {
   // ── Tap notification ───────────────────────────────────────────────────────
 
   const handleTap = async (n: Notification) => {
-    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
-    if (!n.read) await markRead(n.id)
+    await Haptics.selectionAsync()
+    if (!n.read_at) await markRead(n.id)
 
-    const data = n.data ?? {}
-    const sessionId = data.session_id
+    const sessionId = n.session_id
 
     switch (n.type) {
       case 'session_accepted':
@@ -161,12 +171,23 @@ export default function NotificationsScreen() {
         }
         break
       case 'session_applied':
-        router.push('/(app)/provider-dashboard' as any)
+        router.push('/provider-dashboard')
         break
       case 'review_reminder':
         if (sessionId) {
           router.push({ pathname: '/(app)/leave-review' as any, params: { sessionId } })
         }
+        break
+      case 'new_availability':
+      case 'stylist_invite': {
+        const providerId = n.data?.provider_id
+        if (providerId) {
+          router.push({ pathname: '/(app)/provider/[id]' as any, params: { id: providerId } })
+        }
+        break
+      }
+      case 'verification':
+        router.push('/(app)/verify-payment' as any)
         break
       default:
         break
@@ -178,12 +199,13 @@ export default function NotificationsScreen() {
   const filtered    = notifications.filter(n => matchesFilter(n, filter))
   const todayItems  = filtered.filter(n => isToday(n.created_at))
   const earlierItems = filtered.filter(n => !isToday(n.created_at))
-  const hasUnread   = notifications.some(n => !n.read)
+  const hasUnread   = notifications.some(n => !n.read_at)
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
     <View style={styles.container}>
+      <ScreenDecor />
       {/* ── Top bar ── */}
       <View style={[styles.topBar, { paddingTop: insets.top + 8 }]}>
         <TouchableOpacity
@@ -227,6 +249,13 @@ export default function NotificationsScreen() {
           </TouchableOpacity>
         ))}
       </View>
+
+      {fetchError && (
+        <View style={styles.errorBanner}>
+          <Ionicons name="warning-outline" size={16} color={Colors.error} />
+          <Text style={styles.errorBannerText}>{fetchError}</Text>
+        </View>
+      )}
 
       {loading ? (
         <View style={styles.centred}>
@@ -295,22 +324,26 @@ export default function NotificationsScreen() {
 
 function NotifItem({ notif: n, onPress }: { notif: Notification; onPress: () => void }) {
   const c = cfg(n.type)
-  const isNavigable = ['session_accepted', 'new_message', 'session_applied', 'review_reminder'].includes(n.type) &&
-    (n.data?.session_id || n.type === 'session_applied')
+  const isNavigable = (
+    ['session_accepted', 'new_message', 'session_applied', 'review_reminder'].includes(n.type) &&
+    (n.session_id || n.type === 'session_applied')
+  ) || (
+    ['new_availability', 'stylist_invite'].includes(n.type) && !!n.data?.provider_id
+  ) || n.type === 'verification'
 
   return (
     <TouchableOpacity
-      style={[styles.notifCard, !n.read && styles.notifCardUnread]}
+      style={[styles.notifCard, !n.read_at && styles.notifCardUnread]}
       onPress={onPress}
       activeOpacity={0.85}
     >
-      {!n.read && <View style={styles.unreadAccent} />}
+      {!n.read_at && <View style={styles.unreadAccent} />}
       <View style={[styles.iconCircle, { backgroundColor: c.bg }]}>
         <Ionicons name={c.icon as any} size={22} color={c.color} />
       </View>
       <View style={styles.notifContent}>
         <View style={styles.notifTopRow}>
-          <Text style={[styles.notifTitle, !n.read && styles.notifTitleUnread]} numberOfLines={1}>
+          <Text style={[styles.notifTitle, !n.read_at && styles.notifTitleUnread]} numberOfLines={1}>
             {n.title}
           </Text>
           <Text style={styles.notifTime}>{formatTime(n.created_at)}</Text>
@@ -327,7 +360,7 @@ function NotifItem({ notif: n, onPress }: { notif: Notification; onPress: () => 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.cream },
+  container: { flex: 1, backgroundColor: 'transparent', overflow: 'hidden' },
   centred:   { flex: 1, alignItems: 'center', justifyContent: 'center' },
 
   topBar: {
@@ -350,14 +383,15 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
   },
   topBarTitle: {
+    fontFamily: 'DancingScript_700Bold',
     flex: 1,
     textAlign: 'center',
-    fontSize: 17,
-    fontWeight: '800',
+    fontSize: 25,
     color: Colors.warmDark,
     letterSpacing: -0.3,
   },
   topBarRight: { width: 80 },
+
   markAllBtn: {
     width: 80,
     alignItems: 'flex-end',
@@ -484,6 +518,26 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
 
+  // Fetch error banner
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#FEF2F2',
+    borderRadius: 12,
+    padding: 12,
+    margin: 16,
+    marginBottom: 0,
+    borderWidth: 1,
+    borderColor: '#FECACA',
+  },
+  errorBannerText: {
+    flex: 1,
+    fontSize: 13,
+    color: Colors.error,
+    fontWeight: '500',
+  },
+
   // Empty state
   emptyState: {
     alignItems: 'center',
@@ -501,8 +555,8 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   emptyTitle: {
-    fontSize: 17,
-    fontWeight: '800',
+    fontFamily: 'DancingScript_700Bold',
+    fontSize: 25,
     color: Colors.warmDark,
     letterSpacing: -0.3,
   },

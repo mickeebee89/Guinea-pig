@@ -7,43 +7,34 @@ import {
   useWindowDimensions,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { useRouter, Redirect } from 'expo-router'
 import * as Haptics from 'expo-haptics'
 import * as Updates from 'expo-updates'
 import { Colors } from '@/constants/Colors'
-import { useAuth } from '@/context/auth'
-import { supabase } from '@/lib/supabase'
 
 const LOGO_URI = 'https://res.cloudinary.com/dzbazlq1o/image/upload/c_fill,g_north,ar_1:1/f_auto,q_auto/54340_ia8jsd'
 
-export default function WelcomeScreen() {
-  const router = useRouter()
-  const { session, loading, signOut } = useAuth()
-  const { width } = useWindowDimensions()
+interface Props {
+  onSelectRole: (role: 'provider' | 'model') => void
+  onGoLogin: () => void
+}
 
-  // Authenticated users should always land on (app), not this welcome screen.
-  if (!loading && session) return <Redirect href="/(app)" />
+export default function WelcomeScreen({ onSelectRole, onGoLogin }: Props) {
+  const { width } = useWindowDimensions()
   const wide = width >= 600
   const logoSize = Math.min(width * 0.62, 280)
 
   const pickRole = async (role: 'provider' | 'model') => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
-    router.push({ pathname: '/(auth)/signup', params: { role } })
+    onSelectRole(role)
   }
 
   const goLogin = async () => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
-    router.push('/(auth)/login')
-  }
-
-  const handleSignOut = async () => {
-    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
-    signOut()
+    onGoLogin()
   }
 
   return (
     <SafeAreaView style={styles.safe}>
-      {/* Decorative background circles */}
       <View style={styles.decorTop} />
       <View style={styles.decorBottom} />
 
@@ -79,22 +70,12 @@ export default function WelcomeScreen() {
       </View>
 
       <View style={styles.footer}>
-        {session ? (
-          <>
-            <Text style={styles.footerText}>Signed in — </Text>
-            <TouchableOpacity onPress={handleSignOut}>
-              <Text style={styles.signOutLink}>Sign out</Text>
-            </TouchableOpacity>
-          </>
-        ) : (
-          <>
-            <Text style={styles.footerText}>Already have an account? </Text>
-            <TouchableOpacity onPress={goLogin}>
-              <Text style={styles.loginLink}>Log in</Text>
-            </TouchableOpacity>
-          </>
-        )}
+        <Text style={styles.footerText}>Already have an account? </Text>
+        <TouchableOpacity onPress={goLogin}>
+          <Text style={styles.loginLink}>Log in</Text>
+        </TouchableOpacity>
       </View>
+
       <Text style={styles.buildTag}>
         {Updates.updateId ? `upd:${Updates.updateId.slice(-6)}` : 'local'}
       </Text>
@@ -194,12 +175,8 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     marginBottom: 4,
   },
-  cardsInner: {
-    gap: 12,
-  },
-  cardsInnerRow: {
-    flexDirection: 'row',
-  },
+  cardsInner: { gap: 12 },
+  cardsInnerRow: { flexDirection: 'row' },
   card: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -213,15 +190,9 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     elevation: 6,
   },
-  cardWide: {
-    flex: 1,
-  },
-  cardEmoji: {
-    fontSize: 26,
-  },
-  cardText: {
-    flex: 1,
-  },
+  cardWide:     { flex: 1 },
+  cardEmoji:    { fontSize: 26 },
+  cardText:     { flex: 1 },
   cardTitle: {
     fontSize: 17,
     fontWeight: '700',
@@ -245,20 +216,8 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
     paddingTop: 8,
   },
-  footerText: {
-    fontSize: 14,
-    color: Colors.muted,
-  },
-  loginLink: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: Colors.roseDark,
-  },
-  signOutLink: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: Colors.rose,
-  },
+  footerText: { fontSize: 14, color: Colors.muted },
+  loginLink:  { fontSize: 14, fontWeight: '600', color: Colors.roseDark },
   buildTag: {
     textAlign: 'center',
     fontSize: 9,

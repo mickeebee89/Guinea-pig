@@ -1,49 +1,69 @@
 import { useEffect } from 'react'
-import { Stack, useRouter, useSegments } from 'expo-router'
+import { View, ActivityIndicator } from 'react-native'
 import { StatusBar } from 'expo-status-bar'
+import * as SplashScreen from 'expo-splash-screen'
+import { useFonts } from 'expo-font'
+import {
+  Quicksand_400Regular,
+  Quicksand_700Bold,
+} from '@expo-google-fonts/quicksand'
+import { DancingScript_700Bold } from '@expo-google-fonts/dancing-script'
 import { StripeProvider } from '@stripe/stripe-react-native'
+import * as Updates from 'expo-updates'
 import { AuthProvider, useAuth } from '@/context/auth'
+import AppEntry from '@/components/AppEntry'
+import { Colors } from '@/constants/Colors'
 
-function RootRedirect() {
-  const { session, loading, roleLoaded, role } = useAuth()
-  const segments = useSegments()
-  const router = useRouter()
+// Keep the native splash visible until fonts are ready.
+SplashScreen.preventAutoHideAsync()
 
+function OtaUpdater() {
   useEffect(() => {
-    if (loading || !roleLoaded) return
-    console.log('[RootRedirect] role:', role, 'session:', !!session, 'segments:', segments)
-    const inAuthGroup = segments[0] === '(auth)'
-
-    if (!session && !inAuthGroup && segments[0] !== undefined) {
-      router.replace('/')
-    }
-    if (session && segments[0] !== '(app)') {
-      if (role === 'provider') {
-        console.log('[RootRedirect] → provider-dashboard')
-        router.replace('/(app)/provider-dashboard' as any)
-      } else {
-        console.log('[RootRedirect] → model home')
-        router.replace('/(app)')
-      }
-    }
-  }, [session, loading, roleLoaded, role, segments])
-
+    if (!Updates.isEnabled) return
+    ;(async () => {
+      try {
+        const check = await Updates.checkForUpdateAsync()
+        if (!check.isAvailable) return
+        await Updates.fetchUpdateAsync()
+        await Updates.reloadAsync()
+      } catch {}
+    })()
+  }, [])
   return null
+}
+
+function Root() {
+  const { loading } = useAuth()
+
+  if (loading) {
+    return (
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.cream }}>
+        <ActivityIndicator color={Colors.rose} size="large" />
+      </View>
+    )
+  }
+
+  return <AppEntry />
 }
 
 const stripeKey = process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? ''
 
 export default function RootLayout() {
+  const [fontsLoaded, fontError] = useFonts({
+    Quicksand_400Regular,
+    Quicksand_700Bold,
+    DancingScript_700Bold,
+  })
+
+  useEffect(() => {
+    if (fontsLoaded || fontError) SplashScreen.hideAsync()
+  }, [fontsLoaded, fontError])
+
   const inner = (
     <AuthProvider>
-      <RootRedirect />
+      <OtaUpdater />
       <StatusBar style="dark" />
-      <Stack screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
-        <Stack.Screen name="index" />
-        <Stack.Screen name="(auth)" />
-        <Stack.Screen name="(onboarding)" />
-        <Stack.Screen name="(app)" />
-      </Stack>
+      <Root />
     </AuthProvider>
   )
 

@@ -4,16 +4,17 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 
 const nav = [
-  { href: '/',            label: 'Dashboard',           icon: '📊' },
-  { href: '/users',       label: 'Users',               icon: '👤' },
-  { href: '/reports',     label: 'Reports',             icon: '🚩' },
-  { href: '/moderation',  label: 'Moderation Queue',    icon: '🖼️' },
-  { href: '/providers',   label: 'Providers',           icon: '✂️' },
-  { href: '/revenue',     label: 'Revenue',             icon: '💷' },
-  { href: '/categories',  label: 'Categories',          icon: '🏷️' },
-  { href: '/settings',    label: 'Settings',            icon: '⚙️' },
-  { href: '/messages',    label: 'Messages',            icon: '💬' },
-  { href: '/audit-log',   label: 'Audit Log',           icon: '📋' },
+  { href: '/',               label: 'Dashboard',        icon: '📊' },
+  { href: '/users',          label: 'Users',            icon: '👤' },
+  { href: '/verification',   label: 'Verification',     icon: '🛡️' },
+  { href: '/reports',        label: 'Reports',          icon: '🚩' },
+  { href: '/moderation',     label: 'Moderation Queue', icon: '🖼️' },
+  { href: '/providers',      label: 'Providers',        icon: '✂️' },
+  { href: '/revenue',        label: 'Revenue',          icon: '💷' },
+  { href: '/categories',     label: 'Categories',       icon: '🏷️' },
+  { href: '/settings',       label: 'Settings',         icon: '⚙️' },
+  { href: '/messages',       label: 'Messages',         icon: '💬' },
+  { href: '/audit-log',      label: 'Audit Log',        icon: '📋' },
 ]
 
 export default function Sidebar() {

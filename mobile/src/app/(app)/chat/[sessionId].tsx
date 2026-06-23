@@ -11,12 +11,13 @@ import {
   Modal,
   KeyboardAvoidingView,
   Platform,
+  ActivityIndicator,
 } from 'react-native'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import * as Haptics from 'expo-haptics'
 import { Ionicons } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { Colors } from '@/constants/Colors'
+import { Colors, CategoryColors } from '@/constants/Colors'
 import { useAuth } from '@/context/auth'
 import { supabase } from '@/lib/supabase'
 
@@ -50,7 +51,7 @@ type Message = {
   id: string
   session_id: string
   sender_id: string
-  content: string
+  body: string
   type: 'text' | 'system'
   created_at: string
   read_at: string | null
@@ -59,7 +60,7 @@ type Message = {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 const CATEGORY_COLOR: Record<string, string> = {
-  Nails:       '#C8788A',
+  Nails:       CategoryColors.nails,
   Lashes:      '#1D9E75',
   Brows:       '#BA7517',
   Hair:        '#7B5EA7',
@@ -107,7 +108,9 @@ export default function ChatScreen() {
   const [inputText,  setInputText]  = useState('')
   const [sending,    setSending]    = useState(false)
   const [loading,    setLoading]    = useState(true)
-  const [menuOpen,   setMenuOpen]   = useState(false)
+  const [menuOpen,        setMenuOpen]        = useState(false)
+  const [alreadyReviewed, setAlreadyReviewed] = useState(false)
+  const [markingComplete, setMarkingComplete] = useState(false)
 
   // ── Load ───────────────────────────────────────────────────────────────────
 
@@ -159,11 +162,11 @@ export default function ChatScreen() {
         )
       }
 
-      // Messages (only if accepted)
-      if (s.status === 'accepted') {
-        const { data: msgData } = await supabase
+      // Messages (accepted or completed)
+      if (s.status === 'accepted' || s.status === 'completed') {
+        const { data: msgData, error: msgFetchErr } = await supabase
           .from('messages')
-          .select('id, session_id, sender_id, content, type, created_at, read_at')
+          .select('id, session_id, sender_id, body, created_at, read_at')
           .eq('session_id', sessionId)
           .order('created_at', { ascending: false })  // newest first → inverted FlatList
 
@@ -177,6 +180,16 @@ export default function ChatScreen() {
           .neq('sender_id', userId)
           .is('read_at', null)
           .then(() => {})
+
+        if (s.status === 'completed') {
+          const { data: existRev } = await supabase
+            .from('reviews')
+            .select('id')
+            .eq('session_id', sessionId)
+            .eq('reviewer_id', userId)
+            .maybeSingle()
+          setAlreadyReviewed(!!existRev)
+        }
       }
     } catch {
       // silent
@@ -232,19 +245,16 @@ export default function ChatScreen() {
     setInputText('')
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
 
-    try {
-      await supabase.from('messages').insert({
-        session_id: sessionId,
-        sender_id:  userId,
-        content:    text,
-        type:       'text',
-      })
-    } catch {
+    const { error } = await supabase.from('messages').insert({
+      session_id: sessionId,
+      sender_id:  userId,
+      body:       text,
+    })
+    if (error) {
       setInputText(text)  // restore on failure
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)
-    } finally {
-      setSending(false)
     }
+    setSending(false)
   }
 
   // ── Block / Report ─────────────────────────────────────────────────────────
@@ -299,6 +309,50 @@ export default function ChatScreen() {
     )
   }
 
+  const handleLeaveReview = async () => {
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
+    const isModel = chat?.model_user_id === userId
+    router.push({
+      pathname: '/(app)/leave-review' as any,
+      params: { sessionId, revieweeType: isModel ? 'provider' : 'model' },
+    })
+  }
+
+  const handleMarkComplete = () => {
+    Alert.alert(
+      'Mark as complete?',
+      'This confirms the session is done. The model will be notified and can leave a review.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Mark complete',
+          onPress: async () => {
+            await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
+            setMarkingComplete(true)
+            try {
+              await supabase.from('sessions').update({ status: 'completed' }).eq('id', sessionId)
+              if (chat?.model_user_id) {
+                supabase.from('notifications').insert({
+                  user_id:    chat.model_user_id,
+                  type:       'session_completed',
+                  title:      'Session completed ✓',
+                  body:       'Your stylist has marked the session as complete.',
+                  session_id: sessionId,
+                }).then(() => {})
+              }
+              await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
+              setChat(prev => prev ? { ...prev, status: 'completed' } : prev)
+            } catch {
+              await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)
+              Alert.alert('Error', 'Could not mark session as complete. Please try again.')
+            }
+            setMarkingComplete(false)
+          },
+        },
+      ]
+    )
+  }
+
   const goBack = async () => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
     router.back()
@@ -306,7 +360,10 @@ export default function ChatScreen() {
 
   // ── Derived ────────────────────────────────────────────────────────────────
 
-  const isAccepted     = chat?.status === 'accepted'
+  const isAccepted      = chat?.status === 'accepted'
+  const isCompleted     = chat?.status === 'completed'
+  const showChat        = isAccepted || isCompleted
+  const isModel         = chat?.model_user_id === userId
   const hasMaterialCost = (treatment?.materials_cost ?? 0) > 0
   const initials       = (otherParty?.name ?? '')
     .split(' ').map(w => w[0] ?? '').join('').slice(0, 2).toUpperCase()
@@ -328,7 +385,7 @@ export default function ChatScreen() {
 
   // ── Locked state ───────────────────────────────────────────────────────────
 
-  if (!isAccepted) {
+  if (!showChat) {
     const statusLabel =
       chat?.status === 'pending'  ? 'Awaiting acceptance' :
       chat?.status === 'declined' ? 'Application not accepted' :
@@ -429,6 +486,44 @@ export default function ChatScreen() {
         </Text>
       </View>
 
+      {/* ── Mark complete banner (accepted, stylist only) ── */}
+      {isAccepted && !isModel && (
+        <TouchableOpacity
+          style={[styles.completeBanner, markingComplete && { opacity: 0.7 }]}
+          onPress={handleMarkComplete}
+          disabled={markingComplete}
+          activeOpacity={0.85}
+        >
+          {markingComplete ? (
+            <ActivityIndicator size="small" color={Colors.white} />
+          ) : (
+            <>
+              <Ionicons name="checkmark-circle-outline" size={18} color={Colors.white} />
+              <Text style={styles.completeBannerText}>Mark session as complete</Text>
+            </>
+          )}
+        </TouchableOpacity>
+      )}
+
+      {/* ── Review banner (completed sessions) ── */}
+      {isCompleted && (
+        <TouchableOpacity
+          style={[styles.reviewBanner, alreadyReviewed && styles.reviewBannerDone]}
+          onPress={alreadyReviewed ? undefined : handleLeaveReview}
+          activeOpacity={alreadyReviewed ? 1 : 0.85}
+          disabled={alreadyReviewed}
+        >
+          <Ionicons
+            name={alreadyReviewed ? 'checkmark-circle' : 'star-outline'}
+            size={18}
+            color={alreadyReviewed ? '#059669' : Colors.white}
+          />
+          <Text style={[styles.reviewBannerText, alreadyReviewed && styles.reviewBannerTextDone]}>
+            {alreadyReviewed ? 'Review submitted ✓' : 'Leave a review'}
+          </Text>
+        </TouchableOpacity>
+      )}
+
       {/* ── Messages ── */}
       <FlatList
         ref={listRef}
@@ -455,7 +550,7 @@ export default function ChatScreen() {
           if (item.type === 'system') {
             return (
               <View style={styles.systemMsgWrap}>
-                <Text style={styles.systemMsgText}>{item.content}</Text>
+                <Text style={styles.systemMsgText}>{item.body}</Text>
               </View>
             )
           }
@@ -492,7 +587,7 @@ export default function ChatScreen() {
                     isGroupedTop && (isMine ? styles.bubbleMineGrouped : styles.bubbleTheirsGrouped),
                   ]}>
                     <Text style={[styles.bubbleText, isMine && styles.bubbleTextMine]}>
-                      {item.content}
+                      {item.body}
                     </Text>
                   </View>
                   <View style={[styles.bubbleMeta, isMine && styles.bubbleMetaMine]}>
@@ -518,27 +613,29 @@ export default function ChatScreen() {
         }
       />
 
-      {/* ── Input bar ── */}
-      <View style={[styles.inputBar, { paddingBottom: Math.max(insets.bottom, 12) }]}>
-        <TextInput
-          style={styles.input}
-          value={inputText}
-          onChangeText={setInputText}
-          placeholder="Type a message…"
-          placeholderTextColor={Colors.muted}
-          multiline
-          maxLength={1000}
-          returnKeyType="default"
-        />
-        <TouchableOpacity
-          style={[styles.sendBtn, (!inputText.trim() || sending) && styles.sendBtnDisabled]}
-          disabled={!inputText.trim() || sending}
-          onPress={sendMessage}
-          activeOpacity={0.85}
-        >
-          <Ionicons name="send" size={18} color={Colors.white} />
-        </TouchableOpacity>
-      </View>
+      {/* ── Input bar (accepted only) ── */}
+      {isAccepted && (
+        <View style={[styles.inputBar, { paddingBottom: Math.max(insets.bottom, 12) }]}>
+          <TextInput
+            style={styles.input}
+            value={inputText}
+            onChangeText={setInputText}
+            placeholder="Type a message…"
+            placeholderTextColor={Colors.muted}
+            multiline
+            maxLength={1000}
+            returnKeyType="default"
+          />
+          <TouchableOpacity
+            style={[styles.sendBtn, (!inputText.trim() || sending) && styles.sendBtnDisabled]}
+            disabled={!inputText.trim() || sending}
+            onPress={sendMessage}
+            activeOpacity={0.85}
+          >
+            <Ionicons name="send" size={18} color={Colors.white} />
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* ── Block / Report modal ── */}
       <Modal
@@ -599,7 +696,7 @@ export default function ChatScreen() {
 // ── Styles ────────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.cream },
+  container: { flex: 1, backgroundColor: 'transparent' },
   centred:   { alignItems: 'center', justifyContent: 'center' },
   loadingText: { fontSize: 15, color: Colors.muted },
 
@@ -872,6 +969,68 @@ const styles = StyleSheet.create({
     elevation: 0,
   },
 
+  // Mark complete banner
+  completeBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginHorizontal: 12,
+    marginTop: 8,
+    marginBottom: 4,
+    backgroundColor: '#1D9E75',
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    shadowColor: '#1D9E75',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  completeBannerText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: Colors.white,
+    letterSpacing: -0.2,
+  },
+
+  // Review banner
+  reviewBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginHorizontal: 12,
+    marginTop: 8,
+    marginBottom: 4,
+    backgroundColor: Colors.roseDark,
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    shadowColor: Colors.roseDark,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  reviewBannerDone: {
+    backgroundColor: '#ECFDF5',
+    borderWidth: 1,
+    borderColor: '#6EE7B7',
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  reviewBannerText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: Colors.white,
+    letterSpacing: -0.2,
+  },
+  reviewBannerTextDone: {
+    color: '#059669',
+  },
+
   // Locked state
   lockedWrap: {
     flex: 1,
@@ -891,8 +1050,8 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
   },
   lockedTitle: {
-    fontSize: 22,
-    fontWeight: '800',
+    fontFamily: 'DancingScript_700Bold',
+    fontSize: 33,
     color: Colors.warmDark,
     letterSpacing: -0.4,
     marginBottom: 8,
@@ -969,8 +1128,8 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   menuTitle: {
-    fontSize: 16,
-    fontWeight: '800',
+    fontFamily: 'DancingScript_700Bold',
+    fontSize: 24,
     color: Colors.warmDark,
     letterSpacing: -0.3,
     marginBottom: 12,
