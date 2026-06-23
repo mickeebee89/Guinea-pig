@@ -314,11 +314,15 @@ export default function ProviderShopScreen() {
       >
         {/* ── Banner ── */}
         <View style={styles.bannerWrapper}>
-          {provider.banner_url ? (
-            <Image source={{ uri: provider.banner_url }} style={styles.bannerImage} resizeMode="cover" />
-          ) : (
-            <View style={styles.bannerPlaceholder} />
-          )}
+          {/* Guinea Pig branding — shown for every provider */}
+          <View style={styles.bannerBrand}>
+            <Image
+              source={require('../../../../assets/images/guinea-pig-logo.png')}
+              style={styles.bannerLogo}
+              resizeMode="contain"
+            />
+            <Text style={styles.bannerBrandText}>Guinea Pig</Text>
+          </View>
           <View style={[styles.bannerControls, { paddingTop: insets.top + 10 }]}>
             <TouchableOpacity style={styles.bannerIconBtn} onPress={goBack} activeOpacity={0.85}>
               <Ionicons name="chevron-back" size={20} color={Colors.white} />
@@ -597,8 +601,22 @@ const styles = StyleSheet.create({
   errorSub:   { fontSize: 14, color: Colors.muted },
 
   bannerWrapper: { height: BANNER_HEIGHT },
-  bannerImage: { width: '100%', height: BANNER_HEIGHT },
-  bannerPlaceholder: { width: '100%', height: BANNER_HEIGHT, backgroundColor: Colors.roseDark },
+  bannerBrand: {
+    width: '100%',
+    height: BANNER_HEIGHT,
+    backgroundColor: Colors.softPink,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+  },
+  bannerLogo: { width: 104, height: 104 },
+  bannerBrandText: {
+    fontFamily: 'DancingScript_700Bold',
+    fontSize: 36,
+    color: Colors.rose,
+    letterSpacing: -0.3,
+  },
   bannerControls: {
     position: 'absolute', top: 0, left: 0, right: 0,
     flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 16,
