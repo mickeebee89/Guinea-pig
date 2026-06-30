@@ -7,6 +7,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   TouchableOpacity,
+  Alert,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter, useLocalSearchParams } from 'expo-router'
@@ -60,10 +61,16 @@ export default function SignupScreen() {
     setLoading(true)
     setCooldown(60)
 
+    const cleanFirst   = firstName.trim()
+    const cleanInitial = lastInitial.trim().toUpperCase().charAt(0)
+
     const { data, error } = await supabase.auth.signUp({
       email: email.trim().toLowerCase(),
       password,
-      options: { data: { role } },
+      // Persist name into user_metadata too, so a later login self-heal of a
+      // half-created account can recreate the users row with the real name
+      // instead of a placeholder.
+      options: { data: { role, first_name: cleanFirst, last_initial: cleanInitial } },
     })
 
     if (error) {
@@ -81,13 +88,14 @@ export default function SignupScreen() {
       return
     }
 
-    const cleanFirst   = firstName.trim()
-    const cleanInitial = lastInitial.trim().toUpperCase().charAt(0)
-
     if (data.user) {
 
       try {
-        await supabase.from('users').insert({
+        // supabase-js only THROWS on network errors; a DB rejection (RLS,
+        // constraint, not-null) comes back as { error }. Check it and throw into
+        // the catch below so we never fall through to navigation with an orphaned
+        // auth account and no user signal.
+        const { error: usersError } = await supabase.from('users').insert({
           id:           data.user.id,
           email:        email.trim().toLowerCase(),
           first_name:   cleanFirst,
@@ -95,12 +103,22 @@ export default function SignupScreen() {
           role,
           region:       'UK',
         })
+        if (usersError) throw usersError
 
         if (role === 'provider') {
-          await supabase.from('providers').insert({ user_id: data.user.id })
+          const { error: providersError } = await supabase.from('providers').insert({ user_id: data.user.id })
+          if (providersError) throw providersError
         }
-      } catch {}
-      // profile inserts failing must not block the auth flow
+      } catch (e) {
+        console.error('signup profile creation failed:', e)
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)
+        setLoading(false)
+        Alert.alert(
+          'Account setup incomplete',
+          "We couldn't finish setting up your account, please try again",
+        )
+        return
+      }
     }
 
     await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)

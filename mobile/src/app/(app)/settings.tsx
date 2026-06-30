@@ -26,6 +26,7 @@ import { Colors } from '@/constants/Colors'
 import { useAuth } from '@/context/auth'
 import { supabase } from '@/lib/supabase'
 import ScreenDecor from '@/components/ScreenDecor'
+import LoadErrorState from '@/components/LoadErrorState'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -220,6 +221,7 @@ export default function SettingsScreen() {
   const [notifPrefs,   setNotifPrefs]   = useState<NotifPrefs>(DEFAULT_PREFS)
   const [verifStatus,  setVerifStatus]  = useState<VerifStatus>('none')
   const [loading,      setLoading]      = useState(true)
+  const [loadError,    setLoadError]    = useState(false)
   const [uploadingPic, setUploadingPic] = useState(false)
 
   // ── Edit modal ─────────────────────────────────────────────────────────────
@@ -242,6 +244,7 @@ export default function SettingsScreen() {
   // ── Load ───────────────────────────────────────────────────────────────────
 
   const load = useCallback(async () => {
+    setLoadError(false)
     if (!userId) { setLoading(false); return }
     try {
       const { data: ud } = await supabase
@@ -290,7 +293,10 @@ export default function SettingsScreen() {
         else if (vr?.status === 'declined') setVerifStatus('declined')
         else setVerifStatus('none')
       }
-    } catch {}
+    } catch (e) {
+      console.error('settings load failed:', e)
+      setLoadError(true)
+    }
     setLoading(false)
   }, [userId, session])
 
@@ -310,21 +316,52 @@ export default function SettingsScreen() {
     const { uri } = result.assets[0]
     try {
       const manipulated = await ImageManipulator.manipulateAsync(uri, [], { base64: true })
-      const { data: up, error } = await supabase.storage
+      const { data: up, error: uploadError } = await supabase.storage
         .from('profile-pics')
         .upload(`${userId}/profile.jpg`, decode(manipulated.base64!), {
           contentType: 'image/jpeg', upsert: true,
         })
-      if (!error && up) {
-        const { data: urlData } = supabase.storage.from('profile-pics').getPublicUrl(up.path)
-        await supabase.from('users').update({ profile_pic_url: urlData.publicUrl }).eq('id', userId)
-        setUserData(p => p ? { ...p, profile_pic_url: urlData.publicUrl } : p)
-        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
+      if (uploadError || !up) {
+        console.error('changePic upload failed:', uploadError)
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)
+        Alert.alert('Couldn’t update photo', 'Please try again.')
+        return
       }
-    } catch {
+
+      const { data: urlData } = supabase.storage.from('profile-pics').getPublicUrl(up.path)
+      // Fixed-filename upload (<userId>/profile.jpg) → identical public URL every
+      // time, so the image cache would serve the OLD pic. Stamp the stored URL with
+      // a per-save cache-buster ONCE here; every read site renders it as-is.
+      const newUrl = `${urlData.publicUrl}?t=${Date.now()}`
+
+      // Write the new URL to BOTH the users row AND the providers row (keyed by
+      // user_id). Public stylist surfaces read providers.profile_pic_url, so that
+      // row must update too or the new pic never shows publicly. A non-provider
+      // (model) simply matches 0 provider rows — that's not an error.
+      const [
+        { data: usersData, error: usersError },
+        { data: providersData, error: providersError },
+      ] = await Promise.all([
+        supabase.from('users').update({ profile_pic_url: newUrl }).eq('id', userId).select(),
+        supabase.from('providers').update({ profile_pic_url: newUrl }).eq('user_id', userId).select(),
+      ])
+
+      if (usersError || providersError) {
+        console.error('changePic DB update failed:', { usersError, providersError, usersData, providersData })
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)
+        Alert.alert('Couldn’t update photo', 'Please try again.')
+        return
+      }
+
+      setUserData(p => p ? { ...p, profile_pic_url: newUrl } : p)
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
+    } catch (e) {
+      console.error('changePic failed:', e)
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)
+      Alert.alert('Couldn’t update photo', 'Please try again.')
+    } finally {
+      setUploadingPic(false)
     }
-    setUploadingPic(false)
   }
 
   // ── Edit field modal ───────────────────────────────────────────────────────
@@ -517,6 +554,14 @@ export default function SettingsScreen() {
     )
   }
 
+  if (loadError) {
+    return (
+      <View style={styles.container}>
+        <LoadErrorState onRetry={() => load()} />
+      </View>
+    )
+  }
+
   const dbRole     = userData?.role
   const isProvider = dbRole === 'provider' || dbRole === 'both'
   const isModel    = dbRole === 'model'    || dbRole === 'both'
@@ -527,6 +572,8 @@ export default function SettingsScreen() {
   const displayName = userData
     ? `${userData.first_name}${userData.last_initial ? ` ${userData.last_initial}.` : ''}`
     : ''
+
+  const avatarSourceUri = userData?.profile_pic_url ?? null
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
@@ -593,8 +640,8 @@ export default function SettingsScreen() {
               <View style={styles.picPreviewWrap}>
                 {uploadingPic ? (
                   <ActivityIndicator size="small" color={Colors.roseDark} />
-                ) : userData?.profile_pic_url ? (
-                  <Image source={{ uri: userData.profile_pic_url }} style={styles.picPreview} />
+                ) : avatarSourceUri ? (
+                  <Image source={{ uri: avatarSourceUri }} style={styles.picPreview} />
                 ) : (
                   <View style={[styles.picPreview, styles.picPreviewPlaceholder]}>
                     <Ionicons name="person" size={14} color={Colors.muted} />

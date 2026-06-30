@@ -21,6 +21,7 @@ import { Colors, CategoryColors } from '@/constants/Colors'
 import { useAuth } from '@/context/auth'
 import { supabase } from '@/lib/supabase'
 import ScreenDecor from '@/components/ScreenDecor'
+import LoadErrorState from '@/components/LoadErrorState'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -229,6 +230,7 @@ export default function ProviderDashboardScreen() {
   const [providerLat,       setProviderLat]       = useState<number | null>(null)
   const [providerLng,       setProviderLng]       = useState<number | null>(null)
   const [loading,           setLoading]           = useState(true)
+  const [loadError,         setLoadError]         = useState(false)
   const [refreshing,        setRefreshing]        = useState(false)
   const [publishLoading,    setPublishLoading]    = useState(false)
   const [processingIds,     setProcessingIds]     = useState<Set<string>>(new Set())
@@ -238,6 +240,7 @@ export default function ProviderDashboardScreen() {
   const load = useCallback(async (isRefresh = false) => {
     if (!userId) return
     if (!isRefresh) setLoading(true)
+    setLoadError(false)
 
     try {
       // Phase 1: fetch user profile + provider row in parallel; derive display name from users
@@ -403,7 +406,7 @@ export default function ProviderDashboardScreen() {
 
       const [{ data: modelsData }, { data: treatsData }] = await Promise.all([
         supabase
-          .from('users')
+          .from('public_profiles')
           .select('id, first_name, last_initial, profile_pic_url')
           .in('id', modelIds),
         treatIds.length > 0
@@ -441,7 +444,10 @@ export default function ProviderDashboardScreen() {
 
       setPendingSessions((pendingData ?? []).map(enrich))
       setUpcomingSessions((upcomingData ?? []).map(enrich))
-    } catch {}
+    } catch (e) {
+      console.error('provider-dashboard load failed:', e)
+      setLoadError(true)
+    }
 
     setLoading(false)
     setRefreshing(false)
@@ -487,14 +493,15 @@ export default function ProviderDashboardScreen() {
     try {
       await supabase.from('sessions').update({ status: 'accepted' }).eq('id', s.id)
       try {
-        await supabase.from('notifications').insert({
+        const { error } = await supabase.from('notifications').insert({
           user_id: s.model_user_id,
           type: 'session_accepted',
           title: 'Session accepted! 🎉',
           body: `Your booking for ${formatSessionDate(s.date)} has been confirmed.`,
           session_id: s.id,
         })
-      } catch {}
+        if (error) console.error('accept session notification failed:', error)
+      } catch (e) { console.error('accept session notification failed:', e) }
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
       setPendingSessions(prev => prev.filter(x => x.id !== s.id))
       if (s.date >= todayKey()) {
@@ -524,14 +531,15 @@ export default function ProviderDashboardScreen() {
             try {
               await supabase.from('sessions').update({ status: 'declined' }).eq('id', s.id)
               try {
-                await supabase.from('notifications').insert({
+                const { error } = await supabase.from('notifications').insert({
                   user_id: s.model_user_id,
                   type: 'session_declined',
                   title: 'Session update',
                   body: `Your booking for ${formatSessionDate(s.date)} was not confirmed.`,
                   session_id: s.id,
                 })
-              } catch {}
+                if (error) console.error('decline session notification failed:', error)
+              } catch (e) { console.error('decline session notification failed:', e) }
               setPendingSessions(prev => prev.filter(x => x.id !== s.id))
             } catch {
               Alert.alert('Error', 'Could not decline session. Please try again.')
@@ -647,6 +655,14 @@ export default function ProviderDashboardScreen() {
     return (
       <View style={[styles.container, styles.centred]}>
         <ActivityIndicator color={Colors.roseDark} />
+      </View>
+    )
+  }
+
+  if (loadError) {
+    return (
+      <View style={styles.container}>
+        <LoadErrorState onRetry={() => load()} />
       </View>
     )
   }

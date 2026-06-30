@@ -17,6 +17,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Colors, CategoryColors } from '@/constants/Colors'
 import { useAuth } from '@/context/auth'
 import { supabase } from '@/lib/supabase'
+import LoadErrorState from '@/components/LoadErrorState'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -87,6 +88,7 @@ export default function SessionsScreen() {
   const [confirmed,     setConfirmed]     = useState<Sess[]>([])
   const [completed,     setCompleted]     = useState<Sess[]>([])
   const [loading,       setLoading]       = useState(true)
+  const [loadError,     setLoadError]     = useState(false)
   const [refreshing,    setRefreshing]    = useState(false)
   const [processingIds, setProcessingIds] = useState<Set<string>>(new Set())
 
@@ -95,6 +97,7 @@ export default function SessionsScreen() {
   const load = useCallback(async (isRefresh = false) => {
     if (!userId) return
     if (!isRefresh) setLoading(true)
+    setLoadError(false)
     try {
       const { data: provRow } = await supabase
         .from('providers').select('id').eq('user_id', userId).maybeSingle()
@@ -119,7 +122,7 @@ export default function SessionsScreen() {
       const treatIds = [...new Set(rows.map((s: any) => s.treatment_id as string | null).filter(Boolean))] as string[]
 
       const [{ data: modelsData }, { data: treatsData }] = await Promise.all([
-        supabase.from('users').select('id, first_name, last_initial, profile_pic_url').in('id', modelIds),
+        supabase.from('public_profiles').select('id, first_name, last_initial, profile_pic_url').in('id', modelIds),
         treatIds.length > 0
           ? supabase.from('provider_treatments').select('id, name, category').in('id', treatIds)
           : Promise.resolve({ data: [] as any[] }),
@@ -156,7 +159,10 @@ export default function SessionsScreen() {
       setPending(enriched.filter(s => s.status === 'pending').sort((a, b) => b.created_at.localeCompare(a.created_at)))
       setConfirmed(enriched.filter(s => s.status === 'accepted').sort((a, b) => a.date.localeCompare(b.date)))
       setCompleted(enriched.filter(s => s.status === 'completed').sort((a, b) => b.date.localeCompare(a.date)))
-    } catch {}
+    } catch (e) {
+      console.error('sessions load failed:', e)
+      setLoadError(true)
+    }
     setLoading(false)
     setRefreshing(false)
   }, [userId])
@@ -265,6 +271,14 @@ export default function SessionsScreen() {
     return (
       <View style={[styles.container, { alignItems: 'center', justifyContent: 'center' }]}>
         <ActivityIndicator color={Colors.roseDark} />
+      </View>
+    )
+  }
+
+  if (loadError) {
+    return (
+      <View style={styles.container}>
+        <LoadErrorState onRetry={() => load()} />
       </View>
     )
   }

@@ -20,6 +20,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Colors, CategoryColors } from '@/constants/Colors'
 import { useAuth } from '@/context/auth'
 import { supabase } from '@/lib/supabase'
+import LoadErrorState from '@/components/LoadErrorState'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -108,6 +109,7 @@ export default function ChatScreen() {
   const [inputText,  setInputText]  = useState('')
   const [sending,    setSending]    = useState(false)
   const [loading,    setLoading]    = useState(true)
+  const [loadError,  setLoadError]  = useState(false)
   const [menuOpen,        setMenuOpen]        = useState(false)
   const [alreadyReviewed, setAlreadyReviewed] = useState(false)
   const [markingComplete, setMarkingComplete] = useState(false)
@@ -116,6 +118,7 @@ export default function ChatScreen() {
 
   const loadData = useCallback(async () => {
     if (!sessionId || !userId) return
+    setLoadError(false)
     try {
       // Session
       const { data: sessionData } = await supabase
@@ -145,7 +148,7 @@ export default function ChatScreen() {
               .eq('id', s.provider_id)
               .single()
           : supabase
-              .from('users')
+              .from('public_profiles')
               .select('id, first_name, last_initial, profile_pic_url')
               .eq('id', s.model_user_id)
               .single(),
@@ -191,8 +194,9 @@ export default function ChatScreen() {
           setAlreadyReviewed(!!existRev)
         }
       }
-    } catch {
-      // silent
+    } catch (e) {
+      console.error('chat load failed:', e)
+      setLoadError(true)
     } finally {
       setLoading(false)
     }
@@ -379,6 +383,14 @@ export default function ChatScreen() {
       <View style={[styles.container, styles.centred]}>
         <View style={{ paddingTop: insets.top }} />
         <Text style={styles.loadingText}>Loading…</Text>
+      </View>
+    )
+  }
+
+  if (loadError) {
+    return (
+      <View style={[styles.container, styles.centred]}>
+        <LoadErrorState onRetry={() => loadData()} />
       </View>
     )
   }

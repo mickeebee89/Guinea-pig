@@ -25,6 +25,7 @@ import { useAuth } from '@/context/auth'
 import { supabase } from '@/lib/supabase'
 import { isModelVerified } from '@/lib/verification'
 import ScreenDecor from '@/components/ScreenDecor'
+import LoadErrorState from '@/components/LoadErrorState'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -158,6 +159,7 @@ export default function ModelProfileScreen() {
   const [instagramHandle,  setInstagramHandle]  = useState('')
   const [savingInstagram,  setSavingInstagram]  = useState(false)
   const [loading,          setLoading]          = useState(true)
+  const [loadError,        setLoadError]        = useState(false)
   const [uploading,        setUploading]        = useState(false)
   const [addingPhotos,     setAddingPhotos]     = useState(false)
   const [categories,       setCategories]       = useState<Category[]>([])
@@ -210,6 +212,7 @@ export default function ModelProfileScreen() {
 
   const load = useCallback(async () => {
     if (!userId) return
+    setLoadError(false)
     try {
       const [{ data: userData }, { data: photoData }, { data: attrData }, { data: catData }, verified] = await Promise.all([
         supabase
@@ -253,7 +256,10 @@ export default function ModelProfileScreen() {
         setAttrs(attrData as ModelAttrs)
         setBioText((attrData as any).bio ?? '')
       }
-    } catch {}
+    } catch (e) {
+      console.error('model-profile load failed:', e)
+      setLoadError(true)
+    }
 
     // Fetch reviews where this model is the reviewee
     try {
@@ -266,10 +272,10 @@ export default function ModelProfileScreen() {
       if (revData && (revData as any[]).length > 0) {
         const reviewerIds = [...new Set((revData as any[]).map((r: any) => r.reviewer_id))]
         const { data: reviewerUsers, error: reviewerErr } = await supabase
-          .from('users')
+          .from('public_profiles')
           .select('id, first_name, last_initial')
           .in('id', reviewerIds)
-        if (reviewerErr) console.warn('SELF REVIEWS users lookup →', reviewerErr)
+        if (reviewerErr) console.warn('SELF REVIEWS users lookup', reviewerErr)
         const userMap: Record<string, string> = {}
         ;(reviewerUsers as any[] ?? []).forEach((u: any) => {
           const name = `${u.first_name ?? ''}${u.last_initial ? ' ' + u.last_initial + '.' : ''}`.trim()
@@ -318,13 +324,18 @@ export default function ModelProfileScreen() {
         .from('profile-pics')
         .upload(fileName, decode(manipulated.base64!), { contentType: 'image/jpeg', upsert: true })
       if (!error && up) {
+        // Fixed-filename upload → identical URL → stale image cache. Stamp a
+        // per-save cache-buster into the stored URL once; read sites render as-is.
         const { data: urlData } = supabase.storage.from('profile-pics').getPublicUrl(up.path)
-        await supabase.from('users').update({ profile_pic_url: urlData.publicUrl }).eq('id', userId)
-        setProfile(p => p ? { ...p, profile_pic_url: urlData.publicUrl } : p)
+        const newUrl = `${urlData.publicUrl}?t=${Date.now()}`
+        await supabase.from('users').update({ profile_pic_url: newUrl }).eq('id', userId)
+        setProfile(p => p ? { ...p, profile_pic_url: newUrl } : p)
         await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
       }
-    } catch {
+    } catch (e) {
+      console.error('model changeProfilePic failed:', e)
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)
+      Alert.alert('Couldn’t update photo', 'Please try again.')
     }
     setUploading(false)
   }
@@ -628,7 +639,7 @@ export default function ModelProfileScreen() {
       .update({ instagram_handle: handle || null })
       .eq('id', userId)
     if (error) {
-      console.warn('saveInstagram →', error.message)
+      console.warn('saveInstagram', error.message)
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)
       flashError('instagram')
     } else {
@@ -669,6 +680,14 @@ export default function ModelProfileScreen() {
     return (
       <View style={[styles.container, styles.centred]}>
         <ActivityIndicator color={Colors.roseDark} />
+      </View>
+    )
+  }
+
+  if (loadError) {
+    return (
+      <View style={[styles.container, styles.centred]}>
+        <LoadErrorState onRetry={() => load()} />
       </View>
     )
   }

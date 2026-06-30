@@ -16,6 +16,7 @@ import { useAuth } from '@/context/auth'
 import { supabase } from '@/lib/supabase'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import ScreenDecor from '@/components/ScreenDecor'
+import LoadErrorState from '@/components/LoadErrorState'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -84,10 +85,12 @@ export default function MessagesScreen() {
 
   const [convs,      setConvs]      = useState<ConvItem[]>([])
   const [loading,    setLoading]    = useState(true)
+  const [loadError,  setLoadError]  = useState(false)
   const [refreshing, setRefreshing] = useState(false)
 
   const load = useCallback(async () => {
     if (!userId) return
+    setLoadError(false)
     try {
       // 1. Get user's provider ID if applicable
       const { data: provRow } = await supabase
@@ -138,7 +141,7 @@ export default function MessagesScreen() {
           .select('id, name, profile_pic_url')
           .in('id', providerIds),
         supabase
-          .from('users')
+          .from('public_profiles')
           .select('id, first_name, last_initial, profile_pic_url')
           .in('id', modelUserIds),
         treatmentIds.length > 0
@@ -219,8 +222,9 @@ export default function MessagesScreen() {
       )
 
       setConvs(items)
-    } catch {
-      // leave empty
+    } catch (e) {
+      console.error('messages load failed:', e)
+      setLoadError(true)
     } finally {
       setLoading(false)
       setRefreshing(false)
@@ -278,7 +282,9 @@ export default function MessagesScreen() {
           />
         }
         ListEmptyComponent={
-          loading ? null : (
+          loading ? null : loadError ? (
+            <LoadErrorState onRetry={() => load()} fill={false} />
+          ) : (
             <View style={styles.emptyState}>
               <Text style={styles.emptyEmoji}>💬</Text>
               <Text style={styles.emptyTitle}>No messages yet</Text>

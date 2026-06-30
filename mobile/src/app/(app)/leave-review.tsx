@@ -19,6 +19,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Colors, CategoryColors } from '@/constants/Colors'
 import { useAuth } from '@/context/auth'
 import { supabase } from '@/lib/supabase'
+import LoadErrorState from '@/components/LoadErrorState'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -159,6 +160,7 @@ export default function LeaveReviewScreen() {
   const [treatmentName,    setTreatmentName]    = useState<string | null>(null)
   const [treatmentCat,     setTreatmentCat]     = useState<string | null>(null)
   const [loading,          setLoading]          = useState(true)
+  const [loadError,        setLoadError]        = useState(false)
   const [alreadyReviewed,  setAlreadyReviewed]  = useState(false)
   const [posting,          setPosting]          = useState(false)
   const [posted,           setPosted]           = useState(false)
@@ -173,6 +175,7 @@ export default function LeaveReviewScreen() {
 
   const load = useCallback(async () => {
     if (!sessionId || !userId) { setLoading(false); return }
+    setLoadError(false)
     try {
       const { data: sd } = await supabase
         .from('sessions')
@@ -206,7 +209,7 @@ export default function LeaveReviewScreen() {
       if (isReviewingModel) {
         promises.push(
           supabase
-            .from('users')
+            .from('public_profiles')
             .select('first_name, last_initial, profile_pic_url')
             .eq('id', s.model_user_id)
             .single()
@@ -243,7 +246,10 @@ export default function LeaveReviewScreen() {
           setRevieweeUserId((rd as any).user_id ?? null)
         }
       }
-    } catch {}
+    } catch (e) {
+      console.error('leave-review load failed:', e)
+      setLoadError(true)
+    }
     setLoading(false)
   }, [sessionId, userId, isReviewingModel])
 
@@ -319,6 +325,14 @@ export default function LeaveReviewScreen() {
     return (
       <View style={[styles.container, styles.centred]}>
         <ActivityIndicator color={Colors.roseDark} />
+      </View>
+    )
+  }
+
+  if (loadError) {
+    return (
+      <View style={styles.container}>
+        <LoadErrorState onRetry={() => load()} />
       </View>
     )
   }

@@ -102,6 +102,10 @@ export default function ApplySessionScreen() {
   const [existingPhotos,  setExistingPhotos]  = useState<ExistingPhoto[]>([])
   const [selectedPhotoIds,setSelectedPhotoIds]= useState<Set<string>>(new Set())
   const [pendingPhotos,   setPendingPhotos]   = useState<PendingPhoto[]>([])
+  // URLs that already uploaded in a prior (aborted) submit attempt. Carried forward
+  // so a retry re-uploads ONLY the failed photos while these still attach to the
+  // booking — no duplicate bucket uploads or model_photos library rows.
+  const [carriedPhotoUrls, setCarriedPhotoUrls] = useState<string[]>([])
   const [providerUserId,  setProviderUserId]  = useState<string | null>(null)
 
   // ── Wizard state ───────────────────────────────────────────────────────────
@@ -292,8 +296,11 @@ export default function ApplySessionScreen() {
     try {
       // The selected slot is a real `availability` row; use its id directly.
       const resolvedAvailId = selectedSlot.id
-      // Upload pending photos, silently skip failures
-      const uploadedUrls: string[] = []
+      // Upload pending photos. Seed with any URLs that already uploaded in a prior
+      // aborted attempt (carriedPhotoUrls) so they attach without re-uploading. Track
+      // the photos that FAIL by reference so a retry can re-upload only those.
+      const uploadedUrls: string[] = [...carriedPhotoUrls]
+      const failedPhotos: PendingPhoto[] = []
       for (const photo of pendingPhotos) {
         try {
           const fileName = `${userId}/${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`
@@ -301,14 +308,49 @@ export default function ApplySessionScreen() {
           const { data: up, error: upErr } = await supabase.storage
             .from('model-photos')
             .upload(fileName, decode(manipulated.base64!), { contentType: 'image/jpeg' })
-          if (!upErr && up) {
-            const { data: urlData } = supabase.storage.from('model-photos').getPublicUrl(up.path)
-            uploadedUrls.push(urlData.publicUrl)
-            try {
-              await supabase.from('model_photos').insert({ user_id: userId, photo_url: urlData.publicUrl })
-            } catch {}
+          if (upErr || !up) {
+            console.error('apply-session: photo upload failed:', upErr)
+            failedPhotos.push(photo)
+            continue
           }
-        } catch {}
+          const { data: urlData } = supabase.storage.from('model-photos').getPublicUrl(up.path)
+          uploadedUrls.push(urlData.publicUrl)
+          // Saving to the reusable photo library is best-effort: the URL is already
+          // attached to this booking above, so a library-insert failure isn't a lost
+          // photo — log it but don't count it as a failed upload.
+          const { error: libErr } = await supabase.from('model_photos').insert({ user_id: userId, photo_url: urlData.publicUrl })
+          if (libErr) console.error('apply-session: model_photos library insert failed:', libErr)
+        } catch (e) {
+          console.error('apply-session: photo upload threw:', e)
+          failedPhotos.push(photo)
+        }
+      }
+
+      // Some attached photos couldn't be uploaded — never submit without them
+      // silently. Let the model choose: proceed without the failed photos, or back
+      // out and retry. The booking itself is unaffected either way.
+      if (failedPhotos.length > 0) {
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning)
+        const proceedWithout = await new Promise<boolean>(resolve => {
+          Alert.alert(
+            'Couldn’t upload your photos',
+            `${failedPhotos.length} photo${failedPhotos.length > 1 ? 's' : ''} couldn’t be uploaded. Submit your application without ${failedPhotos.length > 1 ? 'them' : 'it'}, or go back and try again?`,
+            [
+              { text: 'Try again',       style: 'cancel',      onPress: () => resolve(false) },
+              { text: 'Submit without',  style: 'destructive', onPress: () => resolve(true) },
+            ],
+            { cancelable: false },
+          )
+        })
+        if (!proceedWithout) {
+          // Abort: keep ONLY the failed photos pending (the succeeded ones are already
+          // in the bucket + library), and carry their URLs forward so the next submit
+          // re-uploads just the failures and still attaches the successes.
+          setPendingPhotos(failedPhotos)
+          setCarriedPhotoUrls(uploadedUrls)
+          setSubmitting(false)
+          return
+        }
       }
 
       const selectedExistingUrls = existingPhotos

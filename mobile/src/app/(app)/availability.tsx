@@ -395,7 +395,7 @@ export default function AvailabilityScreen() {
         ])
         const providerName = (provData as any)?.name ?? 'A stylist'
         if (favData && (favData as any[]).length > 0) {
-          await supabase.from('notifications').insert(
+          const { error } = await supabase.from('notifications').insert(
             (favData as any[]).map(f => ({
               user_id:    f.user_id,
               type:       'new_availability',
@@ -404,8 +404,9 @@ export default function AvailabilityScreen() {
               session_id: providerId,
             }))
           )
+          if (error) console.error('new availability notification failed:', error)
         }
-      } catch {}
+      } catch (e) { console.error('new availability notification failed:', e) }
 
       router.back()
     } catch (e: any) {

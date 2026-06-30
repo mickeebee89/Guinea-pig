@@ -91,9 +91,13 @@ export default function ProfilePicScreen() {
       .from('profile-pics')
       .getPublicUrl(uploadData.path)
 
+    // Stamp a per-save cache-buster into the stored URL (fixed filename → otherwise
+    // identical URL → stale image cache). Read sites render this value as-is.
+    const newUrl = `${urlData.publicUrl}?t=${Date.now()}`
+
     await supabase
       .from('users')
-      .update({ profile_pic_url: urlData.publicUrl })
+      .update({ profile_pic_url: newUrl })
       .eq('id', session.user.id)
 
     await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)

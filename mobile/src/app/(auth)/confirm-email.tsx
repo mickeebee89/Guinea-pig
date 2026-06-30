@@ -105,7 +105,7 @@ export default function ConfirmEmailScreen() {
                   location_text: '',
                 })
               if (provInsertErr) {
-                console.log('[ConfirmEmail] providers insert error:', provInsertErr.code, provInsertErr.message, provInsertErr.details)
+                console.error('[ConfirmEmail] providers insert error:', provInsertErr.code, provInsertErr.message, provInsertErr.details)
                 Alert.alert(
                   'Provider row insert failed',
                   `code: ${provInsertErr.code}\nmessage: ${provInsertErr.message}\ndetails: ${provInsertErr.details ?? '—'}\nhint: ${provInsertErr.hint ?? '—'}`,
@@ -114,7 +114,7 @@ export default function ConfirmEmailScreen() {
             }
           }
         } catch (e) {
-          console.log('[ConfirmEmail] profile upsert error:', e)
+          console.error('[ConfirmEmail] profile upsert error:', e)
         }
 
         await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)

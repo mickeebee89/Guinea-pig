@@ -103,7 +103,7 @@ export default function ReviewsScreen() {
       if (revData && (revData as any[]).length > 0) {
         const reviewerIds = [...new Set((revData as any[]).map((r: any) => r.reviewer_id))]
         const { data: userRows, error: userErr } = await supabase
-          .from('users')
+          .from('public_profiles')
           .select('id, first_name, last_initial')
           .in('id', reviewerIds)
         if (userErr) console.warn('reviews name lookup failed:', userErr)

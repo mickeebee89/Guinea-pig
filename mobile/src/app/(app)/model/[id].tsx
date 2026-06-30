@@ -187,7 +187,7 @@ export default function ModelProfileViewScreen() {
         { data: catData,   error: catErr   },
       ] = await Promise.all([
         supabase
-          .from('users')
+          .from('public_profiles')
           .select('first_name, last_initial, profile_pic_url, instagram_handle')
           .eq('id', modelId)
           .single(),
@@ -234,7 +234,7 @@ export default function ModelProfileViewScreen() {
           // Fetch reviewer names
           const reviewerIds = [...new Set((revData as any[]).map((r: any) => r.reviewer_id))]
           const { data: reviewerUsers } = reviewerIds.length > 0
-            ? await supabase.from('users').select('id, first_name, last_initial').in('id', reviewerIds)
+            ? await supabase.from('public_profiles').select('id, first_name, last_initial').in('id', reviewerIds)
             : { data: [] as any[] }
           const userMap: Record<string, string> = {}
           ;(reviewerUsers as any[] ?? []).forEach((u: any) => {

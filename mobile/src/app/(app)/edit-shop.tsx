@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import {
   View,
   Text,
@@ -18,6 +18,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { Colors, CategoryColors } from '@/constants/Colors'
 import { useAuth } from '@/context/auth'
 import { supabase } from '@/lib/supabase'
+import LoadErrorState from '@/components/LoadErrorState'
 
 const TREATMENT_CATEGORIES = [
   { name: 'Nails',     color: CategoryColors.nails },
@@ -39,38 +40,44 @@ export default function EditShopScreen() {
   const [locationText,       setLocationText]       = useState('')
   const [selectedCategories, setSelectedCategories] = useState<Set<string>>(new Set())
   const [loading,            setLoading]            = useState(true)
+  const [loadError,          setLoadError]          = useState(false)
   const [saving,             setSaving]             = useState(false)
 
-  useEffect(() => {
+  const load = useCallback(async () => {
     if (!userId) return
-    ;(async () => {
-      try {
-        const { data: prov } = await supabase
-          .from('providers')
-          .select('id, name, bio, location_text')
-          .eq('user_id', userId)
-          .single()
+    setLoading(true)
+    setLoadError(false)
+    try {
+      const { data: prov } = await supabase
+        .from('providers')
+        .select('id, name, bio, location_text')
+        .eq('user_id', userId)
+        .single()
 
-        if (prov) {
-          const pid = (prov as any).id as string
-          setProviderId(pid)
-          setName((prov as any).name ?? '')
-          setBio((prov as any).bio ?? '')
-          setLocationText((prov as any).location_text ?? '')
+      if (prov) {
+        const pid = (prov as any).id as string
+        setProviderId(pid)
+        setName((prov as any).name ?? '')
+        setBio((prov as any).bio ?? '')
+        setLocationText((prov as any).location_text ?? '')
 
-          // Load existing treatment categories
-          const { data: treats } = await supabase
-            .from('provider_treatments')
-            .select('category')
-            .eq('provider_id', pid)
-          if (treats && treats.length > 0) {
-            setSelectedCategories(new Set((treats as any[]).map(t => t.category as string)))
-          }
+        // Load existing treatment categories
+        const { data: treats } = await supabase
+          .from('provider_treatments')
+          .select('category')
+          .eq('provider_id', pid)
+        if (treats && treats.length > 0) {
+          setSelectedCategories(new Set((treats as any[]).map(t => t.category as string)))
         }
-      } catch {}
-      setLoading(false)
-    })()
+      }
+    } catch (e) {
+      console.error('edit-shop load failed:', e)
+      setLoadError(true)
+    }
+    setLoading(false)
   }, [userId])
+
+  useEffect(() => { load() }, [load])
 
   const toggleCategory = async (cat: string) => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
@@ -129,6 +136,14 @@ export default function EditShopScreen() {
     return (
       <View style={[styles.container, { alignItems: 'center', justifyContent: 'center' }]}>
         <ActivityIndicator color={Colors.roseDark} />
+      </View>
+    )
+  }
+
+  if (loadError) {
+    return (
+      <View style={[styles.container, { alignItems: 'center', justifyContent: 'center' }]}>
+        <LoadErrorState onRetry={() => load()} />
       </View>
     )
   }

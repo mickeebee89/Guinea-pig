@@ -195,10 +195,10 @@ export default function ProviderShopScreen() {
           if (revData && (revData as any[]).length > 0) {
             const reviewerIds = [...new Set((revData as any[]).map((r: any) => r.reviewer_id))]
             const { data: reviewerUsers, error: reviewerErr } = await supabase
-              .from('users')
+              .from('public_profiles')
               .select('id, first_name, last_initial')
               .in('id', reviewerIds)
-            if (reviewerErr) console.warn('PROVIDER REVIEWS users lookup →', reviewerErr)
+            if (reviewerErr) console.warn('PROVIDER REVIEWS users lookup', reviewerErr)
             const userMap: Record<string, string> = {}
             ;(reviewerUsers as any[] ?? []).forEach((u: any) => {
               const name = `${u.first_name ?? ''}${u.last_initial ? ' ' + u.last_initial + '.' : ''}`.trim()

@@ -24,6 +24,7 @@ import { supabase } from '@/lib/supabase'
 import { isModelVerified } from '@/lib/verification'
 import ScreenDecor from '@/components/ScreenDecor'
 import { useAppRole } from '@/components/AppEntry'
+import LoadErrorState from '@/components/LoadErrorState'
 import ProviderDashboardScreen from './provider-dashboard'
 
 const CATEGORIES = [
@@ -143,6 +144,7 @@ function ModelHomeContent() {
   const [userLng, setUserLng]                   = useState<number | null>(null)
   const [refreshing, setRefreshing]             = useState(false)
   const [loading, setLoading]                   = useState(true)
+  const [loadError, setLoadError]               = useState(false)
   const [profilePicUrl, setProfilePicUrl]       = useState<string | null>(null)
   const [unreadCount, setUnreadCount]           = useState(0)
   const [upcomingSessions, setUpcomingSessions] = useState<UpcomingSession[]>([])
@@ -155,6 +157,7 @@ function ModelHomeContent() {
   const fetchData = useCallback(async () => {
     if (!userId) { setLoading(false); return }
 
+    setLoadError(false)
     try {
       const { data: userData } = await supabase
         .from('users')
@@ -295,7 +298,9 @@ function ModelHomeContent() {
         completed:         completedList.length,
         distinctProviders: new Set(completedList.map((s: any) => s.provider_id as string)).size,
       })
-    } catch {
+    } catch (e) {
+      console.error('index load failed:', e)
+      setLoadError(true)
     } finally {
       setLoading(false)
     }
@@ -671,6 +676,8 @@ function ModelHomeContent() {
               <View style={styles.emptyState}>
                 <Text style={styles.emptyStateText}>Finding stylists near you…</Text>
               </View>
+            ) : loadError ? (
+              <LoadErrorState onRetry={() => fetchData()} fill={false} />
             ) : displayProviders.length === 0 ? (
               <View style={styles.emptyState}>
                 <Text style={styles.emptyStateEmoji}>🐹</Text>
@@ -1069,7 +1076,7 @@ const styles = StyleSheet.create({
   dashCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.card,
+    backgroundColor: Colors.white,
     borderRadius: 12,
     padding: 12,
     marginBottom: 10,
@@ -1086,17 +1093,17 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: Colors.roseLightest,
+    backgroundColor: Colors.softPink,
     alignItems: 'center',
     justifyContent: 'center',
   },
   dashAvatarInitial: { fontSize: 18, fontWeight: '700', color: Colors.roseDark },
   dashInfo: { flex: 1, gap: 3 },
-  dashTitle: { fontSize: 15, fontWeight: '600', color: Colors.text },
+  dashTitle: { fontSize: 15, fontWeight: '600', color: Colors.warmDark },
   dashMeta: { fontSize: 13, color: Colors.muted },
   dashTag: {
     alignSelf: 'flex-start',
-    backgroundColor: Colors.roseLightest,
+    backgroundColor: Colors.softPink,
     borderRadius: 6,
     paddingHorizontal: 7,
     paddingVertical: 2,
@@ -1106,7 +1113,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   dashStatusBadge: {
-    backgroundColor: Colors.roseLight,
+    backgroundColor: Colors.softPink,
     borderRadius: 8,
     paddingHorizontal: 8,
     paddingVertical: 4,
@@ -1129,7 +1136,7 @@ const styles = StyleSheet.create({
   subCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.card,
+    backgroundColor: Colors.white,
     borderRadius: 12,
     padding: 14,
     gap: 12,
@@ -1143,12 +1150,12 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: Colors.roseLightest,
+    backgroundColor: Colors.softPink,
     alignItems: 'center',
     justifyContent: 'center',
   },
   subInfo: { flex: 1 },
-  subStatusText: { fontSize: 15, fontWeight: '600', color: Colors.text },
+  subStatusText: { fontSize: 15, fontWeight: '600', color: Colors.warmDark },
   subRenew: { fontSize: 13, color: Colors.muted, marginTop: 2 },
   subBadge: {
     backgroundColor: Colors.roseDark,
@@ -1165,7 +1172,7 @@ const styles = StyleSheet.create({
   },
   impactStat: {
     flex: 1,
-    backgroundColor: Colors.card,
+    backgroundColor: Colors.white,
     borderRadius: 12,
     padding: 16,
     alignItems: 'center',

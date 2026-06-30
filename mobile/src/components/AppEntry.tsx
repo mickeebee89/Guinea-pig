@@ -1,8 +1,8 @@
 import { createContext, useContext, useEffect, useState } from 'react'
-import { View, ActivityIndicator } from 'react-native'
+import { View, ActivityIndicator, Alert } from 'react-native'
 import { Stack } from 'expo-router'
 import { useAuth } from '@/context/auth'
-import { supabase } from '@/lib/supabase'
+import { ensureProfile } from '@/lib/ensureProfile'
 import { Colors } from '@/constants/Colors'
 import WelcomeScreen    from '@/screens/auth/WelcomeScreen'
 import LoginScreen      from '@/screens/auth/LoginScreen'
@@ -42,22 +42,25 @@ export default function AppEntry() {
 
     setRoleLoading(true)
 
-    const metaRole = session.user.user_metadata?.role as string | undefined
-    if (metaRole) {
-      setRole(metaRole)
+    // Resolve the role AND self-heal any half-created account in one pass: this
+    // checks whether the users (and providers) row exists and recreates only the
+    // missing ones. Healthy accounts incur a SELECT or two and no writes. We can't
+    // short-circuit on metaRole here — an account can have role in metadata yet be
+    // missing its users row (that's exactly the half-created case we heal).
+    let cancelled = false
+    ensureProfile(session).then(({ role: resolvedRole, error }) => {
+      if (cancelled) return
+      if (error) {
+        Alert.alert(
+          'Account setup issue',
+          "We couldn't finish loading your account, please try again.",
+        )
+      }
+      setRole(resolvedRole)
       setRoleLoading(false)
-      return
-    }
+    })
 
-    supabase
-      .from('users')
-      .select('role')
-      .eq('id', session.user.id)
-      .single()
-      .then(({ data }) => {
-        setRole(data?.role ?? 'model')
-        setRoleLoading(false)
-      })
+    return () => { cancelled = true }
   }, [session?.user.id])
 
   // Reset auth flow to welcome when session disappears (sign-out)
