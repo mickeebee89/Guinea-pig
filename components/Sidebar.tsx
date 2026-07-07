@@ -1,7 +1,8 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
+import { supabase } from '@/lib/supabase'
 
 const nav = [
   { href: '/',               label: 'Dashboard',        icon: '📊' },
@@ -19,6 +20,15 @@ const nav = [
 
 export default function Sidebar() {
   const pathname = usePathname()
+  const router = useRouter()
+
+  // No route gating yet — just don't render the admin shell on the login screen.
+  if (pathname === '/login') return null
+
+  async function handleSignOut() {
+    await supabase.auth.signOut()
+    router.replace('/login')
+  }
 
   return (
     <aside className="w-56 min-h-screen flex flex-col shrink-0" style={{ backgroundColor: '#3D2E2E' }}>
@@ -46,6 +56,15 @@ export default function Sidebar() {
           )
         })}
       </nav>
+      <div className="px-5 py-4 border-t border-white/10">
+        <button
+          onClick={handleSignOut}
+          className="flex items-center gap-3 py-2 text-sm text-white/60 hover:text-white/90 transition-colors"
+        >
+          <span className="text-base">🚪</span>
+          Sign out
+        </button>
+      </div>
     </aside>
   )
 }

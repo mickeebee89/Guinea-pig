@@ -6,11 +6,19 @@ import { supabase } from '@/lib/supabase'
 interface AuditEntry {
   id: string
   action: string
+  admin_id: string | null
   admin_note: string | null
   details: Record<string, unknown> | null
   created_at: string
   target_user: { first_name: string; last_initial: string | null; email: string } | null
   target_provider: { shop_handle: string } | null
+}
+
+interface AdminInfo {
+  id: string
+  first_name: string | null
+  last_initial: string | null
+  email: string
 }
 
 const ACTION_COLORS: Record<string, string> = {
@@ -27,6 +35,8 @@ const ACTION_COLORS: Record<string, string> = {
   report_resolve:        'bg-green-100 text-green-700',
   image_approved:        'bg-green-100 text-green-700',
   image_rejected:        'bg-red-100 text-red-700',
+  verification_approve:  'bg-green-100 text-green-700',
+  verification_reject:   'bg-red-100 text-red-700',
   toggle_image_review:   'bg-purple-100 text-purple-700',
   admin_message_sent:    'bg-blue-100 text-blue-700',
   provider_suspend:      'bg-orange-100 text-orange-700',
@@ -43,6 +53,7 @@ const ALL_ACTIONS = Object.keys(ACTION_COLORS)
 
 export default function AuditLogPage() {
   const [entries, setEntries]     = useState<AuditEntry[]>([])
+  const [adminMap, setAdminMap]   = useState<Record<string, AdminInfo>>({})
   const [loading, setLoading]     = useState(true)
   const [actionFilter, setAction] = useState('all')
   const [dateFrom, setDateFrom]   = useState('')
@@ -54,7 +65,7 @@ export default function AuditLogPage() {
     setLoading(true)
     let q = supabase
       .from('admin_audit_log')
-      .select(`id, action, admin_note, details, created_at,
+      .select(`id, action, admin_id, admin_note, details, created_at,
         target_user:users!target_user_id(first_name, last_initial, email),
         target_provider:providers!target_provider_id(shop_handle)`)
       .order('created_at', { ascending: false })
@@ -65,7 +76,24 @@ export default function AuditLogPage() {
     if (dateTo)   q = q.lte('created_at', dateTo + 'T23:59:59')
 
     const { data } = await q
-    setEntries((data as unknown as AuditEntry[]) ?? [])
+    const rows = (data as unknown as AuditEntry[]) ?? []
+    setEntries(rows)
+
+    // Resolve acting-admin names. admin_id references auth.users, which PostgREST
+    // can't embed, so look them up in public.users by id. Missing rows fall back
+    // to the raw uuid in the render.
+    const adminIds = [...new Set(rows.map(r => r.admin_id).filter(Boolean) as string[])]
+    if (adminIds.length > 0) {
+      const { data: admins } = await supabase
+        .from('users')
+        .select('id, first_name, last_initial, email')
+        .in('id', adminIds)
+      const map: Record<string, AdminInfo> = {}
+      ;(admins as AdminInfo[] ?? []).forEach(a => { map[a.id] = a })
+      setAdminMap(map)
+    } else {
+      setAdminMap({})
+    }
     setLoading(false)
   }
 
@@ -113,6 +141,7 @@ export default function AuditLogPage() {
                 <tr className="border-b border-black/5 text-[#3D2E2E]/50 text-xs uppercase tracking-wide">
                   <th className="text-left px-4 py-3">Timestamp</th>
                   <th className="text-left px-4 py-3">Action</th>
+                  <th className="text-left px-4 py-3">Admin</th>
                   <th className="text-left px-4 py-3">Target User</th>
                   <th className="text-left px-4 py-3">Target Shop</th>
                   <th className="text-left px-4 py-3">Note / Details</th>
@@ -126,6 +155,20 @@ export default function AuditLogPage() {
                     </td>
                     <td className="px-4 py-3">
                       <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${color(e.action)}`}>{e.action}</span>
+                    </td>
+                    <td className="px-4 py-3">
+                      {(() => {
+                        const a = e.admin_id ? adminMap[e.admin_id] : null
+                        if (a) return (
+                          <div>
+                            <div className="font-medium">{a.first_name ?? 'Admin'} {a.last_initial ?? ''}.</div>
+                            <div className="text-xs text-[#3D2E2E]/40">{a.email}</div>
+                          </div>
+                        )
+                        return e.admin_id
+                          ? <span className="text-xs font-mono text-[#3D2E2E]/40">{e.admin_id}</span>
+                          : <span className="text-[#3D2E2E]/30">—</span>
+                      })()}
                     </td>
                     <td className="px-4 py-3">
                       {e.target_user ? (

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { logAction } from '@/lib/audit'
 
 interface VerificationRequest {
   id: string
@@ -43,7 +44,7 @@ export default function VerificationQueuePage() {
     setWorking(req.id)
     const note = notes[req.id] ?? ''
     // Update request status
-    await supabase
+    const { error: updateErr } = await supabase
       .from('verification_requests')
       .update({ status: 'approved', notes: note, reviewed_at: new Date().toISOString() })
       .eq('id', req.id)
@@ -66,6 +67,13 @@ export default function VerificationQueuePage() {
         body: 'Your identity check passed! Complete the £4.99 payment to activate your verified badge.',
       })
     }
+    // Audit only after the status update actually succeeded (admin_id stamped by logAction).
+    if (!updateErr) {
+      await logAction('verification_approve', {
+        targetUserId: req.user.id,
+        details: { request_id: req.id, role: req.user.role, outcome: 'approved' },
+      })
+    }
     setWorking(null)
     load()
   }
@@ -73,7 +81,7 @@ export default function VerificationQueuePage() {
   async function reject(req: VerificationRequest) {
     setWorking(req.id)
     const note = notes[req.id] ?? ''
-    await supabase
+    const { error: updateErr } = await supabase
       .from('verification_requests')
       .update({ status: 'rejected', notes: note, reviewed_at: new Date().toISOString() })
       .eq('id', req.id)
@@ -85,6 +93,13 @@ export default function VerificationQueuePage() {
         ? `Your verification was not approved: ${note}`
         : 'Your verification was not approved. Please resubmit with a clearer photo.',
     })
+    // Audit only after the status update actually succeeded (admin_id stamped by logAction).
+    if (!updateErr) {
+      await logAction('verification_reject', {
+        targetUserId: req.user.id,
+        details: { request_id: req.id, role: req.user.role, outcome: 'rejected', reason: note || null },
+      })
+    }
     setWorking(null)
     load()
   }
