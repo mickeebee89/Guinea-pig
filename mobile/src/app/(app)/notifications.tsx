@@ -41,6 +41,7 @@ type IconCfg = { icon: string; color: string; bg: string; filter: 'Sessions' | '
 const TYPE_CFG: Record<string, IconCfg> = {
   session_accepted: { icon: 'checkmark-circle',  color: '#1D9E75',      bg: '#ECFDF5',              filter: 'Sessions' },
   session_declined: { icon: 'close-circle',       color: Colors.error,   bg: '#FEF2F2',              filter: 'Sessions' },
+  session_completed:{ icon: 'checkmark-done-circle',color: '#F59E0B',     bg: '#FFFBEB',              filter: 'Sessions' },
   session_applied:  { icon: 'person-add',         color: Colors.roseDark,bg: Colors.softPink + '40', filter: 'Sessions' },
   new_message:      { icon: 'chatbubble',         color: Colors.rose,    bg: Colors.softPink + '30', filter: 'Activity' },
   review_reminder:  { icon: 'star',               color: '#F59E0B',      bg: '#FFFBEB',              filter: 'Activity' },
@@ -53,6 +54,11 @@ const TYPE_CFG: Record<string, IconCfg> = {
 const DEFAULT_CFG: IconCfg = {
   icon: 'ellipse-outline', color: Colors.muted, bg: Colors.inputBg, filter: 'Activity',
 }
+
+// Display-only labels for the filter tabs. The internal Filter value 'Sessions'
+// is unchanged (used for state comparison + ICON_CFG keys); only the rendered
+// text maps to "Treatments".
+const FILTER_LABELS: Record<Filter, string> = { All: 'All', Sessions: 'Treatments', Activity: 'Activity' }
 
 function cfg(type: string): IconCfg {
   return TYPE_CFG[type] ?? DEFAULT_CFG
@@ -245,7 +251,7 @@ export default function NotificationsScreen() {
             }}
             activeOpacity={0.8}
           >
-            <Text style={[styles.tabText, filter === f && styles.tabTextActive]}>{f}</Text>
+            <Text style={[styles.tabText, filter === f && styles.tabTextActive]}>{FILTER_LABELS[f]}</Text>
           </TouchableOpacity>
         ))}
       </View>
@@ -285,8 +291,8 @@ export default function NotificationsScreen() {
               <Text style={styles.emptyTitle}>Nothing here yet</Text>
               <Text style={styles.emptySub}>
                 {filter === 'All'
-                  ? "We'll notify you about sessions, messages, and updates."
-                  : `No ${filter.toLowerCase()} notifications.`}
+                  ? "We'll notify you about treatments, messages, and updates."
+                  : `No ${filter === 'Sessions' ? 'treatment' : filter.toLowerCase()} notifications.`}
               </Text>
             </View>
           ) : (
@@ -320,6 +326,71 @@ export default function NotificationsScreen() {
   )
 }
 
+// ── Review CTA (session_completed rows) ─────────────────────────────────────────
+// Reuses the existing review launch (mirrors chat/[sessionId].tsx) and the existing
+// session_id + reviewer_id duplicate-guard lookup — no review logic is duplicated.
+function ReviewCTA({ sessionId }: { sessionId: string }) {
+  const router      = useRouter()
+  const { session } = useAuth()
+  const userId      = session?.user?.id
+  // loading → resolving; review → show CTA; done → already reviewed; hidden → not a participant
+  const [state, setState]               = useState<'loading' | 'review' | 'done' | 'hidden'>('loading')
+  const [revieweeType, setRevieweeType] = useState<'provider' | 'model'>('provider')
+
+  useEffect(() => {
+    if (!userId) { setState('hidden'); return }
+    let cancelled = false
+    ;(async () => {
+      // Derive direction from the session (mirror chat launcher: isModel = model_user_id === uid)
+      const { data: s } = await supabase
+        .from('sessions')
+        .select('model_user_id')
+        .eq('id', sessionId)
+        .maybeSingle()
+      if (cancelled) return
+      if (!s) { setState('hidden'); return }
+      const isModel = (s as any).model_user_id === userId
+      setRevieweeType(isModel ? 'provider' : 'model')
+
+      // Duplicate guard: same lookup as chat/[sessionId].tsx:189 / leave-review.tsx:194
+      const { data: existRev } = await supabase
+        .from('reviews')
+        .select('id')
+        .eq('session_id', sessionId)
+        .eq('reviewer_id', userId)
+        .maybeSingle()
+      if (cancelled) return
+      setState(existRev ? 'done' : 'review')
+    })()
+    return () => { cancelled = true }
+  }, [sessionId, userId])
+
+  if (state === 'loading' || state === 'hidden') return null
+
+  if (state === 'done') {
+    return (
+      <View style={styles.reviewedPill}>
+        <Ionicons name="checkmark-circle" size={13} color="#B8860B" />
+        <Text style={styles.reviewedText}>Reviewed</Text>
+      </View>
+    )
+  }
+
+  return (
+    <TouchableOpacity
+      style={styles.reviewCta}
+      activeOpacity={0.85}
+      onPress={async () => {
+        await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
+        // Same launch as chat/[sessionId].tsx:319 — screen + revieweeType support both directions.
+        router.push({ pathname: '/(app)/leave-review' as any, params: { sessionId, revieweeType } })
+      }}
+    >
+      <Text style={styles.reviewCtaText}>⭐ Leave a review</Text>
+    </TouchableOpacity>
+  )
+}
+
 // ── Notification item ─────────────────────────────────────────────────────────
 
 function NotifItem({ notif: n, onPress }: { notif: Notification; onPress: () => void }) {
@@ -349,6 +420,9 @@ function NotifItem({ notif: n, onPress }: { notif: Notification; onPress: () => 
           <Text style={styles.notifTime}>{formatTime(n.created_at)}</Text>
         </View>
         <Text style={styles.notifBody} numberOfLines={2}>{n.body}</Text>
+        {n.type === 'session_completed' && n.session_id && (
+          <ReviewCTA sessionId={n.session_id} />
+        )}
       </View>
       {isNavigable && (
         <Ionicons name="chevron-forward" size={16} color={Colors.muted} style={styles.chevron} />
@@ -362,6 +436,38 @@ function NotifItem({ notif: n, onPress }: { notif: Notification; onPress: () => 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: 'transparent', overflow: 'hidden' },
   centred:   { flex: 1, alignItems: 'center', justifyContent: 'center' },
+
+  // Review CTA on session_completed rows (gold, prominent)
+  reviewCta: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F59E0B',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    marginTop: 10,
+    shadowColor: '#F59E0B',
+    shadowOpacity: 0.35,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
+  reviewCtaText: { color: Colors.white, fontSize: 13, fontWeight: '700', letterSpacing: 0.2 },
+  reviewedPill: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 14,
+    backgroundColor: '#FFFBEB',
+    borderWidth: 1,
+    borderColor: '#F3D99A',
+  },
+  reviewedText: { color: '#B8860B', fontSize: 12, fontWeight: '600' },
 
   topBar: {
     flexDirection: 'row',
@@ -455,16 +561,16 @@ const styles = StyleSheet.create({
     padding: 14,
     marginBottom: 8,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: Colors.border + '80',
     overflow: 'hidden',
     shadowColor: Colors.warmDark,
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
+    shadowOpacity: 0.02,
     shadowRadius: 4,
-    elevation: 1,
+    elevation: 0,
   },
   notifCardUnread: {
-    backgroundColor: Colors.rose + '0D',
+    backgroundColor: Colors.pinkVibrant + '1A',
     borderColor: Colors.softPink,
   },
   unreadAccent: {
@@ -473,7 +579,7 @@ const styles = StyleSheet.create({
     top: 0,
     bottom: 0,
     width: 3,
-    backgroundColor: Colors.roseDark,
+    backgroundColor: Colors.pinkVibrant,
     borderTopLeftRadius: 16,
     borderBottomLeftRadius: 16,
   },

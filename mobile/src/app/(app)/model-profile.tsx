@@ -847,7 +847,7 @@ export default function ModelProfileScreen() {
           </View>
 
           <Text style={styles.sectionSub}>
-            Up to {MAX_PHOTOS} photos per category — stylists see these when you apply for a session.
+            Up to {MAX_PHOTOS} photos per category — stylists see these when you apply for a treatment.
           </Text>
 
           {photoGroups.length === 0 ? (
@@ -951,7 +951,7 @@ export default function ModelProfileScreen() {
             <View style={styles.verifyText}>
               <Text style={styles.verifyTitle}>Get verified</Text>
               <Text style={styles.verifySub}>
-                A verified badge builds trust with providers and helps you get more sessions.
+                A verified badge builds trust with providers and helps you get more treatments.
               </Text>
             </View>
             <TouchableOpacity

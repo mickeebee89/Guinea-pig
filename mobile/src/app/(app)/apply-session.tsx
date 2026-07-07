@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import {
   View,
   Text,
@@ -50,7 +50,7 @@ const STEP_TITLES = [
 const STEP_SUBS = [
   "Available dates are highlighted in rose — tap one to select",
   'Choose a time slot that works for you',
-  "Pick the treatment you'd like at this session",
+  "Pick the treatment you'd like",
   'Anything the stylist should know? (optional)',
   'Share photos to help the stylist prepare (optional)',
   'Please read and agree before confirming your application',
@@ -59,7 +59,7 @@ const STEP_SUBS = [
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type AvailabilitySlot = { id: string; date: string; start_time: string; end_time: string }
+type AvailabilitySlot = { id: string; date: string; start_time: string; end_time: string; treatmentIds: string[] }
 type Treatment        = { id: string; name: string; category: string }
 type ExistingPhoto    = { id: string; photoUrl: string }
 type PendingPhoto     = { uri: string }
@@ -78,6 +78,18 @@ function formatDateShort(key: string): string {
   return new Date(y, m - 1, d).toLocaleDateString('en-GB', {
     day: 'numeric', month: 'short', year: 'numeric',
   })
+}
+
+// Times may be stored as 'HH:MM' or 'HH:MM:SS'; the taken_slots RPC always returns
+// 'HH:MM:SS'. Normalise both to 'HH:MM:SS' before comparing — the same rule
+// availability.tsx uses for its (provider_id, date, start_time, end_time) unique key.
+function toHHMMSS(t: string): string {
+  return t && t.length === 5 ? `${t}:00` : t
+}
+
+// Composite slot key so a taken booking matches its availability slot exactly.
+function slotKey(startTime: string, endTime: string): string {
+  return `${toHHMMSS(startTime)}|${toHHMMSS(endTime)}`
 }
 
 // ── Screen ────────────────────────────────────────────────────────────────────
@@ -107,6 +119,11 @@ export default function ApplySessionScreen() {
   // booking — no duplicate bucket uploads or model_photos library rows.
   const [carriedPhotoUrls, setCarriedPhotoUrls] = useState<string[]>([])
   const [providerUserId,  setProviderUserId]  = useState<string | null>(null)
+  // Taken slots for the selected date, from the server-side taken_slots RPC
+  // (pending/accepted sessions only) — so we never read other users' sessions on the
+  // client. Keyed by normalised `start|end`. takenError → conservative: treat all taken.
+  const [takenSlotKeys,   setTakenSlotKeys]   = useState<Set<string>>(new Set())
+  const [takenError,      setTakenError]      = useState<string | null>(null)
 
   // ── Wizard state ───────────────────────────────────────────────────────────
 
@@ -147,7 +164,7 @@ export default function ApplySessionScreen() {
         const [{ data: availData, error: availError }, { data: treatData, error: treatError }, { data: provData }] = await Promise.all([
           supabase
             .from('availability')
-            .select('id, date, start_time, end_time')
+            .select('id, date, start_time, end_time, active_treatments')
             .eq('provider_id', providerId)
             .gte('date', todayKey)
             .order('date'),
@@ -161,7 +178,14 @@ export default function ApplySessionScreen() {
             .eq('id', providerId)
             .single(),
         ])
-        if (availData) setAvailRows(availData as AvailabilityRow[])
+        if (availData) setAvailRows((availData as any[]).map(r => ({
+          id:           r.id,
+          date:         r.date,
+          start_time:   r.start_time,
+          end_time:     r.end_time,
+          // Per-slot treatment scoping (mirror availability.tsx's treatmentIds).
+          treatmentIds: (r.active_treatments as string[] | null) ?? [],
+        })))
         if (treatData) setTreatments(treatData as Treatment[])
         if (provData)  setProviderUserId((provData as any).user_id ?? null)
       } catch {}
@@ -181,6 +205,37 @@ export default function ApplySessionScreen() {
     load()
   }, [providerId, userId, todayKey])
 
+  // Which of this provider's slots are already taken on the selected date. Uses the
+  // server-side taken_slots RPC (pending/accepted only) instead of reading others'
+  // sessions, so the sessions table can be locked down to participants.
+  useEffect(() => {
+    if (!providerId || !selectedDate) {
+      setTakenSlotKeys(new Set())
+      setTakenError(null)
+      return
+    }
+    let cancelled = false
+    setTakenError(null)
+    ;(async () => {
+      const { data, error } = await supabase.rpc('taken_slots', {
+        p_provider_id: providerId,
+        p_date:        selectedDate,
+      })
+      if (cancelled) return
+      if (error) {
+        // Surface, don't swallow. Conservative: with availability unverifiable, flag
+        // every slot taken so a booked slot can never be shown as free.
+        console.error('taken_slots RPC failed:', error)
+        setTakenError(error.message ?? 'Could not check slot availability')
+        setTakenSlotKeys(new Set())
+        return
+      }
+      const rows = (data ?? []) as { start_time: string; end_time: string }[]
+      setTakenSlotKeys(new Set(rows.map(r => slotKey(r.start_time, r.end_time))))
+    })()
+    return () => { cancelled = true }
+  }, [providerId, selectedDate])
+
   // ── Derived ────────────────────────────────────────────────────────────────
 
   const availDateSet = useMemo(() => new Set(availRows.map(r => r.date)), [availRows])
@@ -190,9 +245,23 @@ export default function ApplySessionScreen() {
     [availRows, selectedDate]
   )
 
+  // A slot is unavailable if the RPC reported it taken, or if the RPC errored (we then
+  // treat every slot as taken rather than risk showing a booked slot as free).
+  const isSlotTaken = (slot: AvailabilitySlot): boolean =>
+    takenError != null || takenSlotKeys.has(slotKey(slot.start_time, slot.end_time))
+
+  // Treatments a given slot actually supports. Mirrors availability.tsx:602
+  // (slotTreats = dayTreats.filter(t => slot.treatmentIds.includes(t.id))).
+  // Backward-compat: a slot with empty/null active_treatments (created before per-slot
+  // scoping existed) falls back to the provider's full list rather than showing none.
+  const treatmentsForSlot = useCallback((slot: AvailabilitySlot): Treatment[] => {
+    if (!slot.treatmentIds || slot.treatmentIds.length === 0) return treatments
+    return treatments.filter(t => slot.treatmentIds.includes(t.id))
+  }, [treatments])
+
   const treatmentsInSlot = useMemo(
-    () => selectedSlot ? treatments : [],
-    [selectedSlot, treatments]
+    () => selectedSlot ? treatmentsForSlot(selectedSlot) : [],
+    [selectedSlot, treatmentsForSlot]
   )
 
   const selectedTreatment = useMemo(
@@ -247,6 +316,7 @@ export default function ApplySessionScreen() {
   }
 
   const selectSlot = async (slot: AvailabilitySlot) => {
+    if (isSlotTaken(slot)) return
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
     setSelectedSlot(slot)
     setSelectedTreatId(null)
@@ -390,14 +460,19 @@ export default function ApplySessionScreen() {
 
       let consentErr: any = null
       if (providerUserId && sessionData) {
-        const { error: notifErr } = await supabase.from('notifications').insert({
-          user_id: providerUserId,
-          type:    'session_application',
-          title:   'New session application',
-          body:    `A model has applied for ${selectedTreatment?.name ?? 'a session'} on ${formatDateShort(selectedDate)} at ${selectedSlot.start_time}`,
-          data:    { session_id: sessionData.id, provider_id: providerId },
-          read:    false,
-        })
+        const notifPayload = {
+          user_id:    providerUserId,
+          type:       'session_application',
+          title:      'New treatment application',
+          body:       `A model has applied for ${selectedTreatment?.name ?? 'a treatment'} on ${formatDateShort(selectedDate)} at ${selectedSlot.start_time}`,
+          // session_id must be TOP-LEVEL so tap/deep-link + the Leave-review CTA can read
+          // n.session_id (matches the model-directed inserts). Unread is tracked by read_at
+          // (null = unread) — there is NO `read` column, so we don't set one.
+          session_id: sessionData.id,
+          data:       { provider_id: providerId },
+        }
+        const { error: notifErr } = await supabase.from('notifications').insert(notifPayload)
+        if (notifErr) console.error('session_application notification insert failed:', notifErr)
         consentErr = notifErr
       }
       if (sessionErr) throw sessionErr
@@ -508,40 +583,54 @@ export default function ApplySessionScreen() {
         {/* ════ STEP 2 — TIME SLOTS ════════════════════════════════════════ */}
         {step === 2 && (
           <View style={styles.card}>
+            {takenError && (
+              <Text style={styles.slotErrorHint}>
+                Couldn't check slot availability. To avoid double-booking, slots are shown as
+                unavailable — go back and try again.
+              </Text>
+            )}
             {slotsForDate.length === 0 ? (
               <Text style={styles.emptyHint}>No time slots available for this date.</Text>
             ) : (
               slotsForDate.map((slot) => {
                 const isSelected = selectedSlot?.id === slot.id
-                const slotTreats = treatments
+                const taken      = isSlotTaken(slot)
+                const slotTreats = treatmentsForSlot(slot)
                 return (
                   <TouchableOpacity
                     key={slot.id}
-                    style={[styles.slotPill, isSelected && styles.slotPillSelected]}
+                    style={[styles.slotPill, isSelected && styles.slotPillSelected, taken && styles.slotPillTaken]}
                     onPress={() => selectSlot(slot)}
+                    disabled={taken}
                     activeOpacity={0.85}
                   >
                     <View style={styles.slotTimeWrap}>
                       <Ionicons
                         name="time-outline"
                         size={16}
-                        color={isSelected ? Colors.roseDark : Colors.muted}
+                        color={isSelected && !taken ? Colors.roseDark : Colors.muted}
                       />
-                      <Text style={[styles.slotTimeText, isSelected && styles.slotTimeTextSelected]}>
+                      <Text style={[styles.slotTimeText, isSelected && !taken && styles.slotTimeTextSelected, taken && styles.slotTimeTextTaken]}>
                         {slot.start_time} – {slot.end_time}
                       </Text>
                     </View>
-                    <View style={styles.slotStripes}>
-                      {slotTreats.map(t => {
-                        const color = CATEGORY_COLOR[t.category] ?? Colors.muted
-                        return (
-                          <View key={t.id} style={[styles.slotStripe, { backgroundColor: color }]}>
-                            <Text style={styles.slotStripeText}>{t.category}</Text>
-                          </View>
-                        )
-                      })}
-                    </View>
-                    {isSelected && (
+                    {taken ? (
+                      <View style={styles.slotStripes}>
+                        <Text style={styles.slotTakenLabel}>Booked</Text>
+                      </View>
+                    ) : (
+                      <View style={styles.slotStripes}>
+                        {slotTreats.map(t => {
+                          const color = CATEGORY_COLOR[t.category] ?? Colors.muted
+                          return (
+                            <View key={t.id} style={[styles.slotStripe, { backgroundColor: color }]}>
+                              <Text style={styles.slotStripeText}>{t.category}</Text>
+                            </View>
+                          )
+                        })}
+                      </View>
+                    )}
+                    {isSelected && !taken && (
                       <Ionicons name="checkmark-circle" size={22} color={Colors.roseDark} />
                     )}
                   </TouchableOpacity>
@@ -672,7 +761,7 @@ export default function ApplySessionScreen() {
         {step === 7 && selectedDate && selectedSlot && selectedTreatment && (
           <>
           <View style={styles.card}>
-            <Text style={styles.confirmSectionTitle}>Session details</Text>
+            <Text style={styles.confirmSectionTitle}>Treatment details</Text>
 
             <ConfirmRow icon="person-outline"   label="Provider"  value={providerName ?? ''} />
             <ConfirmRow icon="calendar-outline" label="Date"      value={formatDayLabel(selectedDate)} />
@@ -1007,6 +1096,27 @@ const styles = StyleSheet.create({
   slotPillSelected: {
     borderColor: Colors.roseDark,
     backgroundColor: Colors.rose + '12',
+  },
+  slotPillTaken: {
+    opacity: 0.55,
+    backgroundColor: Colors.inputBg,
+  },
+  slotTimeTextTaken: {
+    color: Colors.muted,
+    textDecorationLine: 'line-through',
+  },
+  slotTakenLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: Colors.muted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  slotErrorHint: {
+    fontSize: 13,
+    color: Colors.error,
+    marginBottom: 12,
+    lineHeight: 18,
   },
   slotTimeWrap: {
     flexDirection: 'row',

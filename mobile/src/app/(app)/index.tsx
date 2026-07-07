@@ -23,6 +23,7 @@ import { useAuth } from '@/context/auth'
 import { supabase } from '@/lib/supabase'
 import { isModelVerified } from '@/lib/verification'
 import ScreenDecor from '@/components/ScreenDecor'
+import HeaderIcons from '@/components/HeaderIcons'
 import { useAppRole } from '@/components/AppEntry'
 import LoadErrorState from '@/components/LoadErrorState'
 import ProviderDashboardScreen from './provider-dashboard'
@@ -146,7 +147,6 @@ function ModelHomeContent() {
   const [loading, setLoading]                   = useState(true)
   const [loadError, setLoadError]               = useState(false)
   const [profilePicUrl, setProfilePicUrl]       = useState<string | null>(null)
-  const [unreadCount, setUnreadCount]           = useState(0)
   const [upcomingSessions, setUpcomingSessions] = useState<UpcomingSession[]>([])
   const [pendingApps,      setPendingApps]      = useState<PendingApp[]>([])
   const [invites,          setInvites]          = useState<Invite[]>([])
@@ -186,7 +186,7 @@ function ModelHomeContent() {
         }
       }).catch(() => {})
 
-      const [{ data: provData }, { data: favData }, { count: unread }] = await Promise.all([
+      const [{ data: provData }, { data: favData }] = await Promise.all([
         supabase
           .from('providers')
           .select('id, name, profile_pic_url, is_verified, rating, location_text, latitude, longitude, provider_treatments(category)')
@@ -195,11 +195,6 @@ function ModelHomeContent() {
           .from('favourites')
           .select('provider_id')
           .eq('user_id', userId),
-        supabase
-          .from('notifications')
-          .select('id', { count: 'exact', head: true })
-          .eq('user_id', userId)
-          .is('read_at', null),
       ])
 
       if (provData) {
@@ -219,7 +214,6 @@ function ModelHomeContent() {
       if (favData) {
         setFavouriteIds(new Set((favData as { provider_id: string }[]).map(f => f.provider_id)))
       }
-      setUnreadCount(unread ?? 0)
 
       // ── Dashboard data ────────────────────────────────────────────────────
       const todayStr = (() => {
@@ -417,37 +411,13 @@ function ModelHomeContent() {
                 </TouchableOpacity>
               )}
             </View>
-            <TouchableOpacity
-              style={styles.bellBtn}
-              onPress={async () => {
-                await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
-                router.push('/(app)/messages' as any)
-              }}
-            >
-              <Ionicons name="chatbubble-ellipses-outline" size={22} color={Colors.warmDark} />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.bellBtn}
-              onPress={async () => {
-                await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
-                router.push('/(app)/notifications' as any)
-              }}
-            >
-              <Ionicons name="notifications-outline" size={22} color={Colors.warmDark} />
-              {unreadCount > 0 && (
-                <View style={styles.bellBadge}>
-                  <Text style={styles.bellBadgeText}>
-                    {unreadCount > 9 ? '9+' : String(unreadCount)}
-                  </Text>
-                </View>
-              )}
-            </TouchableOpacity>
+            <HeaderIcons />
           </View>
 
           {/* ── Upcoming sessions ── */}
           {upcomingSessions.length > 0 && (
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Upcoming sessions</Text>
+              <Text style={styles.sectionTitle}>Upcoming treatments</Text>
               {upcomingSessions.map(s => (
                 <TouchableOpacity
                   key={s.id}
@@ -770,7 +740,7 @@ function ModelHomeContent() {
                 <View style={styles.impactStat}>
                   <Text style={styles.impactNum}>{impact.completed}</Text>
                   <Text style={styles.impactLabel}>
-                    {impact.completed === 1 ? 'session' : 'sessions'}{'\n'}completed
+                    {impact.completed === 1 ? 'treatment' : 'treatments'}{'\n'}completed
                   </Text>
                 </View>
                 {impact.distinctProviders > 0 && (
@@ -867,41 +837,6 @@ const styles = StyleSheet.create({
     color: Colors.warmDark,
     padding: 0,
   },
-  bellBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: Colors.white,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: Colors.warmDark,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    elevation: 2,
-    position: 'relative',
-  },
-  bellBadge: {
-    position: 'absolute',
-    top: -2,
-    right: -2,
-    minWidth: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: Colors.error,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 3,
-    borderWidth: 1.5,
-    borderColor: Colors.cream,
-  },
-  bellBadgeText: {
-    fontSize: 9,
-    fontWeight: '800',
-    color: Colors.white,
-    letterSpacing: -0.2,
-  },
-
   // Nearby horizontal list
   nearbyRow: { gap: 12, paddingBottom: 4 },
   nearbyCard: {

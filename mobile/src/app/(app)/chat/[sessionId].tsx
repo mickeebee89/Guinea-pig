@@ -325,7 +325,7 @@ export default function ChatScreen() {
   const handleMarkComplete = () => {
     Alert.alert(
       'Mark as complete?',
-      'This confirms the session is done. The model will be notified and can leave a review.',
+      'This confirms the treatment is done. The model will be notified and can leave a review.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -339,8 +339,8 @@ export default function ChatScreen() {
                 supabase.from('notifications').insert({
                   user_id:    chat.model_user_id,
                   type:       'session_completed',
-                  title:      'Session completed ✓',
-                  body:       'Your stylist has marked the session as complete.',
+                  title:      'Treatment completed ✓',
+                  body:       'Your stylist has marked the treatment as complete.',
                   session_id: sessionId,
                 }).then(() => {})
               }
@@ -348,7 +348,7 @@ export default function ChatScreen() {
               setChat(prev => prev ? { ...prev, status: 'completed' } : prev)
             } catch {
               await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)
-              Alert.alert('Error', 'Could not mark session as complete. Please try again.')
+              Alert.alert('Error', 'Could not mark treatment as complete. Please try again.')
             }
             setMarkingComplete(false)
           },
@@ -462,7 +462,22 @@ export default function ChatScreen() {
           <Ionicons name="chevron-back" size={20} color={Colors.roseDark} />
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.headerInfo} activeOpacity={0.8}>
+        <TouchableOpacity
+          style={styles.headerInfo}
+          activeOpacity={0.8}
+          onPress={async () => {
+            // Provider profile needs providers.id (= chat.provider_id); model profile
+            // needs the model's user id (= otherParty.userId). Different id-spaces.
+            const targetId = isModel ? chat?.provider_id : otherParty?.userId
+            if (!targetId) return // guard: missing id → do nothing, don't push a broken route
+            await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+            router.push(
+              isModel
+                ? { pathname: '/(app)/provider/[id]' as any, params: { id: targetId } }
+                : { pathname: '/(app)/model/[id]' as any, params: { id: targetId } }
+            )
+          }}
+        >
           {otherParty?.picUrl ? (
             <Image source={{ uri: otherParty.picUrl }} style={styles.headerAvatar} />
           ) : (
@@ -511,7 +526,7 @@ export default function ChatScreen() {
           ) : (
             <>
               <Ionicons name="checkmark-circle-outline" size={18} color={Colors.white} />
-              <Text style={styles.completeBannerText}>Mark session as complete</Text>
+              <Text style={styles.completeBannerText}>Mark treatment as complete</Text>
             </>
           )}
         </TouchableOpacity>
@@ -618,7 +633,7 @@ export default function ChatScreen() {
             <View style={styles.materialsNotice}>
               <Ionicons name="information-circle-outline" size={16} color={Colors.roseDark} />
               <Text style={styles.materialsText}>
-                Reminder: {treatment!.name} has a £{treatment!.materials_cost!.toFixed(2)} materials cost, payable to the provider at the session.
+                Reminder: {treatment!.name} has a £{treatment!.materials_cost!.toFixed(2)} materials cost, payable to the provider at the treatment.
               </Text>
             </View>
           ) : null

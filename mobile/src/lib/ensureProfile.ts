@@ -33,19 +33,14 @@ export async function ensureProfile(session: Session): Promise<EnsureProfileResu
 
   let role = (existingUser?.role as string | undefined) ?? metaRole
 
-  // Only a MISSING users row signals a genuine half-created account. This flag gates
-  // providers creation below — a healthy/fresh-signup provider already has its row
-  // created by its own signup flow, so we must not touch providers in that case.
-  const userWasMissing = !existingUser
-
   // 2. Recreate the users row ONLY if missing — healthy profiles are left untouched.
   //    Reuse the same placeholder/constant fallbacks ConfirmEmailScreen uses. Newer
   //    signups now persist first_name/last_initial into user_metadata, so those heal
   //    with real names; older half-created accounts fall back to placeholders.
   if (!existingUser) {
-    // Race-safe write: a concurrent signup insert can land between the SELECT above
-    // and this write, so upsert with ignoreDuplicates — an existing row becomes a
-    // harmless no-op (never overwritten) instead of a unique-violation crash.
+    // Race-safe write: the auth.users trigger (single source of truth) can create this
+    // row between the SELECT above and this write, so upsert with ignoreDuplicates —
+    // an existing row becomes a harmless no-op (never overwritten), not a 23505 crash.
     const { error: userUpsertErr } = await supabase.from('users').upsert({
       id:           uid,
       email:        session.user.email ?? '',
@@ -54,21 +49,22 @@ export async function ensureProfile(session: Session): Promise<EnsureProfileResu
       last_initial: (meta.last_initial as string | undefined) || null,
       region:       'UK',
     }, { onConflict: 'id', ignoreDuplicates: true })
-    if (userUpsertErr) {
+    // ignoreDuplicates makes this ON CONFLICT DO NOTHING, so a row the auth.users
+    // trigger created concurrently is a silent no-op. Guard 23505 too as defence in
+    // depth — it's now expected/benign, never a failure. Surface any other error.
+    if (userUpsertErr && userUpsertErr.code !== '23505') {
       console.error('ensureProfile: users recreate failed:', userUpsertErr)
       return { role: metaRole, error: userUpsertErr }
     }
     role = metaRole
   }
 
-  // 3. Providers row — ONLY for a genuinely orphaned account (users row was missing
-  //    and we just recreated it). providers has no user_id unique constraint to
-  //    upsert against, so we can't dedupe via onConflict; instead we gate on
-  //    userWasMissing. A healthy/fresh-signup provider already gets its providers row
-  //    from its own signup flow — touching it here would race that insert and collide
-  //    on the providers pkey (23505). In the orphan case that race doesn't exist, so
-  //    a plain check-then-insert is safe.
-  if (role === 'provider' && userWasMissing) {
+  // 3. Providers row — self-heal only if genuinely missing. The auth.users trigger is
+  //    the single source of truth and creates this row on signup; we only recreate it
+  //    for a provider that somehow lacks one. providers has NO user_id UNIQUE constraint
+  //    (only pkey on id), so we CANNOT dedupe via .upsert({ onConflict: 'user_id' }) —
+  //    that would raise 42P10, not a benign no-op. Instead gate on an existence check.
+  if (role === 'provider') {
     const { data: existingProv, error: provSelErr } = await supabase
       .from('providers')
       .select('id')
@@ -80,8 +76,11 @@ export async function ensureProfile(session: Session): Promise<EnsureProfileResu
     }
 
     if (!existingProv) {
+      // The SELECT above is not atomic with this insert: the trigger can create the row
+      // in between. A unique/pk violation (23505) therefore means "already created" —
+      // treat as a benign no-op. Surface any other (genuine) error.
       const { error: provInsErr } = await supabase.from('providers').insert({ user_id: uid })
-      if (provInsErr) {
+      if (provInsErr && provInsErr.code !== '23505') {
         console.error('ensureProfile: providers recreate failed:', provInsErr)
         return { role, error: provInsErr }
       }

@@ -11,6 +11,7 @@ export const Colors = {
   rose:      '#C2A14D',  // gold — primary CTAs
   roseDark:  '#A8862E',  // deep gold — pressed / dark CTA
   softPink:  '#F4DADC',  // blush — accent fills
+  pinkVibrant: '#F45D9E',  // vibrant pink — notification unread accent
   cream:     '#FBF6F1',  // off-white — page background
   warmDark:  '#3A302C',  // charcoal — heading / primary text
   white:     '#FFFFFF',  // card surfaces (unchanged)

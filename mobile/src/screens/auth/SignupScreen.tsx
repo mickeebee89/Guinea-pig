@@ -7,7 +7,6 @@ import {
   KeyboardAvoidingView,
   Platform,
   TouchableOpacity,
-  Alert,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import * as Haptics from 'expo-haptics'
@@ -94,38 +93,6 @@ export default function SignupScreen({ role, onBack, onGoLogin, onNeedConfirmati
       setErrors({ form: 'An account with this email already exists. Please log in instead.' })
       setLoading(false)
       return
-    }
-
-    if (data.user) {
-      try {
-        // supabase-js only THROWS on network errors; a DB rejection (RLS,
-        // constraint, not-null) comes back as { error }. Check it and throw into
-        // the catch below so we never fall through to navigation with an orphaned
-        // auth account and no user signal.
-        const { error: usersError } = await supabase.from('users').insert({
-          id:           data.user.id,
-          email:        email.trim().toLowerCase(),
-          first_name:   cleanFirst,
-          last_initial: cleanInitial,
-          role,
-          region:       'UK',
-        })
-        if (usersError) throw usersError
-
-        if (role === 'provider') {
-          const { error: providersError } = await supabase.from('providers').insert({ user_id: data.user.id })
-          if (providersError) throw providersError
-        }
-      } catch (e) {
-        console.error('signup profile creation failed:', e)
-        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)
-        setLoading(false)
-        Alert.alert(
-          'Account setup incomplete',
-          "We couldn't finish setting up your account, please try again",
-        )
-        return
-      }
     }
 
     await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)

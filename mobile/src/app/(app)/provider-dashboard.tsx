@@ -22,6 +22,7 @@ import { useAuth } from '@/context/auth'
 import { supabase } from '@/lib/supabase'
 import ScreenDecor from '@/components/ScreenDecor'
 import LoadErrorState from '@/components/LoadErrorState'
+import HeaderIcons from '@/components/HeaderIcons'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -60,8 +61,6 @@ type ModelCard = {
   hair_length: string | null
   skin_tone: string | null
   is_verified: boolean
-  latitude: number | null
-  longitude: number | null
   distance: number | null
 }
 
@@ -94,15 +93,6 @@ function todayKey() {
   const m = String(d.getMonth() + 1).padStart(2, '0')
   const day = String(d.getDate()).padStart(2, '0')
   return `${y}-${m}-${day}`
-}
-
-function haversine(lat1: number, lon1: number, lat2: number, lon2: number): number {
-  const R = 3958.8
-  const dLat = (lat2 - lat1) * Math.PI / 180
-  const dLon = (lon2 - lon1) * Math.PI / 180
-  const a = Math.sin(dLat / 2) ** 2 +
-    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
 }
 
 function formatDistance(d: number): string {
@@ -219,6 +209,7 @@ export default function ProviderDashboardScreen() {
   const [upcomingSessions,  setUpcomingSessions]  = useState<SessionCard[]>([])
   const [stats,             setStats]             = useState<Stats>({ totalSessions: 0, portfolioCount: 0 })
   const [nearbyModels,      setNearbyModels]      = useState<ModelCard[]>([])
+  const [nearbyLoading,     setNearbyLoading]     = useState(true)
   const [modelSearch,       setModelSearch]       = useState('')
   const [showModelFilters,  setShowModelFilters]  = useState(false)
   const [filterHairColour,  setFilterHairColour]  = useState<string | null>(null)
@@ -362,30 +353,9 @@ export default function ProviderDashboardScreen() {
         portfolioCount: portfolioCount ?? 0,
       })
 
-      // Fetch nearby models with attributes
-      const { data: modelUsersData } = await supabase
-        .from('users')
-        .select('id, first_name, last_initial, profile_pic_url, is_verified, latitude, longitude, model_attributes(hair_colour, hair_type, hair_length, skin_tone)')
-        .eq('role', 'model')
-        .limit(200)
-      if (modelUsersData) {
-        setNearbyModels((modelUsersData as any[]).map(m => {
-          const attrs = Array.isArray(m.model_attributes) ? m.model_attributes[0] : m.model_attributes
-          return {
-            id:              m.id,
-            name:            `${m.first_name ?? ''}${m.last_initial ? ' ' + m.last_initial + '.' : ''}`.trim() || 'Model',
-            profile_pic_url: m.profile_pic_url ?? null,
-            hair_colour:     attrs?.hair_colour ?? null,
-            hair_type:       attrs?.hair_type ?? null,
-            hair_length:     attrs?.hair_length ?? null,
-            skin_tone:       attrs?.skin_tone ?? null,
-            is_verified:     !!(m.is_verified),
-            latitude:        m.latitude ?? null,
-            longitude:       m.longitude ?? null,
-            distance:        null,
-          }
-        }))
-      }
+      // NOTE: nearby models are fetched separately in their own effect below, which
+      // re-runs on [providerLat, providerLng, filterDistanceMi] since the RPC computes
+      // distance at fetch time and those are its inputs.
 
       // Phase 3: enrich sessions with model + treatment info
       const allSessions = [...(pendingData ?? []), ...(upcomingData ?? [])]
@@ -472,6 +442,45 @@ export default function ProviderDashboardScreen() {
     }).catch(() => {})
   }, [userId])
 
+  // ── Nearby models ────────────────────────────────────────────────────────────
+  // The nearby_models RPC computes distance at fetch time, so this must re-run when
+  // its inputs change — hence its own effect keyed on [providerLat, providerLng,
+  // filterDistanceMi], separate from load()'s [userId]. Cold-load waits for GPS
+  // (coords start null); a distance-filter change refetches.
+  useEffect(() => {
+    // Guard: no coords yet (GPS still resolving) → skip RPC, stay in loading state.
+    if (providerLat == null || providerLng == null) {
+      setNearbyLoading(true)
+      return
+    }
+    let cancelled = false
+    ;(async () => {
+      const { data, error } = await supabase.rpc('nearby_models', {
+        p_lat: providerLat,
+        p_lng: providerLng,
+        p_radius_mi: filterDistanceMi,
+      })
+      if (cancelled) return // a newer fetch (coords/filter changed) superseded this one
+      if (data) {
+        setNearbyModels((data as any[]).map(m => ({
+          id:              m.id,
+          name:            `${m.first_name ?? ''}${m.last_initial ? ' ' + m.last_initial + '.' : ''}`.trim() || 'Model',
+          profile_pic_url: m.profile_pic_url ?? null,
+          // NOTE: hair/skin attributes are NOT returned by the nearby_models RPC yet —
+          // set null for now (cards drop the attr chips; hair/skin filters won't match).
+          hair_colour:     null,
+          hair_type:       null,
+          hair_length:     null,
+          skin_tone:       null,
+          is_verified:     !!(m.is_verified),
+          distance:        m.distance_mi ?? null,
+        })))
+      }
+      setNearbyLoading(false)
+    })()
+    return () => { cancelled = true }
+  }, [providerLat, providerLng, filterDistanceMi])
+
   const onRefresh = () => {
     setRefreshing(true)
     load(true)
@@ -496,7 +505,7 @@ export default function ProviderDashboardScreen() {
         const { error } = await supabase.from('notifications').insert({
           user_id: s.model_user_id,
           type: 'session_accepted',
-          title: 'Session accepted! 🎉',
+          title: 'Treatment accepted! 🎉',
           body: `Your booking for ${formatSessionDate(s.date)} has been confirmed.`,
           session_id: s.id,
         })
@@ -511,14 +520,14 @@ export default function ProviderDashboardScreen() {
       }
     } catch {
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)
-      Alert.alert('Error', 'Could not accept session. Please try again.')
+      Alert.alert('Error', 'Could not accept treatment. Please try again.')
     }
     setProcessing(s.id, false)
   }
 
   const declineSession = async (s: SessionCard) => {
     Alert.alert(
-      'Decline session?',
+      'Decline treatment?',
       `This will decline ${s.modelName}'s application for ${formatSessionDate(s.date)}.`,
       [
         { text: 'Cancel', style: 'cancel' },
@@ -534,7 +543,7 @@ export default function ProviderDashboardScreen() {
                 const { error } = await supabase.from('notifications').insert({
                   user_id: s.model_user_id,
                   type: 'session_declined',
-                  title: 'Session update',
+                  title: 'Treatment update',
                   body: `Your booking for ${formatSessionDate(s.date)} was not confirmed.`,
                   session_id: s.id,
                 })
@@ -542,7 +551,7 @@ export default function ProviderDashboardScreen() {
               } catch (e) { console.error('decline session notification failed:', e) }
               setPendingSessions(prev => prev.filter(x => x.id !== s.id))
             } catch {
-              Alert.alert('Error', 'Could not decline session. Please try again.')
+              Alert.alert('Error', 'Could not decline treatment. Please try again.')
             }
             setProcessing(s.id, false)
           },
@@ -691,6 +700,7 @@ export default function ProviderDashboardScreen() {
           <Text style={styles.subGreeting}>Welcome back, {provider.name.split(' ')[0]}</Text>
         </View>
         <View style={styles.topBarRight}>
+          <HeaderIcons />
           <TouchableOpacity
             style={styles.settingsBtn}
             onPress={async () => {
@@ -762,7 +772,7 @@ export default function ProviderDashboardScreen() {
             style={{ flex: 1 }}
           >
             <StatCard
-              label="Sessions"
+              label="Treatments"
               value={stats.totalSessions.toString()}
               icon="calendar-outline"
             />
@@ -820,13 +830,13 @@ export default function ProviderDashboardScreen() {
 
         {/* ── Upcoming sessions ── */}
         <View style={[styles.sectionHeader, { marginTop: 8 }]}>
-          <Text style={styles.sectionTitle}>Upcoming sessions</Text>
+          <Text style={styles.sectionTitle}>Upcoming treatments</Text>
         </View>
 
         {upcomingSessions.length === 0 ? (
           <View style={styles.emptyCard}>
             <Ionicons name="calendar-outline" size={32} color={Colors.muted} />
-            <Text style={styles.emptyCardText}>No confirmed sessions yet</Text>
+            <Text style={styles.emptyCardText}>No confirmed treatments yet</Text>
           </View>
         ) : (
           upcomingSessions.map(s => (
@@ -971,25 +981,27 @@ export default function ProviderDashboardScreen() {
         )}
 
         {(() => {
-          const modelsWithDist = nearbyModels.map(m => ({
-            ...m,
-            distance: providerLat != null && providerLng != null && m.latitude != null && m.longitude != null
-              ? haversine(providerLat, providerLng, m.latitude, m.longitude)
-              : null,
-          }))
+          // Waiting on GPS (coords null) or the first RPC fetch → show finding state.
+          if (nearbyLoading) {
+            return (
+              <View style={styles.emptyCard}>
+                <ActivityIndicator color={Colors.roseDark} />
+                <Text style={styles.emptyCardText}>Finding models near you…</Text>
+              </View>
+            )
+          }
+          // Distance is computed + radius-filtered + sorted (ascending) server-side by the
+          // nearby_models RPC. Only name/attribute/verified filtering remains client-side.
           const q = modelSearch.trim().toLowerCase()
-          const filtered = modelsWithDist
-            .filter(m => {
-              if (q && !m.name.toLowerCase().includes(q)) return false
-              if (filterHairColour && m.hair_colour !== filterHairColour) return false
-              if (filterHairType && m.hair_type !== filterHairType) return false
-              if (filterHairLength && m.hair_length !== filterHairLength) return false
-              if (filterSkinTone && m.skin_tone !== filterSkinTone) return false
-              if (filterVerified && !m.is_verified) return false
-              if (filterDistanceMi != null && (m.distance == null || m.distance > filterDistanceMi)) return false
-              return true
-            })
-            .sort((a, b) => (a.distance ?? Infinity) - (b.distance ?? Infinity))
+          const filtered = nearbyModels.filter(m => {
+            if (q && !m.name.toLowerCase().includes(q)) return false
+            if (filterHairColour && m.hair_colour !== filterHairColour) return false
+            if (filterHairType && m.hair_type !== filterHairType) return false
+            if (filterHairLength && m.hair_length !== filterHairLength) return false
+            if (filterSkinTone && m.skin_tone !== filterSkinTone) return false
+            if (filterVerified && !m.is_verified) return false
+            return true
+          })
           const hasActiveFilter = !!(q || filterHairColour || filterHairType || filterHairLength || filterSkinTone || filterVerified || filterDistanceMi != null)
           return filtered.length === 0 ? (
             <View style={styles.emptyCard}>

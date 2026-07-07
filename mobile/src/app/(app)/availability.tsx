@@ -377,12 +377,28 @@ export default function AvailabilityScreen() {
         ))
         .map(r => (r as any).id)
 
+      // Protect booked slots: a session referencing an availability row via
+      // sessions.availability_id (FK, NO ACTION) blocks its deletion with a 23503.
+      // Exclude any removed-slot id a session still references — regardless of status,
+      // since the FK cares only that a row references it, not what state it's in.
+      let skippedBookedCount = 0
       if (idsToRemove.length > 0) {
-        const { error: delErr } = await supabase
-          .from('availability')
-          .delete()
-          .in('id', idsToRemove)
-        if (delErr) throw delErr
+        const { data: bookedRows, error: bookedErr } = await supabase
+          .from('sessions')
+          .select('availability_id')
+          .in('availability_id', idsToRemove)
+        if (bookedErr) throw bookedErr
+        const bookedIds    = new Set((bookedRows ?? []).map((r: any) => r.availability_id))
+        const deletableIds = idsToRemove.filter(id => !bookedIds.has(id))
+        skippedBookedCount = idsToRemove.length - deletableIds.length
+
+        if (deletableIds.length > 0) {
+          const { error: delErr } = await supabase
+            .from('availability')
+            .delete()
+            .in('id', deletableIds)
+          if (delErr) throw delErr
+        }
       }
 
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
@@ -395,20 +411,30 @@ export default function AvailabilityScreen() {
         ])
         const providerName = (provData as any)?.name ?? 'A stylist'
         if (favData && (favData as any[]).length > 0) {
+          // An availability notification isn't tied to a session — leave session_id
+          // null (omitted) so it can't violate notifications_session_id_fkey.
+          // TODO(notifications): this best-effort insert can 23503 on some rows — investigate when locking down the notifications table; must never affect save UX.
           const { error } = await supabase.from('notifications').insert(
             (favData as any[]).map(f => ({
-              user_id:    f.user_id,
-              type:       'new_availability',
-              title:      'New availability posted',
-              body:       `${providerName} has new slots available — tap to view their shop`,
-              session_id: providerId,
+              user_id: f.user_id,
+              type:    'new_availability',
+              title:   'New availability posted',
+              body:    `${providerName} has new slots available — tap to view their shop`,
             }))
           )
-          if (error) console.error('new availability notification failed:', error)
+          if (error) console.warn('new availability notification failed (non-blocking):', error)
         }
-      } catch (e) { console.error('new availability notification failed:', e) }
+      } catch (e) { console.warn('new availability notification failed (non-blocking):', e) }
 
-      router.back()
+      if (skippedBookedCount > 0) {
+        Alert.alert(
+          'Some slots kept',
+          `${skippedBookedCount} slot${skippedBookedCount === 1 ? '' : 's'} couldn't be removed because ${skippedBookedCount === 1 ? 'it has a booking' : 'they have bookings'}. Cancel the booking to free the slot before removing it.`,
+          [{ text: 'OK', onPress: () => router.back() }],
+        )
+      } else {
+        router.back()
+      }
     } catch (e: any) {
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)
       console.error('availability save failed:', e)

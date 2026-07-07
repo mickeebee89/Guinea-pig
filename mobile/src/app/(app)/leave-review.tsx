@@ -357,7 +357,7 @@ export default function LeaveReviewScreen() {
             <Ionicons name="checkmark-circle" size={48} color={Colors.white} />
           </View>
           <Text style={styles.successTitle}>Already reviewed</Text>
-          <Text style={styles.successSub}>You've already left a review for this session.</Text>
+          <Text style={styles.successSub}>You've already left a review for this treatment.</Text>
           <TouchableOpacity style={styles.doneBtn} onPress={goBack} activeOpacity={0.9}>
             <Text style={styles.doneBtnText}>Back</Text>
           </TouchableOpacity>
@@ -512,7 +512,7 @@ export default function LeaveReviewScreen() {
               onChangeText={t => setComment(t.slice(0, COMMENT_MAX))}
               placeholder={isReviewingModel
                 ? 'What was it like working with them? Any tips for other stylists?'
-                : 'What made this session memorable? Any tips for other models?'}
+                : 'What made this treatment memorable? Any tips for other models?'}
               placeholderTextColor={Colors.muted}
               textAlignVertical="top"
             />

@@ -134,7 +134,7 @@ export default function SubscribeScreen() {
             </View>
             <Text style={styles.heroTitle}>Guinea Pig Premium</Text>
             <Text style={styles.heroSub}>
-              Unlock unlimited session applications and exclusive features with a monthly subscription.
+              Unlock unlimited treatment applications and exclusive features with a monthly subscription.
             </Text>
 
             {/* Price badge */}
@@ -165,9 +165,9 @@ export default function SubscribeScreen() {
           <View style={styles.nudgeCard}>
             <Ionicons name="information-circle-outline" size={18} color={Colors.roseDark} style={{ marginTop: 1 }} />
             <Text style={styles.nudgeText}>
-              You tried to apply for a session with{' '}
+              You tried to apply for a treatment with{' '}
               <Text style={{ fontWeight: '700' }}>{providerName || 'this provider'}</Text>.
-              {' '}A subscription lets you apply to any session — instantly.
+              {' '}A subscription lets you apply to any treatment — instantly.
             </Text>
           </View>
 
@@ -209,7 +209,7 @@ export default function SubscribeScreen() {
           </View>
           <Text style={styles.successTitle}>Subscription active! 🎉</Text>
           <Text style={styles.successSub}>
-            You now have unlimited session applications. Your card will be charged £2.99 on the same date each month.
+            You now have unlimited treatment applications. Your card will be charged £2.99 on the same date each month.
           </Text>
 
           <View style={styles.successPerks}>
@@ -226,7 +226,7 @@ export default function SubscribeScreen() {
             onPress={goToSession}
             activeOpacity={0.9}
           >
-            <Text style={styles.primaryBtnText}>Continue to session</Text>
+            <Text style={styles.primaryBtnText}>Continue to treatment</Text>
             <Ionicons name="arrow-forward" size={18} color={Colors.white} />
           </TouchableOpacity>
 
@@ -249,7 +249,7 @@ const BENEFITS = [
   {
     icon:  'infinite-outline',
     title: 'Unlimited applications',
-    desc:  'Apply to as many sessions as you like — no cap.',
+    desc:  'Apply to as many treatments as you like — no cap.',
   },
   {
     icon:  'chatbubble-ellipses-outline',
@@ -258,8 +258,8 @@ const BENEFITS = [
   },
   {
     icon:  'analytics-outline',
-    title: 'Session insights',
-    desc:  'Track your session history and review scores.',
+    title: 'Treatment insights',
+    desc:  'Track your treatment history and review scores.',
   },
 ]
 

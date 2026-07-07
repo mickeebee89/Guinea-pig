@@ -479,7 +479,7 @@ export default function ProviderShopScreen() {
         <View style={[styles.stickyBar, { paddingBottom: Math.max(insets.bottom, 16) }]}>
           <TouchableOpacity style={styles.applyBtn} onPress={handleApply} activeOpacity={0.9}>
             <Ionicons name="calendar-outline" size={18} color={Colors.white} />
-            <Text style={styles.applyBtnText}>Apply for session</Text>
+            <Text style={styles.applyBtnText}>Apply for treatment</Text>
           </TouchableOpacity>
         </View>
       )}

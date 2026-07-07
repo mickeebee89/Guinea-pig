@@ -8,7 +8,7 @@ const CONSENT_ITEMS = [
   {
     icon:  'images-outline'            as const,
     title: 'Photo sharing',
-    body:  'Any photos you attach will be shared with the provider to help them prepare your session.',
+    body:  'Any photos you attach will be shared with the provider to help them prepare your treatment.',
   },
   {
     icon:  'person-outline'            as const,

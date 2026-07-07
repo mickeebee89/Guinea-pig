@@ -5,7 +5,6 @@ import {
   StyleSheet,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import * as Haptics from 'expo-haptics'
@@ -67,56 +66,8 @@ export default function ConfirmEmailScreen({ email, role, first, initial, onBack
       if (data.session) {
         pendingAuth.clear()
 
-        // Ensure profile rows exist — they may have failed during signUp() if email
-        // confirmation was required (no session at that point, so RLS blocked the inserts)
-        try {
-          const uid = data.session.user.id
-          await supabase.from('users').upsert({
-            id:           uid,
-            email:        data.session.user.email ?? email ?? '',
-            role:         role || 'model',
-            first_name:   first || '',
-            last_initial: initial || null,
-            region:       'UK',
-          }, { onConflict: 'id', ignoreDuplicates: true })
-
-          if (role === 'provider') {
-            const { data: existingProv } = await supabase
-              .from('providers')
-              .select('id')
-              .eq('user_id', uid)
-              .maybeSingle()
-            if (!existingProv) {
-              const handle = `${first ?? ''}${initial ? '-' + initial : ''}`
-                .toLowerCase()
-                .replace(/[^a-z0-9-]/g, '')
-                .replace(/-+/g, '-')
-                .replace(/^-|-$/g, '') || 'stylist'
-              const displayName = `${first ?? ''}${initial ? ' ' + initial + '.' : ''}`.trim() || 'Stylist'
-
-              const { error: provInsertErr } = await supabase
-                .from('providers')
-                .insert({
-                  user_id:       uid,
-                  shop_handle:   handle,
-                  level:         'beginner',
-                  region:        'UK',
-                  name:          displayName,
-                  is_published:  true,
-                  location_text: '',
-                })
-              if (provInsertErr) {
-                console.error('[ConfirmEmail] providers insert error:', provInsertErr.code, provInsertErr.message)
-                Alert.alert(
-                  'Provider row insert failed',
-                  `code: ${provInsertErr.code}\nmessage: ${provInsertErr.message}\ndetails: ${provInsertErr.details ?? '—'}\nhint: ${provInsertErr.hint ?? '—'}`,
-                )
-              }
-            }
-          }
-        } catch (e) {
-          console.error('[ConfirmEmail] profile upsert error:', e)
-        }
+        // The users + providers rows are created server-side by the auth.users trigger
+        // at signup (single source of truth) — no client-side profile creation here.
 
         await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
         // onAuthStateChange fires SIGNED_IN → AppEntry renders the app Stack automatically.

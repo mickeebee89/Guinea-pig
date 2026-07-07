@@ -183,7 +183,7 @@ export default function SessionsScreen() {
       await supabase.from('sessions').update({ status: 'accepted' }).eq('id', s.id)
       supabase.from('notifications').insert({
         user_id: s.model_user_id, type: 'session_accepted',
-        title: 'Session accepted! 🎉',
+        title: 'Treatment accepted! 🎉',
         body: `Your booking for ${fmtDate(s.date)} has been confirmed.`,
         session_id: s.id,
       }).then(() => {})
@@ -192,14 +192,14 @@ export default function SessionsScreen() {
       setConfirmed(prev => [...prev, { ...s, status: 'accepted' }].sort((a, b) => a.date.localeCompare(b.date)))
     } catch {
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)
-      Alert.alert('Error', 'Could not accept session.')
+      Alert.alert('Error', 'Could not accept treatment.')
     }
     setProcessing(s.id, false)
   }
 
   const declineSession = (s: Sess) => {
     Alert.alert(
-      'Decline session?',
+      'Decline treatment?',
       `This will decline ${s.modelName}'s application for ${fmtDate(s.date)}.`,
       [
         { text: 'Cancel', style: 'cancel' },
@@ -212,13 +212,13 @@ export default function SessionsScreen() {
               await supabase.from('sessions').update({ status: 'declined' }).eq('id', s.id)
               supabase.from('notifications').insert({
                 user_id: s.model_user_id, type: 'session_declined',
-                title: 'Session update',
+                title: 'Treatment update',
                 body: `Your booking for ${fmtDate(s.date)} was not confirmed.`,
                 session_id: s.id,
               }).then(() => {})
               setPending(prev => prev.filter(x => x.id !== s.id))
             } catch {
-              Alert.alert('Error', 'Could not decline session.')
+              Alert.alert('Error', 'Could not decline treatment.')
             }
             setProcessing(s.id, false)
           },
@@ -230,7 +230,7 @@ export default function SessionsScreen() {
   const markComplete = (s: Sess) => {
     Alert.alert(
       'Mark as complete?',
-      `Confirm the session with ${s.modelName} on ${fmtDate(s.date)} is done. They'll be invited to leave a review.`,
+      `Confirm the treatment with ${s.modelName} on ${fmtDate(s.date)} is done. They'll be invited to leave a review.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -242,8 +242,8 @@ export default function SessionsScreen() {
               await supabase.from('sessions').update({ status: 'completed' }).eq('id', s.id)
               supabase.from('notifications').insert({
                 user_id: s.model_user_id, type: 'session_completed',
-                title: 'Session completed ✓',
-                body: `Your session on ${fmtDate(s.date)} has been marked as completed.`,
+                title: 'Treatment completed ✓',
+                body: `Your treatment on ${fmtDate(s.date)} has been marked as completed.`,
                 session_id: s.id,
               }).then(() => {})
               await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
@@ -251,7 +251,7 @@ export default function SessionsScreen() {
               setCompleted(prev => [{ ...s, status: 'completed' }, ...prev])
             } catch {
               await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)
-              Alert.alert('Error', 'Could not mark session as complete.')
+              Alert.alert('Error', 'Could not mark treatment as complete.')
             }
             setProcessing(s.id, false)
           },
@@ -297,7 +297,7 @@ export default function SessionsScreen() {
         >
           <Ionicons name="chevron-back" size={20} color={Colors.roseDark} />
         </TouchableOpacity>
-        <Text style={styles.topBarTitle}>Sessions</Text>
+        <Text style={styles.topBarTitle}>Treatments</Text>
         <View style={{ width: 36 }} />
       </View>
 
@@ -335,7 +335,7 @@ export default function SessionsScreen() {
           )}
         </View>
         {confirmed.length === 0 ? (
-          <EmptyCard icon="calendar-outline" text="No confirmed sessions" />
+          <EmptyCard icon="calendar-outline" text="No confirmed treatments" />
         ) : (
           confirmed.map(s => (
             <ConfirmedCard
@@ -354,7 +354,7 @@ export default function SessionsScreen() {
           <Text style={styles.sectionTitle}>Completed</Text>
         </View>
         {completed.length === 0 ? (
-          <EmptyCard icon="ribbon-outline" text="No completed sessions yet" />
+          <EmptyCard icon="ribbon-outline" text="No completed treatments yet" />
         ) : (
           completed.map(s => (
             <CompletedCard

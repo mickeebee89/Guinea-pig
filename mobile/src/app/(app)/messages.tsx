@@ -134,7 +134,7 @@ export default function MessagesScreen() {
         { data: provInfos },
         { data: modelInfos },
         { data: treatInfos },
-        { data: msgsRaw },
+        { data: msgsRaw, error: msgsErr },
       ] = await Promise.all([
         supabase
           .from('providers')
@@ -152,11 +152,15 @@ export default function MessagesScreen() {
           : Promise.resolve({ data: [] }),
         supabase
           .from('messages')
-          .select('id, session_id, sender_id, content, created_at, type, read_at')
+          .select('id, session_id, sender_id, body, created_at, read_at')
           .in('session_id', sessionIds)
           .order('created_at', { ascending: false })
           .limit(300),
       ])
+
+      // Surface real query errors (e.g. schema mismatch) instead of silently rendering
+      // "no messages yet" — a swallowed 42703 here is exactly what hid this bug before.
+      if (msgsErr) console.error('conversations preview: messages query failed:', msgsErr)
 
       // 4. Index data
       const provMap    = Object.fromEntries((provInfos  ?? []).map((p: any) => [p.id, p]))
@@ -166,9 +170,8 @@ export default function MessagesScreen() {
         id: string
         session_id: string
         sender_id: string
-        content: string
+        body: string
         created_at: string
-        type: string
         read_at: string | null
       }[]
 
@@ -208,7 +211,7 @@ export default function MessagesScreen() {
           status:           s.status,
           otherPartyName,
           otherPartyPic,
-          lastContent:      lastMsg?.content ?? null,
+          lastContent:      lastMsg?.body ?? null,
           lastTime:         lastMsg?.created_at ?? s.created_at,
           lastSenderId:     lastMsg?.sender_id ?? null,
           unreadCount:      unreadBySession[s.id] ?? 0,

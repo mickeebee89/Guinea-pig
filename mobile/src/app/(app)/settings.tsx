@@ -62,8 +62,8 @@ const DEFAULT_PREFS: NotifPrefs = {
 }
 
 const NOTIF_ROWS: { key: keyof NotifPrefs; label: string; sub: string; icon: string }[] = [
-  { key: 'session_updates',   label: 'Session updates',    sub: 'Accepted, declined, and upcoming reminders', icon: 'calendar-outline' },
-  { key: 'review_reminders',  label: 'Review reminders',   sub: 'Prompts to rate completed sessions',         icon: 'star-outline'     },
+  { key: 'session_updates',   label: 'Treatment updates',  sub: 'Accepted, declined, and upcoming reminders', icon: 'calendar-outline' },
+  { key: 'review_reminders',  label: 'Review reminders',   sub: 'Prompts to rate completed treatments',       icon: 'star-outline'     },
   { key: 'promotions',        label: 'Promotions',         sub: 'Special offers and platform news',           icon: 'gift-outline'     },
 ]
 
@@ -88,7 +88,7 @@ function editPlaceholder(f: EditField): string {
     first_name:   'e.g. Micky',
     last_initial: 'e.g. B',
     email:        'your@email.com',
-    bio:          'Tell models about your space, specialties, and what to expect from a session…',
+    bio:          'Tell models about your space, specialties, and what to expect from a treatment…',
   }[f]
 }
 
