@@ -105,9 +105,11 @@ export default function AvailabilityScreen() {
 
   // Step 2 – treatments per day
   const [dayTreatments,  setDayTreatments] = useState<DayTreatments>({})
+  const [step2Expanded,  setStep2Expanded] = useState(false)
 
   // Step 3 – time slots per day
   const [daySlots,       setDaySlots]      = useState<DaySlots>({})
+  const [step3Expanded,  setStep3Expanded] = useState(false)
 
   // Data
   const [treatments,     setTreatments]    = useState<Treatment[]>([])
@@ -183,7 +185,9 @@ export default function AvailabilityScreen() {
 
   // ── Derived ───────────────────────────────────────────────────────────────
 
-  const sortedDates = useMemo(() => [...selectedDates].sort(), [selectedDates])
+  // Latest date first (descending) — steps 2 & 3 show the most recent date at the
+  // top/expanded, older dates under "Other dates" in descending order too.
+  const sortedDates = useMemo(() => [...selectedDates].sort((a, b) => b.localeCompare(a)), [selectedDates])
 
   const datesWithTreatments = useMemo(
     () => sortedDates.filter(d => (dayTreatments[d]?.length ?? 0) > 0),
@@ -465,6 +469,117 @@ export default function AvailabilityScreen() {
     ? treatments.filter(t => (dayTreatments[modalDate] ?? []).includes(t.id))
     : []
 
+  // Light haptic on expand/collapse of the "Other dates" sections.
+  const toggleStep2 = useCallback(async () => {
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+    setStep2Expanded(v => !v)
+  }, [])
+  const toggleStep3 = useCallback(async () => {
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+    setStep3Expanded(v => !v)
+  }, [])
+
+  // One date's treatment card (step 2). Shared by the always-visible nearest date
+  // and the collapsed "Other dates" list so the markup can't drift apart.
+  const renderTreatmentCard = (dateStr: string) => (
+    <View key={dateStr} style={styles.card}>
+      <Text style={styles.cardDayLabel}>{formatDayLabel(dateStr)}</Text>
+      <View style={styles.chipGrid}>
+        {treatments.map(t => {
+          const active = (dayTreatments[dateStr] ?? []).includes(t.id)
+          const color  = CATEGORY_COLOR[t.category] ?? Colors.muted
+          return (
+            <TouchableOpacity
+              key={t.id}
+              style={[
+                styles.treatChip,
+                active
+                  ? { backgroundColor: color, borderColor: color }
+                  : { borderColor: color },
+              ]}
+              onPress={() => toggleTreatment(dateStr, t.id)}
+              activeOpacity={0.75}
+            >
+              {active && (
+                <Ionicons name="checkmark" size={12} color={Colors.white} style={{ marginRight: 4 }} />
+              )}
+              <Text style={[
+                styles.treatChipText,
+                active ? styles.treatChipTextActive : { color },
+              ]}>
+                {t.name}
+              </Text>
+            </TouchableOpacity>
+          )
+        })}
+      </View>
+    </View>
+  )
+
+  // One date's slot card (step 3). Slots sorted by startTime so session-added
+  // slots read in time order (DB-loaded ones already are).
+  const renderSlotCard = (dateStr: string) => {
+    const slots     = [...(daySlots[dateStr] ?? [])].sort((a, b) => a.startTime.localeCompare(b.startTime))
+    const dayTreats = treatments.filter(t => (dayTreatments[dateStr] ?? []).includes(t.id))
+
+    return (
+      <View key={dateStr} style={styles.card}>
+        <Text style={styles.cardDayLabel}>{formatDayLabel(dateStr)}</Text>
+
+        {slots.length === 0 && (
+          <Text style={styles.noSlotsHint}>No slots yet — add one below</Text>
+        )}
+
+        {slots.map(slot => {
+          const slotTreats = dayTreats.filter(t => slot.treatmentIds.includes(t.id))
+          return (
+            <TouchableOpacity
+              key={slot.id}
+              style={styles.slotRow}
+              onPress={() => openEditSlot(dateStr, slot)}
+              activeOpacity={0.85}
+            >
+              <View style={styles.slotTime}>
+                <Ionicons name="time-outline" size={14} color={Colors.muted} />
+                <Text style={styles.slotTimeText}>{slot.startTime} – {slot.endTime}</Text>
+              </View>
+              <View style={styles.slotStripes}>
+                {slotTreats.map(t => {
+                  const color = CATEGORY_COLOR[t.category] ?? Colors.muted
+                  return (
+                    <View key={t.id} style={[styles.slotStripe, { backgroundColor: color }]}>
+                      <Text style={styles.slotStripeText}>{t.category}</Text>
+                    </View>
+                  )
+                })}
+              </View>
+              <TouchableOpacity
+                style={styles.slotRemove}
+                onPress={() => removeSlot(dateStr, slot.id)}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Ionicons name="close-circle" size={20} color={Colors.muted} />
+              </TouchableOpacity>
+            </TouchableOpacity>
+          )
+        })}
+
+        <TouchableOpacity
+          style={styles.addSlotBtn}
+          onPress={() => openAddSlot(dateStr)}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="add-circle-outline" size={18} color={Colors.roseDark} />
+          <Text style={styles.addSlotText}>Add slot</Text>
+        </TouchableOpacity>
+      </View>
+    )
+  }
+
+  // Dates for steps 2 & 3, latest-first (see sortedDates). Top card = latest date.
+  const step2Dates = sortedDates
+  const step3Dates = datesWithTreatments
+
   return (
     <View style={styles.container}>
       {/* ── Top bar ── */}
@@ -575,99 +690,52 @@ export default function AvailabilityScreen() {
         )}
 
         {/* ════ STEP 2 — TREATMENTS PER DAY ════════════════════════════════ */}
-        {step === 2 && sortedDates.map(dateStr => (
-          <View key={dateStr} style={styles.card}>
-            <Text style={styles.cardDayLabel}>{formatDayLabel(dateStr)}</Text>
-            <View style={styles.chipGrid}>
-              {treatments.map(t => {
-                const active = (dayTreatments[dateStr] ?? []).includes(t.id)
-                const color  = CATEGORY_COLOR[t.category] ?? Colors.muted
-                return (
-                  <TouchableOpacity
-                    key={t.id}
-                    style={[
-                      styles.treatChip,
-                      active
-                        ? { backgroundColor: color, borderColor: color }
-                        : { borderColor: color },
-                    ]}
-                    onPress={() => toggleTreatment(dateStr, t.id)}
-                    activeOpacity={0.75}
-                  >
-                    {active && (
-                      <Ionicons name="checkmark" size={12} color={Colors.white} style={{ marginRight: 4 }} />
-                    )}
-                    <Text style={[
-                      styles.treatChipText,
-                      active ? styles.treatChipTextActive : { color },
-                    ]}>
-                      {t.name}
-                    </Text>
-                  </TouchableOpacity>
-                )
-              })}
-            </View>
-          </View>
-        ))}
+        {step === 2 && step2Dates.length > 0 && (
+          <>
+            {/* Most recently touched date (or nearest) — always visible */}
+            {renderTreatmentCard(step2Dates[0])}
+
+            {/* The rest — collapsed behind an "Other dates" toggle */}
+            {step2Dates.length > 1 && (
+              <>
+                <TouchableOpacity style={styles.otherToggle} onPress={toggleStep2} activeOpacity={0.8}>
+                  <Text style={styles.otherToggleText}>Other dates ({step2Dates.length - 1})</Text>
+                  <Ionicons
+                    name="chevron-down"
+                    size={18}
+                    color={Colors.roseDark}
+                    style={{ transform: [{ rotate: step2Expanded ? '180deg' : '0deg' }] }}
+                  />
+                </TouchableOpacity>
+                {step2Expanded && step2Dates.slice(1).map(renderTreatmentCard)}
+              </>
+            )}
+          </>
+        )}
 
         {/* ════ STEP 3 — TIME SLOTS ════════════════════════════════════════ */}
-        {step === 3 && datesWithTreatments.map(dateStr => {
-          const slots       = daySlots[dateStr] ?? []
-          const dayTreats   = treatments.filter(t => (dayTreatments[dateStr] ?? []).includes(t.id))
+        {step === 3 && step3Dates.length > 0 && (
+          <>
+            {/* Most recently touched date (or nearest) — always visible */}
+            {renderSlotCard(step3Dates[0])}
 
-          return (
-            <View key={dateStr} style={styles.card}>
-              <Text style={styles.cardDayLabel}>{formatDayLabel(dateStr)}</Text>
-
-              {slots.length === 0 && (
-                <Text style={styles.noSlotsHint}>No slots yet — add one below</Text>
-              )}
-
-              {slots.map(slot => {
-                const slotTreats = dayTreats.filter(t => slot.treatmentIds.includes(t.id))
-                return (
-                  <TouchableOpacity
-                    key={slot.id}
-                    style={styles.slotRow}
-                    onPress={() => openEditSlot(dateStr, slot)}
-                    activeOpacity={0.85}
-                  >
-                    <View style={styles.slotTime}>
-                      <Ionicons name="time-outline" size={14} color={Colors.muted} />
-                      <Text style={styles.slotTimeText}>{slot.startTime} – {slot.endTime}</Text>
-                    </View>
-                    <View style={styles.slotStripes}>
-                      {slotTreats.map(t => {
-                        const color = CATEGORY_COLOR[t.category] ?? Colors.muted
-                        return (
-                          <View key={t.id} style={[styles.slotStripe, { backgroundColor: color }]}>
-                            <Text style={styles.slotStripeText}>{t.category}</Text>
-                          </View>
-                        )
-                      })}
-                    </View>
-                    <TouchableOpacity
-                      style={styles.slotRemove}
-                      onPress={() => removeSlot(dateStr, slot.id)}
-                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                    >
-                      <Ionicons name="close-circle" size={20} color={Colors.muted} />
-                    </TouchableOpacity>
-                  </TouchableOpacity>
-                )
-              })}
-
-              <TouchableOpacity
-                style={styles.addSlotBtn}
-                onPress={() => openAddSlot(dateStr)}
-                activeOpacity={0.8}
-              >
-                <Ionicons name="add-circle-outline" size={18} color={Colors.roseDark} />
-                <Text style={styles.addSlotText}>Add slot</Text>
-              </TouchableOpacity>
-            </View>
-          )
-        })}
+            {/* The rest — collapsed behind an "Other dates" toggle */}
+            {step3Dates.length > 1 && (
+              <>
+                <TouchableOpacity style={styles.otherToggle} onPress={toggleStep3} activeOpacity={0.8}>
+                  <Text style={styles.otherToggleText}>Other dates ({step3Dates.length - 1})</Text>
+                  <Ionicons
+                    name="chevron-down"
+                    size={18}
+                    color={Colors.roseDark}
+                    style={{ transform: [{ rotate: step3Expanded ? '180deg' : '0deg' }] }}
+                  />
+                </TouchableOpacity>
+                {step3Expanded && step3Dates.slice(1).map(renderSlotCard)}
+              </>
+            )}
+          </>
+        )}
 
         <View style={{ height: 16 }} />
       </ScrollView>
@@ -1025,6 +1093,25 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: Colors.warmDark,
     marginBottom: 12,
+  },
+
+  // "Other dates" collapsible toggle (steps 2 & 3)
+  otherToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: Colors.white,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    paddingHorizontal: 16,
+    paddingVertical: 13,
+    marginBottom: 12,
+  },
+  otherToggleText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: Colors.warmDark,
   },
 
   // Calendar

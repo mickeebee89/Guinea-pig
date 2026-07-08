@@ -130,9 +130,11 @@ function timeAgo(iso: string): string {
 function StatCard({ label, value, icon, hint }: { label: string; value: string; icon: string; hint?: string }) {
   return (
     <View style={statStyles.card}>
+      {/* Tappable affordance */}
+      <Ionicons name="chevron-forward" size={13} color={Colors.roseDark} style={statStyles.chevron} />
       <Ionicons name={icon as any} size={20} color={Colors.roseDark} />
       <Text style={statStyles.value}>{value}</Text>
-      <Text style={statStyles.label}>{label}</Text>
+      <Text style={statStyles.label} numberOfLines={2}>{label}</Text>
       {hint ? <Text style={statStyles.hint}>{hint}</Text> : null}
     </View>
   )
@@ -141,18 +143,26 @@ function StatCard({ label, value, icon, hint }: { label: string; value: string; 
 const statStyles = StyleSheet.create({
   card: {
     flex: 1,
+    position: 'relative',
     backgroundColor: Colors.white,
     borderRadius: 16,
     paddingVertical: 16,
+    paddingHorizontal: 8,
     alignItems: 'center',
     gap: 4,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: Colors.softPink,
     shadowColor: Colors.warmDark,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 4,
     elevation: 1,
+  },
+  chevron: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    opacity: 0.7,
   },
   value: {
     fontSize: 24,
@@ -166,6 +176,7 @@ const statStyles = StyleSheet.create({
     color: Colors.muted,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
+    textAlign: 'center',
   },
   hint: {
     fontSize: 10,
@@ -812,9 +823,10 @@ export default function ProviderDashboardScreen() {
             style={{ flex: 1 }}
           >
             <StatCard
-              label="Treatments"
+              label="Treatment history"
               value={stats.totalSessions.toString()}
               icon="calendar-outline"
+              hint="View all"
             />
           </TouchableOpacity>
           <TouchableOpacity
@@ -837,6 +849,7 @@ export default function ProviderDashboardScreen() {
               label="Portfolio"
               value={stats.portfolioCount.toString()}
               icon="images-outline"
+              hint="View all"
             />
           </TouchableOpacity>
         </View>
@@ -870,7 +883,9 @@ export default function ProviderDashboardScreen() {
 
         {/* ── Upcoming sessions ── */}
         <View style={[styles.sectionHeader, { marginTop: 8 }]}>
-          <Text style={styles.sectionTitle}>Upcoming treatments</Text>
+          <Text style={styles.sectionTitle}>
+            Upcoming treatments{upcomingSessions.length > 0 ? ` (${upcomingSessions.length})` : ''}
+          </Text>
         </View>
 
         {upcomingSessions.length === 0 ? (
@@ -879,13 +894,19 @@ export default function ProviderDashboardScreen() {
             <Text style={styles.emptyCardText}>No confirmed treatments yet</Text>
           </View>
         ) : (
-          upcomingSessions.map(s => (
-            <UpcomingCard
-              key={s.id}
-              session={s}
-              onChat={() => goChat(s.id)}
-            />
-          ))
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.upcomingScroll}
+          >
+            {upcomingSessions.map(s => (
+              <UpcomingCard
+                key={s.id}
+                session={s}
+                onChat={() => goChat(s.id)}
+              />
+            ))}
+          </ScrollView>
         )}
 
         {/* ── Quick links ── */}
@@ -1160,8 +1181,9 @@ function UpcomingCard({
 }) {
   const catColor = categoryColor(s.treatmentCategory)
   return (
-    <View style={styles.sessionCard}>
-      <View style={styles.sessionCardRow}>
+    <View style={[styles.sessionCard, styles.upcomingCardH]}>
+      {/* Model + date/time */}
+      <View style={styles.upcomingHeader}>
         {s.modelPicUrl ? (
           <Image source={{ uri: s.modelPicUrl }} style={styles.sessionAvatar} />
         ) : (
@@ -1170,28 +1192,30 @@ function UpcomingCard({
           </View>
         )}
         <View style={{ flex: 1 }}>
-          <Text style={styles.sessionModelName}>{s.modelName}</Text>
-          <View style={styles.sessionMeta}>
-            {s.treatmentName && (
-              <View style={[styles.treatPill, { backgroundColor: catColor + '22' }]}>
-                <View style={[styles.treatDot, { backgroundColor: catColor }]} />
-                <Text style={[styles.treatPillText, { color: catColor }]}>{s.treatmentName}</Text>
-              </View>
-            )}
-            <Text style={styles.sessionDateTime}>
-              {formatSessionDate(s.date)} · {formatTime(s.start_time)}
-            </Text>
-          </View>
+          <Text style={styles.sessionModelName} numberOfLines={1}>{s.modelName}</Text>
+          <Text style={styles.sessionDateTime} numberOfLines={1}>
+            {formatSessionDate(s.date)} · {formatTime(s.start_time)}
+          </Text>
         </View>
-        <TouchableOpacity
-          style={styles.chatBtn}
-          onPress={onChat}
-          activeOpacity={0.8}
-        >
-          <Ionicons name="chatbubble-outline" size={16} color={Colors.roseDark} />
-          <Text style={styles.chatBtnText}>Chat</Text>
-        </TouchableOpacity>
       </View>
+
+      {/* Treatment */}
+      {s.treatmentName && (
+        <View style={[styles.treatPill, styles.upcomingTreatPill, { backgroundColor: catColor + '22' }]}>
+          <View style={[styles.treatDot, { backgroundColor: catColor }]} />
+          <Text style={[styles.treatPillText, { color: catColor }]} numberOfLines={1}>{s.treatmentName}</Text>
+        </View>
+      )}
+
+      {/* Chat */}
+      <TouchableOpacity
+        style={[styles.chatBtn, styles.upcomingChatBtn]}
+        onPress={onChat}
+        activeOpacity={0.8}
+      >
+        <Ionicons name="chatbubble-outline" size={16} color={Colors.roseDark} />
+        <Text style={styles.chatBtnText}>Chat</Text>
+      </TouchableOpacity>
     </View>
   )
 }
@@ -1588,6 +1612,32 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 12,
     marginBottom: 2,
+  },
+
+  // Upcoming treatments — horizontal swipeable cards
+  upcomingScroll: {
+    gap: 12,
+    paddingRight: 16,
+    paddingBottom: 4,
+  },
+  upcomingCardH: {
+    width: 230,
+    marginBottom: 4,
+  },
+  upcomingHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  upcomingTreatPill: {
+    alignSelf: 'flex-start',
+    marginTop: 12,
+    maxWidth: '100%',
+  },
+  upcomingChatBtn: {
+    alignSelf: 'stretch',
+    justifyContent: 'center',
+    marginTop: 12,
   },
   sessionAvatar: {
     width: 44,
