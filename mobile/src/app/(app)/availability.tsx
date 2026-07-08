@@ -437,7 +437,11 @@ export default function AvailabilityScreen() {
           [{ text: 'OK', onPress: () => router.back() }],
         )
       } else {
-        router.back()
+        Alert.alert(
+          'Availability saved ✓',
+          'Your available dates and times have been updated.',
+          [{ text: 'OK', onPress: () => router.back() }],
+        )
       }
     } catch (e: any) {
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)

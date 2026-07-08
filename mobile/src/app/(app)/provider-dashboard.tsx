@@ -12,7 +12,7 @@ import {
   Switch,
   TextInput,
 } from 'react-native'
-import { useRouter } from 'expo-router'
+import { useRouter, useFocusEffect } from 'expo-router'
 import * as Haptics from 'expo-haptics'
 import * as Location from 'expo-location'
 import { Ionicons } from '@expo/vector-icons'
@@ -216,6 +216,10 @@ export default function ProviderDashboardScreen() {
   const userId   = session?.user?.id
 
   const [provider,          setProvider]          = useState<Provider | null>(null)
+  // Verified status kept as its own state (not only inside `provider`) so a focus
+  // re-sync can't be dropped when `provider` is momentarily null. The shop toggle,
+  // banner and badge read THIS. Written by both load() and the focus effect.
+  const [isVerified,        setIsVerified]        = useState(false)
   const [pendingSessions,   setPendingSessions]   = useState<SessionCard[]>([])
   const [upcomingSessions,  setUpcomingSessions]  = useState<SessionCard[]>([])
   const [stats,             setStats]             = useState<Stats>({ totalSessions: 0, portfolioCount: 0 })
@@ -252,6 +256,7 @@ export default function ProviderDashboardScreen() {
       ])
 
       const userVerified = !!(userRow as any)?.is_verified
+      setIsVerified(userVerified)
       const first       = (userRow as any)?.first_name ?? ''
       const initial     = (userRow as any)?.last_initial ?? ''
       const displayName = first ? `${first}${initial ? ` ${initial}.` : ''}`.trim() : 'Stylist'
@@ -437,6 +442,36 @@ export default function ProviderDashboardScreen() {
 
   useEffect(() => { load() }, [load])
 
+  // Lightweight re-sync on focus: after an admin approves verification (is_verified)
+  // and publishes the shop (is_published), returning to the dashboard should reflect
+  // it without a manual reload — so the shop toggle enables. Cheap targeted fetch, no
+  // loading flash (unlike re-running the full load()).
+  useFocusEffect(
+    useCallback(() => {
+      if (!userId) return
+      let cancelled = false
+      ;(async () => {
+        const [{ data: u }, { data: pr }] = await Promise.all([
+          supabase.from('users').select('is_verified').eq('id', userId).single(),
+          supabase.from('providers').select('is_published').eq('user_id', userId).maybeSingle(),
+        ])
+        if (cancelled) return
+        const v = !!(u as any)?.is_verified
+        // Apply verified to its own state — this can NEVER be dropped, even if
+        // `provider` is still null (focus fired before load() finished).
+        setIsVerified(v)
+        // Publish flag lives on `provider`; merge when present (harmless if null —
+        // load() will set it). Log whether provider existed at merge time.
+        setProvider(p => {
+          if (!p) return p
+          const pub = pr ? !!(pr as any).is_published : p.is_published
+          return (p.is_verified === v && p.is_published === pub) ? p : { ...p, is_verified: v, is_published: pub }
+        })
+      })()
+      return () => { cancelled = true }
+    }, [userId])
+  )
+
   useEffect(() => {
     if (!userId) return
     Location.requestForegroundPermissionsAsync().then(({ status }) => {
@@ -579,7 +614,7 @@ export default function ProviderDashboardScreen() {
 
     // Only a verified provider can go live — the DB blocks is_published=true for
     // unverified providers, so guard here too (the UI toggle is disabled for them).
-    if (value && !provider.is_verified) {
+    if (value && !isVerified) {
       Alert.alert('Verify first', 'Get verified to make your shop live.')
       return
     }
@@ -738,7 +773,7 @@ export default function ProviderDashboardScreen() {
                 <Text style={styles.headerAvatarInitials}>{providerInitials}</Text>
               </View>
             )}
-            {provider.is_verified && (
+            {isVerified && (
               <View style={styles.verifiedDot}>
                 <Ionicons name="checkmark" size={9} color={Colors.white} />
               </View>
@@ -772,7 +807,7 @@ export default function ProviderDashboardScreen() {
           </View>
           {publishLoading ? (
             <ActivityIndicator size="small" color={Colors.roseDark} />
-          ) : provider.is_verified ? (
+          ) : isVerified ? (
             <Switch
               value={isPublished}
               onValueChange={togglePublished}
@@ -795,7 +830,7 @@ export default function ProviderDashboardScreen() {
         </View>
 
         {/* ── Get verified banner (hidden once verified) ── */}
-        {!provider.is_verified && (
+        {!isVerified && (
           <TouchableOpacity
             style={styles.verifyBanner}
             onPress={async () => {
