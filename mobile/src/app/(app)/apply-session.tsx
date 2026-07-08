@@ -157,7 +157,11 @@ export default function ApplySessionScreen() {
           return
         }
         if (!verified) {
-          router.replace({ pathname: '/(app)/verify-payment' as any })
+          // Carry provider context so the pending screen can offer "add to favourites".
+          router.replace({
+            pathname: '/(app)/verify-payment' as any,
+            params:   { providerId, providerName },
+          })
           return
         }
       } catch (e) {

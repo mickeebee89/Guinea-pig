@@ -125,7 +125,11 @@ export default function SubscribeScreen() {
     }
     if (!isVerified) {
       // Subscribed but not identity-verified → selfie verification step.
-      router.replace({ pathname: '/(app)/verify-payment' as any })
+      // Carry provider context so the pending screen can offer "add to favourites".
+      router.replace({
+        pathname: '/(app)/verify-payment' as any,
+        params:   { providerId, providerName },
+      })
       return
     }
     router.replace({

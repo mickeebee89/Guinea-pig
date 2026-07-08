@@ -9,7 +9,7 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native'
-import { useRouter } from 'expo-router'
+import { useRouter, useLocalSearchParams } from 'expo-router'
 import * as Haptics from 'expo-haptics'
 import * as ImagePicker from 'expo-image-picker'
 import * as ImageManipulator from 'expo-image-manipulator'
@@ -25,6 +25,9 @@ type Step = 'loading' | 'instructions' | 'camera' | 'uploading' | 'submitted' | 
 
 export default function VerifyPaymentScreen() {
   const router  = useRouter()
+  // Optional provider context — passed only by the model-facing gate callers
+  // (subscribe / apply-session) so the pending screen can offer "add to favourites".
+  const { providerId, providerName } = useLocalSearchParams<{ providerId?: string; providerName?: string }>()
   const { session } = useAuth()
   const insets  = useSafeAreaInsets()
   const userId  = session?.user?.id
@@ -37,6 +40,8 @@ export default function VerifyPaymentScreen() {
   const [requestNotes,   setRequestNotes]   = useState<string | null>(null)
   const [paymentLoading, setPaymentLoading] = useState(false)
   const [hasPaid,        setHasPaid]        = useState(false)   // provider paid (pay-first)
+  const [favourited,     setFavourited]     = useState(false)   // added this provider to favourites
+  const [favLoading,     setFavLoading]     = useState(false)
 
   // ── Check existing request ─────────────────────────────────────────────────
 
@@ -163,6 +168,41 @@ export default function VerifyPaymentScreen() {
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)
       Alert.alert('Upload failed', e?.message ?? 'Could not submit your selfie. Please try again.')
       setStep('camera')
+    }
+  }
+
+  // ── Add stylist to favourites (pending screen) ─────────────────────────────
+  // Reuses the same favourites row as the provider profile's heart button:
+  // { user_id, provider_id }. Guards against a duplicate (unique constraint) by
+  // checking first, and treats a duplicate-insert error as already-favourited.
+
+  const addToFavourites = async () => {
+    if (!userId || !providerId || favLoading || favourited) return
+    setFavLoading(true)
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+    try {
+      const { data: existing } = await supabase
+        .from('favourites')
+        .select('id')
+        .eq('user_id', userId)
+        .eq('provider_id', providerId)
+        .maybeSingle()
+
+      if (!existing) {
+        const { error } = await supabase
+          .from('favourites')
+          .insert({ user_id: userId, provider_id: providerId })
+        // 23505 = unique_violation → already favourited on another device; treat as success.
+        if (error && (error as any).code !== '23505') throw error
+      }
+
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
+      setFavourited(true)
+    } catch (e: any) {
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)
+      Alert.alert('Could not add to favourites', e?.message ?? 'Please try again.')
+    } finally {
+      setFavLoading(false)
     }
   }
 
@@ -361,6 +401,35 @@ export default function VerifyPaymentScreen() {
             Your verification selfie has been submitted.{'\n'}
             Our team will review it within 24 hours and notify you when done.
           </Text>
+
+          {providerId ? (
+            <>
+              <Text style={styles.centredSub}>
+                Add {providerName || 'this stylist'} to your favourites so you can apply as soon as you're approved.
+              </Text>
+              <TouchableOpacity
+                style={[styles.primaryBtn, (favourited || favLoading) && { opacity: 0.7 }]}
+                onPress={addToFavourites}
+                disabled={favourited || favLoading}
+                activeOpacity={0.9}
+              >
+                {favLoading ? (
+                  <ActivityIndicator color={Colors.white} />
+                ) : favourited ? (
+                  <>
+                    <Ionicons name="checkmark-circle" size={20} color={Colors.white} />
+                    <Text style={styles.primaryBtnText}>Added to favourites ✓</Text>
+                  </>
+                ) : (
+                  <>
+                    <Ionicons name="heart" size={20} color={Colors.white} />
+                    <Text style={styles.primaryBtnText}>Add {providerName || 'this stylist'} to favourites</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </>
+          ) : null}
+
           <TouchableOpacity
             style={styles.ghostBtn}
             onPress={async () => { await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.back() }}
