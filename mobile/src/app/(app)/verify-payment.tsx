@@ -375,7 +375,7 @@ export default function VerifyPaymentScreen() {
       {step === 'confirming' && (
         <View style={styles.centred}>
           <ActivityIndicator color={Colors.roseDark} size="large" />
-          <Text style={styles.centredTitle}>Activating your badge…</Text>
+          <Text style={styles.centredTitle}>Payment received — now take your selfie…</Text>
         </View>
       )}
 

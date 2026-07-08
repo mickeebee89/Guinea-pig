@@ -783,6 +783,27 @@ export default function ProviderDashboardScreen() {
           )}
         </View>
 
+        {/* ── Get verified banner (hidden once verified) ── */}
+        {!provider.is_verified && (
+          <TouchableOpacity
+            style={styles.verifyBanner}
+            onPress={async () => {
+              await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+              router.push('/(app)/verify-payment' as any)
+            }}
+            activeOpacity={0.9}
+          >
+            <View style={styles.verifyBannerIcon}>
+              <Ionicons name="shield-checkmark-outline" size={26} color={Colors.roseDark} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.verifyBannerTitle}>Get verified</Text>
+              <Text style={styles.verifyBannerSub}>Verify your identity to make your shop live and start getting bookings.</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color={Colors.roseDark} />
+          </TouchableOpacity>
+        )}
+
         {/* ── Stats ── */}
         <View style={styles.statsRow}>
           <TouchableOpacity
@@ -1474,8 +1495,37 @@ const styles = StyleSheet.create({
   },
   shopCardTitle: { fontSize: 14, fontWeight: '700', color: Colors.warmDark },
   shopCardStatus: { fontSize: 12, fontWeight: '500', marginTop: 2 },
-  publishLocked: { alignItems: 'flex-end', maxWidth: 140, opacity: 0.6 },
-  publishHint:   { fontSize: 11, color: Colors.muted, marginTop: 4, textAlign: 'right' },
+  publishLocked: { alignItems: 'flex-end', maxWidth: 128, gap: 5 },
+  publishHint:   { fontSize: 12, fontWeight: '700', color: Colors.pinkVibrant, textAlign: 'right', lineHeight: 15 },
+
+  // Get-verified banner (under the shop toggle, until verified)
+  verifyBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: Colors.white,
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 16,
+    borderWidth: 1.5,
+    borderColor: Colors.pinkVibrant,
+    shadowColor: Colors.pinkVibrant,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  verifyBannerIcon: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: Colors.pinkVibrant + '1A',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  verifyBannerTitle: { fontSize: 15, fontWeight: '800', color: Colors.warmDark, marginBottom: 2 },
+  verifyBannerSub:   { fontSize: 12, color: Colors.muted, lineHeight: 16 },
 
   // Stats row
   statsRow: {

@@ -26,6 +26,7 @@ const NO_PHOTO_SVG = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg"
 export default function VerificationQueuePage() {
   const [requests, setRequests]     = useState<VerificationRequest[]>([])
   const [signedUrls, setSignedUrls] = useState<Record<string, string>>({})   // selfie signed URLs, keyed by request id
+  const [lightbox, setLightbox]     = useState<string | null>(null)          // enlarged selfie (signed URL) or null
   const [loading, setLoading]       = useState(true)
   const [filter, setFilter]     = useState<'pending' | 'approved' | 'rejected'>('pending')
   const [notes, setNotes]       = useState<Record<string, string>>({})
@@ -170,7 +171,8 @@ export default function VerificationQueuePage() {
                   <img
                     src={signedUrls[req.id] || NO_PHOTO_SVG}
                     alt="Verification selfie"
-                    className="w-36 h-36 object-cover rounded-xl border border-black/5"
+                    className="w-36 h-36 object-cover rounded-xl border border-black/5 cursor-pointer hover:opacity-90 transition-opacity"
+                    onClick={() => { if (signedUrls[req.id]) setLightbox(signedUrls[req.id]) }}
                     onError={e => { (e.target as HTMLImageElement).src = NO_PHOTO_SVG }}
                   />
                 </div>
@@ -196,7 +198,7 @@ export default function VerificationQueuePage() {
 
                   {req.user.role === 'provider' && filter === 'pending' && (
                     <p className="text-xs text-amber-600 bg-amber-50 rounded-lg px-3 py-2 mb-3">
-                      Provider — approval will send payment notification (£14.99 required to activate badge)
+                      Provider — approval verifies them and makes their shop live
                     </p>
                   )}
 
@@ -235,6 +237,28 @@ export default function VerificationQueuePage() {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Enlarged selfie lightbox — click anywhere or the × to close */}
+      {lightbox && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-6 cursor-zoom-out"
+          onClick={() => setLightbox(null)}
+        >
+          <button
+            onClick={() => setLightbox(null)}
+            aria-label="Close"
+            className="absolute top-4 right-5 text-white/90 text-4xl leading-none hover:text-white"
+          >
+            ×
+          </button>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={lightbox}
+            alt="Verification selfie enlarged"
+            className="max-h-[90vh] max-w-[90vw] object-contain rounded-lg shadow-2xl"
+          />
         </div>
       )}
     </div>
