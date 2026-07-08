@@ -21,7 +21,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { Colors, CategoryColors } from '@/constants/Colors'
 import { useAuth } from '@/context/auth'
 import { supabase } from '@/lib/supabase'
-import { isModelVerified } from '@/lib/verification'
+import { isIdentityVerified } from '@/lib/verification'
 import ScreenDecor from '@/components/ScreenDecor'
 import HeaderIcons from '@/components/HeaderIcons'
 import { useAppRole } from '@/components/AppEntry'
@@ -234,7 +234,7 @@ function ModelHomeContent() {
         supabase.from('notifications').select('id, title, body, data, created_at').eq('user_id', userId).eq('type', 'stylist_invite').is('read_at', null).order('created_at', { ascending: false }).limit(10),
         supabase.from('subscriptions').select('*').eq('user_id', userId).eq('status', 'active').maybeSingle(),
         supabase.from('sessions').select('provider_id').eq('model_user_id', userId).eq('status', 'completed'),
-        isModelVerified(userId).catch(() => false),
+        isIdentityVerified(userId).catch(() => false),
       ])
 
       const allProviderIds = [...new Set([...(upcomingRaw ?? []).map((s: any) => s.provider_id), ...(pendingRaw ?? []).map((s: any) => s.provider_id)])]

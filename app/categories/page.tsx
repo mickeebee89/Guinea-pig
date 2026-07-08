@@ -101,12 +101,10 @@ export default function CategoriesPage() {
           <div className="text-[#3D2E2E]/40 text-sm">Loading…</div>
         ) : cats.map(c => (
           <div key={c.id} className={`bg-white rounded-xl border border-black/5 shadow-sm px-5 py-4 flex items-center gap-4 ${!c.is_active ? 'opacity-50' : ''}`}>
-            <div className="w-8 h-8 rounded-full flex items-center justify-center text-lg" style={{ backgroundColor: c.colour_hex ?? '#C8788A' }}>
-              {c.icon_name ?? ''}
-            </div>
-            <div className="flex-1">
-              <div className="font-medium text-[#3D2E2E]">{c.name}</div>
-              <div className="text-xs text-[#3D2E2E]/40">/{c.slug} · order {c.sort_order}</div>
+            <div className="w-8 h-8 shrink-0 rounded-full" style={{ backgroundColor: c.colour_hex ?? '#C8788A' }} />
+            <div className="flex-1 min-w-0 flex flex-col gap-0.5">
+              <div className="font-medium text-[#3D2E2E] leading-tight truncate">{c.name}</div>
+              <div className="text-xs text-[#3D2E2E]/40 leading-tight truncate">/{c.slug} · order {c.sort_order}</div>
             </div>
             <div className="flex items-center gap-3">
               <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${c.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>

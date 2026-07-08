@@ -23,7 +23,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Colors } from '@/constants/Colors'
 import { useAuth } from '@/context/auth'
 import { supabase } from '@/lib/supabase'
-import { isModelVerified } from '@/lib/verification'
+import { isIdentityVerified } from '@/lib/verification'
 import ScreenDecor from '@/components/ScreenDecor'
 import LoadErrorState from '@/components/LoadErrorState'
 
@@ -235,7 +235,7 @@ export default function ModelProfileScreen() {
           .select('id, name, sort_order')
           .eq('user_id', userId)
           .order('sort_order'),
-        isModelVerified(userId),
+        isIdentityVerified(userId),
       ])
 
       if (userData) {

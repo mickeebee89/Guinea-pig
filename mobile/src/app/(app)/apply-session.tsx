@@ -17,7 +17,7 @@ import { decode } from 'base64-arraybuffer'
 import { Ionicons } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Colors, CategoryColors } from '@/constants/Colors'
-import { isModelVerified } from '@/lib/verification'
+import { hasActiveSubscription, isIdentityVerified } from '@/lib/verification'
 import { useAuth } from '@/context/auth'
 import { supabase } from '@/lib/supabase'
 import { ConsentGate } from '@/components/ConsentGate'
@@ -141,18 +141,27 @@ export default function ApplySessionScreen() {
   useEffect(() => {
     if (!providerId || !userId) return
     async function load() {
-      // Gate: models must be verified (active subscription OR is_verified) to apply
+      // Gate: models must have BOTH an active subscription AND identity verification.
+      // Route to whichever step is missing (subscribe-first): no sub → subscribe;
+      // subscribed but unverified → verify-payment; both → proceed.
       try {
-        const verified = await isModelVerified(userId!)
-        if (!verified) {
+        const [subscribed, verified] = await Promise.all([
+          hasActiveSubscription(userId!),
+          isIdentityVerified(userId!),
+        ])
+        if (!subscribed) {
           router.replace({
             pathname: '/(app)/subscribe' as any,
             params:   { providerId, providerName },
           })
           return
         }
+        if (!verified) {
+          router.replace({ pathname: '/(app)/verify-payment' as any })
+          return
+        }
       } catch (e) {
-        console.error('apply-session verification check failed:', e)
+        console.error('apply-session gate check failed:', e)
         router.replace({
           pathname: '/(app)/subscribe' as any,
           params:   { providerId, providerName },
@@ -559,7 +568,7 @@ export default function ApplySessionScreen() {
               <Text style={styles.emptyEmoji}>📅</Text>
               <Text style={styles.emptyTitle}>No availability yet</Text>
               <Text style={styles.emptySub}>
-                This provider hasn't published their schedule. Check back soon!
+                This stylist hasn't added any availability yet. Check back soon!
               </Text>
             </View>
           ) : (

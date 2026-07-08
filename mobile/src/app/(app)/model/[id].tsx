@@ -19,7 +19,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Colors, CategoryColors } from '@/constants/Colors'
 import { useAuth } from '@/context/auth'
 import { supabase } from '@/lib/supabase'
-import { isModelVerified } from '@/lib/verification'
+import { isIdentityVerified } from '@/lib/verification'
 import ScreenDecor from '@/components/ScreenDecor'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -220,7 +220,7 @@ export default function ModelProfileViewScreen() {
         caption:     p.caption ?? null,
         category_id: p.category_id ?? null,
       })))
-      try { setIsVerified(await isModelVerified(modelId)) } catch {}
+      try { setIsVerified(await isIdentityVerified(modelId)) } catch {}
 
       // Fetch reviews about this model
       try {

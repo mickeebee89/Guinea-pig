@@ -130,6 +130,7 @@ export default function ProviderShopScreen() {
   const [portfolio,     setPortfolio]     = useState<PortfolioItem[]>([])
   const [reviews,       setReviews]       = useState<Review[]>([])
   const [availability,  setAvailability]  = useState<AvailabilitySlot[]>([])
+  const [hasOpenSlots,  setHasOpenSlots]  = useState(false)
   const [isFavourite,   setIsFavourite]   = useState(false)
   const [refreshing,    setRefreshing]    = useState(false)
   const [loading,       setLoading]       = useState(true)
@@ -144,6 +145,7 @@ export default function ProviderShopScreen() {
         { data: treatData },
         { data: portData },
         { data: avData },
+        { data: openData },
       ] = await Promise.all([
         supabase
           .from('providers')
@@ -166,6 +168,10 @@ export default function ProviderShopScreen() {
           .order('date')
           .order('start_time')
           .limit(30),
+        // Authoritative bookable check: at least one future slot with no
+        // pending/accepted session referencing it. The `availability` list above
+        // still counts booked slots, so gate the Apply button on this instead.
+        supabase.rpc('has_open_availability', { p_provider_id: id }),
       ])
 
       if (provData)  setProvider(provData as Provider)
@@ -181,6 +187,7 @@ export default function ProviderShopScreen() {
         setPortfolio(normPort as PortfolioItem[])
       }
       if (avData) setAvailability(avData as AvailabilitySlot[])
+      setHasOpenSlots(openData === true)
 
       // Fetch reviews using the provider's auth user_id as reviewee_id
       const providerUserId = (provData as any)?.user_id
@@ -477,10 +484,20 @@ export default function ProviderShopScreen() {
       {/* ── Sticky apply bar ── */}
       {ownShop !== '1' && (
         <View style={[styles.stickyBar, { paddingBottom: Math.max(insets.bottom, 16) }]}>
-          <TouchableOpacity style={styles.applyBtn} onPress={handleApply} activeOpacity={0.9}>
-            <Ionicons name="calendar-outline" size={18} color={Colors.white} />
-            <Text style={styles.applyBtnText}>Apply for treatment</Text>
-          </TouchableOpacity>
+          {!hasOpenSlots ? (
+            <>
+              <View style={[styles.applyBtn, styles.applyBtnDisabled]}>
+                <Ionicons name="calendar-outline" size={18} color={Colors.muted} />
+                <Text style={[styles.applyBtnText, { color: Colors.muted }]}>Apply for treatment</Text>
+              </View>
+              <Text style={styles.applyHint}>No availability yet — check back soon</Text>
+            </>
+          ) : (
+            <TouchableOpacity style={styles.applyBtn} onPress={handleApply} activeOpacity={0.9}>
+              <Ionicons name="calendar-outline" size={18} color={Colors.white} />
+              <Text style={styles.applyBtnText}>Apply for treatment</Text>
+            </TouchableOpacity>
+          )}
         </View>
       )}
     </View>
@@ -743,4 +760,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3, shadowRadius: 10, elevation: 5,
   },
   applyBtnText: { color: Colors.white, fontSize: 16, fontWeight: '700', letterSpacing: -0.2 },
+  applyBtnDisabled: { backgroundColor: Colors.inputBg, shadowOpacity: 0, elevation: 0 },
+  applyHint: { fontSize: 12, color: Colors.muted, textAlign: 'center', marginTop: 8, fontWeight: '500' },
 })
