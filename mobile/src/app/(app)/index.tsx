@@ -377,80 +377,75 @@ function ModelHomeContent() {
             />
           }
         >
-          {/* ── Header ── */}
-          <View style={styles.header}>
-            <TouchableOpacity
-              style={styles.profileBtn}
-              onPress={async () => {
-                await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
-                router.push('/(app)/model-profile' as any)
-              }}
-              activeOpacity={0.85}
-            >
-              {profilePicUrl ? (
-                <Image source={{ uri: profilePicUrl }} style={styles.profileBtnImg} />
-              ) : (
-                <View style={styles.profileBtnPlaceholder}>
-                  <Ionicons name="person" size={18} color={Colors.roseDark} />
-                </View>
-              )}
-            </TouchableOpacity>
-            <View style={styles.searchBar}>
-              <Ionicons name="search-outline" size={16} color={Colors.muted} />
-              <TextInput
-                style={styles.searchInput}
-                placeholder="Search stylists…"
-                placeholderTextColor={Colors.muted}
-                value={search}
-                onChangeText={setSearch}
-                returnKeyType="search"
-              />
-              {search.length > 0 && (
-                <TouchableOpacity onPress={() => setSearch('')}>
-                  <Ionicons name="close-circle" size={16} color={Colors.muted} />
-                </TouchableOpacity>
-              )}
+          {/* ── Title ── */}
+          <View style={styles.titleRow}>
+            <Text style={styles.pageTitle}>Dashboard</Text>
+            <View style={styles.titleIcons}>
+              <HeaderIcons />
+              <TouchableOpacity
+                style={styles.profileBtn}
+                onPress={async () => {
+                  await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+                  router.push('/(app)/model-profile' as any)
+                }}
+                activeOpacity={0.85}
+              >
+                {profilePicUrl ? (
+                  <Image source={{ uri: profilePicUrl }} style={styles.profileBtnImg} />
+                ) : (
+                  <View style={styles.profileBtnPlaceholder}>
+                    <Ionicons name="person" size={18} color={Colors.roseDark} />
+                  </View>
+                )}
+              </TouchableOpacity>
             </View>
-            <HeaderIcons />
           </View>
 
           {/* ── Upcoming sessions ── */}
           {upcomingSessions.length > 0 && (
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Upcoming treatments</Text>
-              {upcomingSessions.map(s => (
-                <TouchableOpacity
-                  key={s.id}
-                  style={styles.dashCard}
-                  onPress={async () => {
-                    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
-                    router.push({ pathname: '/(app)/chat/[sessionId]' as any, params: { sessionId: s.id } })
-                  }}
-                  activeOpacity={0.85}
-                >
-                  <View style={styles.dashAvatarWrap}>
-                    {s.provider_pic ? (
-                      <Image source={{ uri: s.provider_pic }} style={styles.dashAvatar} />
-                    ) : (
-                      <View style={[styles.dashAvatarPlaceholder, { backgroundColor: Colors.softPink }]}>
-                        <Text style={styles.dashAvatarInitial}>{s.provider_name[0]?.toUpperCase() ?? '?'}</Text>
+              <Text style={styles.sectionTitle}>Upcoming treatments ({upcomingSessions.length})</Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.upcomingScroll}
+              >
+                {upcomingSessions.map(s => (
+                  <TouchableOpacity
+                    key={s.id}
+                    style={styles.upcomingCard}
+                    onPress={async () => {
+                      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+                      router.push({ pathname: '/(app)/chat/[sessionId]' as any, params: { sessionId: s.id } })
+                    }}
+                    activeOpacity={0.85}
+                  >
+                    <View style={styles.upcomingHeader}>
+                      <View style={styles.dashAvatarWrap}>
+                        {s.provider_pic ? (
+                          <Image source={{ uri: s.provider_pic }} style={styles.dashAvatar} />
+                        ) : (
+                          <View style={[styles.dashAvatarPlaceholder, { backgroundColor: Colors.softPink }]}>
+                            <Text style={styles.dashAvatarInitial}>{s.provider_name[0]?.toUpperCase() ?? '?'}</Text>
+                          </View>
+                        )}
                       </View>
-                    )}
-                  </View>
-                  <View style={styles.dashInfo}>
-                    <Text style={styles.dashTitle}>{s.provider_name}</Text>
-                    <Text style={styles.dashMeta}>{formatSessDate(s.date, s.start_time)}</Text>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.dashTitle} numberOfLines={1}>{s.provider_name}</Text>
+                        <Text style={styles.dashMeta} numberOfLines={1}>{formatSessDate(s.date, s.start_time)}</Text>
+                      </View>
+                    </View>
                     {s.treatment_name ? (
                       <Text style={[styles.dashTag, { color: CATEGORY_COLOR[s.treatment_category ?? ''] ?? Colors.roseDark }]}>
                         {s.treatment_name}
                       </Text>
                     ) : null}
-                  </View>
-                  <View style={styles.dashStatusBadge}>
-                    <Text style={styles.dashStatusText}>Confirmed</Text>
-                  </View>
-                </TouchableOpacity>
-              ))}
+                    <View style={[styles.dashStatusBadge, styles.upcomingStatus]}>
+                      <Text style={styles.dashStatusText}>Confirmed</Text>
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
             </View>
           )}
 
@@ -532,27 +527,58 @@ function ModelHomeContent() {
             </View>
           )}
 
-          {/* ── Filter bar ── */}
-          <View style={styles.filterBar}>
+          {/* ── Favourites ── */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Favourites</Text>
+            {favouriteProviders.length === 0 ? (
+              <View style={styles.emptyFavs}>
+                <Text style={styles.emptyFavsEmoji}>🤍</Text>
+                <Text style={styles.emptyFavsText}>
+                  Save models you love — tap the heart on any profile
+                </Text>
+              </View>
+            ) : (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.favsRow}
+              >
+                {favouriteProviders.map(p => (
+                  <FavouriteCard key={p.id} provider={p} onPress={() => openProvider(p.id)} />
+                ))}
+              </ScrollView>
+            )}
+          </View>
+
+          {/* ── Search + filter (for Nearby stylists) ── */}
+          <View style={styles.searchRow}>
+            <View style={styles.searchBar}>
+              <Ionicons name="search-outline" size={16} color={Colors.muted} />
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Search stylists…"
+                placeholderTextColor={Colors.muted}
+                value={search}
+                onChangeText={setSearch}
+                returnKeyType="search"
+              />
+              {search.length > 0 && (
+                <TouchableOpacity onPress={() => setSearch('')}>
+                  <Ionicons name="close-circle" size={16} color={Colors.muted} />
+                </TouchableOpacity>
+              )}
+            </View>
             <TouchableOpacity
-              style={[styles.filterToggleBtn, (showFilters || hasActiveFilter) && { backgroundColor: Colors.roseDark }]}
+              style={[styles.filterBtn, (showFilters || hasActiveFilter) && styles.filterBtnActive]}
               onPress={async () => {
                 await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
                 setShowFilters(f => !f)
               }}
               activeOpacity={0.8}
             >
-              <Ionicons name="options-outline" size={18} color={(showFilters || hasActiveFilter) ? Colors.white : Colors.warmDark} />
+              <Ionicons name="options-outline" size={15} color={(showFilters || hasActiveFilter) ? Colors.white : Colors.roseDark} />
+              <Text style={[styles.filterBtnText, (showFilters || hasActiveFilter) && { color: Colors.white }]}>Filter</Text>
             </TouchableOpacity>
-            {hasActiveFilter && (
-              <Text style={styles.filterSummary}>
-                {[
-                  selectedCategory !== 'All' && selectedCategory,
-                  distanceFilter !== 'Any' && `within ${distanceFilter}`,
-                  verifiedOnly && 'verified only',
-                ].filter(Boolean).join(' · ')}
-              </Text>
-            )}
           </View>
 
           {/* ── Filter panel ── */}
@@ -615,29 +641,6 @@ function ModelHomeContent() {
               </View>
             </View>
           )}
-
-          {/* ── Favourites ── */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Favourites</Text>
-            {favouriteProviders.length === 0 ? (
-              <View style={styles.emptyFavs}>
-                <Text style={styles.emptyFavsEmoji}>🤍</Text>
-                <Text style={styles.emptyFavsText}>
-                  Save models you love — tap the heart on any profile
-                </Text>
-              </View>
-            ) : (
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.favsRow}
-              >
-                {favouriteProviders.map(p => (
-                  <FavouriteCard key={p.id} provider={p} onPress={() => openProvider(p.id)} />
-                ))}
-              </ScrollView>
-            )}
-          </View>
 
           {/* ── Nearby stylists ── */}
           <View style={styles.section}>
@@ -794,14 +797,50 @@ const styles = StyleSheet.create({
   safe:      { flex: 1 },
   scroll:    { paddingBottom: 24 },
 
-  header: {
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: Platform.OS === 'android' ? 16 : 12,
+    paddingBottom: 4,
+  },
+  titleIcons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  pageTitle: {
+    fontFamily: 'DancingScript_700Bold',
+    fontSize: 33,
+    color: Colors.warmDark,
+    letterSpacing: -0.5,
+  },
+  searchRow: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingTop: Platform.OS === 'android' ? 16 : 12,
-    paddingBottom: 12,
+    marginTop: 20,
+    marginBottom: 4,
     gap: 10,
   },
+  filterBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 12,
+    flexShrink: 0,
+    backgroundColor: Colors.softPink + '40',
+    borderWidth: 1,
+    borderColor: Colors.rose + '40',
+  },
+  filterBtnActive: {
+    backgroundColor: Colors.roseDark,
+    borderColor: Colors.roseDark,
+  },
+  filterBtnText: { fontSize: 13, fontWeight: '700', color: Colors.roseDark },
   profileBtn: {
     width: 36,
     height: 36,
@@ -862,21 +901,7 @@ const styles = StyleSheet.create({
   nearbyPill: { borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3, maxWidth: 100 },
   nearbyPillText: { fontSize: 10, fontWeight: '700', textAlign: 'center' },
 
-  // Filter bar
-  filterBar: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 16, paddingVertical: 6, gap: 10,
-  },
-  filterSummary: {
-    fontSize: 13, fontWeight: '600', color: Colors.roseDark, flex: 1,
-  },
-  filterToggleBtn: {
-    width: 36, height: 36, borderRadius: 18, flexShrink: 0,
-    backgroundColor: Colors.white, alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1, borderColor: Colors.border,
-    shadowColor: Colors.warmDark, shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06, shadowRadius: 4, elevation: 1,
-  },
+  // Filter panel
   filterPanel: {
     backgroundColor: Colors.white, marginHorizontal: 16, marginTop: 8,
     borderRadius: 16, padding: 14, borderWidth: 1, borderColor: Colors.border,
@@ -1022,6 +1047,23 @@ const styles = StyleSheet.create({
     shadowRadius: 3,
     elevation: 2,
   },
+  // Upcoming treatments — horizontal cards
+  upcomingScroll: { gap: 12, paddingRight: 16, paddingBottom: 4 },
+  upcomingCard: {
+    width: 230,
+    backgroundColor: Colors.white,
+    borderRadius: 12,
+    padding: 12,
+    gap: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  upcomingHeader: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  upcomingStatus: { alignSelf: 'flex-start' },
+
   dashAvatarWrap: { width: 44, height: 44, borderRadius: 22, overflow: 'hidden' },
   dashAvatar: { width: 44, height: 44, borderRadius: 22 },
   dashAvatarPlaceholder: {

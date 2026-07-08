@@ -1011,11 +1011,12 @@ export default function ProviderDashboardScreen() {
             />
             <FilterChips
               label="Distance"
-              options={['1 mi','2 mi','4 mi','10 mi','20 mi']}
-              selected={filterDistanceMi != null ? `${filterDistanceMi} mi` : null}
+              options={['Any','1 mi','2 mi','4 mi','10 mi','20 mi']}
+              selected={filterDistanceMi != null ? `${filterDistanceMi} mi` : 'Any'}
               onSelect={v => {
-                const parsed = v ? parseInt(v) : null
-                setFilterDistanceMi(parsed === filterDistanceMi ? null : parsed)
+                // 'Any' (or clearing) → null radius = no distance cap (show all matching models).
+                const parsed = (!v || v === 'Any') ? null : parseInt(v)
+                setFilterDistanceMi(parsed)
               }}
             />
             <View style={nearbyStyles.filterRow}>
