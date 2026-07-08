@@ -236,10 +236,11 @@ export default function ProviderDashboardScreen() {
     try {
       // Phase 1: fetch user profile + provider row in parallel; derive display name from users
       const [{ data: userRow }, { data: provRow }] = await Promise.all([
-        supabase.from('users').select('first_name, last_initial, profile_pic_url').eq('id', userId).single(),
+        supabase.from('users').select('first_name, last_initial, profile_pic_url, is_verified').eq('id', userId).single(),
         supabase.from('providers').select('id, user_id, bio, is_published, shop_handle, rating, review_count').eq('user_id', userId).maybeSingle(),
       ])
 
+      const userVerified = !!(userRow as any)?.is_verified
       const first       = (userRow as any)?.first_name ?? ''
       const initial     = (userRow as any)?.last_initial ?? ''
       const displayName = first ? `${first}${initial ? ` ${initial}.` : ''}`.trim() : 'Stylist'
@@ -251,7 +252,7 @@ export default function ProviderDashboardScreen() {
         id,
         name:            displayName,
         profile_pic_url: userPic,
-        is_verified:     null,
+        is_verified:     userVerified,
         rating,
         review_count:    reviewCount,
         is_published:    isPublished,
@@ -281,7 +282,7 @@ export default function ProviderDashboardScreen() {
             level:         'beginner',
             region:        'UK',
             name:          displayName,
-            is_published:  true,
+            is_published:  false,   // start hidden until pay + verify (admin approval publishes)
             location_text: '',
           })
           .select('id')
@@ -565,6 +566,13 @@ export default function ProviderDashboardScreen() {
   const togglePublished = async (value: boolean) => {
     if (!provider) return
 
+    // Only a verified provider can go live — the DB blocks is_published=true for
+    // unverified providers, so guard here too (the UI toggle is disabled for them).
+    if (value && !provider.is_verified) {
+      Alert.alert('Verify first', 'Get verified to make your shop live.')
+      return
+    }
+
     if (value) {
       const { count } = await supabase
         .from('provider_treatments')
@@ -753,7 +761,7 @@ export default function ProviderDashboardScreen() {
           </View>
           {publishLoading ? (
             <ActivityIndicator size="small" color={Colors.roseDark} />
-          ) : (
+          ) : provider.is_verified ? (
             <Switch
               value={isPublished}
               onValueChange={togglePublished}
@@ -761,6 +769,17 @@ export default function ProviderDashboardScreen() {
               thumbColor={isPublished ? Colors.roseDark : Colors.muted}
               ios_backgroundColor={Colors.border}
             />
+          ) : (
+            <View style={styles.publishLocked}>
+              <Switch
+                value={false}
+                disabled
+                trackColor={{ false: Colors.border, true: Colors.border }}
+                thumbColor={Colors.border}
+                ios_backgroundColor={Colors.border}
+              />
+              <Text style={styles.publishHint}>Verify to make your shop live</Text>
+            </View>
           )}
         </View>
 
@@ -1455,6 +1474,8 @@ const styles = StyleSheet.create({
   },
   shopCardTitle: { fontSize: 14, fontWeight: '700', color: Colors.warmDark },
   shopCardStatus: { fontSize: 12, fontWeight: '500', marginTop: 2 },
+  publishLocked: { alignItems: 'flex-end', maxWidth: 140, opacity: 0.6 },
+  publishHint:   { fontSize: 11, color: Colors.muted, marginTop: 4, textAlign: 'right' },
 
   // Stats row
   statsRow: {

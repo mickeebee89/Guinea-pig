@@ -20,21 +20,41 @@ interface VerificationRequest {
   }
 }
 
+// Shown when there's no signed URL (missing image, or an old public-URL row).
+const NO_PHOTO_SVG = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="144" height="144"><rect fill="%23f5f0ed" width="144" height="144"/><text x="72" y="76" text-anchor="middle" fill="%239b8b86" font-size="14">No photo</text></svg>'
+
 export default function VerificationQueuePage() {
-  const [requests, setRequests] = useState<VerificationRequest[]>([])
-  const [loading, setLoading]   = useState(true)
+  const [requests, setRequests]     = useState<VerificationRequest[]>([])
+  const [signedUrls, setSignedUrls] = useState<Record<string, string>>({})   // selfie signed URLs, keyed by request id
+  const [loading, setLoading]       = useState(true)
   const [filter, setFilter]     = useState<'pending' | 'approved' | 'rejected'>('pending')
   const [notes, setNotes]       = useState<Record<string, string>>({})
   const [working, setWorking]   = useState<string | null>(null)
 
   async function load() {
     setLoading(true)
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('verification_requests')
-      .select('id, selfie_url, status, notes, created_at, users!user_id(id, first_name, last_initial, email, role, is_verified)')
+      .select('id, selfie_url, status, notes, created_at, user:users!user_id(id, first_name, last_initial, email, role, is_verified)')
       .eq('status', filter)
       .order('created_at', { ascending: false })
-    setRequests((data ?? []) as unknown as VerificationRequest[])
+    if (error) console.error('verification requests load failed:', error)
+    const rows = (data ?? []) as unknown as VerificationRequest[]
+    setRequests(rows)
+
+    // verification-selfies is a PRIVATE bucket. selfie_url now holds a storage path;
+    // sign it for ~5 minutes so the <img> can load. Old test rows hold full public
+    // URLs (not paths) → signing fails → they fall back to the "No photo" placeholder.
+    const entries = await Promise.all(
+      rows.map(async r => {
+        if (!r.selfie_url) return [r.id, ''] as const
+        const { data: signed } = await supabase.storage
+          .from('verification-selfies')
+          .createSignedUrl(r.selfie_url, 300)
+        return [r.id, signed?.signedUrl ?? ''] as const
+      }),
+    )
+    setSignedUrls(Object.fromEntries(entries))
     setLoading(false)
   }
 
@@ -59,12 +79,15 @@ export default function VerificationQueuePage() {
         body: 'Your Guinea Pig profile is now verified. Your badge is live!',
       })
     } else {
-      // Providers: notify to complete payment
+      // Providers: approval is the unlock (payment is now decoupled / pay-first).
+      // Verify the user AND make their profile visible.
+      await supabase.from('users').update({ is_verified: true }).eq('id', req.user.id)
+      await supabase.from('providers').update({ is_published: true }).eq('user_id', req.user.id)
       await supabase.from('notifications').insert({
         user_id: req.user.id,
         type: 'verification',
-        title: 'Verification approved — one step left',
-        body: 'Your identity check passed! Complete the £4.99 payment to activate your verified badge.',
+        title: 'You\'re verified! 🎉',
+        body: 'Your identity check passed — your verified badge and profile are now live.',
       })
     }
     // Audit only after the status update actually succeeded (admin_id stamped by logAction).
@@ -145,10 +168,10 @@ export default function VerificationQueuePage() {
                 <div className="shrink-0">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
-                    src={req.selfie_url}
+                    src={signedUrls[req.id] || NO_PHOTO_SVG}
                     alt="Verification selfie"
                     className="w-36 h-36 object-cover rounded-xl border border-black/5"
-                    onError={e => { (e.target as HTMLImageElement).src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="144" height="144"><rect fill="%23f5f0ed" width="144" height="144"/><text x="72" y="76" text-anchor="middle" fill="%239b8b86" font-size="14">No photo</text></svg>' }}
+                    onError={e => { (e.target as HTMLImageElement).src = NO_PHOTO_SVG }}
                   />
                 </div>
 
@@ -173,7 +196,7 @@ export default function VerificationQueuePage() {
 
                   {req.user.role === 'provider' && filter === 'pending' && (
                     <p className="text-xs text-amber-600 bg-amber-50 rounded-lg px-3 py-2 mb-3">
-                      Provider — approval will send payment notification (£4.99 required to activate badge)
+                      Provider — approval will send payment notification (£14.99 required to activate badge)
                     </p>
                   )}
 

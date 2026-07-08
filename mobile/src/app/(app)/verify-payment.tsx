@@ -21,7 +21,7 @@ import { Colors } from '@/constants/Colors'
 import { useAuth } from '@/context/auth'
 import { supabase } from '@/lib/supabase'
 
-type Step = 'loading' | 'instructions' | 'camera' | 'uploading' | 'submitted' | 'approved_pay' | 'confirming' | 'success' | 'rejected'
+type Step = 'loading' | 'instructions' | 'camera' | 'uploading' | 'submitted' | 'confirming' | 'success' | 'rejected'
 
 export default function VerifyPaymentScreen() {
   const router  = useRouter()
@@ -36,6 +36,7 @@ export default function VerifyPaymentScreen() {
   const [selfieUri,      setSelfieUri]       = useState<string | null>(null)
   const [requestNotes,   setRequestNotes]   = useState<string | null>(null)
   const [paymentLoading, setPaymentLoading] = useState(false)
+  const [hasPaid,        setHasPaid]        = useState(false)   // provider paid (pay-first)
 
   // ── Check existing request ─────────────────────────────────────────────────
 
@@ -53,6 +54,20 @@ export default function VerifyPaymentScreen() {
         return
       }
 
+      // Pay-first (providers only): have they already paid? Used to avoid a second
+      // charge on the instructions / resubmit paths.
+      let paid = false
+      if (isProvider) {
+        const { data: payRow } = await supabase
+          .from('verification_payments')
+          .select('id')
+          .eq('user_id', userId)
+          .limit(1)
+          .maybeSingle()
+        paid = !!payRow
+        setHasPaid(paid)
+      }
+
       const { data: existing } = await supabase
         .from('verification_requests')
         .select('status, notes')
@@ -61,29 +76,29 @@ export default function VerifyPaymentScreen() {
         .limit(1)
         .maybeSingle()
 
-      if (!existing) {
-        setStep('instructions')
-        return
+      if (existing) {
+        const status = (existing as any).status as string
+        if (status === 'pending') { setStep('submitted'); return }
+        if (status === 'approved') {
+          // Approval is the unlock. Models auto-verify here; providers were already
+          // verified by admin approve(). Either way, done.
+          if (!isProvider) {
+            await supabase.from('users').update({ is_verified: true }).eq('id', userId)
+          }
+          setStep('success')
+          return
+        }
+        if (status === 'rejected') {
+          setRequestNotes((existing as any).notes ?? null)
+          setStep('rejected')
+          return
+        }
       }
 
-      const status = (existing as any).status as string
-      if (status === 'pending') {
-        setStep('submitted')
-      } else if (status === 'approved') {
-        // Model: auto-verify, Provider: show payment
-        if (isProvider) {
-          setStep('approved_pay')
-        } else {
-          // Auto-verify model
-          await supabase.from('users').update({ is_verified: true }).eq('id', userId)
-          setStep('success')
-        }
-      } else if (status === 'rejected') {
-        setRequestNotes((existing as any).notes ?? null)
-        setStep('rejected')
-      } else {
-        setStep('instructions')
-      }
+      // No usable request. A provider who already paid goes straight to the camera
+      // (don't charge again); everyone else sees instructions (provider: "Pay £14.99").
+      if (isProvider && paid) setStep('camera')
+      else setStep('instructions')
     } catch {
       setStep('instructions')
     }
@@ -130,16 +145,14 @@ export default function VerifyPaymentScreen() {
         .upload(path, decode(manipulated.base64), { contentType: 'image/jpeg' })
       if (uploadErr) throw uploadErr
 
-      const { data: urlData } = supabase.storage
-        .from('verification-selfies')
-        .getPublicUrl(up.path)
-
       // Delete any previous rejected request so we can submit fresh
       await supabase.from('verification_requests').delete().eq('user_id', userId)
 
+      // Store the STORAGE PATH (bucket is private). The admin generates a short-lived
+      // signed URL at render time — a public URL would 403.
       const { error: insertErr } = await supabase.from('verification_requests').insert({
         user_id:    userId,
-        selfie_url: urlData.publicUrl,
+        selfie_url: up.path,
         status:     'pending',
       })
       if (insertErr) throw insertErr
@@ -166,6 +179,7 @@ export default function VerifyPaymentScreen() {
       if (fnErr || !intentData?.clientSecret) {
         throw new Error(fnErr?.message ?? 'Could not start payment. Please try again.')
       }
+      const paymentIntentId = intentData.paymentIntentId as string | undefined
 
       const { error: initErr } = await initPaymentSheet({
         merchantDisplayName:        'Guinea Pig',
@@ -188,13 +202,15 @@ export default function VerifyPaymentScreen() {
       }
 
       setStep('confirming')
+      // Record the payment (record-only — does NOT verify; unlock is via admin approval).
       await supabase.functions.invoke('stripe-payment', {
-        body: { action: 'confirm_verification', userId },
+        body: { action: 'confirm_verification', userId, paymentIntentId },
       })
 
-      await supabase.from('users').update({ is_verified: true }).eq('id', userId)
-      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
-      setStep('success')
+      // Pay-first: payment done → now take the verification photo. No is_verified here,
+      // no jump to success — verification/unlock happens when the admin approves.
+      setHasPaid(true)
+      setStep('camera')
     } catch (err: any) {
       setPaymentLoading(false)
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)
@@ -238,9 +254,9 @@ export default function VerifyPaymentScreen() {
               <Text style={{ fontWeight: '800', color: Colors.warmDark }}>"Guinea Pig"</Text>
               {' '}written on it. Our team reviews within 24 hours.
             </Text>
-            {isProvider && (
+            {isProvider && !hasPaid && (
               <View style={styles.priceTag}>
-                <Text style={styles.priceTagText}>£4.99 one-off fee after approval</Text>
+                <Text style={styles.priceTagText}>£14.99 one-off verification fee</Text>
               </View>
             )}
           </View>
@@ -250,7 +266,7 @@ export default function VerifyPaymentScreen() {
             { icon: 'pencil-outline',          step: '1', text: 'Write your first name and "Guinea Pig" on a piece of paper' },
             { icon: 'camera-outline',           step: '2', text: 'Take a clear selfie holding the paper — face and writing both visible' },
             { icon: 'cloud-upload-outline',     step: '3', text: 'Submit — our team reviews within 24 hours' },
-            { icon: 'notifications-outline',    step: '4', text: isProvider ? 'Get notified then complete £4.99 payment to activate your badge' : 'Get notified when approved — badge activates automatically (included in your subscription)' },
+            { icon: 'notifications-outline',    step: '4', text: isProvider ? 'Get notified when approved — your verified badge and profile go live' : 'Get notified when approved — badge activates automatically (included in your subscription)' },
           ].map(item => (
             <View key={item.step} style={styles.stepRow}>
               <View style={styles.stepNum}>
@@ -261,15 +277,51 @@ export default function VerifyPaymentScreen() {
             </View>
           ))}
 
+          {isProvider && !hasPaid ? (
+            <TouchableOpacity
+              style={[styles.primaryBtn, paymentLoading && { opacity: 0.7 }]}
+              onPress={handlePayment}
+              disabled={paymentLoading}
+              activeOpacity={0.9}
+            >
+              {paymentLoading
+                ? <ActivityIndicator color={Colors.white} />
+                : <>
+                    <Ionicons name="card-outline" size={20} color={Colors.white} />
+                    <Text style={styles.primaryBtnText}>Pay £14.99</Text>
+                  </>
+              }
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity style={styles.primaryBtn} onPress={takeSelfie} activeOpacity={0.9}>
+              <Ionicons name="camera" size={20} color={Colors.white} />
+              <Text style={styles.primaryBtnText}>Take selfie</Text>
+            </TouchableOpacity>
+          )}
+
+          <Text style={styles.legalNote}>
+            {isProvider && !hasPaid
+              ? 'Secured by Stripe. After payment you\'ll take your verification selfie.'
+              : 'Your selfie is stored securely and only used for identity verification.'}
+          </Text>
+        </ScrollView>
+      )}
+
+      {/* ── CAMERA (no selfie yet — e.g. provider just paid) ── */}
+      {step === 'camera' && !selfieUri && (
+        <View style={styles.centred}>
+          <View style={[styles.bigIcon, { backgroundColor: Colors.softPink + '40' }]}>
+            <Ionicons name="camera-outline" size={44} color={Colors.roseDark} />
+          </View>
+          <Text style={styles.centredTitle}>Take your selfie</Text>
+          <Text style={styles.centredSub}>
+            Hold up the paper with your first name and "Guinea Pig" written on it — face and writing both clearly visible.
+          </Text>
           <TouchableOpacity style={styles.primaryBtn} onPress={takeSelfie} activeOpacity={0.9}>
             <Ionicons name="camera" size={20} color={Colors.white} />
             <Text style={styles.primaryBtnText}>Take selfie</Text>
           </TouchableOpacity>
-
-          <Text style={styles.legalNote}>
-            Your selfie is stored securely and only used for identity verification.
-          </Text>
-        </ScrollView>
+        </View>
       )}
 
       {/* ── PREVIEW SELFIE ── */}
@@ -316,42 +368,6 @@ export default function VerifyPaymentScreen() {
           >
             <Text style={styles.ghostBtnText}>Back to settings</Text>
           </TouchableOpacity>
-        </View>
-      )}
-
-      {/* ── APPROVED — PROVIDER PAYS ── */}
-      {step === 'approved_pay' && (
-        <View style={styles.centred}>
-          <View style={[styles.bigIcon, { backgroundColor: '#ECFDF5' }]}>
-            <Ionicons name="checkmark-circle" size={44} color="#1D9E75" />
-          </View>
-          <Text style={styles.centredTitle}>Identity approved ✓</Text>
-          <Text style={styles.centredSub}>
-            One last step — pay the £4.99 verification fee to activate your verified badge.
-          </Text>
-          <View style={styles.payCard}>
-            <Ionicons name="shield-checkmark" size={28} color={Colors.roseDark} />
-            <View style={{ flex: 1 }}>
-              <Text style={styles.payCardTitle}>Verified Badge</Text>
-              <Text style={styles.payCardSub}>One-time fee · Never charged again</Text>
-            </View>
-            <Text style={styles.payCardPrice}>£4.99</Text>
-          </View>
-          <TouchableOpacity
-            style={[styles.primaryBtn, paymentLoading && { opacity: 0.7 }]}
-            onPress={handlePayment}
-            disabled={paymentLoading}
-            activeOpacity={0.9}
-          >
-            {paymentLoading
-              ? <ActivityIndicator color={Colors.white} />
-              : <>
-                  <Ionicons name="card-outline" size={20} color={Colors.white} />
-                  <Text style={styles.primaryBtnText}>Pay £4.99</Text>
-                </>
-            }
-          </TouchableOpacity>
-          <Text style={styles.legalNote}>Secured by Stripe. Your card details are never stored on our servers.</Text>
         </View>
       )}
 

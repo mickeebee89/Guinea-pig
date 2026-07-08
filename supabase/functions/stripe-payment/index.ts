@@ -87,11 +87,11 @@ Deno.serve(async (req) => {
 })
 
 // ── create_verification_intent ────────────────────────────────────────────────
-// Creates a one-off PaymentIntent for £4.99 verification fee.
+// Creates a one-off PaymentIntent for £14.99 verification fee.
 
 async function createVerificationIntent(userId: string) {
   const intent = await stripe.paymentIntents.create({
-    amount:   499,   // £4.99 in pence
+    amount:   1499,   // £14.99 in pence
     currency: 'gbp',
     description: 'Guinea Pig identity verification fee',
     metadata: { user_id: userId, type: 'verification' },
@@ -105,7 +105,7 @@ async function createVerificationIntent(userId: string) {
 }
 
 // ── create_subscription ───────────────────────────────────────────────────────
-// Creates (or retrieves) a Stripe Customer then creates a £2.99/month
+// Creates (or retrieves) a Stripe Customer then creates a £4.99/month
 // subscription, returning the first invoice's PaymentIntent client_secret.
 
 async function createSubscription(userId: string, email: string) {
@@ -134,12 +134,12 @@ async function createSubscription(userId: string, email: string) {
   // Get or create the monthly recurring price via lookup key
   let priceId: string
   try {
-    const existing = await stripe.prices.retrieve('guinea_pig_monthly_299')
+    const existing = await stripe.prices.retrieve('guinea_pig_monthly_499')
     priceId = existing.id
   } catch {
     // Price doesn't exist yet — create it
     const price = await stripe.prices.create({
-      unit_amount: 299,
+      unit_amount: 499,
       currency:    'gbp',
       recurring:   { interval: 'month' },
       product_data: { name: 'Guinea Pig Monthly' },
@@ -182,7 +182,8 @@ async function createSubscription(userId: string, email: string) {
 
 // ── confirm_verification ──────────────────────────────────────────────────────
 // Called by the client after the payment sheet succeeds.
-// Verifies the intent with Stripe (prevents spoofed confirms) then updates DB.
+// Verifies the intent with Stripe (prevents spoofed confirms) then RECORDS the payment.
+// Paying is NOT verification — is_verified/unlock is granted by admin approval.
 
 async function confirmVerification(userId: string, paymentIntentId: string) {
   if (!paymentIntentId) return respond({ error: 'paymentIntentId required' }, 400)
@@ -197,27 +198,15 @@ async function confirmVerification(userId: string, paymentIntentId: string) {
     return respond({ error: 'Payment intent user mismatch' }, 403)
   }
 
-  await Promise.all([
-    // Mark user verified
-    db.from('users')
-      .update({ is_verified: true })
-      .eq('id', userId),
-
-    // Record payment
-    db.from('verification_payments')
-      .insert({
-        user_id:                  userId,
-        stripe_payment_intent_id: paymentIntentId,
-        amount:                   intent.amount,
-        currency:                 intent.currency,
-      }),
-
-    // Mark latest pending attempt as passed
-    db.from('verification_attempts')
-      .update({ passed: true })
-      .eq('user_id', userId)
-      .eq('passed', false),
-  ])
+  // Record the payment ONLY. Do not set is_verified and do not mark the attempt
+  // passed — verification/unlock is granted by admin approval, not by paying.
+  await db.from('verification_payments')
+    .insert({
+      user_id:                  userId,
+      stripe_payment_intent_id: paymentIntentId,
+      amount:                   intent.amount,
+      currency:                 intent.currency,
+    })
 
   return respond({ success: true })
 }

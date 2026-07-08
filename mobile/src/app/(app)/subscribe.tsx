@@ -139,7 +139,7 @@ export default function SubscribeScreen() {
 
             {/* Price badge */}
             <View style={styles.priceBadge}>
-              <Text style={styles.priceAmount}>£2.99</Text>
+              <Text style={styles.priceAmount}>£4.99</Text>
               <Text style={styles.pricePeriod}> / month</Text>
             </View>
             <Text style={styles.cancelNote}>Cancel anytime · No hidden fees</Text>
@@ -182,7 +182,7 @@ export default function SubscribeScreen() {
               ? <ActivityIndicator color={Colors.white} />
               : <>
                   <Ionicons name="card-outline" size={20} color={Colors.white} />
-                  <Text style={styles.primaryBtnText}>Subscribe for £2.99/month</Text>
+                  <Text style={styles.primaryBtnText}>Subscribe for £4.99/month</Text>
                 </>
             }
           </TouchableOpacity>
@@ -209,7 +209,7 @@ export default function SubscribeScreen() {
           </View>
           <Text style={styles.successTitle}>Subscription active! 🎉</Text>
           <Text style={styles.successSub}>
-            You now have unlimited treatment applications. Your card will be charged £2.99 on the same date each month.
+            You now have unlimited treatment applications. Your card will be charged £4.99 on the same date each month.
           </Text>
 
           <View style={styles.successPerks}>
