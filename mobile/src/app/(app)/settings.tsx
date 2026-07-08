@@ -662,6 +662,9 @@ export default function SettingsScreen() {
           )}
           {!isProvider && <View style={{ height: 1 }} />}
         </View>
+        <Text style={styles.picCaption}>
+          Use a clear photo of your face — it's compared to your verification selfie.
+        </Text>
 
         {/* Notification preferences */}
         <Text style={styles.subSectionTitle}>Notification preferences</Text>
@@ -1046,6 +1049,10 @@ const styles = StyleSheet.create({
     fontSize: 11, fontWeight: '700', color: Colors.muted,
     textTransform: 'uppercase', letterSpacing: 0.8,
     marginBottom: 8, marginTop: 16, paddingHorizontal: 4,
+  },
+  picCaption: {
+    fontSize: 12, color: Colors.muted, lineHeight: 17,
+    marginTop: 8, paddingHorizontal: 6,
   },
 
   card: {

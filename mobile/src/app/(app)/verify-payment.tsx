@@ -303,10 +303,11 @@ export default function VerifyPaymentScreen() {
 
           <Text style={styles.sectionLabel}>What to do</Text>
           {[
-            { icon: 'pencil-outline',          step: '1', text: 'Write your first name and "Guinea Pig" on a piece of paper' },
-            { icon: 'camera-outline',           step: '2', text: 'Take a clear selfie holding the paper — face and writing both visible' },
-            { icon: 'cloud-upload-outline',     step: '3', text: 'Submit — our team reviews within 24 hours' },
-            { icon: 'notifications-outline',    step: '4', text: isProvider ? 'Get notified when approved — your verified badge and profile go live' : 'Get notified when approved — badge activates automatically (included in your subscription)' },
+            { icon: 'person-circle-outline',    step: '1', text: 'Make sure your profile picture clearly shows your face — we compare it to this selfie' },
+            { icon: 'pencil-outline',          step: '2', text: 'Write your first name and "Guinea Pig" on a piece of paper' },
+            { icon: 'camera-outline',           step: '3', text: 'Take a clear selfie holding the paper — face and writing both visible' },
+            { icon: 'cloud-upload-outline',     step: '4', text: 'Submit — our team reviews within 24 hours' },
+            { icon: 'notifications-outline',    step: '5', text: isProvider ? 'Get notified when approved — your verified badge and profile go live' : 'Get notified when approved — badge activates automatically (included in your subscription)' },
           ].map(item => (
             <View key={item.step} style={styles.stepRow}>
               <View style={styles.stepNum}>

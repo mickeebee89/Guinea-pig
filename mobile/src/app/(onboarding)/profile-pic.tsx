@@ -160,6 +160,7 @@ export default function ProfilePicScreen() {
             <Text style={styles.tipsTitle}>Tips for a great photo</Text>
             {[
               'Clear, well-lit face shot',
+              'Show your face clearly — it\'s used to verify your identity',
               'No filters or heavy edits',
               'Recent — ideally taken this year',
             ].map(tip => (

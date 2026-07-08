@@ -745,6 +745,8 @@ export default function ModelProfileScreen() {
             </View>
           </TouchableOpacity>
 
+          <Text style={styles.avatarCaption}>Use a clear photo of your face.</Text>
+
           {/* Name + badges */}
           <View style={styles.profileInfo}>
             <View style={styles.nameRow}>
@@ -1395,8 +1397,12 @@ const styles = StyleSheet.create({
   },
   avatarWrap: {
     marginTop: -48,
-    marginBottom: 14,
+    marginBottom: 8,
     position: 'relative',
+  },
+  avatarCaption: {
+    fontSize: 12, color: Colors.muted, textAlign: 'center',
+    marginBottom: 10,
   },
   avatar: {
     width: 96,
