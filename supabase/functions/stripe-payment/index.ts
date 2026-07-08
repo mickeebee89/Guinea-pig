@@ -231,7 +231,7 @@ async function confirmSubscription(
   const periodStart = new Date(sub.current_period_start * 1000).toISOString()
   const periodEnd   = new Date(sub.current_period_end   * 1000).toISOString()
 
-  await Promise.all([
+  const [{ error: userErr }, { error: subErr }] = await Promise.all([
     // Update users table
     db.from('users')
       .update({
@@ -254,6 +254,9 @@ async function confirmSubscription(
         { onConflict: 'user_id' },
       ),
   ])
+
+  console.log('CONFIRM SUB WRITE →', JSON.stringify({ userErr, subErr }))
+  if (subErr || userErr) return respond({ success: false, userErr, subErr })
 
   return respond({ success: true, periodEnd })
 }

@@ -705,7 +705,7 @@ export default function ApplySessionScreen() {
         {/* ════ STEP 5 — PHOTOS ════════════════════════════════════════════ */}
         {step === 5 && (
           <>
-            <View style={[styles.card, styles.infoCard]}>
+            <View style={styles.infoCard}>
               <Ionicons name="information-circle-outline" size={18} color={Colors.roseDark} />
               <Text style={styles.infoText}>
                 Photos help the provider prepare their tools and materials. You choose what to share.
@@ -1040,8 +1040,11 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     gap: 10,
     backgroundColor: Colors.softPink + '30',
+    borderWidth: 1,
     borderColor: Colors.softPink,
+    borderRadius: 16,
     padding: 14,
+    marginBottom: 12,
   },
   infoText: {
     flex: 1,

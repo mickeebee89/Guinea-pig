@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import {
   View,
   Text,
@@ -16,6 +16,7 @@ import { useStripe } from '@stripe/stripe-react-native'
 import { Colors } from '@/constants/Colors'
 import { useAuth } from '@/context/auth'
 import { supabase } from '@/lib/supabase'
+import { isIdentityVerified } from '@/lib/verification'
 
 // ── Screen ────────────────────────────────────────────────────────────────────
 
@@ -31,6 +32,18 @@ export default function SubscribeScreen() {
 
   const [step,    setStep]    = useState<'benefits' | 'success'>('benefits')
   const [loading, setLoading] = useState(false)
+  // Identity-verification status, resolved once the success screen shows. Drives
+  // both the "Continue" destination and its label. null = not yet known.
+  const [verified, setVerified] = useState<boolean | null>(null)
+
+  useEffect(() => {
+    if (step !== 'success' || !session?.user?.id) return
+    let cancelled = false
+    isIdentityVerified(session.user.id)
+      .then(v => { if (!cancelled) setVerified(v) })
+      .catch(() => { if (!cancelled) setVerified(false) })
+    return () => { cancelled = true }
+  }, [step, session])
 
   const handleSubscribe = useCallback(async () => {
     setLoading(true)
@@ -77,13 +90,14 @@ export default function SubscribeScreen() {
 
       // Confirm server-side
       setLoading(true)
-      const { error: confirmErr } = await supabase.functions.invoke('stripe-payment', {
+      const { data: confirmData, error: confirmErr } = await supabase.functions.invoke('stripe-payment', {
         body: {
           action:         'confirm_subscription',
           subscriptionId: data.subscriptionId,
           customerId:     data.customerId,
         },
       })
+      console.log('SUB CONFIRM →', JSON.stringify({ data: confirmData, error: confirmErr }))
       if (confirmErr) {
         // Subscription active in Stripe; webhook will sync DB — proceed
         console.warn('[subscribe] confirm_subscription failed:', confirmErr.message)
@@ -101,11 +115,24 @@ export default function SubscribeScreen() {
 
   const goToSession = useCallback(async () => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+    // Decide here — do NOT re-check hasActiveSubscription: we just subscribed, and
+    // the DB row may lag behind the webhook, which would bounce us back to the paywall.
+    // If the verification status hasn't resolved yet, fetch it on tap.
+    let isVerified = verified
+    if (isVerified == null) {
+      try { isVerified = await isIdentityVerified(session!.user.id) }
+      catch { isVerified = false }
+    }
+    if (!isVerified) {
+      // Subscribed but not identity-verified → selfie verification step.
+      router.replace({ pathname: '/(app)/verify-payment' as any })
+      return
+    }
     router.replace({
       pathname: '/(app)/apply-session' as any,
       params:   { providerId, providerName },
     })
-  }, [router, providerId, providerName])
+  }, [router, providerId, providerName, verified, session])
 
   return (
     <View style={styles.container}>
@@ -226,7 +253,9 @@ export default function SubscribeScreen() {
             onPress={goToSession}
             activeOpacity={0.9}
           >
-            <Text style={styles.primaryBtnText}>Continue to treatment</Text>
+            <Text style={styles.primaryBtnText}>
+              {verified === false ? 'Continue to verification' : 'Continue to treatment'}
+            </Text>
             <Ionicons name="arrow-forward" size={18} color={Colors.white} />
           </TouchableOpacity>
 
