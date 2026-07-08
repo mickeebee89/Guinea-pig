@@ -550,12 +550,29 @@ function ModelHomeContent() {
             )}
           </View>
 
-          {/* ── Search + filter (for Nearby stylists) ── */}
-          <View style={styles.searchRow}>
-            <View style={styles.searchBar}>
-              <Ionicons name="search-outline" size={16} color={Colors.muted} />
+          {/* ── Nearby stylists ── */}
+          <View style={styles.section}>
+            {/* Header: title left + Filter pill right */}
+            <View style={styles.nearbyHeader}>
+              <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>Nearby stylists</Text>
+              <TouchableOpacity
+                style={[styles.filterBtn, (showFilters || hasActiveFilter) && styles.filterBtnActive]}
+                onPress={async () => {
+                  await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+                  setShowFilters(f => !f)
+                }}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="options-outline" size={14} color={(showFilters || hasActiveFilter) ? Colors.white : Colors.roseDark} />
+                <Text style={[styles.filterBtnText, (showFilters || hasActiveFilter) && { color: Colors.white }]}>Filter</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Search bar below */}
+            <View style={styles.nearbySearchBar}>
+              <Ionicons name="search-outline" size={15} color={Colors.muted} />
               <TextInput
-                style={styles.searchInput}
+                style={styles.nearbySearchInput}
                 placeholder="Search stylists…"
                 placeholderTextColor={Colors.muted}
                 value={search}
@@ -564,87 +581,71 @@ function ModelHomeContent() {
               />
               {search.length > 0 && (
                 <TouchableOpacity onPress={() => setSearch('')}>
-                  <Ionicons name="close-circle" size={16} color={Colors.muted} />
+                  <Ionicons name="close-circle" size={15} color={Colors.muted} />
                 </TouchableOpacity>
               )}
             </View>
-            <TouchableOpacity
-              style={[styles.filterBtn, (showFilters || hasActiveFilter) && styles.filterBtnActive]}
-              onPress={async () => {
-                await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
-                setShowFilters(f => !f)
-              }}
-              activeOpacity={0.8}
-            >
-              <Ionicons name="options-outline" size={15} color={(showFilters || hasActiveFilter) ? Colors.white : Colors.roseDark} />
-              <Text style={[styles.filterBtnText, (showFilters || hasActiveFilter) && { color: Colors.white }]}>Filter</Text>
-            </TouchableOpacity>
-          </View>
 
-          {/* ── Filter panel ── */}
-          {showFilters && (
-            <View style={styles.filterPanel}>
-              <Text style={styles.filterPanelLabel}>Treatment</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, paddingBottom: 2 }}>
-                {CATEGORIES.map(cat => {
-                  const active = selectedCategory === cat.name
-                  return (
+            {/* Filter panel */}
+            {showFilters && (
+              <View style={styles.filterPanel}>
+                <Text style={styles.filterPanelLabel}>Treatment</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, paddingBottom: 2 }}>
+                  {CATEGORIES.map(cat => {
+                    const active = selectedCategory === cat.name
+                    return (
+                      <TouchableOpacity
+                        key={cat.name}
+                        style={[
+                          styles.distChip,
+                          active
+                            ? { backgroundColor: cat.color, borderColor: cat.color }
+                            : { borderColor: cat.color },
+                        ]}
+                        onPress={async () => {
+                          await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+                          setSelectedCategory(cat.name)
+                        }}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={[styles.distChipText, active ? styles.distChipTextActive : { color: cat.color }]}>
+                          {cat.name}
+                        </Text>
+                      </TouchableOpacity>
+                    )
+                  })}
+                </ScrollView>
+                <Text style={styles.filterPanelLabel}>Distance</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, paddingBottom: 2 }}>
+                  {DISTANCE_OPTIONS.map(opt => (
                     <TouchableOpacity
-                      key={cat.name}
-                      style={[
-                        styles.distChip,
-                        active
-                          ? { backgroundColor: cat.color, borderColor: cat.color }
-                          : { borderColor: cat.color },
-                      ]}
+                      key={opt}
+                      style={[styles.distChip, distanceFilter === opt && styles.distChipActive]}
                       onPress={async () => {
                         await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
-                        setSelectedCategory(cat.name)
+                        setDistanceFilter(opt)
                       }}
                       activeOpacity={0.8}
                     >
-                      <Text style={[styles.distChipText, active ? styles.distChipTextActive : { color: cat.color }]}>
-                        {cat.name}
-                      </Text>
+                      <Text style={[styles.distChipText, distanceFilter === opt && styles.distChipTextActive]}>{opt}</Text>
                     </TouchableOpacity>
-                  )
-                })}
-              </ScrollView>
-              <Text style={styles.filterPanelLabel}>Distance</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, paddingBottom: 2 }}>
-                {DISTANCE_OPTIONS.map(opt => (
-                  <TouchableOpacity
-                    key={opt}
-                    style={[styles.distChip, distanceFilter === opt && styles.distChipActive]}
-                    onPress={async () => {
+                  ))}
+                </ScrollView>
+                <View style={styles.verifiedToggleRow}>
+                  <Text style={styles.verifiedToggleLabel}>Verified only</Text>
+                  <Switch
+                    value={verifiedOnly}
+                    onValueChange={async v => {
                       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
-                      setDistanceFilter(opt)
+                      setVerifiedOnly(v)
                     }}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={[styles.distChipText, distanceFilter === opt && styles.distChipTextActive]}>{opt}</Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-              <View style={styles.verifiedToggleRow}>
-                <Text style={styles.verifiedToggleLabel}>Verified only</Text>
-                <Switch
-                  value={verifiedOnly}
-                  onValueChange={async v => {
-                    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
-                    setVerifiedOnly(v)
-                  }}
-                  trackColor={{ false: Colors.border, true: Colors.rose }}
-                  thumbColor={verifiedOnly ? Colors.roseDark : Colors.muted}
-                  ios_backgroundColor={Colors.border}
-                />
+                    trackColor={{ false: Colors.border, true: Colors.rose }}
+                    thumbColor={verifiedOnly ? Colors.roseDark : Colors.muted}
+                    ios_backgroundColor={Colors.border}
+                  />
+                </View>
               </View>
-            </View>
-          )}
-
-          {/* ── Nearby stylists ── */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Nearby stylists</Text>
+            )}
             {loading ? (
               <View style={styles.emptyState}>
                 <Text style={styles.emptyStateText}>Finding stylists near you…</Text>
@@ -816,21 +817,30 @@ const styles = StyleSheet.create({
     color: Colors.warmDark,
     letterSpacing: -0.5,
   },
-  searchRow: {
+  // Nearby stylists — header (title + Filter), search bar (mirrors provider dashboard)
+  nearbyHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    marginTop: 20,
-    marginBottom: 4,
-    gap: 10,
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  nearbySearchBar: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: Colors.white, borderRadius: 12,
+    borderWidth: 1, borderColor: Colors.border,
+    paddingHorizontal: 12, paddingVertical: 8,
+    marginBottom: 12,
+  },
+  nearbySearchInput: {
+    flex: 1, fontSize: 14, color: Colors.warmDark, padding: 0,
   },
   filterBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: 12,
+    paddingVertical: 5,
+    borderRadius: 10,
     flexShrink: 0,
     backgroundColor: Colors.softPink + '40',
     borderWidth: 1,
@@ -840,7 +850,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.roseDark,
     borderColor: Colors.roseDark,
   },
-  filterBtnText: { fontSize: 13, fontWeight: '700', color: Colors.roseDark },
+  filterBtnText: { fontSize: 12, fontWeight: '700', color: Colors.roseDark },
   profileBtn: {
     width: 36,
     height: 36,
@@ -859,22 +869,6 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.softPink + '50',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  searchBar: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.inputBg,
-    borderRadius: 12,
-    paddingHorizontal: 10,
-    paddingVertical: Platform.OS === 'android' ? 4 : 8,
-    gap: 6,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 14,
-    color: Colors.warmDark,
-    padding: 0,
   },
   // Nearby horizontal list
   nearbyRow: { gap: 12, paddingBottom: 4 },
@@ -901,11 +895,12 @@ const styles = StyleSheet.create({
   nearbyPill: { borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3, maxWidth: 100 },
   nearbyPillText: { fontSize: 10, fontWeight: '700', textAlign: 'center' },
 
-  // Filter panel
+  // Filter panel (inside the Nearby stylists section — mirrors provider dashboard)
   filterPanel: {
-    backgroundColor: Colors.white, marginHorizontal: 16, marginTop: 8,
-    borderRadius: 16, padding: 14, borderWidth: 1, borderColor: Colors.border,
-    gap: 10,
+    backgroundColor: Colors.white,
+    borderRadius: 16, padding: 14, marginBottom: 12,
+    borderWidth: 1, borderColor: Colors.border,
+    gap: 12,
   },
   filterPanelLabel: {
     fontSize: 11, fontWeight: '700', color: Colors.muted,
