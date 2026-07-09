@@ -295,7 +295,8 @@ export default function SettingsScreen() {
         else setVerifStatus('none')
       }
 
-      // Blocked users (people I've blocked) — resolve names/pics via public.users.
+      // Blocked users (people I've blocked) — resolve names/pics via public_profiles
+      // (users RLS blocks reading other people's rows directly).
       const { data: blockRows } = await supabase
         .from('blocks')
         .select('blocked_id')
@@ -303,7 +304,7 @@ export default function SettingsScreen() {
       const blockedIds = [...new Set((blockRows ?? []).map((r: any) => r.blocked_id as string))]
       if (blockedIds.length > 0) {
         const { data: bu } = await supabase
-          .from('users')
+          .from('public_profiles')
           .select('id, first_name, last_initial, profile_pic_url')
           .in('id', blockedIds)
         const map = Object.fromEntries((bu ?? []).map((u: any) => [u.id, u]))
