@@ -12,10 +12,10 @@ export const CategoryColors = {
 } as const
 
 export const Colors = {
-  rose:        '#F5388F',  // primary pink — CTAs, active states, links, wordmark
-  roseDark:    '#D62D77',  // deep pink — pressed / dark CTA
+  rose:        '#DB4B86',  // primary pink — CTAs, active states, links, wordmark (muted rose)
+  roseDark:    '#C23A71',  // deep pink — pressed / dark CTA
   softPink:    '#FFE3EF',  // light pink — accent fills, inactive chips, gradient top
-  pinkVibrant: '#F5388F',  // unread accent (kept in the pink family)
+  pinkVibrant: '#DB4B86',  // unread accent (kept in the pink family)
   cream:       '#FFF7FA',  // very light pink — page background
   warmDark:    '#2B2531',  // near-black plum — heading / primary text
   white:       '#FFFFFF',  // card surfaces

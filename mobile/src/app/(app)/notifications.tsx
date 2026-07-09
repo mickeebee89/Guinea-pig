@@ -562,8 +562,8 @@ const styles = StyleSheet.create({
     ...Shadow.soft,
   },
   notifCardUnread: {
-    backgroundColor: Colors.pinkVibrant + '1A',
-    borderColor: Colors.softPink,
+    backgroundColor: Colors.softPink,
+    borderColor: Colors.rose + '55',
   },
   unreadAccent: {
     position: 'absolute',

@@ -1494,10 +1494,10 @@ const styles = StyleSheet.create({
     borderBottomColor: Colors.border,
     backgroundColor: Colors.cream,
   },
-  topBarLeft: { gap: 2 },
-  greeting:  { fontFamily: Fonts.display, fontSize: 30, color: Colors.rose, letterSpacing: -0.5 },
+  topBarLeft: { gap: 2, flexShrink: 1 },
+  greeting:  { fontFamily: Fonts.display, fontSize: 24, color: Colors.rose, letterSpacing: -0.3 },
   subGreeting: { fontSize: 13, color: Colors.muted },
-  topBarRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  topBarRight: { flexDirection: 'row', alignItems: 'center', gap: 10, marginLeft: 12, flexShrink: 0 },
   settingsBtn: {
     width: 36, height: 36, borderRadius: 18,
     backgroundColor: Colors.white, alignItems: 'center', justifyContent: 'center',

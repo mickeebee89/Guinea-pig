@@ -11,7 +11,7 @@ import * as Haptics from 'expo-haptics'
 import * as Updates from 'expo-updates'
 import { Colors, Fonts, Radius, Shadow } from '@/constants/Colors'
 
-const LOGO_URI = 'https://res.cloudinary.com/dzbazlq1o/image/upload/c_fill,g_north,ar_1:1/f_auto,q_auto/54340_ia8jsd'
+const LOGO = require('../../../assets/images/guinea-pig-logo.png')
 
 interface Props {
   onSelectRole: (role: 'provider' | 'model') => void
@@ -41,16 +41,17 @@ export default function WelcomeScreen({ onSelectRole, onGoLogin }: Props) {
       <View style={styles.hero}>
         <View style={[styles.logoRing, { width: logoSize + 16, height: logoSize + 16, borderRadius: (logoSize + 16) / 2 }]}>
           <Image
-            source={{ uri: LOGO_URI }}
-            style={{ width: logoSize, height: logoSize, borderRadius: logoSize / 2 }}
-            resizeMode="cover"
+            source={LOGO}
+            style={{ width: logoSize * 0.82, height: logoSize * 0.82 }}
+            resizeMode="contain"
           />
         </View>
+        <Text style={styles.wordmark}>Guinea Pig App</Text>
         <Text style={styles.tagline}>Someone's gotta be the guinea pig</Text>
       </View>
 
       <View style={styles.cards}>
-        <Text style={styles.prompt}>I want to…</Text>
+        <Text style={styles.prompt}>I want to be a…</Text>
         <View style={[styles.cardsInner, wide && styles.cardsInnerRow]}>
           <RoleCard
             emoji="✨"
@@ -146,7 +147,7 @@ const styles = StyleSheet.create({
     gap: 20,
   },
   logoRing: {
-    backgroundColor: Colors.white,
+    backgroundColor: Colors.softPink,
     alignItems: 'center',
     justifyContent: 'center',
     ...Shadow.card,
@@ -155,6 +156,12 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.28,
     shadowRadius: 20,
     elevation: 10,
+  },
+  wordmark: {
+    fontFamily: Fonts.display,
+    fontSize: 32,
+    color: Colors.rose,
+    letterSpacing: -0.5,
   },
   tagline: {
     fontFamily: Fonts.heading,
