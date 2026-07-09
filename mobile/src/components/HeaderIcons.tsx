@@ -32,11 +32,16 @@ export default function HeaderIcons() {
       // Unread messages NOT sent by me. messages is participant-scoped by RLS, so this
       // only counts messages in my own sessions — no manual session join needed. read_at
       // is set on chat open, so the dot clears once the conversation is viewed.
+      // Only count messages in READABLE sessions (accepted/completed): a cancelled
+      // session's chat is locked and never runs the mark-as-read step, so its unread
+      // messages are unreachable and must not keep the dot lit (e.g. after a block
+      // auto-cancels the booking).
       supabase
         .from('messages')
-        .select('id', { count: 'exact', head: true })
+        .select('id, sessions!inner(status)', { count: 'exact', head: true })
         .neq('sender_id', userId)
-        .is('read_at', null),
+        .is('read_at', null)
+        .in('sessions.status', ['accepted', 'completed']),
     ])
     setUnreadNotifs(notifCount ?? 0)
     setHasUnreadMsgs((msgCount ?? 0) > 0)

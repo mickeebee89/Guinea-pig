@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback } from 'react'
 import {
   View,
   Text,
@@ -8,12 +8,13 @@ import {
   Image,
   RefreshControl,
 } from 'react-native'
-import { useRouter } from 'expo-router'
+import { useRouter, useFocusEffect } from 'expo-router'
 import * as Haptics from 'expo-haptics'
 import { Ionicons } from '@expo/vector-icons'
 import { Colors, CategoryColors } from '@/constants/Colors'
 import { useAuth } from '@/context/auth'
 import { supabase } from '@/lib/supabase'
+import { getBlockedIds } from '@/lib/blocks'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import ScreenDecor from '@/components/ScreenDecor'
 import LoadErrorState from '@/components/LoadErrorState'
@@ -109,7 +110,9 @@ export default function MessagesScreen() {
         .from('sessions')
         .select('id, provider_id, model_user_id, date, treatment_id, status, created_at')
         .or(orClause)
-        .not('status', 'eq', 'completed')
+        // Hide finished/dead conversations: completed, cancelled and declined bookings drop
+        // off the list. Keeps pending ("Awaiting acceptance…") and accepted.
+        .not('status', 'in', '(completed,cancelled,declined)')
         .order('created_at', { ascending: false })
 
       const sessions = (sessionsRaw ?? []) as {
@@ -135,10 +138,11 @@ export default function MessagesScreen() {
         { data: modelInfos },
         { data: treatInfos },
         { data: msgsRaw, error: msgsErr },
+        blocked,
       ] = await Promise.all([
         supabase
           .from('providers')
-          .select('id, name, profile_pic_url')
+          .select('id, user_id, name, profile_pic_url')
           .in('id', providerIds),
         supabase
           .from('public_profiles')
@@ -156,6 +160,7 @@ export default function MessagesScreen() {
           .in('session_id', sessionIds)
           .order('created_at', { ascending: false })
           .limit(300),
+        getBlockedIds(userId).catch(() => new Set<string>()),
       ])
 
       // Surface real query errors (e.g. schema mismatch) instead of silently rendering
@@ -179,17 +184,34 @@ export default function MessagesScreen() {
       const lastMsgBySession: Record<string, typeof msgs[0]> = {}
       const unreadBySession:  Record<string, number>          = {}
 
+      // Only 'accepted' bookings have an openable chat that runs the mark-as-read step.
+      // Unread in a locked session (cancelled/pending/declined) can never be cleared, so
+      // it must not show a badge — otherwise it sticks forever (e.g. after a block cancels
+      // the booking). Mirrors the HeaderIcons unread-count rule.
+      const openableSessionIds = new Set(
+        sessions.filter(s => s.status === 'accepted').map(s => s.id)
+      )
+
       for (const m of msgs) {
         if (!lastMsgBySession[m.session_id]) {
           lastMsgBySession[m.session_id] = m
         }
-        if (!m.read_at && m.sender_id !== userId) {
+        if (!m.read_at && m.sender_id !== userId && openableSessionIds.has(m.session_id)) {
           unreadBySession[m.session_id] = (unreadBySession[m.session_id] ?? 0) + 1
         }
       }
 
-      // 5. Build ConvItem list
-      const items: ConvItem[] = sessions.map(s => {
+      // 5. Build ConvItem list — mutual block: drop conversations whose other party
+      //    is blocked either direction. Other party = the provider's owning user
+      //    (when I'm the model) or the model_user_id (when I'm the provider).
+      const items: ConvItem[] = sessions
+        .filter(s => {
+          const otherUserId = s.model_user_id === userId
+            ? (provMap[s.provider_id] as any)?.user_id
+            : s.model_user_id
+          return !(otherUserId && blocked.has(otherUserId))
+        })
+        .map(s => {
         const isModel    = s.model_user_id === userId
         const prov       = provMap[s.provider_id]
         const model      = modelMap[s.model_user_id]
@@ -234,7 +256,9 @@ export default function MessagesScreen() {
     }
   }, [userId])
 
-  useEffect(() => { load() }, [load])
+  // Reload on every focus (not just mount) so unread badges clear when returning
+  // from a chat — matches HeaderIcons / provider-dashboard focus-refresh pattern.
+  useFocusEffect(useCallback(() => { load() }, [load]))
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true)
