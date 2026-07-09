@@ -223,6 +223,7 @@ export default function SettingsScreen() {
   const [loading,      setLoading]      = useState(true)
   const [loadError,    setLoadError]    = useState(false)
   const [uploadingPic, setUploadingPic] = useState(false)
+  const [blockedUsers, setBlockedUsers] = useState<{ id: string; name: string; picUrl: string | null }[]>([])
 
   // ── Edit modal ─────────────────────────────────────────────────────────────
 
@@ -292,6 +293,29 @@ export default function SettingsScreen() {
         if (vr?.status === 'pending')  setVerifStatus('pending')
         else if (vr?.status === 'declined') setVerifStatus('declined')
         else setVerifStatus('none')
+      }
+
+      // Blocked users (people I've blocked) — resolve names/pics via public.users.
+      const { data: blockRows } = await supabase
+        .from('blocks')
+        .select('blocked_id')
+        .eq('blocker_id', userId)
+      const blockedIds = [...new Set((blockRows ?? []).map((r: any) => r.blocked_id as string))]
+      if (blockedIds.length > 0) {
+        const { data: bu } = await supabase
+          .from('users')
+          .select('id, first_name, last_initial, profile_pic_url')
+          .in('id', blockedIds)
+        const map = Object.fromEntries((bu ?? []).map((u: any) => [u.id, u]))
+        setBlockedUsers(blockedIds.map(id => {
+          const u = map[id]
+          const name = u
+            ? (`${u.first_name ?? ''}${u.last_initial ? ` ${u.last_initial}.` : ''}`.trim() || 'User')
+            : 'User'
+          return { id, name, picUrl: u?.profile_pic_url ?? null }
+        }))
+      } else {
+        setBlockedUsers([])
       }
     } catch (e) {
       console.error('settings load failed:', e)
@@ -504,6 +528,20 @@ export default function SettingsScreen() {
       { text: 'Cancel', style: 'cancel' },
       { text: 'Sign out', style: 'destructive', onPress: () => signOut() },
     ])
+  }
+
+  const handleUnblock = async (blockedId: string) => {
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+    const { error } = await supabase.from('blocks')
+      .delete()
+      .eq('blocker_id', userId)
+      .eq('blocked_id', blockedId)
+    if (error) {
+      Alert.alert('Couldn’t unblock', error.message ?? 'Please try again.')
+      return
+    }
+    setBlockedUsers(prev => prev.filter(u => u.id !== blockedId))
+    Alert.alert('Unblocked', 'You can interact with this user again.')
   }
 
   const handleDeleteAccount = async () => {
@@ -813,6 +851,30 @@ export default function SettingsScreen() {
           </>
         )}
 
+        {/* ─────────────── BLOCKED USERS ─────────────── */}
+        <Text style={styles.sectionTitle}>Blocked users</Text>
+        <View style={styles.card}>
+          {blockedUsers.length === 0 ? (
+            <Text style={styles.blockedEmpty}>You haven’t blocked anyone.</Text>
+          ) : (
+            blockedUsers.map((u, i) => (
+              <View key={u.id} style={[rowSt.row, i < blockedUsers.length - 1 && rowSt.rowBorder]}>
+                {u.picUrl ? (
+                  <Image source={{ uri: u.picUrl }} style={styles.blockedAvatar} />
+                ) : (
+                  <View style={[styles.blockedAvatar, styles.blockedAvatarPlaceholder]}>
+                    <Ionicons name="person" size={16} color={Colors.muted} />
+                  </View>
+                )}
+                <Text style={rowSt.label} numberOfLines={1}>{u.name}</Text>
+                <TouchableOpacity style={styles.unblockBtn} onPress={() => handleUnblock(u.id)} activeOpacity={0.8}>
+                  <Text style={styles.unblockBtnText}>Unblock</Text>
+                </TouchableOpacity>
+              </View>
+            ))
+          )}
+        </View>
+
         {/* ─────────────── LEGAL ─────────────── */}
         <Text style={styles.sectionTitle}>Legal</Text>
         <View style={styles.card}>
@@ -1020,6 +1082,20 @@ export default function SettingsScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: 'transparent', overflow: 'hidden' },
   centred:   { alignItems: 'center', justifyContent: 'center' },
+
+  // Blocked users
+  blockedEmpty: {
+    fontSize: 14, color: Colors.muted, paddingHorizontal: 16, paddingVertical: 16,
+  },
+  blockedAvatar: { width: 32, height: 32, borderRadius: 16 },
+  blockedAvatarPlaceholder: {
+    backgroundColor: Colors.inputBg, alignItems: 'center', justifyContent: 'center',
+  },
+  unblockBtn: {
+    paddingHorizontal: 14, paddingVertical: 7, borderRadius: 10,
+    borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.white,
+  },
+  unblockBtnText: { fontSize: 13, fontWeight: '700', color: Colors.roseDark },
 
   topBar: {
     flexDirection: 'row',
