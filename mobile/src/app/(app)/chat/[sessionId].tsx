@@ -20,6 +20,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Colors, CategoryColors } from '@/constants/Colors'
 import { useAuth } from '@/context/auth'
 import { supabase } from '@/lib/supabase'
+import { getBlockedIds } from '@/lib/blocks'
 import LoadErrorState from '@/components/LoadErrorState'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -105,6 +106,7 @@ export default function ChatScreen() {
   const [chat,       setChat]       = useState<SessionDetail | null>(null)
   const [treatment,  setTreatment]  = useState<Treatment | null>(null)
   const [otherParty, setOtherParty] = useState<OtherParty | null>(null)
+  const [isBlocked,  setIsBlocked]  = useState(false)   // mutual block either direction
   const [messages,   setMessages]   = useState<Message[]>([])
   const [inputText,  setInputText]  = useState('')
   const [sending,    setSending]    = useState(false)
@@ -158,11 +160,17 @@ export default function ChatScreen() {
 
       const od = (otherData as any).data
       if (od) {
+        const otherUserId = isModel ? (od.user_id ?? null) : s.model_user_id
         setOtherParty(
           isModel
-            ? { name: od.name ?? 'Provider', picUrl: od.profile_pic_url ?? null, userId: od.user_id ?? null }
-            : { name: od.first_name ? `${od.first_name} ${od.last_initial ?? ''}.`.trim() : 'Model', picUrl: od.profile_pic_url ?? null, userId: s.model_user_id }
+            ? { name: od.name ?? 'Provider', picUrl: od.profile_pic_url ?? null, userId: otherUserId }
+            : { name: od.first_name ? `${od.first_name} ${od.last_initial ?? ''}.`.trim() : 'Model', picUrl: od.profile_pic_url ?? null, userId: otherUserId }
         )
+        // Mutual block: if blocked either direction, the chat becomes read-only.
+        if (otherUserId && userId) {
+          const blocked = await getBlockedIds(userId).catch(() => new Set<string>())
+          setIsBlocked(blocked.has(otherUserId))
+        }
       }
 
       // Messages (accepted or completed)
@@ -283,6 +291,46 @@ export default function ChatScreen() {
               if (error && (error as any).code !== '23505') {
                 Alert.alert('Couldn’t block', error.message ?? 'Please try again.')
                 return
+              }
+
+              // Best-effort: cancel any live bookings between the pair and notify the
+              // other party. If this fails, the block still stands (log, don't fail).
+              try {
+                const me = userId
+                const them = otherParty.userId
+                // Resolve provider ownership for both sides (blocker/blocked).
+                const { data: provRows } = await supabase.from('providers')
+                  .select('id, user_id').in('user_id', [me, them])
+                const myProviderId    = (provRows ?? []).find((p: any) => p.user_id === me)?.id
+                const theirProviderId = (provRows ?? []).find((p: any) => p.user_id === them)?.id
+
+                // Sessions between the pair, either direction (I'm provider / I'm model).
+                const orParts: string[] = []
+                if (myProviderId)    orParts.push(`and(model_user_id.eq.${them},provider_id.eq.${myProviderId})`)
+                if (theirProviderId) orParts.push(`and(model_user_id.eq.${me},provider_id.eq.${theirProviderId})`)
+
+                if (orParts.length > 0) {
+                  const { data: pairSessions } = await supabase.from('sessions')
+                    .select('id')
+                    .in('status', ['pending', 'accepted'])
+                    .or(orParts.join(','))
+                  const ids = (pairSessions ?? []).map((r: any) => r.id as string)
+                  if (ids.length > 0) {
+                    await supabase.from('sessions').update({ status: 'cancelled' }).in('id', ids)
+                    // Notify the OTHER party per cancelled session — never mention blocking.
+                    await supabase.from('notifications').insert(
+                      ids.map(sid => ({
+                        user_id:    them,
+                        type:       'session_cancelled',
+                        title:      'Booking cancelled',
+                        body:       'Your upcoming treatment has been cancelled.',
+                        session_id: sid,
+                      }))
+                    )
+                  }
+                }
+              } catch (e) {
+                console.warn('block: cancel/notify bookings failed (non-blocking):', e)
               }
             }
             Alert.alert('Blocked', `${name} has been blocked.`)
@@ -644,8 +692,13 @@ export default function ChatScreen() {
         }
       />
 
-      {/* ── Input bar (accepted only) ── */}
-      {isAccepted && (
+      {/* ── Input bar (accepted only) — blocked users can't message ── */}
+      {isBlocked ? (
+        <View style={[styles.blockedBar, { paddingBottom: Math.max(insets.bottom, 12) }]}>
+          <Ionicons name="ban-outline" size={16} color={Colors.muted} />
+          <Text style={styles.blockedBarText}>You can’t message this user.</Text>
+        </View>
+      ) : isAccepted ? (
         <View style={[styles.inputBar, { paddingBottom: Math.max(insets.bottom, 12) }]}>
           <TextInput
             style={styles.input}
@@ -666,7 +719,7 @@ export default function ChatScreen() {
             <Ionicons name="send" size={18} color={Colors.white} />
           </TouchableOpacity>
         </View>
-      )}
+      ) : null}
 
       {/* ── Block / Report modal ── */}
       <Modal
@@ -967,6 +1020,18 @@ const styles = StyleSheet.create({
     borderTopColor: Colors.border,
     backgroundColor: Colors.cream,
   },
+  blockedBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+    backgroundColor: Colors.cream,
+  },
+  blockedBarText: { fontSize: 13, fontWeight: '600', color: Colors.muted },
   input: {
     flex: 1,
     backgroundColor: Colors.white,

@@ -17,6 +17,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Colors, CategoryColors } from '@/constants/Colors'
 import { useAuth } from '@/context/auth'
 import { supabase } from '@/lib/supabase'
+import { getBlockedIds } from '@/lib/blocks'
 import AvailabilityCalendar from '@/components/AvailabilityCalendar'
 
 const BANNER_HEIGHT = 165
@@ -131,6 +132,7 @@ export default function ProviderShopScreen() {
   const [reviews,       setReviews]       = useState<Review[]>([])
   const [availability,  setAvailability]  = useState<AvailabilitySlot[]>([])
   const [hasOpenSlots,  setHasOpenSlots]  = useState(false)
+  const [isBlocked,     setIsBlocked]     = useState(false)   // mutual block either direction
   const [isFavourite,   setIsFavourite]   = useState(false)
   const [refreshing,    setRefreshing]    = useState(false)
   const [loading,       setLoading]       = useState(true)
@@ -191,6 +193,11 @@ export default function ProviderShopScreen() {
 
       // Fetch reviews using the provider's auth user_id as reviewee_id
       const providerUserId = (provData as any)?.user_id
+      // Mutual block: if blocked either direction, Apply is disabled below.
+      if (providerUserId && userId) {
+        const blocked = await getBlockedIds(userId).catch(() => new Set<string>())
+        setIsBlocked(blocked.has(providerUserId))
+      }
       if (providerUserId) {
         try {
           const { data: revData, error: revErr } = await supabase
@@ -484,7 +491,15 @@ export default function ProviderShopScreen() {
       {/* ── Sticky apply bar ── */}
       {ownShop !== '1' && (
         <View style={[styles.stickyBar, { paddingBottom: Math.max(insets.bottom, 16) }]}>
-          {!hasOpenSlots ? (
+          {isBlocked ? (
+            <>
+              <View style={[styles.applyBtn, styles.applyBtnDisabled]}>
+                <Ionicons name="ban-outline" size={18} color={Colors.muted} />
+                <Text style={[styles.applyBtnText, { color: Colors.muted }]}>Apply for treatment</Text>
+              </View>
+              <Text style={styles.applyHint}>You can’t apply to this stylist</Text>
+            </>
+          ) : !hasOpenSlots ? (
             <>
               <View style={[styles.applyBtn, styles.applyBtnDisabled]}>
                 <Ionicons name="calendar-outline" size={18} color={Colors.muted} />

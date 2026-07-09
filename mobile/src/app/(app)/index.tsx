@@ -22,6 +22,7 @@ import { Colors, CategoryColors } from '@/constants/Colors'
 import { useAuth } from '@/context/auth'
 import { supabase } from '@/lib/supabase'
 import { isIdentityVerified } from '@/lib/verification'
+import { getBlockedIds } from '@/lib/blocks'
 import ScreenDecor from '@/components/ScreenDecor'
 import HeaderIcons from '@/components/HeaderIcons'
 import { useAppRole } from '@/components/AppEntry'
@@ -186,19 +187,23 @@ function ModelHomeContent() {
         }
       }).catch(() => {})
 
-      const [{ data: provData }, { data: favData }] = await Promise.all([
+      const [{ data: provData }, { data: favData }, blockedIds] = await Promise.all([
         supabase
           .from('providers')
-          .select('id, name, profile_pic_url, is_verified, rating, location_text, latitude, longitude, provider_treatments(category)')
+          .select('id, user_id, name, profile_pic_url, is_verified, rating, location_text, latitude, longitude, provider_treatments(category)')
           .eq('is_published', true),
         supabase
           .from('favourites')
           .select('provider_id')
           .eq('user_id', userId),
+        getBlockedIds(userId).catch(() => new Set<string>()),
       ])
 
       if (provData) {
-        setProviders((provData as any[]).map(p => ({
+        // Mutual block: hide any stylist whose owning user is blocked either direction.
+        setProviders((provData as any[])
+          .filter(p => !blockedIds.has(p.user_id as string))
+          .map(p => ({
           id:                  p.id,
           name:                (p.name as string) || 'Stylist',
           location:            (p.location_text as string | null) || null,

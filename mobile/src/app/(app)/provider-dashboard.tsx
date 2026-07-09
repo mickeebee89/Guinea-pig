@@ -20,6 +20,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Colors, CategoryColors } from '@/constants/Colors'
 import { useAuth } from '@/context/auth'
 import { supabase } from '@/lib/supabase'
+import { getBlockedIds } from '@/lib/blocks'
 import ScreenDecor from '@/components/ScreenDecor'
 import LoadErrorState from '@/components/LoadErrorState'
 import HeaderIcons from '@/components/HeaderIcons'
@@ -224,6 +225,8 @@ export default function ProviderDashboardScreen() {
   const [upcomingSessions,  setUpcomingSessions]  = useState<SessionCard[]>([])
   const [stats,             setStats]             = useState<Stats>({ totalSessions: 0, portfolioCount: 0 })
   const [nearbyModels,      setNearbyModels]      = useState<ModelCard[]>([])
+  // Mutually-blocked user ids (either direction) — filtered out of applications & nearby.
+  const [blockedIds,        setBlockedIds]        = useState<Set<string>>(new Set())
   const [nearbyLoading,     setNearbyLoading]     = useState(true)
   const [modelSearch,       setModelSearch]       = useState('')
   const [showModelFilters,  setShowModelFilters]  = useState(false)
@@ -429,7 +432,10 @@ export default function ProviderDashboardScreen() {
         }
       }
 
-      setPendingSessions((pendingData ?? []).map(enrich))
+      // Mutual block: hide applications from blocked models (either direction).
+      const blocked = await getBlockedIds(userId).catch(() => new Set<string>())
+      setBlockedIds(blocked)
+      setPendingSessions((pendingData ?? []).filter((s: any) => !blocked.has(s.model_user_id)).map(enrich))
       setUpcomingSessions((upcomingData ?? []).map(enrich))
     } catch (e) {
       console.error('provider-dashboard load failed:', e)
@@ -1091,6 +1097,7 @@ export default function ProviderDashboardScreen() {
           // nearby_models RPC. Only name/attribute/verified filtering remains client-side.
           const q = modelSearch.trim().toLowerCase()
           const filtered = nearbyModels.filter(m => {
+            if (blockedIds.has(m.id)) return false
             if (q && !m.name.toLowerCase().includes(q)) return false
             if (filterHairColour && m.hair_colour !== filterHairColour) return false
             if (filterHairType && m.hair_type !== filterHairType) return false
