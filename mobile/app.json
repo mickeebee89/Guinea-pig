@@ -60,7 +60,15 @@
       [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "Guinea Pig uses your location to show nearby stylists."
+          "locationWhenInUsePermission": "Guinea Pig uses your location to show nearby stylists."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Guinea Pig accesses your photos so you can upload a profile picture, portfolio images, and treatment photos.",
+          "cameraPermission": "Guinea Pig uses your camera to take your identity verification selfie and profile photo.",
+          "microphonePermission": false
         }
       ]
     ],
