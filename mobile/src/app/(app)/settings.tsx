@@ -519,7 +519,7 @@ export default function SettingsScreen() {
           onPress: async () => {
             Alert.alert(
               'Are you absolutely sure?',
-              'Type DELETE to confirm — your account will be permanently removed.',
+              'Your account and all associated data will be permanently removed. This cannot be undone.',
               [
                 { text: 'Cancel', style: 'cancel' },
                 {
@@ -527,12 +527,15 @@ export default function SettingsScreen() {
                   style: 'destructive',
                   onPress: async () => {
                     try {
-                      await supabase.from('users').update({
-                        deleted_at: new Date().toISOString(),
-                      }).eq('id', userId)
+                      // Real deletion: the edge function removes the auth user, all
+                      // DB rows and storage for the CALLER's own id (derived from JWT).
+                      const { data, error } = await supabase.functions.invoke('delete-account')
+                      if (error || (data as any)?.error) {
+                        throw new Error((data as any)?.error ?? error?.message ?? 'delete failed')
+                      }
                       await signOut()
                     } catch {
-                      Alert.alert('Error', 'Could not delete account. Contact support@guineapig.beauty.')
+                      Alert.alert('Error', 'Could not delete account. Please try again or contact support@guineapig.beauty.')
                     }
                   },
                 },
