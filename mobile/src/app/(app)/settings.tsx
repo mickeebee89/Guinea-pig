@@ -68,9 +68,9 @@ const NOTIF_ROWS: { key: keyof NotifPrefs; label: string; sub: string; icon: str
 ]
 
 const LEGAL_LINKS = [
-  { label: 'Terms of Service',   icon: 'document-outline',  url: 'https://guineapig.beauty/terms'     },
-  { label: 'Community Rules',    icon: 'people-outline',    url: 'https://guineapig.beauty/community' },
-  { label: 'Privacy Policy',     icon: 'eye-off-outline',   url: 'https://guineapig.beauty/privacy'   },
+  { label: 'Terms of Service',   icon: 'document-outline',  url: 'https://guineapigapp.co.uk/terms'     },
+  { label: 'Community Rules',    icon: 'people-outline',    url: 'https://guineapigapp.co.uk/community' },
+  { label: 'Privacy Policy',     icon: 'eye-off-outline',   url: 'https://guineapigapp.co.uk/privacy'   },
 ]
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -535,7 +535,7 @@ export default function SettingsScreen() {
                       }
                       await signOut()
                     } catch {
-                      Alert.alert('Error', 'Could not delete account. Please try again or contact support@guineapig.beauty.')
+                      Alert.alert('Error', 'Could not delete account. Please try again or contact support@guineapigapp.co.uk.')
                     }
                   },
                 },
