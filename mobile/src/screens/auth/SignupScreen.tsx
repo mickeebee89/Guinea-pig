@@ -7,14 +7,19 @@ import {
   KeyboardAvoidingView,
   Platform,
   TouchableOpacity,
+  Linking,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import * as Haptics from 'expo-haptics'
+import { Ionicons } from '@expo/vector-icons'
 import { Colors } from '@/constants/Colors'
 import { Button } from '@/components/Button'
 import { Input } from '@/components/Input'
 import { supabase } from '@/lib/supabase'
 import { pendingAuth } from '@/lib/pendingAuth'
+
+const TERMS_URL   = 'https://guineapigapp.co.uk/terms'
+const PRIVACY_URL = 'https://guineapigapp.co.uk/privacy'
 
 interface ConfirmParams {
   email: string
@@ -35,9 +40,23 @@ export default function SignupScreen({ role, onBack, onGoLogin, onNeedConfirmati
   const [lastInitial, setLastInitial] = useState('')
   const [email, setEmail]             = useState('')
   const [password, setPassword]       = useState('')
+  const [ageConfirmed, setAgeConfirmed] = useState(false)
+  const [termsAccepted, setTermsAccepted] = useState(false)
   const [loading, setLoading]         = useState(false)
   const [errors, setErrors]           = useState<Record<string, string>>({})
   const [cooldown, setCooldown]       = useState(0)
+
+  const toggleAge = async () => {
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+    setAgeConfirmed(a => !a)
+  }
+
+  const toggleTerms = async () => {
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+    setTermsAccepted(a => !a)
+  }
+
+  const openLegal = (url: string) => { Linking.openURL(url) }
 
   useEffect(() => {
     if (cooldown <= 0) return
@@ -53,6 +72,8 @@ export default function SignupScreen({ role, onBack, onGoLogin, onNeedConfirmati
     if (!email.trim())           e.email       = 'Enter your email'
     if (!email.includes('@'))    e.email       = 'Enter a valid email'
     if (password.length < 8)     e.password    = 'At least 8 characters'
+    if (!ageConfirmed)           e.age         = 'You must confirm you are 18 or over'
+    if (!termsAccepted)          e.terms       = 'Please agree to the Terms and Privacy Policy'
     return e
   }
 
@@ -77,7 +98,7 @@ export default function SignupScreen({ role, onBack, onGoLogin, onNeedConfirmati
       // Persist name into user_metadata too, so a later login self-heal of a
       // half-created account can recreate the users row with the real name
       // instead of a placeholder.
-      options: { data: { role, first_name: cleanFirst, last_initial: cleanInitial } },
+      options: { data: { role, first_name: cleanFirst, last_initial: cleanInitial, age_confirmed: true, terms_accepted: true } },
     })
 
     if (error) {
@@ -200,6 +221,31 @@ export default function SignupScreen({ role, onBack, onGoLogin, onNeedConfirmati
                 error={errors.password}
               />
 
+              {/* 18+ age confirmation — required (store compliance gate) */}
+              <TouchableOpacity style={styles.checkRow} onPress={toggleAge} activeOpacity={0.8}>
+                <View style={[styles.checkbox, ageConfirmed && styles.checkboxActive]}>
+                  {ageConfirmed && <Ionicons name="checkmark" size={14} color={Colors.white} />}
+                </View>
+                <Text style={styles.checkLabel}>I confirm I am 18 or over</Text>
+              </TouchableOpacity>
+              {errors.age && <Text style={styles.ageError}>{errors.age}</Text>}
+
+              {/* Terms & Privacy acceptance — required (store compliance gate) */}
+              <View style={styles.checkRow}>
+                <TouchableOpacity onPress={toggleTerms} activeOpacity={0.8}>
+                  <View style={[styles.checkbox, termsAccepted && styles.checkboxActive]}>
+                    {termsAccepted && <Ionicons name="checkmark" size={14} color={Colors.white} />}
+                  </View>
+                </TouchableOpacity>
+                <Text style={styles.checkLabel}>
+                  I agree to the{' '}
+                  <Text style={styles.checkLink} onPress={() => openLegal(TERMS_URL)}>Terms of Service</Text>
+                  {' '}and{' '}
+                  <Text style={styles.checkLink} onPress={() => openLegal(PRIVACY_URL)}>Privacy Policy</Text>
+                </Text>
+              </View>
+              {errors.terms && <Text style={styles.ageError}>{errors.terms}</Text>}
+
               <Button
                 label={cooldown > 0 ? `Please wait ${cooldown}s…` : 'Create account'}
                 onPress={handleSignup}
@@ -213,10 +259,6 @@ export default function SignupScreen({ role, onBack, onGoLogin, onNeedConfirmati
                 <Text style={styles.switchText}>Already have an account? </Text>
                 <Text style={styles.switchLink} onPress={goLogin}>Log in</Text>
               </View>
-
-              <Text style={styles.terms}>
-                By signing up you agree to our Terms of Service and Privacy Policy.
-              </Text>
             </View>
           </ScrollView>
         </KeyboardAvoidingView>
@@ -260,6 +302,46 @@ const styles = StyleSheet.create({
   nameRow:   { flexDirection: 'row', gap: 12 },
   nameFirst:   { flex: 1 },
   nameInitial: { width: 80 },
+  checkRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 4,
+    marginTop: 4,
+  },
+  checkbox: {
+    width: 24,
+    height: 24,
+    borderRadius: 7,
+    borderWidth: 2,
+    borderColor: Colors.border,
+    backgroundColor: Colors.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  checkboxActive: {
+    backgroundColor: Colors.roseDark,
+    borderColor: Colors.roseDark,
+  },
+  checkLabel: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.warmDark,
+    lineHeight: 20,
+  },
+  checkLink: {
+    color: Colors.roseDark,
+    fontWeight: '700',
+    textDecorationLine: 'underline',
+  },
+  ageError: {
+    color: Colors.error,
+    fontSize: 12,
+    marginTop: 6,
+    marginLeft: 4,
+  },
   submitBtn: { marginTop: 8, marginBottom: 16 },
   switchRow: {
     flexDirection: 'row',
@@ -268,5 +350,4 @@ const styles = StyleSheet.create({
   },
   switchText: { fontSize: 14, color: Colors.muted },
   switchLink: { fontSize: 14, fontWeight: '600', color: Colors.roseDark },
-  terms: { fontSize: 12, color: Colors.muted, textAlign: 'center', lineHeight: 18 },
 })
