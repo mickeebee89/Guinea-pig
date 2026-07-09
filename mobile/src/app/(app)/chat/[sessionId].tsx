@@ -277,9 +277,13 @@ export default function ChatScreen() {
           onPress: async () => {
             await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning)
             if (otherParty?.userId && userId) {
-              supabase.from('user_blocks')
+              const { error } = await supabase.from('blocks')
                 .insert({ blocker_id: userId, blocked_id: otherParty.userId })
-                .then(() => {})
+              // 23505 = unique_violation → already blocked; treat as success.
+              if (error && (error as any).code !== '23505') {
+                Alert.alert('Couldn’t block', error.message ?? 'Please try again.')
+                return
+              }
             }
             Alert.alert('Blocked', `${name} has been blocked.`)
           },
