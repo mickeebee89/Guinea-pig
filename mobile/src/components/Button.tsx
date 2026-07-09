@@ -7,7 +7,7 @@ import {
   TextStyle,
 } from 'react-native'
 import * as Haptics from 'expo-haptics'
-import { Colors } from '@/constants/Colors'
+import { Colors, Fonts, Radius, Shadow } from '@/constants/Colors'
 
 type Variant = 'primary' | 'secondary' | 'ghost'
 
@@ -56,7 +56,7 @@ export function Button({
       ]}
     >
       {loading ? (
-        <ActivityIndicator color={variant === 'primary' ? Colors.white : Colors.roseDark} />
+        <ActivityIndicator color={variant === 'primary' ? Colors.white : Colors.rose} />
       ) : (
         <Text
           style={[
@@ -77,13 +77,14 @@ export function Button({
 const styles = StyleSheet.create({
   base: {
     height: 54,
-    borderRadius: 16,
+    borderRadius: Radius.lg,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 24,
   },
   primary: {
-    backgroundColor: Colors.roseDark,
+    backgroundColor: Colors.rose,
+    ...Shadow.card,
   },
   secondary: {
     backgroundColor: Colors.softPink,
@@ -93,19 +94,21 @@ const styles = StyleSheet.create({
   },
   disabled: {
     opacity: 0.45,
+    shadowOpacity: 0,
+    elevation: 0,
   },
   label: {
     fontSize: 16,
-    fontWeight: '600',
+    fontFamily: Fonts.bodyBold,
     letterSpacing: 0.2,
   },
   labelPrimary: {
     color: Colors.white,
   },
   labelSecondary: {
-    color: Colors.roseDark,
+    color: Colors.rose,
   },
   labelGhost: {
-    color: Colors.roseDark,
+    color: Colors.rose,
   },
 })

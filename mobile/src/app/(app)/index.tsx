@@ -18,7 +18,7 @@ import { useRouter } from 'expo-router'
 import * as Haptics from 'expo-haptics'
 import * as Location from 'expo-location'
 import { Ionicons } from '@expo/vector-icons'
-import { Colors, CategoryColors } from '@/constants/Colors'
+import { Colors, CategoryColors, Fonts } from '@/constants/Colors'
 import { useAuth } from '@/context/auth'
 import { supabase } from '@/lib/supabase'
 import { isIdentityVerified } from '@/lib/verification'
@@ -30,13 +30,13 @@ import LoadErrorState from '@/components/LoadErrorState'
 import ProviderDashboardScreen from './provider-dashboard'
 
 const CATEGORIES = [
-  { name: 'All',       color: Colors.muted   },
+  { name: 'All',       color: Colors.muted        },
   { name: 'Nails',     color: CategoryColors.nails },
-  { name: 'Lashes',    color: '#1D9E75'      },
-  { name: 'Brows',     color: '#BA7517'      },
-  { name: 'Hair',      color: '#7B5EA7'      },
-  { name: 'Makeup',    color: '#E8845E'      },
-  { name: 'Spray Tan', color: '#C99A4E'      },
+  { name: 'Lashes',    color: CategoryColors.lashes },
+  { name: 'Brows',     color: CategoryColors.brows },
+  { name: 'Hair',      color: CategoryColors.hair  },
+  { name: 'Makeup',    color: CategoryColors.makeup },
+  { name: 'Spray Tan', color: CategoryColors.sprayTan },
 ] as const
 
 const DISTANCE_OPTIONS = ['Any', '1 mi', '2 mi', '4 mi', '10 mi', '20 mi'] as const
@@ -687,7 +687,7 @@ function ModelHomeContent() {
                         </View>
                       )}
                       {p.is_verified && (
-                        <Ionicons name="checkmark-circle" size={14} color="#1D9E75" style={styles.nearbyVerified} />
+                        <Ionicons name="checkmark-circle" size={14} color={Colors.rose} style={styles.nearbyVerified} />
                       )}
                     </View>
                     <Text style={styles.nearbyName} numberOfLines={1}>{p.name}</Text>
@@ -817,10 +817,10 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   pageTitle: {
-    fontFamily: 'DancingScript_700Bold',
-    fontSize: 33,
-    color: Colors.warmDark,
-    letterSpacing: -0.5,
+    fontFamily: Fonts.display,
+    fontSize: 30,
+    color: Colors.rose,
+    letterSpacing: -0.3,
   },
   // Nearby stylists — header (title + Filter), search bar (mirrors provider dashboard)
   nearbyHeader: {
@@ -927,10 +927,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   sectionTitle: {
-    fontFamily: 'DancingScript_700Bold',
-    fontSize: 26,
+    fontFamily: Fonts.heading,
+    fontSize: 18,
     color: Colors.warmDark,
-    letterSpacing: -0.3,
+    letterSpacing: -0.2,
     marginBottom: 12,
   },
 

@@ -8,6 +8,7 @@ import {
   Quicksand_700Bold,
 } from '@expo-google-fonts/quicksand'
 import { DancingScript_700Bold } from '@expo-google-fonts/dancing-script'
+import { Fredoka_600SemiBold, Fredoka_700Bold } from '@expo-google-fonts/fredoka'
 import { StripeProvider } from '@stripe/stripe-react-native'
 import * as Updates from 'expo-updates'
 import { AuthProvider, useAuth } from '@/context/auth'
@@ -53,6 +54,8 @@ export default function RootLayout() {
     Quicksand_400Regular,
     Quicksand_700Bold,
     DancingScript_700Bold,
+    Fredoka_600SemiBold,
+    Fredoka_700Bold,
   })
 
   useEffect(() => {

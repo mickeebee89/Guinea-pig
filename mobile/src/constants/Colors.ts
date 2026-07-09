@@ -1,22 +1,61 @@
+// Pink theme. Token NAMES are kept stable (rose/roseDark/softPink/…) so every existing
+// `Colors.*` reference across the app recolours centrally; only the values changed.
+
 export const CategoryColors = {
-  nails:    '#C77B92',
-  lashes:   '#1D9E75',
-  brows:    '#BA7517',
-  hair:     '#7B5EA7',
-  makeup:   '#E8845E',
-  sprayTan: '#C99A4E',
+  // Unified pink — categories share the primary accent (was per-category multi-colour).
+  nails:    '#F5388F',
+  lashes:   '#F5388F',
+  brows:    '#F5388F',
+  hair:     '#F5388F',
+  makeup:   '#F5388F',
+  sprayTan: '#F5388F',
 } as const
 
 export const Colors = {
-  rose:      '#C2A14D',  // gold — primary CTAs
-  roseDark:  '#A8862E',  // deep gold — pressed / dark CTA
-  softPink:  '#F4DADC',  // blush — accent fills
-  pinkVibrant: '#F45D9E',  // vibrant pink — notification unread accent
-  cream:     '#FBF6F1',  // off-white — page background
-  warmDark:  '#3A302C',  // charcoal — heading / primary text
-  white:     '#FFFFFF',  // card surfaces (unchanged)
-  error:     '#DC2626',  // error states (unchanged)
-  border:    '#F0E6D9',  // soft gold-tint borders
-  muted:     '#9A8E86',  // warm grey — secondary text
-  inputBg:   '#F9ECE4',  // blush-cream — chip / badge / input backgrounds
+  rose:        '#F5388F',  // primary pink — CTAs, active states, links, wordmark
+  roseDark:    '#D62D77',  // deep pink — pressed / dark CTA
+  softPink:    '#FFE3EF',  // light pink — accent fills, inactive chips, gradient top
+  pinkVibrant: '#F5388F',  // unread accent (kept in the pink family)
+  cream:       '#FFF7FA',  // very light pink — page background
+  warmDark:    '#2B2531',  // near-black plum — heading / primary text
+  white:       '#FFFFFF',  // card surfaces
+  error:       '#DC2626',  // error states
+  border:      '#F6E1EA',  // soft pink borders
+  muted:       '#6E6675',  // darker plum-grey — readable secondary text
+  inputBg:     '#FFF0F6',  // pink-tint input / chip / badge background
 } as const
+
+// ── Design tokens (new) ───────────────────────────────────────────────────────
+
+export const Fonts = {
+  display:  'Fredoka_600SemiBold',  // chunky rounded wordmark / big headings
+  heading:  'Quicksand_700Bold',    // section titles / subheads
+  body:     'Quicksand_400Regular',
+  bodyBold: 'Quicksand_700Bold',
+} as const
+
+export const Radius = { sm: 10, md: 14, lg: 20, xl: 28, pill: 999 } as const
+
+export const Spacing = { xs: 4, sm: 8, md: 12, lg: 16, xl: 20, xxl: 24 } as const
+
+export const Shadow = {
+  // Soft pink-tinted card lift.
+  card: {
+    shadowColor: '#F5388F',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.10,
+    shadowRadius: 16,
+    elevation: 3,
+  },
+  // Subtle neutral lift for smaller surfaces.
+  soft: {
+    shadowColor: '#2B2531',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+} as const
+
+// Pink→white gradient for headers (use with expo-linear-gradient).
+export const PinkGradient = ['#FFE3EF', '#FFF7FA'] as const

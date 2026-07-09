@@ -8,7 +8,7 @@ import {
   TextInputProps,
 } from 'react-native'
 import * as Haptics from 'expo-haptics'
-import { Colors } from '@/constants/Colors'
+import { Colors, Fonts, Radius } from '@/constants/Colors'
 
 interface Props extends TextInputProps {
   label?: string
@@ -56,7 +56,7 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 13,
-    fontWeight: '500',
+    fontFamily: Fonts.bodyBold,
     color: Colors.warmDark,
     marginBottom: 6,
     opacity: 0.7,
@@ -65,7 +65,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: Colors.inputBg,
-    borderRadius: 14,
+    borderRadius: Radius.md,
     borderWidth: 1.5,
     borderColor: Colors.border,
     paddingHorizontal: 16,
@@ -80,6 +80,7 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 52,
     fontSize: 16,
+    fontFamily: Fonts.body,
     color: Colors.warmDark,
   },
   eyeBtn: {
