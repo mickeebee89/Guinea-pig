@@ -20,7 +20,7 @@ import * as ImageManipulator from 'expo-image-manipulator'
 import { decode } from 'base64-arraybuffer'
 import { Ionicons } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { Colors } from '@/constants/Colors'
+import { Colors, Fonts } from '@/constants/Colors'
 import { useAuth } from '@/context/auth'
 import { supabase } from '@/lib/supabase'
 import { isIdentityVerified } from '@/lib/verification'
@@ -117,7 +117,7 @@ function groupByCategory(
 
 // ── Inline save status ──────────────────────────────────────────────────────────
 
-const SAVED_GREEN = '#1D9E75'  // matches the verified-check green used in this screen
+const SAVED_COLOUR = Colors.rose  // matches the verified-check accent used in this screen
 
 type FieldStatus = 'saved' | 'error'
 
@@ -131,9 +131,9 @@ function SaveStatus({ status, style }: { status?: FieldStatus; style?: any }) {
       <Ionicons
         name={ok ? 'checkmark-circle' : 'alert-circle'}
         size={14}
-        color={ok ? SAVED_GREEN : Colors.error}
+        color={ok ? SAVED_COLOUR : Colors.error}
       />
-      <Text style={[styles.saveStatusText, { color: ok ? SAVED_GREEN : Colors.error }]}>
+      <Text style={[styles.saveStatusText, { color: ok ? SAVED_COLOUR : Colors.error }]}>
         {ok ? 'Saved' : "Couldn't save — try again"}
       </Text>
     </View>
@@ -752,7 +752,7 @@ export default function ModelProfileScreen() {
             <View style={styles.nameRow}>
               <Text style={styles.displayName}>{displayName}</Text>
               {isVerified && (
-                <Ionicons name="checkmark-circle" size={20} color="#1D9E75" style={{ marginLeft: 6 }} />
+                <Ionicons name="checkmark-circle" size={20} color={Colors.rose} style={{ marginLeft: 6 }} />
               )}
             </View>
           </View>
@@ -1028,8 +1028,8 @@ export default function ModelProfileScreen() {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Verification</Text>
-            <View style={[styles.subPill, { backgroundColor: isVerified ? '#D1FAE5' : Colors.inputBg }]}>
-              <Text style={[styles.subPillText, { color: isVerified ? '#1D9E75' : Colors.muted }]}>{isVerified ? 'Verified' : 'Not verified'}</Text>
+            <View style={[styles.subPill, { backgroundColor: isVerified ? Colors.softPink : Colors.inputBg }]}>
+              <Text style={[styles.subPillText, { color: isVerified ? Colors.rose : Colors.muted }]}>{isVerified ? 'Verified' : 'Not verified'}</Text>
             </View>
           </View>
           {!isVerified && (
@@ -1358,11 +1358,11 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
   },
   topBarTitle: {
-    fontFamily: 'DancingScript_700Bold',
+    fontFamily: Fonts.display,
     flex: 1,
     textAlign: 'center',
-    fontSize: 25,
-    color: Colors.warmDark,
+    fontSize: 22,
+    color: Colors.rose,
     letterSpacing: -0.3,
   },
 
@@ -1445,8 +1445,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   displayName: {
-    fontFamily: 'DancingScript_700Bold',
-    fontSize: 33,
+    fontFamily: Fonts.display,
+    fontSize: 26,
     color: Colors.warmDark,
     letterSpacing: -0.4,
   },
@@ -1469,7 +1469,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: '#ECFDF5',
+    backgroundColor: Colors.softPink,
     borderRadius: 20,
     paddingHorizontal: 10,
     paddingVertical: 5,
@@ -1477,7 +1477,7 @@ const styles = StyleSheet.create({
   verifiedPillText: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#1D9E75',
+    color: Colors.rose,
   },
 
   // Section
@@ -1501,10 +1501,10 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   sectionTitle: {
-    fontFamily: 'DancingScript_700Bold',
-    fontSize: 24,
+    fontFamily: Fonts.heading,
+    fontSize: 18,
     color: Colors.warmDark,
-    letterSpacing: -0.3,
+    letterSpacing: -0.2,
   },
   sectionSub: {
     fontSize: 12,
@@ -1619,10 +1619,10 @@ const styles = StyleSheet.create({
 
   // Category modal shared
   catModalTitle: {
-    fontFamily: 'DancingScript_700Bold',
-    fontSize: 25,
+    fontFamily: Fonts.heading,
+    fontSize: 19,
     color: Colors.warmDark,
-    letterSpacing: -0.3,
+    letterSpacing: -0.2,
     marginBottom: 6,
   },
   catModalSub: {
@@ -1914,8 +1914,8 @@ const styles = StyleSheet.create({
 
   // Caption modal
   captionModalTitle: {
-    fontFamily: 'DancingScript_700Bold',
-    fontSize: 25,
+    fontFamily: Fonts.heading,
+    fontSize: 19,
     color: Colors.warmDark,
     marginBottom: 12,
     paddingHorizontal: 4,

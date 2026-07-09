@@ -17,7 +17,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router'
 import * as Haptics from 'expo-haptics'
 import { Ionicons } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { Colors, CategoryColors } from '@/constants/Colors'
+import { Colors, CategoryColors, Fonts, Radius, Shadow } from '@/constants/Colors'
 import { useAuth } from '@/context/auth'
 import { supabase } from '@/lib/supabase'
 import { getBlockedIds } from '@/lib/blocks'
@@ -63,11 +63,11 @@ type Message = {
 
 const CATEGORY_COLOR: Record<string, string> = {
   Nails:       CategoryColors.nails,
-  Lashes:      '#1D9E75',
-  Brows:       '#BA7517',
-  Hair:        '#7B5EA7',
-  Makeup:      '#E8845E',
-  'Spray Tan': '#C99A4E',
+  Lashes:      CategoryColors.lashes,
+  Brows:       CategoryColors.brows,
+  Hair:        CategoryColors.hair,
+  Makeup:      CategoryColors.makeup,
+  'Spray Tan': CategoryColors.sprayTan,
 }
 
 function formatTime(iso: string): string {
@@ -1074,11 +1074,11 @@ const styles = StyleSheet.create({
     marginHorizontal: 12,
     marginTop: 8,
     marginBottom: 4,
-    backgroundColor: '#1D9E75',
+    backgroundColor: Colors.rose,
     borderRadius: 14,
     paddingHorizontal: 16,
     paddingVertical: 12,
-    shadowColor: '#1D9E75',
+    shadowColor: Colors.rose,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 6,
@@ -1146,10 +1146,10 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
   },
   lockedTitle: {
-    fontFamily: 'DancingScript_700Bold',
-    fontSize: 33,
+    fontFamily: Fonts.heading,
+    fontSize: 24,
     color: Colors.warmDark,
-    letterSpacing: -0.4,
+    letterSpacing: -0.3,
     marginBottom: 8,
     textAlign: 'center',
   },
@@ -1224,10 +1224,10 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   menuTitle: {
-    fontFamily: 'DancingScript_700Bold',
-    fontSize: 24,
+    fontFamily: Fonts.heading,
+    fontSize: 20,
     color: Colors.warmDark,
-    letterSpacing: -0.3,
+    letterSpacing: -0.2,
     marginBottom: 12,
     paddingHorizontal: 4,
   },

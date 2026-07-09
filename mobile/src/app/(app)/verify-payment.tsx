@@ -17,7 +17,8 @@ import { decode } from 'base64-arraybuffer'
 import { Ionicons } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useStripe } from '@stripe/stripe-react-native'
-import { Colors } from '@/constants/Colors'
+import { LinearGradient } from 'expo-linear-gradient'
+import { Colors, Fonts, Radius, Shadow, PinkGradient } from '@/constants/Colors'
 import { useAuth } from '@/context/auth'
 import { supabase } from '@/lib/supabase'
 
@@ -262,7 +263,7 @@ export default function VerifyPaymentScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={[styles.topBar, { paddingTop: insets.top + 8 }]}>
+      <LinearGradient colors={PinkGradient} style={[styles.topBar, { paddingTop: insets.top + 8 }]}>
         <TouchableOpacity
           style={styles.backBtn}
           onPress={async () => { await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.back() }}
@@ -272,7 +273,7 @@ export default function VerifyPaymentScreen() {
         </TouchableOpacity>
         <Text style={styles.topBarTitle}>Get verified</Text>
         <View style={{ width: 36 }} />
-      </View>
+      </LinearGradient>
 
       {/* ── LOADING ── */}
       {step === 'loading' && (
@@ -499,7 +500,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: 16, paddingBottom: 10,
     borderBottomWidth: 1, borderBottomColor: Colors.border,
-    backgroundColor: Colors.cream,
   },
   backBtn: {
     width: 36, height: 36, borderRadius: 18,
@@ -507,23 +507,24 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: Colors.border,
   },
   topBarTitle: {
-    fontFamily: 'DancingScript_700Bold',
-    flex: 1, textAlign: 'center', fontSize: 25,
+    fontFamily: Fonts.heading,
+    flex: 1, textAlign: 'center', fontSize: 18,
     color: Colors.warmDark, letterSpacing: -0.3,
   },
 
   scroll: { paddingHorizontal: 20, paddingTop: 20 },
 
   heroCard: {
-    backgroundColor: Colors.white, borderRadius: 24, padding: 24,
+    backgroundColor: Colors.white, borderRadius: Radius.xl, padding: 24,
     alignItems: 'center', gap: 12, marginBottom: 24,
     borderWidth: 1, borderColor: Colors.border,
+    ...Shadow.soft,
   },
   heroIconCircle: {
-    width: 80, height: 80, borderRadius: 40, backgroundColor: Colors.roseDark,
+    width: 80, height: 80, borderRadius: 40, backgroundColor: Colors.rose,
     alignItems: 'center', justifyContent: 'center',
   },
-  heroTitle: { fontFamily: 'DancingScript_700Bold', fontSize: 33, color: Colors.warmDark, letterSpacing: -0.4 },
+  heroTitle: { fontFamily: Fonts.display, fontSize: 30, color: Colors.rose, letterSpacing: -0.4 },
   heroSub:   { fontSize: 14, color: Colors.muted, textAlign: 'center', lineHeight: 20 },
   priceTag: {
     backgroundColor: Colors.inputBg, borderRadius: 20,
@@ -538,48 +539,47 @@ const styles = StyleSheet.create({
   },
   stepRow: {
     flexDirection: 'row', alignItems: 'flex-start', gap: 4,
-    backgroundColor: Colors.white, borderRadius: 14, padding: 14,
+    backgroundColor: Colors.white, borderRadius: Radius.md, padding: 14,
     marginBottom: 8, borderWidth: 1, borderColor: Colors.border,
   },
   stepNum: {
-    width: 24, height: 24, borderRadius: 12, backgroundColor: Colors.softPink + '50',
+    width: 24, height: 24, borderRadius: 12, backgroundColor: Colors.softPink,
     alignItems: 'center', justifyContent: 'center', marginRight: 4, flexShrink: 0,
   },
   stepNumText: { fontSize: 12, fontWeight: '800', color: Colors.roseDark },
   stepText:    { flex: 1, fontSize: 13, color: Colors.warmDark, lineHeight: 18 },
 
   selfiePreview: {
-    width: 220, height: 280, borderRadius: 20,
-    borderWidth: 3, borderColor: Colors.roseDark, marginBottom: 8,
+    width: 220, height: 280, borderRadius: Radius.lg,
+    borderWidth: 3, borderColor: Colors.rose, marginBottom: 8,
   },
 
   payCard: {
     flexDirection: 'row', alignItems: 'center', gap: 14,
-    backgroundColor: Colors.white, borderRadius: 18,
+    backgroundColor: Colors.white, borderRadius: Radius.lg,
     padding: 16, width: '100%', marginBottom: 4,
     borderWidth: 1.5, borderColor: Colors.softPink,
   },
   payCardTitle: { fontSize: 15, fontWeight: '700', color: Colors.warmDark },
   payCardSub:   { fontSize: 12, color: Colors.muted, marginTop: 2 },
-  payCardPrice: { fontSize: 20, fontWeight: '800', color: Colors.roseDark },
+  payCardPrice: { fontSize: 20, fontWeight: '800', color: Colors.rose },
 
   bigIcon: {
     width: 80, height: 80, borderRadius: 40,
     alignItems: 'center', justifyContent: 'center',
   },
-  centredTitle: { fontFamily: 'DancingScript_700Bold', fontSize: 33, color: Colors.warmDark, textAlign: 'center', letterSpacing: -0.4 },
+  centredTitle: { fontFamily: Fonts.display, fontSize: 30, color: Colors.rose, textAlign: 'center', letterSpacing: -0.4 },
   centredSub:   { fontSize: 14, color: Colors.muted, textAlign: 'center', lineHeight: 21 },
 
   primaryBtn: {
-    width: '100%', height: 54, backgroundColor: Colors.roseDark,
-    borderRadius: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    shadowColor: Colors.roseDark, shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3, shadowRadius: 8, elevation: 4, marginTop: 4,
+    width: '100%', height: 54, backgroundColor: Colors.rose,
+    borderRadius: Radius.lg, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    ...Shadow.card, marginTop: 4,
   },
-  primaryBtnText: { fontSize: 16, fontWeight: '800', color: Colors.white, letterSpacing: -0.2 },
+  primaryBtnText: { fontFamily: Fonts.bodyBold, fontSize: 16, color: Colors.white, letterSpacing: -0.2 },
   ghostBtn: {
     paddingVertical: 14, paddingHorizontal: 32,
-    borderRadius: 14, borderWidth: 1.5, borderColor: Colors.border,
+    borderRadius: Radius.md, borderWidth: 1.5, borderColor: Colors.border,
     backgroundColor: Colors.white,
   },
   ghostBtnText: { fontSize: 15, fontWeight: '600', color: Colors.warmDark },

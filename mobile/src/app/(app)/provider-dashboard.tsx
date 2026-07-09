@@ -17,7 +17,7 @@ import * as Haptics from 'expo-haptics'
 import * as Location from 'expo-location'
 import { Ionicons } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { Colors, CategoryColors } from '@/constants/Colors'
+import { Colors, CategoryColors, Fonts } from '@/constants/Colors'
 import { useAuth } from '@/context/auth'
 import { supabase } from '@/lib/supabase'
 import { getBlockedIds } from '@/lib/blocks'
@@ -29,11 +29,11 @@ import HeaderIcons from '@/components/HeaderIcons'
 
 const CATEGORY_COLORS: Record<string, string> = {
   nails:      CategoryColors.nails,
-  lashes:     '#1D9E75',
-  brows:      '#BA7517',
-  hair:       '#7B5EA7',
-  makeup:     '#E8845E',
-  'spray tan':'#C99A4E',
+  lashes:     CategoryColors.lashes,
+  brows:      CategoryColors.brows,
+  hair:       CategoryColors.hair,
+  makeup:     CategoryColors.makeup,
+  'spray tan':CategoryColors.sprayTan,
 }
 
 function categoryColor(cat: string | null | undefined) {
@@ -803,10 +803,10 @@ export default function ProviderDashboardScreen() {
         {/* ── Shop status card ── */}
         <View style={styles.shopCard}>
           <View style={styles.shopCardLeft}>
-            <View style={[styles.shopStatusDot, { backgroundColor: isPublished ? '#1D9E75' : Colors.muted }]} />
+            <View style={[styles.shopStatusDot, { backgroundColor: isPublished ? Colors.rose : Colors.muted }]} />
             <View>
               <Text style={styles.shopCardTitle}>Shop status</Text>
-              <Text style={[styles.shopCardStatus, { color: isPublished ? '#1D9E75' : Colors.muted }]}>
+              <Text style={[styles.shopCardStatus, { color: isPublished ? Colors.rose : Colors.muted }]}>
                 {isPublished ? 'Live — models can find you' : 'Offline — hidden from search'}
               </Text>
             </View>
@@ -979,8 +979,8 @@ export default function ProviderDashboardScreen() {
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.quickLinkBtn} onPress={goEditShop} activeOpacity={0.85}>
-            <View style={[styles.quickLinkIcon, { backgroundColor: '#E8845E26' }]}>
-              <Ionicons name="pencil-outline" size={22} color="#E8845E" />
+            <View style={[styles.quickLinkIcon, { backgroundColor: Colors.softPink }]}>
+              <Ionicons name="pencil-outline" size={22} color={Colors.roseDark} />
             </View>
             <View style={styles.quickLinkText}>
               <Text style={styles.quickLinkTitle}>Edit Shop</Text>
@@ -1330,8 +1330,8 @@ function NearbyModelCard({ model, onInvite, onViewProfile }: { model: ModelCard;
           </View>
         )}
         {model.skin_tone && (
-          <View style={[nearbyStyles.attrChip, { backgroundColor: '#E8845E18' }]}>
-            <Text style={[nearbyStyles.attrChipText, { color: '#B5603A' }]} numberOfLines={1}>{model.skin_tone}</Text>
+          <View style={[nearbyStyles.attrChip, { backgroundColor: Colors.inputBg }]}>
+            <Text style={[nearbyStyles.attrChipText, { color: Colors.roseDark }]} numberOfLines={1}>{model.skin_tone}</Text>
           </View>
         )}
       </View>
@@ -1385,7 +1385,7 @@ const nearbyStyles = StyleSheet.create({
     width: 16,
     height: 16,
     borderRadius: 8,
-    backgroundColor: '#1D9E75',
+    backgroundColor: Colors.rose,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1.5,
@@ -1495,7 +1495,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.cream,
   },
   topBarLeft: { gap: 2 },
-  greeting:  { fontFamily: 'DancingScript_700Bold', fontSize: 33, color: Colors.warmDark, letterSpacing: -0.5 },
+  greeting:  { fontFamily: Fonts.display, fontSize: 30, color: Colors.rose, letterSpacing: -0.5 },
   subGreeting: { fontSize: 13, color: Colors.muted },
   topBarRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   settingsBtn: {
@@ -1528,7 +1528,7 @@ const styles = StyleSheet.create({
     width: 16,
     height: 16,
     borderRadius: 8,
-    backgroundColor: '#1D9E75',
+    backgroundColor: Colors.rose,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1.5,
@@ -1609,10 +1609,10 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   sectionTitle: {
-    fontFamily: 'DancingScript_700Bold',
-    fontSize: 25,
+    fontFamily: Fonts.heading,
+    fontSize: 18,
     color: Colors.warmDark,
-    letterSpacing: -0.3,
+    letterSpacing: -0.2,
   },
   badge: {
     backgroundColor: Colors.roseDark,

@@ -13,7 +13,7 @@ import * as Haptics from 'expo-haptics'
 import { Ionicons } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useStripe } from '@stripe/stripe-react-native'
-import { Colors } from '@/constants/Colors'
+import { Colors, Fonts, Radius, Shadow } from '@/constants/Colors'
 import { useAuth } from '@/context/auth'
 import { supabase } from '@/lib/supabase'
 import { isIdentityVerified } from '@/lib/verification'
@@ -246,7 +246,7 @@ export default function SubscribeScreen() {
           <View style={styles.successPerks}>
             {BENEFITS.slice(0, 3).map(b => (
               <View key={b.title} style={styles.successPerkRow}>
-                <Ionicons name="checkmark-circle" size={18} color="#1D9E75" />
+                <Ionicons name="checkmark-circle" size={18} color={Colors.rose} />
                 <Text style={styles.successPerkText}>{b.title}</Text>
               </View>
             ))}
@@ -314,8 +314,8 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: Colors.border,
   },
   topBarTitle: {
-    fontFamily: 'DancingScript_700Bold',
-    flex: 1, textAlign: 'center', fontSize: 25,
+    fontFamily: Fonts.heading,
+    flex: 1, textAlign: 'center', fontSize: 18,
     color: Colors.warmDark, letterSpacing: -0.3,
   },
 
@@ -323,10 +323,9 @@ const styles = StyleSheet.create({
 
   // Hero
   heroCard: {
-    backgroundColor: Colors.roseDark, borderRadius: 24, padding: 24,
+    backgroundColor: Colors.roseDark, borderRadius: Radius.xl, padding: 24,
     alignItems: 'center', gap: 10, marginBottom: 24,
-    shadowColor: Colors.roseDark, shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.35, shadowRadius: 14, elevation: 6,
+    ...Shadow.card,
   },
   heroIconRing: {
     width: 80, height: 80, borderRadius: 40,
@@ -334,7 +333,7 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
     marginBottom: 4,
   },
-  heroTitle: { fontFamily: 'DancingScript_700Bold', fontSize: 35, color: Colors.white, letterSpacing: -0.5 },
+  heroTitle: { fontFamily: Fonts.display, fontSize: 30, color: Colors.white, letterSpacing: -0.5 },
   heroSub:   { fontSize: 14, color: 'rgba(255,255,255,0.82)', textAlign: 'center', lineHeight: 20 },
 
   priceBadge:   { flexDirection: 'row', alignItems: 'baseline', marginTop: 4 },
@@ -349,10 +348,11 @@ const styles = StyleSheet.create({
     marginBottom: 10, paddingHorizontal: 2,
   },
   benefitsCard: {
-    backgroundColor: Colors.white, borderRadius: 18,
+    backgroundColor: Colors.white, borderRadius: Radius.lg,
     padding: 4, gap: 0, marginBottom: 16,
     borderWidth: 1, borderColor: Colors.border,
     overflow: 'hidden',
+    ...Shadow.soft,
   },
   benefitRow: {
     flexDirection: 'row', alignItems: 'flex-start', gap: 12,
@@ -362,7 +362,7 @@ const styles = StyleSheet.create({
     width: 36, height: 36, borderRadius: 10, backgroundColor: Colors.softPink + '40',
     alignItems: 'center', justifyContent: 'center', marginTop: 1,
   },
-  benefitTitle: { fontSize: 14, fontWeight: '700', color: Colors.warmDark, marginBottom: 2 },
+  benefitTitle: { fontFamily: Fonts.bodyBold, fontSize: 14, color: Colors.warmDark, marginBottom: 2 },
   benefitDesc:  { fontSize: 12, color: Colors.muted, lineHeight: 17 },
 
   // Nudge
@@ -376,19 +376,18 @@ const styles = StyleSheet.create({
 
   // Buttons
   primaryBtn: {
-    width: '100%', height: 54, backgroundColor: Colors.roseDark,
-    borderRadius: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    shadowColor: Colors.roseDark, shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3, shadowRadius: 8, elevation: 4,
+    width: '100%', height: 54, backgroundColor: Colors.rose,
+    borderRadius: Radius.lg, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    ...Shadow.card,
   },
-  primaryBtnText: { fontSize: 16, fontWeight: '800', color: Colors.white, letterSpacing: -0.2 },
+  primaryBtnText: { fontFamily: Fonts.bodyBold, fontSize: 16, color: Colors.white, letterSpacing: -0.2 },
   ghostBtn: {
-    width: '100%', height: 48, borderRadius: 14,
+    width: '100%', height: 48, borderRadius: Radius.md,
     borderWidth: 1.5, borderColor: Colors.border,
     backgroundColor: Colors.white,
     alignItems: 'center', justifyContent: 'center', marginTop: 10,
   },
-  ghostBtnText:  { fontSize: 15, fontWeight: '600', color: Colors.warmDark },
+  ghostBtnText:  { fontFamily: Fonts.bodyBold, fontSize: 15, color: Colors.warmDark },
   legalNote: {
     fontSize: 11, color: Colors.muted, textAlign: 'center',
     lineHeight: 16, marginTop: 12, paddingHorizontal: 8,
@@ -401,8 +400,8 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center', marginBottom: 8,
   },
   successTitle: {
-    fontFamily: 'DancingScript_700Bold',
-    fontSize: 35, color: Colors.warmDark,
+    fontFamily: Fonts.display,
+    fontSize: 30, color: Colors.rose,
     textAlign: 'center', letterSpacing: -0.5,
   },
   successSub: {
@@ -410,10 +409,11 @@ const styles = StyleSheet.create({
     lineHeight: 21, marginBottom: 4,
   },
   successPerks: {
-    backgroundColor: Colors.white, borderRadius: 16,
+    backgroundColor: Colors.white, borderRadius: Radius.lg,
     padding: 16, gap: 12, width: '100%',
     borderWidth: 1, borderColor: Colors.border, marginBottom: 8,
+    ...Shadow.soft,
   },
   successPerkRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  successPerkText: { fontSize: 14, fontWeight: '500', color: Colors.warmDark },
+  successPerkText: { fontFamily: Fonts.body, fontSize: 14, color: Colors.warmDark },
 })

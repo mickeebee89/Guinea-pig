@@ -13,7 +13,7 @@ import { useRouter } from 'expo-router'
 import * as Haptics from 'expo-haptics'
 import { Ionicons } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { Colors, CategoryColors } from '@/constants/Colors'
+import { Colors, CategoryColors, Fonts, Radius, Shadow } from '@/constants/Colors'
 import { useAuth } from '@/context/auth'
 import { supabase } from '@/lib/supabase'
 
@@ -21,11 +21,11 @@ import { supabase } from '@/lib/supabase'
 
 const CATEGORY_COLOR: Record<string, string> = {
   Nails:       CategoryColors.nails,
-  Lashes:      '#1D9E75',
-  Brows:       '#BA7517',
-  Hair:        '#7B5EA7',
-  Makeup:      '#E8845E',
-  'Spray Tan': '#C99A4E',
+  Lashes:      CategoryColors.lashes,
+  Brows:       CategoryColors.brows,
+  Hair:        CategoryColors.hair,
+  Makeup:      CategoryColors.makeup,
+  'Spray Tan': CategoryColors.sprayTan,
 }
 
 const DAYS_SHORT  = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
@@ -1064,9 +1064,9 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   stepTitle: {
-    fontFamily: 'DancingScript_700Bold',
-    fontSize: 35,
-    color: Colors.warmDark,
+    fontFamily: Fonts.display,
+    fontSize: 30,
+    color: Colors.rose,
     letterSpacing: -0.5,
     marginBottom: 4,
   },
@@ -1081,16 +1081,12 @@ const styles = StyleSheet.create({
   // Card (used in all steps)
   card: {
     backgroundColor: Colors.white,
-    borderRadius: 20,
+    borderRadius: Radius.lg,
     padding: 16,
     marginBottom: 12,
     borderWidth: 1,
     borderColor: Colors.border,
-    shadowColor: Colors.warmDark,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 6,
-    elevation: 2,
+    ...Shadow.soft,
   },
   cardDayLabel: {
     fontSize: 15,
@@ -1105,7 +1101,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     backgroundColor: Colors.white,
-    borderRadius: 14,
+    borderRadius: Radius.md,
     borderWidth: 1,
     borderColor: Colors.border,
     paddingHorizontal: 16,
@@ -1304,18 +1300,14 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   nextBtn: {
-    backgroundColor: Colors.roseDark,
-    borderRadius: 16,
+    backgroundColor: Colors.rose,
+    borderRadius: Radius.lg,
     height: 54,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    shadowColor: Colors.roseDark,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.28,
-    shadowRadius: 8,
-    elevation: 4,
+    ...Shadow.card,
   },
   nextBtnDisabled: {
     opacity: 0.45,
@@ -1324,8 +1316,8 @@ const styles = StyleSheet.create({
   },
   nextBtnText: {
     color: Colors.white,
+    fontFamily: Fonts.bodyBold,
     fontSize: 16,
-    fontWeight: '700',
     letterSpacing: -0.2,
   },
 
@@ -1363,8 +1355,8 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   modalTitle: {
-    fontFamily: 'DancingScript_700Bold',
-    fontSize: 25,
+    fontFamily: Fonts.heading,
+    fontSize: 19,
     color: Colors.warmDark,
     marginBottom: 16,
     letterSpacing: -0.3,
@@ -1385,14 +1377,14 @@ const styles = StyleSheet.create({
   timeChip: {
     paddingHorizontal: 12,
     paddingVertical: 8,
-    borderRadius: 12,
-    backgroundColor: Colors.white,
+    borderRadius: Radius.md,
+    backgroundColor: Colors.inputBg,
     borderWidth: 1.5,
     borderColor: Colors.border,
   },
   timeChipActive: {
-    backgroundColor: Colors.roseDark,
-    borderColor: Colors.roseDark,
+    backgroundColor: Colors.rose,
+    borderColor: Colors.rose,
   },
   timeChipText: {
     fontSize: 13,
@@ -1410,7 +1402,7 @@ const styles = StyleSheet.create({
   modalCancelBtn: {
     flex: 1,
     height: 50,
-    borderRadius: 14,
+    borderRadius: Radius.md,
     borderWidth: 1.5,
     borderColor: Colors.border,
     alignItems: 'center',
@@ -1425,15 +1417,11 @@ const styles = StyleSheet.create({
   modalSaveBtn: {
     flex: 2,
     height: 50,
-    borderRadius: 14,
-    backgroundColor: Colors.roseDark,
+    borderRadius: Radius.md,
+    backgroundColor: Colors.rose,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: Colors.roseDark,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.25,
-    shadowRadius: 6,
-    elevation: 3,
+    ...Shadow.card,
   },
   modalSaveBtnDisabled: {
     opacity: 0.4,
@@ -1442,7 +1430,7 @@ const styles = StyleSheet.create({
   },
   modalSaveText: {
     fontSize: 15,
-    fontWeight: '700',
+    fontFamily: Fonts.bodyBold,
     color: Colors.white,
   },
 })

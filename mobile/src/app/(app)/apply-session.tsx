@@ -16,7 +16,7 @@ import * as ImageManipulator from 'expo-image-manipulator'
 import { decode } from 'base64-arraybuffer'
 import { Ionicons } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { Colors, CategoryColors } from '@/constants/Colors'
+import { Colors, CategoryColors, Fonts, Radius, Shadow } from '@/constants/Colors'
 import { hasActiveSubscription, isIdentityVerified } from '@/lib/verification'
 import { useAuth } from '@/context/auth'
 import { supabase } from '@/lib/supabase'
@@ -27,11 +27,11 @@ import AvailabilityCalendar, { dateKey } from '@/components/AvailabilityCalendar
 
 const CATEGORY_COLOR: Record<string, string> = {
   Nails:       CategoryColors.nails,
-  Lashes:      '#1D9E75',
-  Brows:       '#BA7517',
-  Hair:        '#7B5EA7',
-  Makeup:      '#E8845E',
-  'Spray Tan': '#C99A4E',
+  Lashes:      CategoryColors.lashes,
+  Brows:       CategoryColors.brows,
+  Hair:        CategoryColors.hair,
+  Makeup:      CategoryColors.makeup,
+  'Spray Tan': CategoryColors.sprayTan,
 }
 
 const TOTAL_STEPS = 7
@@ -507,7 +507,7 @@ export default function ApplySessionScreen() {
       <View style={[styles.container, styles.successContainer]}>
         <View style={[styles.successInner, { paddingTop: insets.top + 40, paddingBottom: insets.bottom + 24 }]}>
           <View style={styles.successIconCircle}>
-            <Ionicons name="checkmark-circle" size={64} color={Colors.roseDark} />
+            <Ionicons name="checkmark-circle" size={64} color={Colors.rose} />
           </View>
           <Text style={styles.successTitle}>Application sent!</Text>
           <Text style={styles.successSub}>
@@ -535,7 +535,7 @@ export default function ApplySessionScreen() {
       {/* ── Top bar ── */}
       <View style={[styles.topBar, { paddingTop: insets.top + 8 }]}>
         <TouchableOpacity style={styles.backBtn} onPress={goBack} activeOpacity={0.75}>
-          <Ionicons name="chevron-back" size={20} color={Colors.roseDark} />
+          <Ionicons name="chevron-back" size={20} color={Colors.rose} />
           <Text style={styles.backText}>{step > 1 ? 'Back' : 'Cancel'}</Text>
         </TouchableOpacity>
         <View style={styles.progressWrap}>
@@ -585,7 +585,7 @@ export default function ApplySessionScreen() {
               />
               {selectedDate && (
                 <View style={styles.selectionBanner}>
-                  <Ionicons name="calendar-outline" size={14} color={Colors.roseDark} />
+                  <Ionicons name="calendar-outline" size={14} color={Colors.rose} />
                   <Text style={styles.selectionText}>{formatDayLabel(selectedDate)}</Text>
                 </View>
               )}
@@ -621,7 +621,7 @@ export default function ApplySessionScreen() {
                       <Ionicons
                         name="time-outline"
                         size={16}
-                        color={isSelected && !taken ? Colors.roseDark : Colors.muted}
+                        color={isSelected && !taken ? Colors.rose : Colors.muted}
                       />
                       <Text style={[styles.slotTimeText, isSelected && !taken && styles.slotTimeTextSelected, taken && styles.slotTimeTextTaken]}>
                         {slot.start_time} – {slot.end_time}
@@ -644,7 +644,7 @@ export default function ApplySessionScreen() {
                       </View>
                     )}
                     {isSelected && !taken && (
-                      <Ionicons name="checkmark-circle" size={22} color={Colors.roseDark} />
+                      <Ionicons name="checkmark-circle" size={22} color={Colors.rose} />
                     )}
                   </TouchableOpacity>
                 )
@@ -710,7 +710,7 @@ export default function ApplySessionScreen() {
         {step === 5 && (
           <>
             <View style={styles.infoCard}>
-              <Ionicons name="information-circle-outline" size={18} color={Colors.roseDark} />
+              <Ionicons name="information-circle-outline" size={18} color={Colors.rose} />
               <Text style={styles.infoText}>
                 Photos help the provider prepare their tools and materials. You choose what to share.
               </Text>
@@ -758,7 +758,7 @@ export default function ApplySessionScreen() {
                 onPress={addPhotos}
                 activeOpacity={0.8}
               >
-                <Ionicons name="add-circle-outline" size={20} color={Colors.roseDark} />
+                <Ionicons name="add-circle-outline" size={20} color={Colors.rose} />
                 <Text style={styles.addPhotoText}>Add photos from library</Text>
               </TouchableOpacity>
             </View>
@@ -821,7 +821,7 @@ export default function ApplySessionScreen() {
             <Ionicons
               name={patchTestAgreed ? 'checkbox' : 'square-outline'}
               size={22}
-              color={patchTestAgreed ? Colors.roseDark : Colors.muted}
+              color={patchTestAgreed ? Colors.rose : Colors.muted}
             />
             <Text style={styles.patchTestText}>
               A patch test may be required before some treatments. Please book with enough time in advance for one to be carried out if needed.
@@ -918,9 +918,9 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   successTitle: {
-    fontFamily: 'DancingScript_700Bold',
-    fontSize: 39,
-    color: Colors.warmDark,
+    fontFamily: Fonts.display,
+    fontSize: 32,
+    color: Colors.rose,
     letterSpacing: -0.5,
     marginBottom: 10,
     textAlign: 'center',
@@ -933,19 +933,15 @@ const styles = StyleSheet.create({
     marginBottom: 32,
   },
   doneBtn: {
-    backgroundColor: Colors.roseDark,
-    borderRadius: 16,
+    backgroundColor: Colors.rose,
+    borderRadius: Radius.lg,
     paddingVertical: 16,
     paddingHorizontal: 56,
-    shadowColor: Colors.roseDark,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.28,
-    shadowRadius: 8,
-    elevation: 4,
+    ...Shadow.card,
   },
   doneBtnText: {
     fontSize: 16,
-    fontWeight: '700',
+    fontFamily: Fonts.bodyBold,
     color: Colors.white,
   },
 
@@ -966,7 +962,7 @@ const styles = StyleSheet.create({
   },
   backText: {
     fontSize: 15,
-    color: Colors.roseDark,
+    color: Colors.rose,
     fontWeight: '500',
   },
   progressWrap: {
@@ -984,7 +980,7 @@ const styles = StyleSheet.create({
   },
   progressFill: {
     height: '100%',
-    backgroundColor: Colors.roseDark,
+    backgroundColor: Colors.rose,
     borderRadius: 2,
   },
   progressLabel: {
@@ -1009,9 +1005,9 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   stepTitle: {
-    fontFamily: 'DancingScript_700Bold',
-    fontSize: 35,
-    color: Colors.warmDark,
+    fontFamily: Fonts.display,
+    fontSize: 28,
+    color: Colors.rose,
     letterSpacing: -0.5,
     marginBottom: 4,
   },
@@ -1026,16 +1022,12 @@ const styles = StyleSheet.create({
   // Card
   card: {
     backgroundColor: Colors.white,
-    borderRadius: 20,
+    borderRadius: Radius.lg,
     padding: 16,
     marginBottom: 12,
     borderWidth: 1,
     borderColor: Colors.border,
-    shadowColor: Colors.warmDark,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 6,
-    elevation: 2,
+    ...Shadow.soft,
   },
   centred: { alignItems: 'center', justifyContent: 'center', paddingVertical: 24 },
 
@@ -1043,10 +1035,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 10,
-    backgroundColor: Colors.softPink + '30',
+    backgroundColor: Colors.inputBg,
     borderWidth: 1,
     borderColor: Colors.softPink,
-    borderRadius: 16,
+    borderRadius: Radius.md,
     padding: 14,
     marginBottom: 12,
   },
@@ -1063,7 +1055,7 @@ const styles = StyleSheet.create({
   emptyEmoji: { fontSize: 40, marginBottom: 10 },
   emptyTitle: {
     fontSize: 17,
-    fontWeight: '700',
+    fontFamily: Fonts.heading,
     color: Colors.warmDark,
     marginBottom: 6,
     textAlign: 'center',
@@ -1094,7 +1086,7 @@ const styles = StyleSheet.create({
   selectionText: {
     fontSize: 13,
     fontWeight: '600',
-    color: Colors.roseDark,
+    color: Colors.rose,
   },
 
   // Slot pills
@@ -1102,7 +1094,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: Colors.inputBg,
-    borderRadius: 14,
+    borderRadius: Radius.md,
     padding: 14,
     marginBottom: 10,
     borderWidth: 1.5,
@@ -1110,8 +1102,8 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   slotPillSelected: {
-    borderColor: Colors.roseDark,
-    backgroundColor: Colors.rose + '12',
+    borderColor: Colors.rose,
+    backgroundColor: Colors.softPink,
   },
   slotPillTaken: {
     opacity: 0.55,
@@ -1146,7 +1138,7 @@ const styles = StyleSheet.create({
     color: Colors.warmDark,
   },
   slotTimeTextSelected: {
-    color: Colors.roseDark,
+    color: Colors.rose,
   },
   slotStripes: {
     flex: 1,
@@ -1236,7 +1228,7 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
   },
   photoThumbSelected: {
-    borderColor: Colors.roseDark,
+    borderColor: Colors.rose,
   },
   photoImg: {
     width: '100%',
@@ -1249,7 +1241,7 @@ const styles = StyleSheet.create({
     width: 26,
     height: 26,
     borderRadius: 13,
-    backgroundColor: Colors.roseDark,
+    backgroundColor: Colors.rose,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1263,7 +1255,7 @@ const styles = StyleSheet.create({
   addPhotoText: {
     fontSize: 14,
     fontWeight: '600',
-    color: Colors.roseDark,
+    color: Colors.rose,
   },
 
   // Confirmation
@@ -1327,7 +1319,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.softPink + '40',
   },
   patchTestRowAgreed: {
-    borderColor: Colors.roseDark,
+    borderColor: Colors.rose,
     backgroundColor: Colors.softPink + '66',
   },
   patchTestText: {
@@ -1351,18 +1343,14 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   actionBtn: {
-    backgroundColor: Colors.roseDark,
-    borderRadius: 16,
+    backgroundColor: Colors.rose,
+    borderRadius: Radius.lg,
     height: 54,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    shadowColor: Colors.roseDark,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.28,
-    shadowRadius: 8,
-    elevation: 4,
+    ...Shadow.card,
   },
   actionBtnDisabled: {
     opacity: 0.45,
@@ -1372,7 +1360,7 @@ const styles = StyleSheet.create({
   actionBtnText: {
     color: Colors.white,
     fontSize: 16,
-    fontWeight: '700',
+    fontFamily: Fonts.bodyBold,
     letterSpacing: -0.2,
   },
 })

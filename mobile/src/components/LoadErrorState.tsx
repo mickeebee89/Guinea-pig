@@ -1,6 +1,6 @@
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
-import { Colors } from '@/constants/Colors'
+import { Colors, Fonts, Radius, Spacing, Shadow } from '@/constants/Colors'
 
 interface Props {
   /** Re-runs the screen's load function. */
@@ -33,8 +33,8 @@ const styles = StyleSheet.create({
   wrap: {
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 32,
-    gap: 12,
+    padding: Spacing.xxl + Spacing.xs,
+    gap: Spacing.md,
   },
   fill: {
     flex: 1,
@@ -42,23 +42,24 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 15,
-    fontWeight: '600',
+    fontFamily: Fonts.heading,
     color: Colors.warmDark,
     textAlign: 'center',
   },
   retryBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    backgroundColor: Colors.roseDark,
-    paddingVertical: 10,
-    paddingHorizontal: 18,
-    borderRadius: 999,
-    marginTop: 4,
+    gap: Spacing.xs + 2,
+    backgroundColor: Colors.rose,
+    paddingVertical: Spacing.sm + 2,
+    paddingHorizontal: Spacing.lg + 2,
+    borderRadius: Radius.pill,
+    marginTop: Spacing.xs,
+    ...Shadow.card,
   },
   retryText: {
     color: Colors.white,
     fontSize: 14,
-    fontWeight: '700',
+    fontFamily: Fonts.bodyBold,
   },
 })

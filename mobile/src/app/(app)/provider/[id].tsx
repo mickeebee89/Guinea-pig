@@ -14,7 +14,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router'
 import * as Haptics from 'expo-haptics'
 import { Ionicons } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { Colors, CategoryColors } from '@/constants/Colors'
+import { Colors, CategoryColors, Fonts, Radius, Shadow } from '@/constants/Colors'
 import { useAuth } from '@/context/auth'
 import { supabase } from '@/lib/supabase'
 import { getBlockedIds } from '@/lib/blocks'
@@ -24,11 +24,11 @@ const BANNER_HEIGHT = 165
 
 const CATEGORY_COLOR: Record<string, string> = {
   Nails:      CategoryColors.nails,
-  Lashes:     '#1D9E75',
-  Brows:      '#BA7517',
-  Hair:       '#7B5EA7',
-  Makeup:     '#E8845E',
-  'Spray Tan':'#C99A4E',
+  Lashes:     CategoryColors.lashes,
+  Brows:      CategoryColors.brows,
+  Hair:       CategoryColors.hair,
+  Makeup:     CategoryColors.makeup,
+  'Spray Tan':CategoryColors.sprayTan,
 }
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -345,7 +345,7 @@ export default function ProviderShopScreen() {
               <Ionicons
                 name={isFavourite ? 'heart' : 'heart-outline'}
                 size={20}
-                color={isFavourite ? '#FF6B8A' : Colors.white}
+                color={isFavourite ? Colors.rose : Colors.white}
               />
             </TouchableOpacity>
           </View>
@@ -371,7 +371,7 @@ export default function ProviderShopScreen() {
             <View style={styles.nameRow}>
               <Text style={styles.providerName} numberOfLines={1}>{provider.name}</Text>
               {provider.is_verified && (
-                <Ionicons name="checkmark-circle" size={16} color="#1D9E75" style={styles.verifiedIcon} />
+                <Ionicons name="checkmark-circle" size={16} color={Colors.rose} style={styles.verifiedIcon} />
               )}
             </View>
             {provider.location ? (
@@ -407,7 +407,7 @@ export default function ProviderShopScreen() {
           {/* ── Badges ── */}
           {provider.is_verified ? (
             <View style={styles.badgesRow}>
-              <BadgeChip icon="shield-checkmark-outline" label="Verified" color="#1D9E75" />
+              <BadgeChip icon="shield-checkmark-outline" label="Verified" color={Colors.rose} />
             </View>
           ) : null}
 
@@ -644,8 +644,8 @@ const styles = StyleSheet.create({
   },
   bannerLogo: { width: 104, height: 104 },
   bannerBrandText: {
-    fontFamily: 'DancingScript_700Bold',
-    fontSize: 36,
+    fontFamily: Fonts.display,
+    fontSize: 32,
     color: Colors.rose,
     letterSpacing: -0.3,
   },
@@ -664,9 +664,9 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   avatarWrapper: { position: 'relative', marginRight: 14, marginTop: -44 },
-  avatar: { width: 88, height: 88, borderRadius: 22, borderWidth: 3, borderColor: Colors.cream },
+  avatar: { width: 88, height: 88, borderRadius: Radius.lg, borderWidth: 3, borderColor: Colors.cream },
   avatarPlaceholder: {
-    width: 88, height: 88, borderRadius: 22,
+    width: 88, height: 88, borderRadius: Radius.lg,
     backgroundColor: Colors.softPink, alignItems: 'center', justifyContent: 'center',
     borderWidth: 3, borderColor: Colors.cream,
   },
@@ -674,12 +674,12 @@ const styles = StyleSheet.create({
   verifiedBadge: {
     position: 'absolute', bottom: 2, right: 2,
     width: 20, height: 20, borderRadius: 10,
-    backgroundColor: '#1D9E75', alignItems: 'center', justifyContent: 'center',
+    backgroundColor: Colors.rose, alignItems: 'center', justifyContent: 'center',
     borderWidth: 2, borderColor: Colors.cream,
   },
   profileMeta: { flex: 1, paddingBottom: 6, gap: 3 },
   nameRow: { flexDirection: 'row', alignItems: 'center' },
-  providerName: { fontFamily: 'DancingScript_700Bold', fontSize: 30, color: Colors.warmDark, letterSpacing: -0.4, flexShrink: 1 },
+  providerName: { fontFamily: Fonts.display, fontSize: 26, color: Colors.warmDark, letterSpacing: -0.4, flexShrink: 1 },
   verifiedIcon: { marginLeft: 4 },
   locationRow: { flexDirection: 'row', alignItems: 'center' },
   locationText: { fontSize: 13, color: Colors.muted },
@@ -703,15 +703,16 @@ const styles = StyleSheet.create({
   badgeText: { fontSize: 13, fontWeight: '600' },
 
   section: { marginBottom: 24 },
-  sectionTitle: { fontFamily: 'DancingScript_700Bold', fontSize: 26, color: Colors.warmDark, letterSpacing: -0.3, marginBottom: 12 },
+  sectionTitle: { fontFamily: Fonts.heading, fontSize: 18, color: Colors.warmDark, letterSpacing: -0.1, marginBottom: 12 },
 
   bioText: { fontSize: 15, color: Colors.warmDark, lineHeight: 23, opacity: 0.85 },
 
   // Treatments
   treatmentRow: {
     flexDirection: 'row', alignItems: 'center',
-    backgroundColor: Colors.white, borderRadius: 14, marginBottom: 8,
+    backgroundColor: Colors.white, borderRadius: Radius.md, marginBottom: 8,
     overflow: 'hidden', borderWidth: 1, borderColor: Colors.border,
+    ...Shadow.soft,
   },
   treatmentStripe: { width: 4, alignSelf: 'stretch' },
   treatmentInfo: { flex: 1, padding: 12, gap: 4 },
@@ -730,7 +731,7 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8,
   },
   portfolioRow: { gap: 10 },
-  portfolioThumb: { width: 110, height: 110, borderRadius: 14, overflow: 'hidden' },
+  portfolioThumb: { width: 110, height: 110, borderRadius: Radius.md, overflow: 'hidden' },
   portfolioImg: { width: 110, height: 110 },
   playOverlay: {
     position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
@@ -741,8 +742,9 @@ const styles = StyleSheet.create({
   // Reviews
   emptyReviews: { fontSize: 14, color: Colors.muted, textAlign: 'center', paddingVertical: 20 },
   reviewCard: {
-    backgroundColor: Colors.white, borderRadius: 16, padding: 14, marginBottom: 10,
+    backgroundColor: Colors.white, borderRadius: Radius.lg, padding: 14, marginBottom: 10,
     borderWidth: 1, borderColor: Colors.border,
+    ...Shadow.soft,
   },
   reviewHeader: { flexDirection: 'row', gap: 10, marginBottom: 8 },
   reviewerAvatar: { width: 38, height: 38, borderRadius: 19 },
@@ -769,12 +771,11 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.06, shadowRadius: 8, elevation: 8,
   },
   applyBtn: {
-    backgroundColor: Colors.roseDark, borderRadius: 16, paddingVertical: 16,
+    backgroundColor: Colors.rose, borderRadius: Radius.lg, paddingVertical: 16,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    shadowColor: Colors.roseDark, shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3, shadowRadius: 10, elevation: 5,
+    ...Shadow.card,
   },
-  applyBtnText: { color: Colors.white, fontSize: 16, fontWeight: '700', letterSpacing: -0.2 },
+  applyBtnText: { color: Colors.white, fontFamily: Fonts.bodyBold, fontSize: 16, letterSpacing: -0.2 },
   applyBtnDisabled: { backgroundColor: Colors.inputBg, shadowOpacity: 0, elevation: 0 },
   applyHint: { fontSize: 12, color: Colors.muted, textAlign: 'center', marginTop: 8, fontWeight: '500' },
 })

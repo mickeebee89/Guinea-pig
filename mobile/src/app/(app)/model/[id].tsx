@@ -16,7 +16,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router'
 import * as Haptics from 'expo-haptics'
 import { Ionicons } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { Colors, CategoryColors } from '@/constants/Colors'
+import { Colors, CategoryColors, Fonts, Radius, Shadow } from '@/constants/Colors'
 import { useAuth } from '@/context/auth'
 import { supabase } from '@/lib/supabase'
 import { isIdentityVerified } from '@/lib/verification'
@@ -111,8 +111,8 @@ const ATTR_GROUPS: AttrGroup[] = [
   },
   {
     group: 'Skin',
-    color: '#B5603A',
-    bg: '#E8845E18',
+    color: Colors.roseDark,
+    bg: Colors.inputBg,
     items: [
       { key: 'skin_tone', label: 'Tone' },
       { key: 'skin_type', label: 'Type' },
@@ -120,8 +120,8 @@ const ATTR_GROUPS: AttrGroup[] = [
   },
   {
     group: 'Eyes',
-    color: '#1D9E75',
-    bg: '#ECFDF580',
+    color: Colors.rose,
+    bg: Colors.softPink + '80',
     items: [
       { key: 'eye_colour', label: 'Colour' },
       { key: 'eye_shape',  label: 'Shape'  },
@@ -547,7 +547,7 @@ export default function ModelProfileViewScreen() {
         {/* Actions */}
         {canReview && (
           <TouchableOpacity
-            style={[styles.reviewBtn, hasReviewed && { opacity: 0.6, backgroundColor: '#1D9E75' }]}
+            style={[styles.reviewBtn, hasReviewed && { opacity: 0.6, backgroundColor: Colors.roseDark }]}
             onPress={hasReviewed ? undefined : handleLeaveReview}
             disabled={hasReviewed}
             activeOpacity={0.88}
@@ -629,7 +629,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.white, alignItems: 'center', justifyContent: 'center',
     borderWidth: 1, borderColor: Colors.border,
   },
-  topBarTitle: { fontFamily: 'DancingScript_700Bold', fontSize: 25, color: Colors.warmDark, letterSpacing: -0.3 },
+  topBarTitle: { fontFamily: Fonts.heading, fontSize: 18, color: Colors.warmDark, letterSpacing: -0.2 },
 
   scroll: { paddingHorizontal: 16, paddingTop: 20, gap: 4 },
 
@@ -659,12 +659,12 @@ const styles = StyleSheet.create({
   },
   avatarInitials: { fontSize: 32, fontWeight: '700', color: Colors.roseDark },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  displayName: { fontFamily: 'DancingScript_700Bold', fontSize: 33, color: Colors.warmDark, letterSpacing: -0.5 },
+  displayName: { fontFamily: Fonts.display, fontSize: 28, color: Colors.warmDark, letterSpacing: -0.4 },
   verifiedBadge: {
     width: 20, height: 20, borderRadius: 10,
-    backgroundColor: '#1D9E75', alignItems: 'center', justifyContent: 'center',
+    backgroundColor: Colors.rose, alignItems: 'center', justifyContent: 'center',
   },
-  verifiedLabel: { fontSize: 13, color: '#1D9E75', fontWeight: '600' },
+  verifiedLabel: { fontSize: 13, color: Colors.rose, fontWeight: '600' },
   bioText: {
     fontSize: 14,
     color: Colors.muted,
@@ -685,7 +685,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 
-  sectionTitle: { fontFamily: 'DancingScript_700Bold', fontSize: 25, color: Colors.warmDark, letterSpacing: -0.3, marginBottom: 10 },
+  sectionTitle: { fontFamily: Fonts.heading, fontSize: 18, color: Colors.warmDark, letterSpacing: -0.2, marginBottom: 10 },
 
   chipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   attrChip: {

@@ -16,7 +16,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router'
 import * as Haptics from 'expo-haptics'
 import { Ionicons } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { Colors, CategoryColors } from '@/constants/Colors'
+import { Colors, CategoryColors, Fonts, Radius, Shadow } from '@/constants/Colors'
 import { useAuth } from '@/context/auth'
 import { supabase } from '@/lib/supabase'
 import LoadErrorState from '@/components/LoadErrorState'
@@ -67,12 +67,12 @@ const RATING_LABELS: Record<number, string> = {
 const COMMENT_MAX = 300
 
 const CATEGORY_COLORS: Record<string, string> = {
-  nails: CategoryColors.nails, lashes: '#1D9E75', brows: '#BA7517',
-  hair: '#7B5EA7', makeup: '#E8845E', 'spray tan': '#C99A4E',
+  nails: CategoryColors.nails, lashes: CategoryColors.lashes, brows: CategoryColors.brows,
+  hair: CategoryColors.hair, makeup: CategoryColors.makeup, 'spray tan': CategoryColors.sprayTan,
 }
 
 function categoryColor(cat: string | null | undefined) {
-  return CATEGORY_COLORS[(cat ?? '').toLowerCase()] ?? Colors.roseDark
+  return CATEGORY_COLORS[(cat ?? '').toLowerCase()] ?? Colors.rose
 }
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -132,7 +132,7 @@ function StarRow({
           <Ionicons
             name={star <= rating ? 'star' : 'star-outline'}
             size={size}
-            color={star <= rating ? '#F59E0B' : Colors.border}
+            color={star <= rating ? '#F59E0B' : Colors.border} // star amber kept intentionally (rule 2)
           />
         </TouchableOpacity>
       ))}
@@ -324,7 +324,7 @@ export default function LeaveReviewScreen() {
   if (loading) {
     return (
       <View style={[styles.container, styles.centred]}>
-        <ActivityIndicator color={Colors.roseDark} />
+        <ActivityIndicator color={Colors.rose} />
       </View>
     )
   }
@@ -347,7 +347,7 @@ export default function LeaveReviewScreen() {
       <View style={[styles.container, { paddingTop: insets.top }]}>
         <View style={[styles.topBar, { paddingTop: 8 }]}>
           <TouchableOpacity style={styles.backBtn} onPress={goBack} activeOpacity={0.75}>
-            <Ionicons name="chevron-back" size={20} color={Colors.roseDark} />
+            <Ionicons name="chevron-back" size={20} color={Colors.rose} />
           </TouchableOpacity>
           <Text style={styles.topBarTitle}>Leave a review</Text>
           <View style={{ width: 36 }} />
@@ -398,7 +398,7 @@ export default function LeaveReviewScreen() {
       {/* ── Top bar ── */}
       <View style={[styles.topBar, { paddingTop: insets.top + 8 }]}>
         <TouchableOpacity style={styles.backBtn} onPress={goBack} activeOpacity={0.75}>
-          <Ionicons name="chevron-back" size={20} color={Colors.roseDark} />
+          <Ionicons name="chevron-back" size={20} color={Colors.rose} />
         </TouchableOpacity>
         <Text style={styles.topBarTitle}>
           {isReviewingModel ? 'Review model' : 'Leave a review'}
@@ -418,7 +418,7 @@ export default function LeaveReviewScreen() {
         >
           {/* ── Session recap card ── */}
           <View style={styles.recapCard}>
-            <View style={[styles.recapStrip, { backgroundColor: isReviewingModel ? Colors.roseDark : catColor }]} />
+            <View style={[styles.recapStrip, { backgroundColor: isReviewingModel ? Colors.rose : catColor }]} />
             <View style={styles.recapBody}>
               {revieweePicUrl ? (
                 <Image source={{ uri: revieweePicUrl }} style={styles.recapAvatar} />
@@ -576,34 +576,32 @@ const styles = StyleSheet.create({
   scroll: { paddingHorizontal: 16, paddingTop: 20 },
 
   recapCard: {
-    backgroundColor: Colors.white, borderRadius: 20, marginBottom: 14,
+    backgroundColor: Colors.white, borderRadius: Radius.lg, marginBottom: 14,
     overflow: 'hidden', borderWidth: 1, borderColor: Colors.border,
-    shadowColor: Colors.warmDark, shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05, shadowRadius: 6, elevation: 2,
+    ...Shadow.soft,
   },
   recapStrip: { height: 6 },
   recapBody: { flexDirection: 'row', alignItems: 'center', gap: 14, padding: 16 },
-  recapAvatar: { width: 56, height: 56, borderRadius: 14, flexShrink: 0 },
+  recapAvatar: { width: 56, height: 56, borderRadius: Radius.md, flexShrink: 0 },
   recapAvatarPlaceholder: {
-    width: 56, height: 56, borderRadius: 14,
+    width: 56, height: 56, borderRadius: Radius.md,
     backgroundColor: Colors.softPink,
     alignItems: 'center', justifyContent: 'center', flexShrink: 0,
   },
-  recapAvatarInitials: { fontSize: 20, fontWeight: '700', color: Colors.roseDark },
+  recapAvatarInitials: { fontSize: 20, fontWeight: '700', color: Colors.rose },
   recapInfo: { flex: 1, gap: 6 },
-  recapName: { fontSize: 17, fontWeight: '800', color: Colors.warmDark, letterSpacing: -0.3 },
+  recapName: { fontFamily: Fonts.heading, fontSize: 17, color: Colors.warmDark, letterSpacing: -0.3 },
   treatPill: { flexDirection: 'row', alignItems: 'center', gap: 5, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3, alignSelf: 'flex-start' },
   treatDot: { width: 6, height: 6, borderRadius: 3 },
   treatPillText: { fontSize: 12, fontWeight: '700' },
   recapDate: { fontSize: 12, color: Colors.muted, fontWeight: '500' },
 
   sectionCard: {
-    backgroundColor: Colors.white, borderRadius: 20, padding: 18, marginBottom: 14,
+    backgroundColor: Colors.white, borderRadius: Radius.lg, padding: 18, marginBottom: 14,
     borderWidth: 1, borderColor: Colors.border,
-    shadowColor: Colors.warmDark, shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04, shadowRadius: 6, elevation: 1,
+    ...Shadow.soft,
   },
-  sectionTitle: { fontFamily: 'DancingScript_700Bold', fontSize: 24, color: Colors.warmDark, letterSpacing: -0.3, marginBottom: 4 },
+  sectionTitle: { fontFamily: Fonts.heading, fontSize: 18, color: Colors.warmDark, letterSpacing: -0.3, marginBottom: 4 },
   sectionSub:   { fontSize: 12, color: Colors.muted, marginBottom: 14 },
 
   starsLarge: { alignItems: 'center', marginVertical: 16 },
@@ -620,15 +618,15 @@ const styles = StyleSheet.create({
   tagChip: {
     flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: 14, paddingVertical: 9,
-    borderRadius: 22, borderWidth: 1.5,
-    borderColor: Colors.softPink, backgroundColor: Colors.white,
+    borderRadius: Radius.pill, borderWidth: 1.5,
+    borderColor: Colors.softPink, backgroundColor: Colors.inputBg,
   },
-  tagChipSelected: { backgroundColor: Colors.roseDark, borderColor: Colors.roseDark },
-  tagChipText:     { fontSize: 13, fontWeight: '600', color: Colors.roseDark },
+  tagChipSelected: { backgroundColor: Colors.rose, borderColor: Colors.rose },
+  tagChipText:     { fontSize: 13, fontWeight: '600', color: Colors.rose },
   tagChipTextSelected: { color: Colors.white },
 
   commentInput: {
-    backgroundColor: Colors.inputBg, borderRadius: 14, borderWidth: 1.5,
+    backgroundColor: Colors.inputBg, borderRadius: Radius.md, borderWidth: 1.5,
     borderColor: Colors.border, padding: 14, fontSize: 14,
     color: Colors.warmDark, minHeight: 100, lineHeight: 20,
   },
@@ -641,27 +639,24 @@ const styles = StyleSheet.create({
   },
   rateHint: { textAlign: 'center', fontSize: 12, color: Colors.muted, fontWeight: '500' },
   postBtn: {
-    height: 54, backgroundColor: Colors.roseDark, borderRadius: 16,
+    height: 54, backgroundColor: Colors.rose, borderRadius: Radius.lg,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    shadowColor: Colors.roseDark, shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3, shadowRadius: 8, elevation: 4,
+    ...Shadow.card,
   },
   postBtnDisabled: { backgroundColor: Colors.muted, shadowOpacity: 0, elevation: 0 },
-  postBtnText: { fontSize: 16, fontWeight: '800', color: Colors.white, letterSpacing: -0.2 },
+  postBtnText: { fontFamily: Fonts.bodyBold, fontSize: 16, color: Colors.white, letterSpacing: -0.2 },
 
   successIconCircle: {
-    width: 88, height: 88, borderRadius: 44, backgroundColor: Colors.roseDark,
+    width: 88, height: 88, borderRadius: 44, backgroundColor: Colors.rose,
     alignItems: 'center', justifyContent: 'center',
-    shadowColor: Colors.roseDark, shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.3, shadowRadius: 12, elevation: 6,
+    ...Shadow.card,
   },
-  successTitle: { fontFamily: 'DancingScript_700Bold', fontSize: 35, color: Colors.warmDark, letterSpacing: -0.5, textAlign: 'center' },
+  successTitle: { fontFamily: Fonts.display, fontSize: 32, color: Colors.rose, letterSpacing: -0.5, textAlign: 'center' },
   successSub:   { fontSize: 15, color: Colors.muted, textAlign: 'center', lineHeight: 22 },
   doneBtn: {
-    marginTop: 8, height: 54, width: 180, backgroundColor: Colors.roseDark,
-    borderRadius: 16, alignItems: 'center', justifyContent: 'center',
-    shadowColor: Colors.roseDark, shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25, shadowRadius: 8, elevation: 4,
+    marginTop: 8, height: 54, width: 180, backgroundColor: Colors.rose,
+    borderRadius: Radius.lg, alignItems: 'center', justifyContent: 'center',
+    ...Shadow.card,
   },
-  doneBtnText: { fontSize: 16, fontWeight: '700', color: Colors.white },
+  doneBtnText: { fontFamily: Fonts.bodyBold, fontSize: 16, color: Colors.white },
 })

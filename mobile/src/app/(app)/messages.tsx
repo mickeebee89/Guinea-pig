@@ -11,7 +11,7 @@ import {
 import { useRouter, useFocusEffect } from 'expo-router'
 import * as Haptics from 'expo-haptics'
 import { Ionicons } from '@expo/vector-icons'
-import { Colors, CategoryColors } from '@/constants/Colors'
+import { Colors, CategoryColors, Fonts, Radius, Shadow } from '@/constants/Colors'
 import { useAuth } from '@/context/auth'
 import { supabase } from '@/lib/supabase'
 import { getBlockedIds } from '@/lib/blocks'
@@ -40,11 +40,11 @@ type ConvItem = {
 
 const CATEGORY_COLOR: Record<string, string> = {
   Nails:       CategoryColors.nails,
-  Lashes:      '#1D9E75',
-  Brows:       '#BA7517',
-  Hair:        '#7B5EA7',
-  Makeup:      '#E8845E',
-  'Spray Tan': '#C99A4E',
+  Lashes:      CategoryColors.lashes,
+  Brows:       CategoryColors.brows,
+  Hair:        CategoryColors.hair,
+  Makeup:      CategoryColors.makeup,
+  'Spray Tan': CategoryColors.sprayTan,
 }
 
 function formatConvTime(iso: string): string {
@@ -436,11 +436,11 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
   },
   headerTitle: {
-    fontFamily: 'DancingScript_700Bold',
+    fontFamily: Fonts.display,
     flex: 1,
     textAlign: 'center',
-    fontSize: 25,
-    color: Colors.warmDark,
+    fontSize: 22,
+    color: Colors.rose,
     letterSpacing: -0.3,
   },
   headerRight: { width: 36 },
@@ -457,9 +457,9 @@ const styles = StyleSheet.create({
   },
   emptyEmoji: { fontSize: 48, marginBottom: 16 },
   emptyTitle: {
-    fontFamily: 'DancingScript_700Bold',
-    fontSize: 30,
-    color: Colors.warmDark,
+    fontFamily: Fonts.display,
+    fontSize: 26,
+    color: Colors.rose,
     letterSpacing: -0.3,
     marginBottom: 8,
     textAlign: 'center',
@@ -477,10 +477,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 14,
-    backgroundColor: Colors.cream,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+    marginHorizontal: 12,
+    marginTop: 8,
+    backgroundColor: Colors.white,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: Colors.border,
     gap: 12,
+    ...Shadow.soft,
   },
   avatarWrap: { position: 'relative' },
   avatar: {
@@ -512,7 +516,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
-    borderColor: Colors.cream,
+    borderColor: Colors.white,
   },
 
   rowContent: { flex: 1, gap: 3 },
@@ -534,7 +538,7 @@ const styles = StyleSheet.create({
     color: Colors.muted,
     flexShrink: 0,
   },
-  rowTimeBold: { color: Colors.roseDark, fontWeight: '700' },
+  rowTimeBold: { color: Colors.rose, fontWeight: '700' },
   rowBottomLine: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -552,7 +556,7 @@ const styles = StyleSheet.create({
     minWidth: 20,
     height: 20,
     borderRadius: 10,
-    backgroundColor: Colors.roseDark,
+    backgroundColor: Colors.rose,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 5,

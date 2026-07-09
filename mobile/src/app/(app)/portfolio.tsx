@@ -18,7 +18,7 @@ import * as Haptics from 'expo-haptics'
 import * as ImagePicker from 'expo-image-picker'
 import * as ImageManipulator from 'expo-image-manipulator'
 import { Ionicons } from '@expo/vector-icons'
-import { Colors } from '@/constants/Colors'
+import { Colors, Fonts, Radius, Shadow } from '@/constants/Colors'
 import { useAuth } from '@/context/auth'
 import { supabase } from '@/lib/supabase'
 
@@ -319,7 +319,7 @@ export default function PortfolioScreen() {
               onPress={() => { setNewCatName(''); setShowNewCatModal(true) }}
               activeOpacity={0.8}
             >
-              <Ionicons name="folder-outline" size={18} color={Colors.roseDark} />
+              <Ionicons name="folder-outline" size={18} color={Colors.rose} />
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.addBtn, uploading && { opacity: 0.5 }]}
@@ -337,7 +337,7 @@ export default function PortfolioScreen() {
 
         {loading ? (
           <View style={styles.centred}>
-            <ActivityIndicator color={Colors.roseDark} />
+            <ActivityIndicator color={Colors.rose} />
           </View>
         ) : (
           <ScrollView
@@ -359,7 +359,7 @@ export default function PortfolioScreen() {
                     onPress={() => { setNewCatName(''); setShowNewCatModal(true) }}
                     activeOpacity={0.85}
                   >
-                    <Ionicons name="folder-outline" size={16} color={Colors.roseDark} />
+                    <Ionicons name="folder-outline" size={16} color={Colors.rose} />
                     <Text style={styles.emptySecondaryBtnText}>Create a category</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
@@ -497,7 +497,7 @@ export default function PortfolioScreen() {
                   No category
                 </Text>
                 {pickedCatId === null && (
-                  <Ionicons name="checkmark-circle" size={18} color={Colors.roseDark} />
+                  <Ionicons name="checkmark-circle" size={18} color={Colors.rose} />
                 )}
               </TouchableOpacity>
 
@@ -512,7 +512,7 @@ export default function PortfolioScreen() {
                     {cat.name}
                   </Text>
                   {pickedCatId === cat.id && (
-                    <Ionicons name="checkmark-circle" size={18} color={Colors.roseDark} />
+                    <Ionicons name="checkmark-circle" size={18} color={Colors.rose} />
                   )}
                 </TouchableOpacity>
               ))}
@@ -575,7 +575,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.white,
   },
   backBtn: { padding: 4, marginRight: 8 },
-  title: { fontFamily: 'DancingScript_700Bold', flex: 1, fontSize: 26, color: Colors.warmDark },
+  title: { fontFamily: Fonts.display, flex: 1, fontSize: 26, color: Colors.rose },
   headerActions: { flexDirection: 'row', gap: 8, alignItems: 'center' },
   headerBtn: {
     width: 36, height: 36, borderRadius: 18,
@@ -585,29 +585,31 @@ const styles = StyleSheet.create({
   },
   addBtn: {
     width: 36, height: 36, borderRadius: 18,
-    backgroundColor: Colors.roseDark,
+    backgroundColor: Colors.rose,
     alignItems: 'center', justifyContent: 'center',
+    ...Shadow.card,
   },
 
   scroll: { padding: 16 },
 
   // Empty state
   emptyState: { alignItems: 'center', paddingVertical: 60, paddingHorizontal: 32, gap: 12 },
-  emptyTitle: { fontFamily: 'DancingScript_700Bold', fontSize: 26, color: Colors.warmDark, textAlign: 'center' },
+  emptyTitle: { fontFamily: Fonts.display, fontSize: 26, color: Colors.rose, textAlign: 'center' },
   emptyText:  { fontSize: 14, color: Colors.muted, textAlign: 'center', lineHeight: 20 },
   emptyActions: { gap: 10, alignItems: 'center', marginTop: 8 },
   emptySecondaryBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
     paddingHorizontal: 20, paddingVertical: 10,
-    borderRadius: 12, borderWidth: 1.5, borderColor: Colors.softPink,
+    borderRadius: Radius.md, borderWidth: 1.5, borderColor: Colors.softPink,
     backgroundColor: Colors.white,
   },
-  emptySecondaryBtnText: { fontSize: 14, fontWeight: '600', color: Colors.roseDark },
+  emptySecondaryBtnText: { fontFamily: Fonts.bodyBold, fontSize: 14, color: Colors.rose },
   addFirstBtn: {
     paddingHorizontal: 28, paddingVertical: 12,
-    backgroundColor: Colors.roseDark, borderRadius: 12,
+    backgroundColor: Colors.rose, borderRadius: Radius.lg,
+    ...Shadow.card,
   },
-  addFirstBtnText: { fontSize: 15, fontWeight: '700', color: Colors.white },
+  addFirstBtnText: { fontFamily: Fonts.bodyBold, fontSize: 15, color: Colors.white },
 
   // Category section
   catSection: { marginBottom: 20 },
@@ -616,14 +618,14 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   catLabel: {
-    fontSize: 13, fontWeight: '700', color: Colors.muted,
+    fontFamily: Fonts.bodyBold, fontSize: 13, color: Colors.muted,
     textTransform: 'uppercase', letterSpacing: 0.5,
   },
 
   // Grid
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   gridItem: {
-    width: ITEM_SIZE, height: ITEM_SIZE, borderRadius: 12,
+    width: ITEM_SIZE, height: ITEM_SIZE, borderRadius: Radius.md,
     overflow: 'hidden', position: 'relative',
   },
   gridImg: { width: ITEM_SIZE, height: ITEM_SIZE },
@@ -648,7 +650,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.4)',
   },
   modalSheet: {
-    backgroundColor: Colors.cream, borderTopLeftRadius: 28, borderTopRightRadius: 28,
+    backgroundColor: Colors.cream, borderTopLeftRadius: Radius.xl, borderTopRightRadius: Radius.xl,
     paddingHorizontal: 20, paddingTop: 12, paddingBottom: 32,
     shadowColor: '#000', shadowOffset: { width: 0, height: -4 },
     shadowOpacity: 0.1, shadowRadius: 12, elevation: 16,
@@ -658,39 +660,38 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.border, alignSelf: 'center', marginBottom: 20,
   },
   modalTitle: {
-    fontFamily: 'DancingScript_700Bold',
-    fontSize: 26, color: Colors.warmDark,
+    fontFamily: Fonts.display,
+    fontSize: 26, color: Colors.rose,
     letterSpacing: -0.3, marginBottom: 6,
   },
   modalSub: { fontSize: 13, color: Colors.muted, marginBottom: 20, lineHeight: 18 },
 
   catInput: {
-    backgroundColor: Colors.white, borderRadius: 14, borderWidth: 1.5,
+    backgroundColor: Colors.inputBg, borderRadius: Radius.md, borderWidth: 1.5,
     borderColor: Colors.border, paddingHorizontal: 14, paddingVertical: 12,
     fontSize: 15, color: Colors.warmDark, marginBottom: 16,
   },
   modalBtn: {
-    backgroundColor: Colors.roseDark, borderRadius: 14,
+    backgroundColor: Colors.rose, borderRadius: Radius.md,
     paddingVertical: 15, alignItems: 'center', marginBottom: 10,
-    shadowColor: Colors.roseDark, shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.25, shadowRadius: 6, elevation: 3,
+    ...Shadow.card,
   },
   modalBtnDisabled: { backgroundColor: Colors.muted, shadowOpacity: 0, elevation: 0 },
-  modalBtnText: { fontSize: 15, fontWeight: '700', color: Colors.white },
+  modalBtnText: { fontFamily: Fonts.bodyBold, fontSize: 15, color: Colors.white },
   modalCancel: {
-    backgroundColor: Colors.white, borderRadius: 14, paddingVertical: 15,
+    backgroundColor: Colors.white, borderRadius: Radius.md, paddingVertical: 15,
     alignItems: 'center', borderWidth: 1, borderColor: Colors.border,
   },
-  modalCancelText: { fontSize: 15, fontWeight: '600', color: Colors.warmDark },
+  modalCancelText: { fontFamily: Fonts.bodyBold, fontSize: 15, color: Colors.warmDark },
 
   // Category picker list
   catPickerList: { maxHeight: 240, marginBottom: 16 },
   catPickerItem: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    backgroundColor: Colors.white, borderRadius: 12, padding: 14,
+    backgroundColor: Colors.white, borderRadius: Radius.md, padding: 14,
     marginBottom: 8, borderWidth: 1, borderColor: Colors.border,
   },
-  catPickerItemSelected: { borderColor: Colors.roseDark, backgroundColor: Colors.softPink + '20' },
-  catPickerItemText: { fontSize: 15, fontWeight: '600', color: Colors.warmDark },
-  catPickerItemTextSelected: { color: Colors.roseDark },
+  catPickerItemSelected: { borderColor: Colors.rose, backgroundColor: Colors.softPink + '20' },
+  catPickerItemText: { fontFamily: Fonts.bodyBold, fontSize: 15, color: Colors.warmDark },
+  catPickerItemTextSelected: { color: Colors.rose },
 })

@@ -9,7 +9,7 @@ import {
 import { Stack, useLocalSearchParams } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { Colors } from '@/constants/Colors'
+import { Colors, Fonts, Radius, Shadow, Spacing } from '@/constants/Colors'
 import { supabase } from '@/lib/supabase'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -172,45 +172,47 @@ export default function ReviewsScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: 'transparent' },
   centred:   { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  list:      { padding: 16, paddingTop: 8 },
+  list:      { padding: Spacing.lg, paddingTop: Spacing.sm },
 
   summaryHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
     backgroundColor: Colors.white,
-    borderRadius: 14,
+    borderRadius: Radius.md,
     padding: 14,
-    marginBottom: 12,
+    marginBottom: Spacing.md,
     borderWidth: 1,
     borderColor: Colors.border,
+    ...Shadow.soft,
   },
-  avgText:   { fontSize: 22, fontWeight: '800', color: Colors.warmDark },
-  countText: { fontSize: 14, color: Colors.muted },
+  avgText:   { fontSize: 22, fontFamily: Fonts.bodyBold, color: Colors.warmDark },
+  countText: { fontSize: 14, fontFamily: Fonts.body, color: Colors.muted },
 
-  empty: { textAlign: 'center', color: Colors.muted, fontSize: 15, paddingTop: 40 },
+  empty: { textAlign: 'center', color: Colors.muted, fontFamily: Fonts.body, fontSize: 15, paddingTop: 40 },
 
   card: {
     backgroundColor: Colors.white,
-    borderRadius: 16,
+    borderRadius: Radius.lg,
     padding: 14,
-    marginBottom: 10,
+    marginBottom: Spacing.sm,
     borderWidth: 1,
     borderColor: Colors.border,
+    ...Shadow.soft,
   },
-  cardHeader:      { flexDirection: 'row', gap: 10, marginBottom: 8 },
+  cardHeader:      { flexDirection: 'row', gap: 10, marginBottom: Spacing.sm },
   avatarPlaceholder: {
     width: 38, height: 38, borderRadius: 19,
     backgroundColor: Colors.softPink,
     alignItems: 'center', justifyContent: 'center',
   },
-  avatarInitials:  { fontSize: 13, fontWeight: '700', color: Colors.roseDark },
+  avatarInitials:  { fontSize: 13, fontFamily: Fonts.bodyBold, color: Colors.roseDark },
   reviewerMeta:    { gap: 3 },
-  reviewerName:    { fontSize: 14, fontWeight: '600', color: Colors.warmDark },
+  reviewerName:    { fontSize: 14, fontFamily: Fonts.bodyBold, color: Colors.warmDark },
   ratingRow:       { flexDirection: 'row', alignItems: 'center' },
-  dateText:        { fontSize: 11, color: Colors.muted },
-  tagsRow:         { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 8 },
-  tag:             { backgroundColor: Colors.inputBg, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },
-  tagText:         { fontSize: 11, fontWeight: '600', color: Colors.muted },
-  comment:         { fontSize: 14, color: Colors.warmDark, lineHeight: 20, opacity: 0.85 },
+  dateText:        { fontSize: 11, fontFamily: Fonts.body, color: Colors.muted },
+  tagsRow:         { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: Spacing.sm },
+  tag:             { backgroundColor: Colors.inputBg, borderRadius: Radius.sm, paddingHorizontal: 8, paddingVertical: 3 },
+  tagText:         { fontSize: 11, fontFamily: Fonts.bodyBold, color: Colors.roseDark },
+  comment:         { fontSize: 14, fontFamily: Fonts.body, color: Colors.warmDark, lineHeight: 20, opacity: 0.85 },
 })

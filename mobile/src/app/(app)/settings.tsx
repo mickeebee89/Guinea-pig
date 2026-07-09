@@ -22,7 +22,7 @@ import * as ImageManipulator from 'expo-image-manipulator'
 import { decode } from 'base64-arraybuffer'
 import { Ionicons } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { Colors } from '@/constants/Colors'
+import { Colors, Fonts, Radius, Shadow } from '@/constants/Colors'
 import { useAuth } from '@/context/auth'
 import { supabase } from '@/lib/supabase'
 import ScreenDecor from '@/components/ScreenDecor'
@@ -95,7 +95,7 @@ function editPlaceholder(f: EditField): string {
 function subscriptionLabel(status: string | null | undefined) {
   switch (status) {
     case 'premium': return { text: '✨ Premium', color: Colors.roseDark }
-    case 'pro':     return { text: '🌟 Pro',     color: '#7B5EA7'       }
+    case 'pro':     return { text: '🌟 Pro',     color: Colors.rose     }
     default:        return { text: 'Free Plan',  color: Colors.muted    }
   }
 }
@@ -121,8 +121,8 @@ function Row({
   const inner = (
     <View style={[rowSt.row, !last && rowSt.rowBorder]}>
       {icon && (
-        <View style={[rowSt.iconWrap, danger && { backgroundColor: '#FEF2F2' }]}>
-          <Ionicons name={icon as any} size={17} color={danger ? Colors.error : Colors.roseDark} />
+        <View style={[rowSt.iconWrap, danger && { backgroundColor: Colors.inputBg }]}>
+          <Ionicons name={icon as any} size={17} color={danger ? Colors.error : Colors.rose} />
         </View>
       )}
       <Text style={[rowSt.label, danger && { color: Colors.error }]}>{label}</Text>
@@ -187,7 +187,7 @@ function TogRow({
   return (
     <View style={[rowSt.row, !last && rowSt.rowBorder, { alignItems: 'flex-start', paddingVertical: 14 }]}>
       <View style={rowSt.iconWrap}>
-        <Ionicons name={icon as any} size={17} color={Colors.roseDark} />
+        <Ionicons name={icon as any} size={17} color={Colors.rose} />
       </View>
       <View style={{ flex: 1, gap: 2 }}>
         <Text style={rowSt.label}>{label}</Text>
@@ -778,7 +778,7 @@ export default function SettingsScreen() {
               label="Verified"
               rightEl={
                 <View style={styles.verifiedBadge}>
-                  <Ionicons name="checkmark-circle" size={14} color="#1D9E75" />
+                  <Ionicons name="checkmark-circle" size={14} color={Colors.rose} />
                   <Text style={styles.verifiedBadgeText}>Verified</Text>
                 </View>
               }
@@ -1113,9 +1113,9 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: Colors.border,
   },
   topBarTitle: {
-    fontFamily: 'DancingScript_700Bold',
-    flex: 1, textAlign: 'center', fontSize: 25,
-    color: Colors.warmDark, letterSpacing: -0.3,
+    fontFamily: Fonts.display,
+    flex: 1, textAlign: 'center', fontSize: 22,
+    color: Colors.rose, letterSpacing: -0.3,
   },
 
   scroll: { paddingHorizontal: 16, paddingTop: 16 },
@@ -1137,15 +1137,11 @@ const styles = StyleSheet.create({
 
   card: {
     backgroundColor: Colors.white,
-    borderRadius: 16,
+    borderRadius: Radius.lg,
     borderWidth: 1,
     borderColor: Colors.border,
     overflow: 'hidden',
-    shadowColor: Colors.warmDark,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 4,
-    elevation: 1,
+    ...Shadow.soft,
   },
 
   // Profile pic preview
@@ -1157,7 +1153,7 @@ const styles = StyleSheet.create({
 
   // Subscription
   upgradePill: {
-    backgroundColor: Colors.roseDark, borderRadius: 10,
+    backgroundColor: Colors.rose, borderRadius: Radius.sm,
     paddingHorizontal: 10, paddingVertical: 4,
   },
   upgradePillText: { fontSize: 12, fontWeight: '700', color: Colors.white },
@@ -1165,17 +1161,17 @@ const styles = StyleSheet.create({
   // Verification badges
   verifiedBadge: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
-    backgroundColor: '#ECFDF5', borderRadius: 10,
+    backgroundColor: Colors.softPink, borderRadius: 10,
     paddingHorizontal: 10, paddingVertical: 4,
   },
-  verifiedBadgeText: { fontSize: 12, fontWeight: '700', color: '#1D9E75' },
+  verifiedBadgeText: { fontSize: 12, fontWeight: '700', color: Colors.roseDark },
   pendingBadge: {
-    backgroundColor: '#FFFBEB', borderRadius: 10,
+    backgroundColor: Colors.inputBg, borderRadius: 10,
     paddingHorizontal: 10, paddingVertical: 4,
   },
-  pendingBadgeText: { fontSize: 12, fontWeight: '700', color: '#D97706' },
+  pendingBadgeText: { fontSize: 12, fontWeight: '700', color: Colors.roseDark },
   declinedBadge: {
-    backgroundColor: '#FEF2F2', borderRadius: 10,
+    backgroundColor: Colors.inputBg, borderRadius: 10,
     paddingHorizontal: 10, paddingVertical: 4,
   },
   declinedBadgeText: { fontSize: 12, fontWeight: '700', color: Colors.error },
@@ -1207,7 +1203,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.4)',
   },
   sheet: {
-    backgroundColor: Colors.cream, borderTopLeftRadius: 28, borderTopRightRadius: 28,
+    backgroundColor: Colors.cream, borderTopLeftRadius: Radius.xl, borderTopRightRadius: Radius.xl,
     paddingHorizontal: 16, paddingTop: 12,
     shadowColor: '#000', shadowOffset: { width: 0, height: -4 },
     shadowOpacity: 0.1, shadowRadius: 12, elevation: 16,
@@ -1217,8 +1213,8 @@ const styles = StyleSheet.create({
     alignSelf: 'center', marginBottom: 16,
   },
   modalTitle: {
-    fontFamily: 'DancingScript_700Bold',
-    fontSize: 25, color: Colors.warmDark,
+    fontFamily: Fonts.heading,
+    fontSize: 18, color: Colors.warmDark,
     marginBottom: 14, paddingHorizontal: 2,
   },
 
@@ -1240,12 +1236,11 @@ const styles = StyleSheet.create({
   },
   cancelBtnText: { fontSize: 15, fontWeight: '600', color: Colors.warmDark },
   saveBtn: {
-    flex: 2, height: 50, borderRadius: 14, backgroundColor: Colors.roseDark,
+    flex: 2, height: 50, borderRadius: Radius.md, backgroundColor: Colors.rose,
     alignItems: 'center', justifyContent: 'center',
-    shadowColor: Colors.roseDark, shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.25, shadowRadius: 6, elevation: 3,
+    ...Shadow.card,
   },
-  saveBtnText: { fontSize: 15, fontWeight: '700', color: Colors.white },
+  saveBtnText: { fontFamily: Fonts.bodyBold, fontSize: 15, color: Colors.white },
 
   // Password modal
   pwdLabel: { fontSize: 13, fontWeight: '600', color: Colors.warmDark, marginBottom: 6, marginTop: 4 },

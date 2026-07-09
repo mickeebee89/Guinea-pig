@@ -9,7 +9,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 import * as Haptics from 'expo-haptics'
 import { Ionicons } from '@expo/vector-icons'
-import { Colors } from '@/constants/Colors'
+import { Colors, Fonts, Radius, Shadow } from '@/constants/Colors'
 import { supabase } from '@/lib/supabase'
 import { pendingAuth } from '@/lib/pendingAuth'
 
@@ -113,7 +113,7 @@ export default function ConfirmEmailScreen({ email, role, first, initial, onBack
       <SafeAreaView style={styles.safe}>
         <View style={styles.content}>
           <View style={styles.iconWrap}>
-            <Ionicons name="mail" size={48} color={Colors.roseDark} />
+            <Ionicons name="mail" size={48} color={Colors.rose} />
           </View>
 
           <Text style={styles.title}>Check your email</Text>
@@ -150,7 +150,7 @@ export default function ConfirmEmailScreen({ email, role, first, initial, onBack
 
           {resent && (
             <View style={styles.successBox}>
-              <Ionicons name="checkmark-circle-outline" size={16} color="#1D9E75" />
+              <Ionicons name="checkmark-circle-outline" size={16} color={Colors.rose} />
               <Text style={styles.successText}>Confirmation email resent!</Text>
             </View>
           )}
@@ -176,7 +176,7 @@ export default function ConfirmEmailScreen({ email, role, first, initial, onBack
             activeOpacity={0.8}
           >
             {resending
-              ? <ActivityIndicator color={Colors.roseDark} size="small" />
+              ? <ActivityIndicator color={Colors.rose} size="small" />
               : <Text style={styles.ghostBtnText}>Resend confirmation email</Text>
             }
           </TouchableOpacity>
@@ -197,14 +197,14 @@ const styles = StyleSheet.create({
 
   iconWrap: {
     width: 96, height: 96, borderRadius: 48,
-    backgroundColor: Colors.softPink + '50',
+    backgroundColor: Colors.softPink,
     alignItems: 'center', justifyContent: 'center',
     marginBottom: 24,
   },
 
   title: {
-    fontFamily: 'DancingScript_700Bold',
-    fontSize: 39, color: Colors.warmDark,
+    fontFamily: Fonts.display,
+    fontSize: 34, color: Colors.rose,
     letterSpacing: -0.5, textAlign: 'center', marginBottom: 12,
   },
   body: {
@@ -217,13 +217,14 @@ const styles = StyleSheet.create({
 
   steps: {
     width: '100%', backgroundColor: Colors.white,
-    borderRadius: 16, padding: 16, gap: 12,
+    borderRadius: Radius.lg, padding: 16, gap: 12,
     borderWidth: 1, borderColor: Colors.border, marginBottom: 20,
+    ...Shadow.soft,
   },
   stepRow:     { flexDirection: 'row', alignItems: 'center', gap: 12 },
   stepNum: {
     width: 26, height: 26, borderRadius: 13,
-    backgroundColor: Colors.softPink + '60',
+    backgroundColor: Colors.softPink,
     alignItems: 'center', justifyContent: 'center',
   },
   stepNumText: { fontSize: 12, fontWeight: '800', color: Colors.roseDark },
@@ -231,28 +232,27 @@ const styles = StyleSheet.create({
 
   errorBox: {
     flexDirection: 'row', alignItems: 'flex-start', gap: 8,
-    backgroundColor: '#FEE2E2', borderRadius: 12, padding: 12,
+    backgroundColor: '#FEE2E2', borderRadius: Radius.md, padding: 12,
     width: '100%', marginBottom: 4,
   },
   errorText: { flex: 1, fontSize: 13, color: Colors.error, lineHeight: 18 },
 
   successBox: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
-    backgroundColor: '#ECFDF5', borderRadius: 12, padding: 12,
+    backgroundColor: Colors.softPink, borderRadius: Radius.md, padding: 12,
     width: '100%', marginBottom: 4,
   },
-  successText: { fontSize: 13, color: '#1D9E75', fontWeight: '500' },
+  successText: { fontSize: 13, color: Colors.roseDark, fontWeight: '500' },
 
   actions: { paddingBottom: 12, gap: 10 },
   primaryBtn: {
-    height: 54, backgroundColor: Colors.roseDark, borderRadius: 16,
+    height: 54, backgroundColor: Colors.rose, borderRadius: Radius.lg,
     alignItems: 'center', justifyContent: 'center',
-    shadowColor: Colors.roseDark, shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.28, shadowRadius: 8, elevation: 4,
+    ...Shadow.card,
   },
-  primaryBtnText: { fontSize: 16, fontWeight: '800', color: Colors.white, letterSpacing: -0.2 },
+  primaryBtnText: { fontFamily: Fonts.bodyBold, fontSize: 16, color: Colors.white, letterSpacing: -0.2 },
   ghostBtn: {
-    height: 50, borderRadius: 14,
+    height: 50, borderRadius: Radius.md,
     borderWidth: 1.5, borderColor: Colors.border,
     backgroundColor: Colors.white,
     alignItems: 'center', justifyContent: 'center',

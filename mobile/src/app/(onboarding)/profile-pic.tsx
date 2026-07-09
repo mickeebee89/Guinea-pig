@@ -13,7 +13,7 @@ import * as ImagePicker from 'expo-image-picker'
 import * as ImageManipulator from 'expo-image-manipulator'
 import * as Haptics from 'expo-haptics'
 import { decode } from 'base64-arraybuffer'
-import { Colors } from '@/constants/Colors'
+import { Colors, Fonts, Radius, Shadow } from '@/constants/Colors'
 import { Button } from '@/components/Button'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/context/auth'
@@ -208,9 +208,9 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   title: {
-    fontFamily: 'DancingScript_700Bold',
-    fontSize: 39,
-    color: Colors.warmDark,
+    fontFamily: Fonts.display,
+    fontSize: 32,
+    color: Colors.rose,
     letterSpacing: -0.5,
     marginBottom: 8,
   },
@@ -254,11 +254,12 @@ const styles = StyleSheet.create({
   photoOptions: {
     flexDirection: 'row',
     backgroundColor: Colors.white,
-    borderRadius: 16,
+    borderRadius: Radius.lg,
     borderWidth: 1,
     borderColor: Colors.border,
     overflow: 'hidden',
     marginBottom: 20,
+    ...Shadow.soft,
   },
   photoOption: {
     flex: 1,
@@ -269,7 +270,7 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
   },
   photoOptionIcon:  { fontSize: 18 },
-  photoOptionLabel: { fontSize: 14, color: Colors.warmDark, fontWeight: '500' },
+  photoOptionLabel: { fontFamily: Fonts.bodyBold, fontSize: 14, color: Colors.warmDark },
   divider: {
     width: 1,
     backgroundColor: Colors.border,
@@ -277,12 +278,12 @@ const styles = StyleSheet.create({
   },
   tips: {
     backgroundColor: Colors.softPink + '40',
-    borderRadius: 16,
+    borderRadius: Radius.lg,
     padding: 16,
   },
   tipsTitle: {
+    fontFamily: Fonts.bodyBold,
     fontSize: 13,
-    fontWeight: '700',
     color: Colors.roseDark,
     marginBottom: 8,
     textTransform: 'uppercase',

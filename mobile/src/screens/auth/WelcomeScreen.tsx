@@ -9,7 +9,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 import * as Haptics from 'expo-haptics'
 import * as Updates from 'expo-updates'
-import { Colors } from '@/constants/Colors'
+import { Colors, Fonts, Radius, Shadow } from '@/constants/Colors'
 
 const LOGO_URI = 'https://res.cloudinary.com/dzbazlq1o/image/upload/c_fill,g_north,ar_1:1/f_auto,q_auto/54340_ia8jsd'
 
@@ -115,7 +115,7 @@ function RoleCard({
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: '#FFF5F7',
+    backgroundColor: Colors.cream,
     paddingHorizontal: 24,
     overflow: 'hidden',
   },
@@ -149,6 +149,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.white,
     alignItems: 'center',
     justifyContent: 'center',
+    ...Shadow.card,
     shadowColor: Colors.rose,
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.28,
@@ -156,8 +157,8 @@ const styles = StyleSheet.create({
     elevation: 10,
   },
   tagline: {
+    fontFamily: Fonts.heading,
     fontSize: 16,
-    fontStyle: 'italic',
     color: Colors.muted,
     textAlign: 'center',
     lineHeight: 24,
@@ -168,8 +169,8 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   prompt: {
+    fontFamily: Fonts.bodyBold,
     fontSize: 13,
-    fontWeight: '600',
     color: Colors.muted,
     textTransform: 'uppercase',
     letterSpacing: 1,
@@ -181,9 +182,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    borderRadius: 18,
+    borderRadius: Radius.lg,
     padding: 18,
     backgroundColor: Colors.rose,
+    ...Shadow.card,
     shadowColor: Colors.rose,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.32,
@@ -194,12 +196,13 @@ const styles = StyleSheet.create({
   cardEmoji:    { fontSize: 26 },
   cardText:     { flex: 1 },
   cardTitle: {
+    fontFamily: Fonts.heading,
     fontSize: 17,
-    fontWeight: '700',
     color: Colors.white,
     marginBottom: 3,
   },
   cardSubtitle: {
+    fontFamily: Fonts.body,
     fontSize: 12,
     color: 'rgba(255,255,255,0.82)',
     lineHeight: 17,
@@ -216,8 +219,8 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
     paddingTop: 8,
   },
-  footerText: { fontSize: 14, color: Colors.muted },
-  loginLink:  { fontSize: 14, fontWeight: '600', color: Colors.roseDark },
+  footerText: { fontFamily: Fonts.body, fontSize: 14, color: Colors.muted },
+  loginLink:  { fontFamily: Fonts.bodyBold, fontSize: 14, color: Colors.roseDark },
   buildTag: {
     textAlign: 'center',
     fontSize: 9,

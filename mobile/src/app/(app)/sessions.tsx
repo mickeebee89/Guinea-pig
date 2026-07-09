@@ -14,7 +14,7 @@ import { useRouter } from 'expo-router'
 import * as Haptics from 'expo-haptics'
 import { Ionicons } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { Colors, CategoryColors } from '@/constants/Colors'
+import { Colors, Fonts, Radius, Shadow } from '@/constants/Colors'
 import { useAuth } from '@/context/auth'
 import { supabase } from '@/lib/supabase'
 import LoadErrorState from '@/components/LoadErrorState'
@@ -41,12 +41,8 @@ type Sess = {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-const CAT_COLORS: Record<string, string> = {
-  nails: CategoryColors.nails, lashes: '#1D9E75', brows: '#BA7517',
-  hair: '#7B5EA7', makeup: '#E8845E', 'spray tan': '#C99A4E',
-}
-function cc(cat: string | null | undefined) {
-  return CAT_COLORS[(cat ?? '').toLowerCase()] ?? Colors.roseDark
+function cc(_cat: string | null | undefined) {
+  return Colors.rose
 }
 
 function fmtDate(dateStr: string): string {
@@ -443,7 +439,7 @@ function ConfirmedCard({
     <View style={styles.card}>
       {isPast && (
         <View style={styles.pastBanner}>
-          <Ionicons name="time-outline" size={13} color="#B45309" />
+          <Ionicons name="time-outline" size={13} color={Colors.roseDark} />
           <Text style={styles.pastBannerText}>Date passed — mark as complete when done</Text>
         </View>
       )}
@@ -496,33 +492,32 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: Colors.border,
   },
   topBarTitle: {
-    fontFamily: 'DancingScript_700Bold',
-    flex: 1, textAlign: 'center', fontSize: 25,
-    color: Colors.warmDark, letterSpacing: -0.3,
+    fontFamily: Fonts.display,
+    flex: 1, textAlign: 'center', fontSize: 22,
+    color: Colors.rose, letterSpacing: -0.3,
   },
 
   scroll: { paddingHorizontal: 16, paddingTop: 16 },
 
   sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
-  sectionTitle:  { fontFamily: 'DancingScript_700Bold', fontSize: 25, color: Colors.warmDark, letterSpacing: -0.3 },
+  sectionTitle:  { fontFamily: Fonts.heading, fontSize: 18, color: Colors.warmDark, letterSpacing: -0.2 },
   badge: {
-    backgroundColor: Colors.roseDark, borderRadius: 10,
+    backgroundColor: Colors.rose, borderRadius: Radius.pill,
     paddingHorizontal: 7, paddingVertical: 2, minWidth: 22, alignItems: 'center',
   },
   badgeText: { fontSize: 12, fontWeight: '700', color: Colors.white },
 
   emptyCard: {
-    backgroundColor: Colors.white, borderRadius: 16, padding: 20,
+    backgroundColor: Colors.white, borderRadius: Radius.lg, padding: 20,
     alignItems: 'center', gap: 8, marginBottom: 12,
     borderWidth: 1, borderColor: Colors.border,
   },
   emptyText: { fontSize: 13, color: Colors.muted, fontWeight: '500' },
 
   card: {
-    backgroundColor: Colors.white, borderRadius: 16, padding: 14,
+    backgroundColor: Colors.white, borderRadius: Radius.lg, padding: 14,
     marginBottom: 10, borderWidth: 1, borderColor: Colors.border,
-    shadowColor: Colors.warmDark, shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05, shadowRadius: 6, elevation: 1, gap: 12,
+    ...Shadow.soft, gap: 12,
   },
   cardCompleted: { opacity: 0.85 },
   cardHeaderRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 4 },
@@ -537,7 +532,7 @@ const styles = StyleSheet.create({
   avatarInitials: { fontSize: 15, fontWeight: '700', color: Colors.roseDark },
   modelName: { fontSize: 14, fontWeight: '700', color: Colors.warmDark },
   metaRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6 },
-  treatPill: { flexDirection: 'row', alignItems: 'center', gap: 4, borderRadius: 7, paddingHorizontal: 7, paddingVertical: 3 },
+  treatPill: { flexDirection: 'row', alignItems: 'center', gap: 4, borderRadius: Radius.sm, paddingHorizontal: 7, paddingVertical: 3 },
   treatDot: { width: 5, height: 5, borderRadius: 2.5 },
   treatPillText: { fontSize: 11, fontWeight: '700' },
   metaText: { fontSize: 12, color: Colors.muted, fontWeight: '500' },
@@ -545,40 +540,38 @@ const styles = StyleSheet.create({
 
   pastBanner: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
-    backgroundColor: '#FEF3C7', borderRadius: 8,
+    backgroundColor: Colors.softPink, borderRadius: Radius.sm,
     paddingHorizontal: 10, paddingVertical: 6,
   },
-  pastBannerText: { fontSize: 12, fontWeight: '600', color: '#B45309', flex: 1 },
+  pastBannerText: { fontSize: 12, fontWeight: '600', color: Colors.roseDark, flex: 1 },
 
   actions: { flexDirection: 'row', gap: 8 },
 
   declineBtn: {
-    flex: 1, height: 40, borderRadius: 11, borderWidth: 1.5,
+    flex: 1, height: 40, borderRadius: Radius.md, borderWidth: 1.5,
     borderColor: Colors.border, alignItems: 'center', justifyContent: 'center',
     backgroundColor: Colors.white,
   },
   declineBtnText: { fontSize: 13, fontWeight: '600', color: Colors.warmDark },
 
   acceptBtn: {
-    flex: 2, height: 40, borderRadius: 11, backgroundColor: Colors.roseDark,
+    flex: 2, height: 40, borderRadius: Radius.md, backgroundColor: Colors.rose,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5,
-    shadowColor: Colors.roseDark, shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25, shadowRadius: 4, elevation: 3,
+    ...Shadow.card,
   },
   acceptBtnText: { fontSize: 13, fontWeight: '700', color: Colors.white },
 
   chatBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 5,
-    backgroundColor: Colors.softPink + '40', borderRadius: 11,
+    backgroundColor: Colors.inputBg, borderRadius: Radius.md,
     paddingHorizontal: 14, paddingVertical: 10,
   },
   chatBtnText: { fontSize: 13, fontWeight: '700', color: Colors.roseDark },
 
   completeBtn: {
-    flex: 1, height: 40, borderRadius: 11, backgroundColor: '#1D9E75',
+    flex: 1, height: 40, borderRadius: Radius.md, backgroundColor: Colors.rose,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5,
-    shadowColor: '#1D9E75', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25, shadowRadius: 4, elevation: 3,
+    ...Shadow.card,
   },
   completeBtnText: { fontSize: 13, fontWeight: '700', color: Colors.white },
 })

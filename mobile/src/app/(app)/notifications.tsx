@@ -12,7 +12,7 @@ import { useRouter } from 'expo-router'
 import * as Haptics from 'expo-haptics'
 import { Ionicons } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { Colors } from '@/constants/Colors'
+import { Colors, Fonts, Radius, Shadow } from '@/constants/Colors'
 import { useAuth } from '@/context/auth'
 import { supabase } from '@/lib/supabase'
 import ScreenDecor from '@/components/ScreenDecor'
@@ -39,15 +39,15 @@ type Filter = 'All' | 'Sessions' | 'Activity'
 type IconCfg = { icon: string; color: string; bg: string; filter: 'Sessions' | 'Activity' }
 
 const TYPE_CFG: Record<string, IconCfg> = {
-  session_accepted: { icon: 'checkmark-circle',  color: '#1D9E75',      bg: '#ECFDF5',              filter: 'Sessions' },
+  session_accepted: { icon: 'checkmark-circle',  color: Colors.rose,     bg: Colors.softPink,        filter: 'Sessions' },
   session_declined: { icon: 'close-circle',       color: Colors.error,   bg: '#FEF2F2',              filter: 'Sessions' },
-  session_completed:{ icon: 'checkmark-done-circle',color: '#F59E0B',     bg: '#FFFBEB',              filter: 'Sessions' },
+  session_completed:{ icon: 'checkmark-done-circle',color: Colors.roseDark,bg: Colors.softPink,       filter: 'Sessions' },
   session_applied:  { icon: 'person-add',         color: Colors.roseDark,bg: Colors.softPink + '40', filter: 'Sessions' },
   new_message:      { icon: 'chatbubble',         color: Colors.rose,    bg: Colors.softPink + '30', filter: 'Activity' },
   review_reminder:  { icon: 'star',               color: '#F59E0B',      bg: '#FFFBEB',              filter: 'Activity' },
-  verification:     { icon: 'shield-checkmark',   color: '#1D9E75',      bg: '#ECFDF5',              filter: 'Activity' },
+  verification:     { icon: 'shield-checkmark',   color: Colors.rose,    bg: Colors.softPink,        filter: 'Activity' },
   new_availability: { icon: 'calendar',           color: Colors.roseDark,bg: Colors.softPink + '40', filter: 'Activity' },
-  stylist_invite:   { icon: 'sparkles',           color: '#7B5EA7',      bg: '#7B5EA720',            filter: 'Activity' },
+  stylist_invite:   { icon: 'sparkles',           color: Colors.rose,    bg: Colors.softPink + '40', filter: 'Activity' },
   system:           { icon: 'information-circle', color: Colors.muted,   bg: Colors.inputBg,         filter: 'Activity' },
 }
 
@@ -370,7 +370,7 @@ function ReviewCTA({ sessionId }: { sessionId: string }) {
   if (state === 'done') {
     return (
       <View style={styles.reviewedPill}>
-        <Ionicons name="checkmark-circle" size={13} color="#B8860B" />
+        <Ionicons name="checkmark-circle" size={13} color={Colors.roseDark} />
         <Text style={styles.reviewedText}>Reviewed</Text>
       </View>
     )
@@ -437,23 +437,19 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: 'transparent', overflow: 'hidden' },
   centred:   { flex: 1, alignItems: 'center', justifyContent: 'center' },
 
-  // Review CTA on session_completed rows (gold, prominent)
+  // Review CTA on session_completed rows (pink, prominent)
   reviewCta: {
     alignSelf: 'flex-start',
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F59E0B',
+    backgroundColor: Colors.rose,
     paddingHorizontal: 14,
     paddingVertical: 8,
-    borderRadius: 20,
+    borderRadius: Radius.pill,
     marginTop: 10,
-    shadowColor: '#F59E0B',
-    shadowOpacity: 0.35,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
+    ...Shadow.card,
   },
-  reviewCtaText: { color: Colors.white, fontSize: 13, fontWeight: '700', letterSpacing: 0.2 },
+  reviewCtaText: { color: Colors.white, fontFamily: Fonts.bodyBold, fontSize: 13, letterSpacing: 0.2 },
   reviewedPill: {
     alignSelf: 'flex-start',
     flexDirection: 'row',
@@ -462,12 +458,12 @@ const styles = StyleSheet.create({
     marginTop: 10,
     paddingHorizontal: 10,
     paddingVertical: 5,
-    borderRadius: 14,
-    backgroundColor: '#FFFBEB',
+    borderRadius: Radius.md,
+    backgroundColor: Colors.softPink,
     borderWidth: 1,
-    borderColor: '#F3D99A',
+    borderColor: Colors.border,
   },
-  reviewedText: { color: '#B8860B', fontSize: 12, fontWeight: '600' },
+  reviewedText: { color: Colors.roseDark, fontFamily: Fonts.bodyBold, fontSize: 12 },
 
   topBar: {
     flexDirection: 'row',
@@ -489,11 +485,11 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
   },
   topBarTitle: {
-    fontFamily: 'DancingScript_700Bold',
+    fontFamily: Fonts.display,
     flex: 1,
     textAlign: 'center',
-    fontSize: 25,
-    color: Colors.warmDark,
+    fontSize: 23,
+    color: Colors.rose,
     letterSpacing: -0.3,
   },
   topBarRight: { width: 80 },
@@ -504,8 +500,8 @@ const styles = StyleSheet.create({
     paddingRight: 2,
   },
   markAllText: {
+    fontFamily: Fonts.bodyBold,
     fontSize: 13,
-    fontWeight: '600',
     color: Colors.roseDark,
   },
 
@@ -521,18 +517,18 @@ const styles = StyleSheet.create({
   tab: {
     paddingHorizontal: 16,
     paddingVertical: 7,
-    borderRadius: 20,
+    borderRadius: Radius.pill,
     borderWidth: 1.5,
     borderColor: Colors.border,
-    backgroundColor: Colors.white,
+    backgroundColor: Colors.inputBg,
   },
   tabActive: {
-    backgroundColor: Colors.roseDark,
-    borderColor: Colors.roseDark,
+    backgroundColor: Colors.rose,
+    borderColor: Colors.rose,
   },
   tabText: {
+    fontFamily: Fonts.bodyBold,
     fontSize: 13,
-    fontWeight: '600',
     color: Colors.muted,
   },
   tabTextActive: {
@@ -543,8 +539,8 @@ const styles = StyleSheet.create({
 
   // Group label
   groupLabel: {
+    fontFamily: Fonts.bodyBold,
     fontSize: 12,
-    fontWeight: '700',
     color: Colors.muted,
     textTransform: 'uppercase',
     letterSpacing: 0.8,
@@ -557,17 +553,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: Colors.white,
-    borderRadius: 16,
+    borderRadius: Radius.lg,
     padding: 14,
     marginBottom: 8,
     borderWidth: 1,
-    borderColor: Colors.border + '80',
+    borderColor: Colors.border,
     overflow: 'hidden',
-    shadowColor: Colors.warmDark,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.02,
-    shadowRadius: 4,
-    elevation: 0,
+    ...Shadow.soft,
   },
   notifCardUnread: {
     backgroundColor: Colors.pinkVibrant + '1A',
@@ -580,8 +572,8 @@ const styles = StyleSheet.create({
     bottom: 0,
     width: 3,
     backgroundColor: Colors.pinkVibrant,
-    borderTopLeftRadius: 16,
-    borderBottomLeftRadius: 16,
+    borderTopLeftRadius: Radius.lg,
+    borderBottomLeftRadius: Radius.lg,
   },
   iconCircle: {
     width: 44,
@@ -601,13 +593,13 @@ const styles = StyleSheet.create({
   },
   notifTitle: {
     flex: 1,
+    fontFamily: Fonts.bodyBold,
     fontSize: 14,
-    fontWeight: '600',
     color: Colors.warmDark,
     letterSpacing: -0.1,
   },
   notifTitleUnread: {
-    fontWeight: '800',
+    color: Colors.roseDark,
   },
   notifTime: {
     fontSize: 11,
@@ -630,7 +622,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
     backgroundColor: '#FEF2F2',
-    borderRadius: 12,
+    borderRadius: Radius.md,
     padding: 12,
     margin: 16,
     marginBottom: 0,
@@ -639,9 +631,9 @@ const styles = StyleSheet.create({
   },
   errorBannerText: {
     flex: 1,
+    fontFamily: Fonts.body,
     fontSize: 13,
     color: Colors.error,
-    fontWeight: '500',
   },
 
   // Empty state
@@ -661,12 +653,13 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   emptyTitle: {
-    fontFamily: 'DancingScript_700Bold',
-    fontSize: 25,
+    fontFamily: Fonts.heading,
+    fontSize: 18,
     color: Colors.warmDark,
     letterSpacing: -0.3,
   },
   emptySub: {
+    fontFamily: Fonts.body,
     fontSize: 14,
     color: Colors.muted,
     textAlign: 'center',

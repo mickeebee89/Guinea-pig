@@ -15,18 +15,18 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import * as Haptics from 'expo-haptics'
 import { Ionicons } from '@expo/vector-icons'
-import { Colors, CategoryColors } from '@/constants/Colors'
+import { Colors, CategoryColors, Fonts, Radius, Shadow } from '@/constants/Colors'
 import { useAuth } from '@/context/auth'
 import { supabase } from '@/lib/supabase'
 import LoadErrorState from '@/components/LoadErrorState'
 
 const TREATMENT_CATEGORIES = [
   { name: 'Nails',     color: CategoryColors.nails },
-  { name: 'Lashes',    color: '#1D9E75' },
-  { name: 'Brows',     color: '#BA7517' },
-  { name: 'Hair',      color: '#7B5EA7' },
-  { name: 'Makeup',    color: '#E8845E' },
-  { name: 'Spray Tan', color: '#C99A4E' },
+  { name: 'Lashes',    color: CategoryColors.lashes },
+  { name: 'Brows',     color: CategoryColors.brows },
+  { name: 'Hair',      color: CategoryColors.hair },
+  { name: 'Makeup',    color: CategoryColors.makeup },
+  { name: 'Spray Tan', color: CategoryColors.sprayTan },
 ]
 
 export default function EditShopScreen() {
@@ -135,7 +135,7 @@ export default function EditShopScreen() {
   if (loading) {
     return (
       <View style={[styles.container, { alignItems: 'center', justifyContent: 'center' }]}>
-        <ActivityIndicator color={Colors.roseDark} />
+        <ActivityIndicator color={Colors.rose} />
       </View>
     )
   }
@@ -262,7 +262,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.white,
   },
   backBtn: { padding: 4 },
-  title:   { fontFamily: 'DancingScript_700Bold', fontSize: 26, color: Colors.warmDark },
+  title:   { fontFamily: Fonts.display, fontSize: 24, color: Colors.rose },
 
   scroll: { paddingHorizontal: 20, paddingBottom: 48 },
 
@@ -282,8 +282,8 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   input: {
-    backgroundColor: Colors.white,
-    borderRadius: 12,
+    backgroundColor: Colors.inputBg,
+    borderRadius: Radius.md,
     borderWidth: 1.5,
     borderColor: Colors.border,
     paddingHorizontal: 14,
@@ -306,9 +306,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 9,
-    borderRadius: 20,
+    borderRadius: Radius.pill,
     borderWidth: 2,
-    backgroundColor: Colors.white,
+    backgroundColor: Colors.inputBg,
   },
   categoryChipText: {
     fontSize: 14,
@@ -321,19 +321,15 @@ const styles = StyleSheet.create({
   saveBtn: {
     marginTop: 36,
     height: 54,
-    backgroundColor: Colors.roseDark,
-    borderRadius: 16,
+    backgroundColor: Colors.rose,
+    borderRadius: Radius.lg,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: Colors.roseDark,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.28,
-    shadowRadius: 8,
-    elevation: 4,
+    ...Shadow.card,
   },
   saveBtnText: {
+    fontFamily: Fonts.bodyBold,
     fontSize: 16,
-    fontWeight: '800',
     color: Colors.white,
     letterSpacing: -0.2,
   },

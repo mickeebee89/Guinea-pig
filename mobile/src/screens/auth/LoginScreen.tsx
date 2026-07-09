@@ -11,7 +11,7 @@ import {
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import * as Haptics from 'expo-haptics'
-import { Colors } from '@/constants/Colors'
+import { Colors, Fonts, Radius, Shadow } from '@/constants/Colors'
 import { Button } from '@/components/Button'
 import { Input } from '@/components/Input'
 import { supabase } from '@/lib/supabase'
@@ -163,7 +163,7 @@ const styles = StyleSheet.create({
   backText: {
     fontSize: 17,
     color: Colors.roseDark,
-    fontWeight: '500',
+    fontFamily: Fonts.bodyBold,
   },
   header: {
     alignItems: 'center',
@@ -175,28 +175,24 @@ const styles = StyleSheet.create({
     height: 88,
     borderRadius: 44,
     marginBottom: 16,
-    shadowColor: Colors.rose,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.25,
-    shadowRadius: 12,
-    elevation: 6,
+    ...Shadow.card,
   },
   title: {
-    fontFamily: 'DancingScript_700Bold',
-    fontSize: 39,
-    color: Colors.warmDark,
+    fontFamily: Fonts.display,
+    fontSize: 34,
+    color: Colors.rose,
     letterSpacing: -0.5,
     marginBottom: 6,
   },
-  subtitle: { fontSize: 15, color: Colors.muted },
+  subtitle: { fontSize: 15, color: Colors.muted, fontFamily: Fonts.body },
   form: {},
   errorBox: {
-    backgroundColor: '#FEE2E2',
-    borderRadius: 12,
+    backgroundColor: Colors.softPink,
+    borderRadius: Radius.md,
     padding: 12,
     marginBottom: 16,
   },
-  errorText: { color: Colors.error, fontSize: 14 },
+  errorText: { color: Colors.error, fontSize: 14, fontFamily: Fonts.body },
   forgotRow: {
     alignSelf: 'flex-end',
     marginTop: -8,
@@ -206,13 +202,13 @@ const styles = StyleSheet.create({
   forgotText: {
     fontSize: 14,
     color: Colors.roseDark,
-    fontWeight: '500',
+    fontFamily: Fonts.bodyBold,
   },
-  submitBtn: { marginBottom: 16 },
+  submitBtn: { marginBottom: 16, borderRadius: Radius.lg },
   switchRow: {
     flexDirection: 'row',
     justifyContent: 'center',
   },
-  switchText: { fontSize: 14, color: Colors.muted },
-  switchLink: { fontSize: 14, fontWeight: '600', color: Colors.roseDark },
+  switchText: { fontSize: 14, color: Colors.muted, fontFamily: Fonts.body },
+  switchLink: { fontSize: 14, color: Colors.roseDark, fontFamily: Fonts.bodyBold },
 })

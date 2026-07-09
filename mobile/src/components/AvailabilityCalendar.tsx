@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react'
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native'
 import * as Haptics from 'expo-haptics'
 import { Ionicons } from '@expo/vector-icons'
-import { Colors } from '@/constants/Colors'
+import { Colors, Fonts } from '@/constants/Colors'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -158,11 +158,11 @@ const st = StyleSheet.create({
     backgroundColor: Colors.inputBg,
     alignItems: 'center', justifyContent: 'center',
   },
-  monthTitle: { fontSize: 16, fontWeight: '700', color: Colors.warmDark },
+  monthTitle: { fontSize: 16, fontFamily: Fonts.heading, color: Colors.warmDark },
   calHeaders: { flexDirection: 'row', marginBottom: 6 },
   calHeader: {
     flex: 1, textAlign: 'center', fontSize: 11,
-    fontWeight: '600', color: Colors.muted, textTransform: 'uppercase',
+    fontFamily: Fonts.bodyBold, color: Colors.muted, textTransform: 'uppercase',
   },
   calRow: { flexDirection: 'row', marginBottom: 4 },
   calCell: { flex: 1, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 20 },
@@ -170,10 +170,10 @@ const st = StyleSheet.create({
   calCellAvail:    { backgroundColor: Colors.rose + '28' },
   calCellSelected: { backgroundColor: Colors.roseDark },
   calCellPast:     { opacity: 0.3 },
-  calCellText:         { fontSize: 14, color: Colors.warmDark },
-  calCellTextToday:    { color: Colors.roseDark, fontWeight: '700' },
-  calCellTextAvail:    { color: Colors.roseDark, fontWeight: '600' },
-  calCellTextSelected: { color: Colors.white, fontWeight: '700' },
+  calCellText:         { fontSize: 14, fontFamily: Fonts.body, color: Colors.warmDark },
+  calCellTextToday:    { color: Colors.roseDark, fontFamily: Fonts.bodyBold },
+  calCellTextAvail:    { color: Colors.roseDark, fontFamily: Fonts.bodyBold },
+  calCellTextSelected: { color: Colors.white, fontFamily: Fonts.bodyBold },
   calCellTextPast:     { color: Colors.muted },
   legendRow: {
     flexDirection: 'row', gap: 16, marginTop: 12,
@@ -181,5 +181,5 @@ const st = StyleSheet.create({
   },
   legendItem:  { flexDirection: 'row', alignItems: 'center', gap: 6 },
   legendDot:   { width: 12, height: 12, borderRadius: 6 },
-  legendText:  { fontSize: 12, color: Colors.muted, fontWeight: '500' },
+  legendText:  { fontSize: 12, color: Colors.muted, fontFamily: Fonts.body },
 })

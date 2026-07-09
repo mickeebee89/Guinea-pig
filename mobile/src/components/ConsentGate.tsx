@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import * as Haptics from 'expo-haptics'
-import { Colors } from '@/constants/Colors'
+import { Colors, Fonts, Radius, Shadow } from '@/constants/Colors'
 
 const CONSENT_ITEMS = [
   {
@@ -112,9 +112,9 @@ const styles = StyleSheet.create({
   },
 
   title: {
-    fontFamily: 'DancingScript_700Bold',
-    fontSize: 33,
-    color: Colors.warmDark,
+    fontFamily: Fonts.display,
+    fontSize: 28,
+    color: Colors.rose,
     letterSpacing: -0.4,
     marginBottom: 6,
     textAlign: 'center',
@@ -131,11 +131,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 12,
     backgroundColor: Colors.white,
-    borderRadius: 16,
+    borderRadius: Radius.lg,
     padding: 14,
     marginBottom: 10,
     borderWidth: 1,
     borderColor: Colors.border,
+    ...Shadow.soft,
   },
   termIcon: {
     width: 36,
@@ -149,8 +150,8 @@ const styles = StyleSheet.create({
   },
   termText: { flex: 1 },
   termTitle: {
+    fontFamily: Fonts.bodyBold,
     fontSize: 14,
-    fontWeight: '700',
     color: Colors.warmDark,
     marginBottom: 3,
   },
@@ -180,20 +181,20 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   checkboxActive: {
-    backgroundColor: Colors.roseDark,
-    borderColor: Colors.roseDark,
+    backgroundColor: Colors.rose,
+    borderColor: Colors.rose,
   },
   checkLabel: {
     flex: 1,
+    fontFamily: Fonts.bodyBold,
     fontSize: 14,
-    fontWeight: '600',
     color: Colors.warmDark,
     lineHeight: 20,
   },
 
   continueBtn: {
-    backgroundColor: Colors.roseDark,
-    borderRadius: 16,
+    backgroundColor: Colors.rose,
+    borderRadius: Radius.lg,
     height: 54,
     flexDirection: 'row',
     alignItems: 'center',
@@ -201,11 +202,7 @@ const styles = StyleSheet.create({
     gap: 8,
     marginTop: 4,
     marginBottom: 8,
-    shadowColor: Colors.roseDark,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.28,
-    shadowRadius: 8,
-    elevation: 4,
+    ...Shadow.card,
   },
   continueBtnDisabled: {
     opacity: 0.4,
@@ -213,8 +210,8 @@ const styles = StyleSheet.create({
     elevation: 0,
   },
   continueBtnText: {
+    fontFamily: Fonts.bodyBold,
     fontSize: 16,
-    fontWeight: '700',
     color: Colors.white,
     letterSpacing: -0.2,
   },

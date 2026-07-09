@@ -10,9 +10,10 @@ import {
   Linking,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import { LinearGradient } from 'expo-linear-gradient'
 import * as Haptics from 'expo-haptics'
 import { Ionicons } from '@expo/vector-icons'
-import { Colors } from '@/constants/Colors'
+import { Colors, Fonts, Radius, Spacing, Shadow, PinkGradient } from '@/constants/Colors'
 import { Button } from '@/components/Button'
 import { Input } from '@/components/Input'
 import { supabase } from '@/lib/supabase'
@@ -157,19 +158,21 @@ export default function SignupScreen({ role, onBack, onGoLogin, onNeedConfirmati
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >
-            <TouchableOpacity onPress={goBack} style={styles.back}>
-              <Text style={styles.backText}>‹ Back</Text>
-            </TouchableOpacity>
+            <LinearGradient colors={PinkGradient} style={styles.headerGradient}>
+              <TouchableOpacity onPress={goBack} style={styles.back}>
+                <Text style={styles.backText}>‹ Back</Text>
+              </TouchableOpacity>
 
-            <View style={styles.header}>
-              <View style={[styles.rolePill, { backgroundColor: roleColour }]}>
-                <Text style={styles.rolePillText}>{roleLabel}</Text>
+              <View style={styles.header}>
+                <View style={[styles.rolePill, { backgroundColor: roleColour }]}>
+                  <Text style={styles.rolePillText}>{roleLabel}</Text>
+                </View>
+                <Text style={styles.title}>Create account</Text>
+                <Text style={styles.subtitle}>
+                  Join Guinea Pig as a {roleLabel.toLowerCase()} and start connecting.
+                </Text>
               </View>
-              <Text style={styles.title}>Create account</Text>
-              <Text style={styles.subtitle}>
-                Join Guinea Pig as a {roleLabel.toLowerCase()} and start connecting.
-              </Text>
-            </View>
+            </LinearGradient>
 
             <View style={styles.form}>
               {errors.form && (
@@ -271,7 +274,8 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.cream },
   safe:      { flex: 1 },
   kav:       { flex: 1 },
-  scroll:    { paddingHorizontal: 24, paddingBottom: 40 },
+  scroll:    { paddingBottom: 40 },
+  headerGradient: { paddingHorizontal: Spacing.xxl },
   back: { paddingTop: 12, paddingBottom: 8 },
   backText: { fontSize: 17, color: Colors.roseDark, fontWeight: '500' },
   header: { paddingTop: 12, paddingBottom: 28 },
@@ -279,22 +283,22 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     paddingHorizontal: 12,
     paddingVertical: 5,
-    borderRadius: 20,
+    borderRadius: Radius.pill,
     marginBottom: 12,
   },
-  rolePillText: { color: Colors.white, fontSize: 12, fontWeight: '700', letterSpacing: 0.5 },
+  rolePillText: { color: Colors.white, fontSize: 12, fontFamily: Fonts.bodyBold, letterSpacing: 0.5 },
   title: {
-    fontFamily: 'DancingScript_700Bold',
-    fontSize: 42,
-    color: Colors.warmDark,
+    fontFamily: Fonts.display,
+    fontSize: 34,
+    color: Colors.rose,
     letterSpacing: -0.5,
     marginBottom: 6,
   },
-  subtitle: { fontSize: 15, color: Colors.muted, lineHeight: 22 },
-  form: {},
+  subtitle: { fontSize: 15, color: Colors.muted, lineHeight: 22, fontFamily: Fonts.body },
+  form: { paddingHorizontal: Spacing.xxl },
   formError: {
     backgroundColor: '#FEE2E2',
-    borderRadius: 12,
+    borderRadius: Radius.md,
     padding: 12,
     marginBottom: 16,
   },
@@ -321,19 +325,19 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   checkboxActive: {
-    backgroundColor: Colors.roseDark,
-    borderColor: Colors.roseDark,
+    backgroundColor: Colors.rose,
+    borderColor: Colors.rose,
   },
   checkLabel: {
     flex: 1,
     fontSize: 14,
-    fontWeight: '600',
+    fontFamily: Fonts.bodyBold,
     color: Colors.warmDark,
     lineHeight: 20,
   },
   checkLink: {
     color: Colors.roseDark,
-    fontWeight: '700',
+    fontFamily: Fonts.bodyBold,
     textDecorationLine: 'underline',
   },
   ageError: {
@@ -342,12 +346,12 @@ const styles = StyleSheet.create({
     marginTop: 6,
     marginLeft: 4,
   },
-  submitBtn: { marginTop: 8, marginBottom: 16 },
+  submitBtn: { marginTop: 8, marginBottom: 16, ...Shadow.card },
   switchRow: {
     flexDirection: 'row',
     justifyContent: 'center',
     marginBottom: 20,
   },
-  switchText: { fontSize: 14, color: Colors.muted },
-  switchLink: { fontSize: 14, fontWeight: '600', color: Colors.roseDark },
+  switchText: { fontSize: 14, color: Colors.muted, fontFamily: Fonts.body },
+  switchLink: { fontSize: 14, fontFamily: Fonts.bodyBold, color: Colors.roseDark },
 })
