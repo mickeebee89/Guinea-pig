@@ -40,6 +40,7 @@ export default function SignupScreen({ role, onBack, onGoLogin, onNeedConfirmati
   const [lastInitial, setLastInitial] = useState('')
   const [email, setEmail]             = useState('')
   const [password, setPassword]       = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
   const [ageConfirmed, setAgeConfirmed] = useState(false)
   const [termsAccepted, setTermsAccepted] = useState(false)
   const [loading, setLoading]         = useState(false)
@@ -72,6 +73,7 @@ export default function SignupScreen({ role, onBack, onGoLogin, onNeedConfirmati
     if (!email.trim())           e.email       = 'Enter your email'
     if (!email.includes('@'))    e.email       = 'Enter a valid email'
     if (password.length < 8)     e.password    = 'At least 8 characters'
+    if (password !== confirmPassword) e.confirmPassword = 'Passwords do not match'
     if (!ageConfirmed)           e.age         = 'You must confirm you are 18 or over'
     if (!termsAccepted)          e.terms       = 'Please agree to the Terms and Privacy Policy'
     return e
@@ -221,6 +223,15 @@ export default function SignupScreen({ role, onBack, onGoLogin, onNeedConfirmati
                 onChangeText={setPassword}
                 secure
                 error={errors.password}
+              />
+
+              <Input
+                label="Confirm password"
+                placeholder="Re-enter your password"
+                value={confirmPassword}
+                onChangeText={setConfirmPassword}
+                secure
+                error={errors.confirmPassword}
               />
 
               {/* 18+ age confirmation — required (store compliance gate) */}
