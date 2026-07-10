@@ -10,10 +10,9 @@ import {
   Linking,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { LinearGradient } from 'expo-linear-gradient'
 import * as Haptics from 'expo-haptics'
 import { Ionicons } from '@expo/vector-icons'
-import { Colors, Fonts, Radius, Spacing, Shadow, PinkGradient } from '@/constants/Colors'
+import { Colors, Fonts, Radius, Spacing, Shadow } from '@/constants/Colors'
 import { Button } from '@/components/Button'
 import { Input } from '@/components/Input'
 import { supabase } from '@/lib/supabase'
@@ -158,7 +157,7 @@ export default function SignupScreen({ role, onBack, onGoLogin, onNeedConfirmati
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >
-            <LinearGradient colors={PinkGradient} style={styles.headerGradient}>
+            <View style={styles.headerGradient}>
               <TouchableOpacity onPress={goBack} style={styles.back}>
                 <Text style={styles.backText}>‹ Back</Text>
               </TouchableOpacity>
@@ -172,7 +171,7 @@ export default function SignupScreen({ role, onBack, onGoLogin, onNeedConfirmati
                   Join Guinea Pig as a {roleLabel.toLowerCase()} and start connecting.
                 </Text>
               </View>
-            </LinearGradient>
+            </View>
 
             <View style={styles.form}>
               {errors.form && (
@@ -275,7 +274,7 @@ const styles = StyleSheet.create({
   safe:      { flex: 1 },
   kav:       { flex: 1 },
   scroll:    { paddingBottom: 40 },
-  headerGradient: { paddingHorizontal: Spacing.xxl },
+  headerGradient: { paddingHorizontal: Spacing.xxl, backgroundColor: Colors.softPink },
   back: { paddingTop: 12, paddingBottom: 8 },
   backText: { fontSize: 17, color: Colors.roseDark, fontWeight: '500' },
   header: { paddingTop: 12, paddingBottom: 28 },

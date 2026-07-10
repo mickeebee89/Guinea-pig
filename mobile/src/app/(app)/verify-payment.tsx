@@ -17,8 +17,7 @@ import { decode } from 'base64-arraybuffer'
 import { Ionicons } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useStripe } from '@stripe/stripe-react-native'
-import { LinearGradient } from 'expo-linear-gradient'
-import { Colors, Fonts, Radius, Shadow, PinkGradient } from '@/constants/Colors'
+import { Colors, Fonts, Radius, Shadow } from '@/constants/Colors'
 import { useAuth } from '@/context/auth'
 import { supabase } from '@/lib/supabase'
 
@@ -263,7 +262,7 @@ export default function VerifyPaymentScreen() {
 
   return (
     <View style={styles.container}>
-      <LinearGradient colors={PinkGradient} style={[styles.topBar, { paddingTop: insets.top + 8 }]}>
+      <View style={[styles.topBar, { paddingTop: insets.top + 8 }]}>
         <TouchableOpacity
           style={styles.backBtn}
           onPress={async () => { await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.back() }}
@@ -273,7 +272,7 @@ export default function VerifyPaymentScreen() {
         </TouchableOpacity>
         <Text style={styles.topBarTitle}>Get verified</Text>
         <View style={{ width: 36 }} />
-      </LinearGradient>
+      </View>
 
       {/* ── LOADING ── */}
       {step === 'loading' && (
@@ -500,6 +499,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: 16, paddingBottom: 10,
     borderBottomWidth: 1, borderBottomColor: Colors.border,
+    backgroundColor: Colors.softPink,
   },
   backBtn: {
     width: 36, height: 36, borderRadius: 18,
