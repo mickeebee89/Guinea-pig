@@ -76,13 +76,19 @@ _Use this to start a fresh chat with full context. Hand it to Claude at the star
 ## 🔴 IMMEDIATE NEXT STEPS
 1. ~~Finish testing Part 2b auto-cancel~~ — ✅ DONE (tested both directions, passing). RED #2 (blocking) now fully done + tested.
 2. ~~Push the `public_profiles` fix~~ — ✅ pushed (commit `6cee65e`).
-3. **(Optional, small) Add `session_cancelled` to `TYPE_CFG`** in [notifications.tsx](mobile/src/app/(app)/notifications.tsx#L41) so cancelled-booking notifications group under "Sessions" with a proper icon instead of grey "Activity".
+3. ~~Add `session_cancelled` to `TYPE_CFG`~~ — ✅ DONE (groups under Treatments with a close-circle icon).
 
 ## 📌 PARKED / SMALLER GAPS
 - ~~Messages unread badge stale~~ — ✅ FIXED: messages list reloads on focus + unread only counts readable (`accepted`) sessions; HeaderIcons dot likewise. Cancelled/declined convos also hidden from the list. Commit `a512735`, pushed.
 - **Legal pages must serve live content:** links now point at `guineapigapp.co.uk/{terms,community,privacy}` — those pages must actually exist/serve content, and `support@guineapigapp.co.uk` must be a live mailbox. Hosting task, not app code.
-- Store gates: ✅ **18+ age confirmation** + ✅ **Terms/Privacy acceptance tick** now both live at signup — two required checkboxes in `src/screens/auth/SignupScreen.tsx` (records `age_confirmed` + `terms_accepted` in signup metadata; Terms/Privacy links open the guineapigapp.co.uk pages). ⚠️ The app renders `src/screens/auth/*` via `AppEntry`, NOT the dead `app/(auth)/*` route duplicates — edit the former. Remaining: **iOS camera/location permission strings** (last store gate).
+- Store gates: ✅ **18+ age confirmation** + ✅ **Terms/Privacy acceptance tick** now both live at signup — two required checkboxes in `src/screens/auth/SignupScreen.tsx` (records `age_confirmed` + `terms_accepted` in signup metadata; Terms/Privacy links open the guineapigapp.co.uk pages). ⚠️ The app renders `src/screens/auth/*` via `AppEntry`. ✅ **iOS camera/photo/location permission strings** added (app.json, commit `7c5937e`) — **all code-side store gates now cleared.**
 - Paste 5 branded email templates into Supabase.
+
+## ✅ ALSO DONE THIS SESSION (pink restyle + review flow)
+- **App-wide pink restyle** — new design system (Fredoka display font, Quicksand body, pink palette in `Colors.ts` + Radius/Spacing/Shadow tokens) swept across every screen + component; dead `app/(auth)/*` + `app/index.tsx` routes deleted; native `expo-linear-gradient` dropped (replaced with soft-pink header bands so no dev-client rebuild is needed). Merged to `main`. UI reference doc: `mobile/UI-STYLE-GUIDE.md`.
+- **Treatments-to-review prompt** (commit `fb6269e`) — both dashboards list completed sessions the current user hasn't reviewed, linking to leave-review with the right direction; dashboards now refresh on focus so the prompt clears after reviewing. Fixes the review being orphaned once completed chats are hidden from Messages.
+- **Chat completed-state safe-area** fix; **`session_cancelled` notification icon** added.
+- Confirmed **no calendar bug**: completing a booking already frees its slot (the `taken_slots` RPC counts only pending/accepted); `is_taken` is dead code.
 
 ## 🔴 LAUNCH CHECKLIST (mostly operational, long lead times)
 - **#1 rejection risk = PAYMENTS/IAP:** model sub + provider fee unlock in-app features → Apple may require IAP on iOS (grey zone). DECIDE before iOS submit; consider asking Apple App Review directly. Don't guess.

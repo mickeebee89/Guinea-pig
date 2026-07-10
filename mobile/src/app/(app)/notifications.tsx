@@ -42,6 +42,7 @@ const TYPE_CFG: Record<string, IconCfg> = {
   session_accepted: { icon: 'checkmark-circle',  color: Colors.rose,     bg: Colors.softPink,        filter: 'Sessions' },
   session_declined: { icon: 'close-circle',       color: Colors.error,   bg: '#FEF2F2',              filter: 'Sessions' },
   session_completed:{ icon: 'checkmark-done-circle',color: Colors.roseDark,bg: Colors.softPink,       filter: 'Sessions' },
+  session_cancelled:{ icon: 'close-circle',       color: Colors.muted,   bg: Colors.inputBg,         filter: 'Sessions' },
   session_applied:  { icon: 'person-add',         color: Colors.roseDark,bg: Colors.softPink + '40', filter: 'Sessions' },
   new_message:      { icon: 'chatbubble',         color: Colors.rose,    bg: Colors.softPink + '30', filter: 'Activity' },
   review_reminder:  { icon: 'star',               color: '#F59E0B',      bg: '#FFFBEB',              filter: 'Activity' },
