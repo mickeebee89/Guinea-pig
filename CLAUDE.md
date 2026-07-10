@@ -51,4 +51,18 @@ _This file is read automatically at the start of every Claude Code session. It h
 
 ---
 
+## App Store / Play compliance (rules to audit against)
+
+Durable store requirements this app must meet. **Live pass/fail status lives in the handover doc, not here** — this is the rulebook + where each is handled, so "does it comply?" can be checked against the code.
+
+- **In-app account deletion** (Apple 5.1.1(v), Play) — required for any app with accounts. → `delete-account` edge function + Settings → Delete account (`settings.tsx`).
+- **UGC safety** (Apple Guideline 1.2, Play UGC policy) — apps with user-generated content need ALL of: (a) **block** abusive users, (b) **report** content/users, (c) **moderation** / act on reports, (d) a **consent/EULA**. → block + report in chat (`blocks` table + mutual-block filtering across surfaces), `admins` moderation, per-application `ConsentGate`.
+- **Age gate + terms acceptance** at signup — 18+ confirmation AND agree-to-Terms/Privacy, both required to create an account. → two required checkboxes in `src/screens/auth/SignupScreen.tsx` (records `age_confirmed` + `terms_accepted` in `auth.users` metadata). NB signup renders `src/screens/auth/*` via `AppEntry`, not `app/(auth)/*`.
+- **iOS permission usage strings** — camera, photo-library, location need Info.plist descriptions. → `app.json` via the `expo-image-picker` + `expo-location` plugins.
+- **Privacy** — a working Privacy Policy + data-collection disclosure (Apple privacy labels / Play Data Safety). Identity selfies = special-category data (needs a retention policy + UK ICO registration). Legal links in `settings.tsx` → `guineapigapp.co.uk/{terms,privacy,community}` (those pages must actually serve live content).
+- **⚠️ IAP — the #1 rejection risk (UNRESOLVED).** Apple requires **in-app purchase** for digital subscriptions/unlocks consumed *in the app*. The model **£4.99/mo sub** and provider **verification fee** use **Stripe** and unlock in-app features (apply / publish) — a grey zone: Apple permits external payment only for real-world goods/services consumed *outside* the app (the beauty treatment qualifies; the in-app digital unlock may not). **Decide before iOS submit — consider asking Apple App Review directly.** Play is more lenient but confirm.
+- **Login:** email/password only (no third-party social login) → Sign in with Apple not required.
+
+---
+
 _Not in this file on purpose: session progress, the compliance "RED" gate status, and the launch checklist. Those change constantly and are tracked in chat / the handover doc, so they don't belong in persistent context._
