@@ -14,7 +14,7 @@ import {
   Switch,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { useRouter } from 'expo-router'
+import { useRouter, useFocusEffect } from 'expo-router'
 import * as Haptics from 'expo-haptics'
 import * as Location from 'expo-location'
 import { Ionicons } from '@expo/vector-icons'
@@ -110,6 +110,15 @@ type Invite = {
 type SubscriptionInfo = { status: string; periodEnd: string | null }
 type ImpactInfo      = { completed: number; distinctProviders: number }
 
+type ReviewItem = {
+  id: string
+  provider_name: string
+  provider_pic: string | null
+  date: string
+  treatment_name: string | null
+  treatment_category: string | null
+}
+
 function formatSessDate(dateStr: string, timeStr: string): string {
   const [y, m, d] = dateStr.split('-').map(Number)
   const label = new Date(y, m - 1, d).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })
@@ -154,6 +163,7 @@ function ModelHomeContent() {
   const [subscription,     setSubscription]     = useState<SubscriptionInfo | null>(null)
   const [isVerified,       setIsVerified]       = useState(false)
   const [impact,           setImpact]           = useState<ImpactInfo | null>(null)
+  const [toReview,         setToReview]         = useState<ReviewItem[]>([])
 
   const fetchData = useCallback(async () => {
     if (!userId) { setLoading(false); return }
@@ -238,17 +248,22 @@ function ModelHomeContent() {
         supabase.from('sessions').select('id, provider_id, date, start_time, treatment_id').eq('model_user_id', userId).eq('status', 'pending').order('created_at', { ascending: false }).limit(10),
         supabase.from('notifications').select('id, title, body, data, created_at').eq('user_id', userId).eq('type', 'stylist_invite').is('read_at', null).order('created_at', { ascending: false }).limit(10),
         supabase.from('subscriptions').select('*').eq('user_id', userId).eq('status', 'active').maybeSingle(),
-        supabase.from('sessions').select('provider_id').eq('model_user_id', userId).eq('status', 'completed'),
+        supabase.from('sessions').select('id, provider_id, date, treatment_id').eq('model_user_id', userId).eq('status', 'completed').order('date', { ascending: false }),
         isIdentityVerified(userId).catch(() => false),
       ])
 
-      const allProviderIds = [...new Set([...(upcomingRaw ?? []).map((s: any) => s.provider_id), ...(pendingRaw ?? []).map((s: any) => s.provider_id)])]
-      const allTreatmentIds = [...new Set([...(upcomingRaw ?? []).map((s: any) => s.treatment_id), ...(pendingRaw ?? []).map((s: any) => s.treatment_id)].filter(Boolean) as string[])]
+      const completedSessions = (completedRaw ?? []) as any[]
+      const completedIds = completedSessions.map(s => s.id as string)
 
-      const [{ data: sessProviders }, { data: sessTreats }] = await Promise.all([
+      const allProviderIds = [...new Set([...(upcomingRaw ?? []).map((s: any) => s.provider_id), ...(pendingRaw ?? []).map((s: any) => s.provider_id), ...completedSessions.map(s => s.provider_id as string)])]
+      const allTreatmentIds = [...new Set([...(upcomingRaw ?? []).map((s: any) => s.treatment_id), ...(pendingRaw ?? []).map((s: any) => s.treatment_id), ...completedSessions.map(s => s.treatment_id)].filter(Boolean) as string[])]
+
+      const [{ data: sessProviders }, { data: sessTreats }, { data: myReviews }] = await Promise.all([
         allProviderIds.length > 0 ? supabase.from('providers').select('id, name, profile_pic_url').in('id', allProviderIds) : Promise.resolve({ data: [] as any[] }),
         allTreatmentIds.length > 0 ? supabase.from('provider_treatments').select('id, name, category').in('id', allTreatmentIds) : Promise.resolve({ data: [] as any[] }),
+        completedIds.length > 0 ? supabase.from('reviews').select('session_id').eq('reviewer_id', userId).in('session_id', completedIds) : Promise.resolve({ data: [] as any[] }),
       ])
+      const reviewedSet = new Set((myReviews ?? []).map((r: any) => r.session_id as string))
 
       const provMap: Record<string, { name: string; pic: string | null }> = Object.fromEntries(
         (sessProviders ?? []).map((p: any) => [p.id, { name: p.name as string, pic: (p.profile_pic_url as string | null) ?? null }])
@@ -292,6 +307,17 @@ function ModelHomeContent() {
       setSubscription(subRaw ? { status: (subRaw as any).status as string, periodEnd: periodEnd ? String(periodEnd) : null } : null)
       setIsVerified(verifiedResult as boolean)
 
+      setToReview(completedSessions
+        .filter(s => !reviewedSet.has(s.id as string))
+        .map(s => ({
+          id:                 s.id as string,
+          provider_name:      provMap[s.provider_id]?.name ?? 'Stylist',
+          provider_pic:       provMap[s.provider_id]?.pic ?? null,
+          date:               s.date as string,
+          treatment_name:     s.treatment_id ? (treatMap[s.treatment_id]?.name ?? null) : null,
+          treatment_category: s.treatment_id ? (treatMap[s.treatment_id]?.category ?? null) : null,
+        })))
+
       const completedList = completedRaw ?? []
       setImpact({
         completed:         completedList.length,
@@ -305,7 +331,9 @@ function ModelHomeContent() {
     }
   }, [userId])
 
-  useEffect(() => { fetchData() }, [fetchData])
+  // Refresh on focus (not just mount) so lists like "to review" update after
+  // actions such as leaving a review. fetchData never sets loading=true, so no flash.
+  useFocusEffect(useCallback(() => { fetchData() }, [fetchData]))
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true)
@@ -455,13 +483,48 @@ function ModelHomeContent() {
           )}
 
           {/* ── Needs your attention ── */}
-          {(pendingApps.length > 0 || invites.length > 0) && (
+          {(pendingApps.length > 0 || invites.length > 0 || toReview.length > 0) && (
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Needs your attention</Text>
 
+              {toReview.length > 0 && (
+                <>
+                  <Text style={styles.attentionLabel}>Treatments to review</Text>
+                  {toReview.map(s => (
+                    <TouchableOpacity
+                      key={s.id}
+                      style={styles.dashCard}
+                      onPress={async () => {
+                        await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+                        router.push({ pathname: '/(app)/leave-review' as any, params: { sessionId: s.id, revieweeType: 'provider' } })
+                      }}
+                      activeOpacity={0.85}
+                    >
+                      <View style={styles.dashAvatarWrap}>
+                        {s.provider_pic ? (
+                          <Image source={{ uri: s.provider_pic }} style={styles.dashAvatar} />
+                        ) : (
+                          <View style={[styles.dashAvatarPlaceholder, { backgroundColor: Colors.softPink }]}>
+                            <Text style={styles.dashAvatarInitial}>{s.provider_name[0]?.toUpperCase() ?? '?'}</Text>
+                          </View>
+                        )}
+                      </View>
+                      <View style={styles.dashInfo}>
+                        <Text style={styles.dashTitle}>{s.provider_name}</Text>
+                        <Text style={styles.dashMeta}>{s.treatment_name ? `${s.treatment_name} · ` : ''}How was it?</Text>
+                      </View>
+                      <View style={styles.reviewPill}>
+                        <Ionicons name="star" size={12} color={Colors.white} />
+                        <Text style={styles.reviewPillText}>Review</Text>
+                      </View>
+                    </TouchableOpacity>
+                  ))}
+                </>
+              )}
+
               {pendingApps.length > 0 && (
                 <>
-                  <Text style={styles.attentionLabel}>Pending applications</Text>
+                  <Text style={[styles.attentionLabel, toReview.length > 0 && { marginTop: 12 }]}>Pending applications</Text>
                   {pendingApps.map(s => (
                     <TouchableOpacity
                       key={s.id}
@@ -500,7 +563,7 @@ function ModelHomeContent() {
 
               {invites.length > 0 && (
                 <>
-                  <Text style={[styles.attentionLabel, pendingApps.length > 0 && { marginTop: 12 }]}>
+                  <Text style={[styles.attentionLabel, (pendingApps.length > 0 || toReview.length > 0) && { marginTop: 12 }]}>
                     Invites from stylists
                   </Text>
                   {invites.map(n => {
@@ -1096,6 +1159,12 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   dashStatusText: { fontSize: 11, fontWeight: '700', color: Colors.roseDark },
+  reviewPill: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    backgroundColor: Colors.rose, borderRadius: 8,
+    paddingHorizontal: 10, paddingVertical: 5, flexShrink: 0,
+  },
+  reviewPillText: { fontSize: 12, fontWeight: '700', color: Colors.white },
   dashStatusPending: { backgroundColor: '#FFF3CD' },
   dashStatusTextPending: { color: '#856404' },
 

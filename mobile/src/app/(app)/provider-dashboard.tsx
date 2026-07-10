@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import {
   View,
   Text,
@@ -77,6 +77,15 @@ type SessionCard = {
   status: 'pending' | 'accepted'
   modelName: string
   modelPicUrl: string | null
+  treatmentName: string | null
+  treatmentCategory: string | null
+}
+
+type ReviewCard = {
+  id: string
+  modelName: string
+  modelPicUrl: string | null
+  date: string
   treatmentName: string | null
   treatmentCategory: string | null
 }
@@ -223,6 +232,7 @@ export default function ProviderDashboardScreen() {
   const [isVerified,        setIsVerified]        = useState(false)
   const [pendingSessions,   setPendingSessions]   = useState<SessionCard[]>([])
   const [upcomingSessions,  setUpcomingSessions]  = useState<SessionCard[]>([])
+  const [toReview,          setToReview]          = useState<ReviewCard[]>([])
   const [stats,             setStats]             = useState<Stats>({ totalSessions: 0, portfolioCount: 0 })
   const [nearbyModels,      setNearbyModels]      = useState<ModelCard[]>([])
   // Mutually-blocked user ids (either direction) — filtered out of applications & nearby.
@@ -342,6 +352,7 @@ export default function ProviderDashboardScreen() {
         { data: upcomingData },
         { count: totalCount },
         { count: portfolioCount },
+        { data: completedData },
       ] = await Promise.all([
         supabase
           .from('sessions')
@@ -366,6 +377,12 @@ export default function ProviderDashboardScreen() {
           .from('portfolio_items')
           .select('id', { count: 'exact', head: true })
           .eq('provider_id', providerId),
+        supabase
+          .from('sessions')
+          .select('id, model_user_id, date, treatment_id')
+          .eq('provider_id', providerId)
+          .eq('status', 'completed')
+          .order('date', { ascending: false }),
       ])
 
       setStats({
@@ -378,10 +395,13 @@ export default function ProviderDashboardScreen() {
       // distance at fetch time and those are its inputs.
 
       // Phase 3: enrich sessions with model + treatment info
-      const allSessions = [...(pendingData ?? []), ...(upcomingData ?? [])]
+      const completedRows = (completedData ?? []) as any[]
+      const completedIds = completedRows.map((s: any) => s.id as string)
+      const allSessions = [...(pendingData ?? []), ...(upcomingData ?? []), ...completedRows]
       if (allSessions.length === 0) {
         setPendingSessions([])
         setUpcomingSessions([])
+        setToReview([])
         setLoading(false)
         setRefreshing(false)
         return
@@ -394,7 +414,7 @@ export default function ProviderDashboardScreen() {
         ),
       ]
 
-      const [{ data: modelsData }, { data: treatsData }] = await Promise.all([
+      const [{ data: modelsData }, { data: treatsData }, { data: myReviews }] = await Promise.all([
         supabase
           .from('public_profiles')
           .select('id, first_name, last_initial, profile_pic_url')
@@ -405,7 +425,15 @@ export default function ProviderDashboardScreen() {
               .select('id, name, category')
               .in('id', treatIds)
           : Promise.resolve({ data: [] as any[], error: null }),
+        completedIds.length > 0
+          ? supabase
+              .from('reviews')
+              .select('session_id')
+              .eq('reviewer_id', userId)
+              .in('session_id', completedIds)
+          : Promise.resolve({ data: [] as any[], error: null }),
       ])
+      const reviewedSet = new Set((myReviews ?? []).map((r: any) => r.session_id as string))
 
       const modelMap: Record<string, any>  = {}
       const treatMap: Record<string, any>  = {}
@@ -437,6 +465,20 @@ export default function ProviderDashboardScreen() {
       setBlockedIds(blocked)
       setPendingSessions((pendingData ?? []).filter((s: any) => !blocked.has(s.model_user_id)).map(enrich))
       setUpcomingSessions((upcomingData ?? []).map(enrich))
+      setToReview(completedRows
+        .filter((s: any) => !reviewedSet.has(s.id as string) && !blocked.has(s.model_user_id))
+        .map((s: any) => {
+          const m = modelMap[s.model_user_id]
+          const t = s.treatment_id ? treatMap[s.treatment_id] : null
+          return {
+            id: s.id as string,
+            modelName: m ? `${m.first_name} ${m.last_initial ? m.last_initial + '.' : ''}`.trim() : 'Model',
+            modelPicUrl: m?.profile_pic_url ?? null,
+            date: s.date as string,
+            treatmentName: t?.name ?? null,
+            treatmentCategory: t?.category ?? null,
+          }
+        }))
     } catch (e) {
       console.error('provider-dashboard load failed:', e)
       setLoadError(true)
@@ -446,7 +488,16 @@ export default function ProviderDashboardScreen() {
     setRefreshing(false)
   }, [userId])
 
-  useEffect(() => { load() }, [load])
+  // Load loud on mount, then silently re-load on every focus so lists (incl.
+  // "to review") refresh after actions like leaving a review. load(true) skips
+  // the loading flash.
+  const loadedOnce = useRef(false)
+  useFocusEffect(
+    useCallback(() => {
+      load(loadedOnce.current)
+      loadedOnce.current = true
+    }, [load])
+  )
 
   // Lightweight re-sync on focus: after an admin approves verification (is_verified)
   // and publishes the shop (is_published), returning to the dashboard should reflect
@@ -948,6 +999,42 @@ export default function ProviderDashboardScreen() {
               />
             ))}
           </ScrollView>
+        )}
+
+        {/* ── Treatments to review ── */}
+        {toReview.length > 0 && (
+          <>
+            <View style={[styles.sectionHeader, { marginTop: 8 }]}>
+              <Text style={styles.sectionTitle}>Treatments to review</Text>
+            </View>
+            {toReview.map(s => (
+              <TouchableOpacity
+                key={s.id}
+                style={styles.reviewRow}
+                onPress={async () => {
+                  await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+                  router.push({ pathname: '/(app)/leave-review' as any, params: { sessionId: s.id, revieweeType: 'model' } })
+                }}
+                activeOpacity={0.85}
+              >
+                {s.modelPicUrl ? (
+                  <Image source={{ uri: s.modelPicUrl }} style={styles.reviewAvatar} />
+                ) : (
+                  <View style={[styles.reviewAvatar, styles.reviewAvatarPlaceholder]}>
+                    <Text style={styles.reviewAvatarInitial}>{s.modelName[0]?.toUpperCase() ?? '?'}</Text>
+                  </View>
+                )}
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.reviewName} numberOfLines={1}>{s.modelName}</Text>
+                  <Text style={styles.reviewMeta} numberOfLines={1}>{s.treatmentName ? `${s.treatmentName} · ` : ''}How was it?</Text>
+                </View>
+                <View style={styles.reviewPill}>
+                  <Ionicons name="star" size={12} color={Colors.white} />
+                  <Text style={styles.reviewPillText}>Review</Text>
+                </View>
+              </TouchableOpacity>
+            ))}
+          </>
         )}
 
         {/* ── Quick links ── */}
@@ -1636,6 +1723,25 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
   },
   emptyCardText: { fontSize: 14, color: Colors.muted, fontWeight: '500' },
+
+  // Treatments to review
+  reviewRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    backgroundColor: Colors.white, borderRadius: 18,
+    padding: 12, marginBottom: 8,
+    borderWidth: 1, borderColor: Colors.border,
+  },
+  reviewAvatar: { width: 44, height: 44, borderRadius: 22 },
+  reviewAvatarPlaceholder: { backgroundColor: Colors.softPink, alignItems: 'center', justifyContent: 'center' },
+  reviewAvatarInitial: { fontSize: 18, fontWeight: '700', color: Colors.roseDark },
+  reviewName: { fontSize: 15, fontWeight: '700', color: Colors.warmDark },
+  reviewMeta: { fontSize: 13, color: Colors.muted, marginTop: 2 },
+  reviewPill: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    backgroundColor: Colors.rose, borderRadius: 8,
+    paddingHorizontal: 10, paddingVertical: 5, flexShrink: 0,
+  },
+  reviewPillText: { fontSize: 12, fontWeight: '700', color: Colors.white },
 
   // Session cards (shared)
   sessionCard: {
