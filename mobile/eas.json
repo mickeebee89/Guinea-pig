@@ -22,7 +22,8 @@
       "env": {
         "GRADLE_OPTS": "-Xmx2g -XX:MaxMetaspaceSize=512m",
         "EXPO_PUBLIC_SUPABASE_URL": "https://ptluekkhiopowuyvkgnd.supabase.co",
-        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_g-YDwagWoZBMvrBoZPQmYQ_VXfWZ40T"
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_g-YDwagWoZBMvrBoZPQmYQ_VXfWZ40T",
+        "EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY": "pk_test_51Tg8Uf2NT7OAGIRcJqI0IpvuQIpxxTxVvSsccfIapBqlhEGczUlBVXQHmvbieIbRYz28q75nJdt1zeQLT0C9Mb2K00KWePIH3S"
       },
       "android": {
         "buildType": "apk",
