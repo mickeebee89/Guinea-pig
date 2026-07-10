@@ -719,7 +719,11 @@ export default function ChatScreen() {
             <Ionicons name="send" size={18} color={Colors.white} />
           </TouchableOpacity>
         </View>
-      ) : null}
+      ) : (
+        // Completed / other states have no bottom bar — pad for the safe area so the
+        // last message isn't obscured by the system nav bar.
+        <View style={{ height: Math.max(insets.bottom, 8) }} />
+      )}
 
       {/* ── Block / Report modal ── */}
       <Modal
