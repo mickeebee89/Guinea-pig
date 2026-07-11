@@ -73,10 +73,14 @@ _Use this to start a fresh chat with full context. Hand it to Claude at the star
 
 ---
 
-## 🔴 IMMEDIATE NEXT STEPS
-1. ~~Finish testing Part 2b auto-cancel~~ — ✅ DONE (tested both directions, passing). RED #2 (blocking) now fully done + tested.
-2. ~~Push the `public_profiles` fix~~ — ✅ pushed (commit `6cee65e`).
-3. ~~Add `session_cancelled` to `TYPE_CFG`~~ — ✅ DONE (groups under Treatments with a close-circle icon).
+## 🔴 IMMEDIATE NEXT STEPS (as of 11 Jul — release-build testing)
+- **First Android preview (release) APK built + tested on device.** Most flows PASS: launch, fonts (Fredoka/Quicksand), signup→verify→pay→subscribe, login, dashboards, images, messaging, payments (Stripe sheet, pk_test). `eas.json` preview env now has the Stripe `pk_test` (commit `9f4814d`).
+- **3 bugs found in that build → all FIXED + pushed, but NOT yet retested in a build:**
+  1. **Admin login hung** (refresh worked) → added `router.refresh()` after sign-in. Commit `cb16281`. Verify by running/deploying the admin (`npm run dev` at repo root / Vercel) — it's web, not the phone build.
+  2. **Model apply: "No treatments listed for this slot"** → Micky B's `availability.active_treatments` point at **deleted/orphaned** treatment IDs. Code now falls back to all current treatments when a slot's scoped set is empty. Commit `3309522`.
+  3. **In-chat "Report" silently failed** (`reports.reason` is NOT NULL; insert omitted it and swallowed the error) → new **free-text reason modal** + real error handling; inserts `reporter_id/reported_id/session_id/reason` (status defaults 'open'). Commit `99a7f59`. Admin reports page reads `status='open'` → will now show.
+- **To retest bugs 2 & 3** need a **development-profile** build installed (the preview APK replaced any dev client — same package `com.guineapig.app`; NO GP dev build exists on EAS). Build one: `npx eas-cli build -p android --profile development` → then Metro reloads work; OR rebuild `--profile preview` to bake the fixes in. ⚠️ EAS uploads have been flaky (2× ECONNRESET) — retry / VPN off / phone hotspot.
+- **Bug-2 follow-ups (optional, not done):** data-tidy `update availability set active_treatments='[]' where provider_id='49d40aae-…' and date>=current_date`; prevention = availability editor should strip a deleted treatment's ID from `active_treatments`.
 
 ## 📌 PARKED / SMALLER GAPS
 - ~~Messages unread badge stale~~ — ✅ FIXED: messages list reloads on focus + unread only counts readable (`accepted`) sessions; HeaderIcons dot likewise. Cancelled/declined convos also hidden from the list. Commit `a512735`, pushed.
