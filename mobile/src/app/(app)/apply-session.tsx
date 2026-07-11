@@ -269,7 +269,11 @@ export default function ApplySessionScreen() {
   // scoping existed) falls back to the provider's full list rather than showing none.
   const treatmentsForSlot = useCallback((slot: AvailabilitySlot): Treatment[] => {
     if (!slot.treatmentIds || slot.treatmentIds.length === 0) return treatments
-    return treatments.filter(t => slot.treatmentIds.includes(t.id))
+    const scoped = treatments.filter(t => slot.treatmentIds.includes(t.id))
+    // Fall back to all treatments if the slot's active_treatments are stale/orphaned
+    // (treatments deleted + recreated → those IDs no longer exist), otherwise the slot
+    // dead-ends with "No treatments listed" and the model can't apply.
+    return scoped.length > 0 ? scoped : treatments
   }, [treatments])
 
   const treatmentsInSlot = useMemo(
