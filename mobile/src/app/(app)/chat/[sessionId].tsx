@@ -115,6 +115,9 @@ export default function ChatScreen() {
   const [menuOpen,        setMenuOpen]        = useState(false)
   const [alreadyReviewed, setAlreadyReviewed] = useState(false)
   const [markingComplete, setMarkingComplete] = useState(false)
+  const [reportOpen,       setReportOpen]       = useState(false)
+  const [reportReason,     setReportReason]     = useState('')
+  const [reportSubmitting, setReportSubmitting]  = useState(false)
 
   // ── Load ───────────────────────────────────────────────────────────────────
 
@@ -341,28 +344,36 @@ export default function ChatScreen() {
   }
 
   const handleReport = async () => {
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
     setMenuOpen(false)
-    const name = otherParty?.name ?? 'this user'
-    Alert.alert(
-      `Report ${name}?`,
-      "We'll review this conversation and take action if our guidelines were broken.",
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Report',
-          style: 'destructive',
-          onPress: async () => {
-            await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning)
-            if (otherParty?.userId && userId) {
-              supabase.from('reports')
-                .insert({ reporter_id: userId, reported_id: otherParty.userId, session_id: sessionId })
-                .then(() => {})
-            }
-            Alert.alert('Reported', 'Thank you. Our team will review this.')
-          },
-        },
-      ]
-    )
+    setReportReason('')
+    setReportOpen(true)
+  }
+
+  const submitReport = async () => {
+    const reason = reportReason.trim()
+    if (!reason || reportSubmitting) return
+    if (!otherParty?.userId || !userId) { setReportOpen(false); return }
+    setReportSubmitting(true)
+    // `reason` is a required column — the old fire-and-forget insert omitted it and
+    // silently failed the NOT NULL constraint, so nothing reached the admin. Surface
+    // errors now instead of swallowing them. (status defaults to 'open'.)
+    const { error } = await supabase.from('reports').insert({
+      reporter_id: userId,
+      reported_id: otherParty.userId,
+      session_id:  sessionId,
+      reason,
+    })
+    setReportSubmitting(false)
+    if (error) {
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)
+      Alert.alert('Couldn’t send report', error.message ?? 'Please try again.')
+      return
+    }
+    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
+    setReportOpen(false)
+    setReportReason('')
+    Alert.alert('Reported', 'Thank you. Our team will review this.')
   }
 
   const handleLeaveReview = async () => {
@@ -776,6 +787,52 @@ export default function ChatScreen() {
             </TouchableOpacity>
           </View>
         </View>
+      </Modal>
+
+      {/* ── Report modal (free-text reason) ── */}
+      <Modal
+        visible={reportOpen}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setReportOpen(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.menuOuter}
+        >
+          <TouchableOpacity
+            style={styles.menuBackdrop}
+            onPress={() => setReportOpen(false)}
+            activeOpacity={1}
+          />
+          <View style={[styles.menuSheet, { paddingBottom: Math.max(insets.bottom, 16) }]}>
+            <View style={styles.menuHandle} />
+            <Text style={styles.menuTitle}>Report {otherParty?.name ?? 'user'}</Text>
+            <Text style={styles.reportHelp}>
+              Tell us why you're reporting. Our team will review this conversation.
+            </Text>
+            <TextInput
+              style={styles.reportInput}
+              value={reportReason}
+              onChangeText={setReportReason}
+              placeholder="Why are you reporting?"
+              placeholderTextColor={Colors.muted}
+              multiline
+              maxLength={500}
+            />
+            <TouchableOpacity
+              style={[styles.reportSubmit, (!reportReason.trim() || reportSubmitting) && styles.reportSubmitDisabled]}
+              disabled={!reportReason.trim() || reportSubmitting}
+              onPress={submitReport}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.reportSubmitText}>{reportSubmitting ? 'Sending…' : 'Send report'}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.menuCancel} onPress={() => setReportOpen(false)} activeOpacity={0.8}>
+              <Text style={styles.menuCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
       </Modal>
     </KeyboardAvoidingView>
   )
@@ -1278,5 +1335,38 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
     color: Colors.warmDark,
+  },
+  reportHelp: {
+    fontSize: 13,
+    color: Colors.muted,
+    lineHeight: 18,
+    marginBottom: 12,
+    paddingHorizontal: 4,
+  },
+  reportInput: {
+    minHeight: 90,
+    maxHeight: 160,
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+    borderRadius: 14,
+    backgroundColor: Colors.inputBg,
+    padding: 12,
+    fontSize: 15,
+    color: Colors.warmDark,
+    textAlignVertical: 'top',
+    marginBottom: 12,
+  },
+  reportSubmit: {
+    backgroundColor: Colors.rose,
+    borderRadius: 16,
+    height: 52,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  reportSubmitDisabled: { opacity: 0.45 },
+  reportSubmitText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: Colors.white,
   },
 })
