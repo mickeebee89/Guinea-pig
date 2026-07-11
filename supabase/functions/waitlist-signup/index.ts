@@ -16,19 +16,24 @@ const db = createClient(
 )
 
 // ── CORS ────────────────────────────────────────────────────────────────────
-// Open origin for now (matches the other functions). Optional hardening: swap '*'
-// for the landing-page domain once it's known.
-const CORS = {
-  'Access-Control-Allow-Origin':  '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-}
+// Browser callers are restricted to the landing-page origins. A single static
+// value can't cover both apex + www, so we reflect the request Origin only when
+// it's in the allowlist. Non-browser callers (curl, server-to-server) send no
+// Origin header and are unaffected — CORS only governs what browsers may read.
+const ALLOWED_ORIGINS = new Set([
+  'https://guineapigapp.co.uk',
+  'https://www.guineapigapp.co.uk',
+])
 
-function respond(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...CORS, 'Content-Type': 'application/json' },
-  })
+function corsHeaders(req: Request): Record<string, string> {
+  const origin = req.headers.get('Origin') ?? ''
+  const headers: Record<string, string> = {
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Vary': 'Origin',
+  }
+  if (ALLOWED_ORIGINS.has(origin)) headers['Access-Control-Allow-Origin'] = origin
+  return headers
 }
 
 // ── Validation helpers ──────────────────────────────────────────────────────
@@ -43,7 +48,14 @@ function optional(v: unknown, max: number): string | null {
 
 // ── Handler ─────────────────────────────────────────────────────────────────
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
+  const cors = corsHeaders(req)
+  const respond = (body: unknown, status = 200) =>
+    new Response(JSON.stringify(body), {
+      status,
+      headers: { ...cors, 'Content-Type': 'application/json' },
+    })
+
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
   if (req.method !== 'POST') return respond({ error: 'Method not allowed' }, 405)
 
   let body: Record<string, unknown>
