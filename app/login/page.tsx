@@ -29,7 +29,10 @@ export default function LoginPage() {
       return
     }
 
+    // Invalidate the Router Cache so the just-set session cookie is picked up —
+    // without this the soft-nav to '/' serves the stale pre-login segment and hangs.
     router.replace('/')
+    router.refresh()
   }
 
   return (
