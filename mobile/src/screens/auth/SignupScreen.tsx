@@ -37,7 +37,7 @@ interface Props {
 
 export default function SignupScreen({ role, onBack, onGoLogin, onNeedConfirmation }: Props) {
   const [firstName, setFirstName]     = useState('')
-  const [lastInitial, setLastInitial] = useState('')
+  const [lastName, setLastName]       = useState('')
   const [email, setEmail]             = useState('')
   const [password, setPassword]       = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -68,8 +68,7 @@ export default function SignupScreen({ role, onBack, onGoLogin, onNeedConfirmati
   function validate() {
     const e: Record<string, string> = {}
     if (!firstName.trim())       e.firstName   = 'Enter your first name'
-    if (!lastInitial.trim())     e.lastInitial = 'Enter your last initial'
-    if (lastInitial.length > 1)  e.lastInitial = 'Just one letter'
+    if (!lastName.trim())        e.lastName    = 'Enter your last name'
     if (!email.trim())           e.email       = 'Enter your email'
     if (!email.includes('@'))    e.email       = 'Enter a valid email'
     if (password.length < 8)     e.password    = 'At least 8 characters'
@@ -92,7 +91,11 @@ export default function SignupScreen({ role, onBack, onGoLogin, onNeedConfirmati
     setCooldown(60)
 
     const cleanFirst   = firstName.trim()
-    const cleanInitial = lastInitial.trim().toUpperCase().charAt(0)
+    // Store the FULL surname privately (last_name) and derive the PUBLIC single
+    // letter (last_initial) from it — first alphabetic char, upper-cased. Both go
+    // into metadata so the auth.users trigger and ensureProfile heal populate them.
+    const cleanLast    = lastName.trim()
+    const cleanInitial = (cleanLast.match(/[a-z]/i)?.[0] ?? cleanLast.charAt(0)).toUpperCase()
 
     const { data, error } = await supabase.auth.signUp({
       email: email.trim().toLowerCase(),
@@ -100,7 +103,7 @@ export default function SignupScreen({ role, onBack, onGoLogin, onNeedConfirmati
       // Persist name into user_metadata too, so a later login self-heal of a
       // half-created account can recreate the users row with the real name
       // instead of a placeholder.
-      options: { data: { role, first_name: cleanFirst, last_initial: cleanInitial, age_confirmed: true, terms_accepted: true } },
+      options: { data: { role, first_name: cleanFirst, last_name: cleanLast, last_initial: cleanInitial, age_confirmed: true, terms_accepted: true } },
     })
 
     if (error) {
@@ -193,18 +196,21 @@ export default function SignupScreen({ role, onBack, onGoLogin, onNeedConfirmati
                     error={errors.firstName}
                   />
                 </View>
-                <View style={styles.nameInitial}>
+                <View style={styles.nameFirst}>
                   <Input
-                    label="Last initial"
-                    placeholder="B"
-                    value={lastInitial}
-                    onChangeText={t => setLastInitial(t.charAt(0).toUpperCase())}
-                    maxLength={1}
-                    autoCapitalize="characters"
-                    error={errors.lastInitial}
+                    label="Last name"
+                    placeholder="e.g. Brown"
+                    value={lastName}
+                    onChangeText={setLastName}
+                    maxLength={60}
+                    autoCapitalize="words"
+                    error={errors.lastName}
                   />
                 </View>
               </View>
+              <Text style={styles.nameHint}>
+                Only your first name and last initial (e.g. Sarah B.) are shown publicly — your full surname stays private.
+              </Text>
 
               <Input
                 label="Email"
@@ -315,7 +321,15 @@ const styles = StyleSheet.create({
   formErrorText: { color: Colors.error, fontSize: 14 },
   nameRow:   { flexDirection: 'row', gap: 12 },
   nameFirst:   { flex: 1 },
-  nameInitial: { width: 80 },
+  nameHint: {
+    fontSize: 12,
+    color: Colors.muted,
+    fontFamily: Fonts.body,
+    lineHeight: 17,
+    marginTop: 6,
+    marginBottom: 4,
+    marginLeft: 4,
+  },
   checkRow: {
     flexDirection: 'row',
     alignItems: 'center',

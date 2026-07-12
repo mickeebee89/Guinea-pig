@@ -13,6 +13,7 @@ interface VerificationRequest {
   user: {
     id: string
     first_name: string
+    last_name: string | null
     last_initial: string | null
     email: string
     role: string
@@ -36,7 +37,7 @@ export default function VerificationQueuePage() {
     setLoading(true)
     const { data, error } = await supabase
       .from('verification_requests')
-      .select('id, selfie_url, status, notes, created_at, user:users!user_id(id, first_name, last_initial, email, role, is_verified)')
+      .select('id, selfie_url, status, notes, created_at, user:users!user_id(id, first_name, last_name, last_initial, email, role, is_verified)')
       .eq('status', filter)
       .order('created_at', { ascending: false })
     if (error) console.error('verification requests load failed:', error)
@@ -182,8 +183,9 @@ export default function VerificationQueuePage() {
                   <div className="flex items-start justify-between gap-4 mb-1">
                     <div>
                       <span className="font-semibold text-[#3D2E2E]">
-                        {req.user.first_name} {req.user.last_initial ? req.user.last_initial + '.' : ''}
+                        {req.user.first_name} {req.user.last_name ?? (req.user.last_initial ? req.user.last_initial + '.' : '')}
                       </span>
+                      <span className="ml-2 text-xs text-[#3D2E2E]/40">{req.user.email}</span>
                       <span className="ml-2 text-xs px-2 py-0.5 rounded-full font-medium capitalize"
                         style={{ background: req.user.role === 'model' ? '#E8B5C220' : '#C8788A20', color: req.user.role === 'model' ? '#7B5EA7' : '#8C4A58' }}>
                         {req.user.role}

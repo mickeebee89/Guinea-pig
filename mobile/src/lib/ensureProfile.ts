@@ -46,6 +46,7 @@ export async function ensureProfile(session: Session): Promise<EnsureProfileResu
       email:        session.user.email ?? '',
       role:         metaRole,
       first_name:   (meta.first_name as string | undefined) || '',
+      last_name:    (meta.last_name as string | undefined) || null,
       last_initial: (meta.last_initial as string | undefined) || null,
       region:       'UK',
     }, { onConflict: 'id', ignoreDuplicates: true })

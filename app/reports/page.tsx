@@ -11,8 +11,15 @@ interface Report {
   status: string
   created_at: string
   session_id: string | null
-  reporter: { id: string; first_name: string; last_initial: string | null; email: string }
-  reported: { id: string; first_name: string; last_initial: string | null; email: string }
+  reporter: { id: string; first_name: string; last_name: string | null; last_initial: string | null; email: string }
+  reported: { id: string; first_name: string; last_name: string | null; last_initial: string | null; email: string }
+}
+
+// Admin-only full identity: prefer the private full surname, fall back to the
+// initial for legacy accounts that never captured one.
+function fullName(u: { first_name: string; last_name: string | null; last_initial: string | null }) {
+  const last = u.last_name ?? (u.last_initial ? `${u.last_initial}.` : '')
+  return `${u.first_name} ${last}`.trim()
 }
 
 interface Message {
@@ -36,8 +43,8 @@ export default function ReportsPage() {
     let q = supabase
       .from('reports')
       .select(`id, reason, details, status, created_at, session_id,
-        reporter:users!reporter_id(id, first_name, last_initial, email),
-        reported:users!reported_id(id, first_name, last_initial, email)`)
+        reporter:users!reporter_id(id, first_name, last_name, last_initial, email),
+        reported:users!reported_id(id, first_name, last_name, last_initial, email)`)
       .order('created_at', { ascending: false })
     if (statusFilter !== 'all') q = q.eq('status', statusFilter)
     const { data } = await q
@@ -127,9 +134,11 @@ export default function ReportsPage() {
                     <span className="text-xs text-[#3D2E2E]/40">{new Date(r.created_at).toLocaleDateString('en-GB')}</span>
                   </div>
                   <div className="text-sm mb-1">
-                    <span className="font-medium text-[#3D2E2E]">{r.reporter.first_name} {r.reporter.last_initial}.</span>
+                    <span className="font-medium text-[#3D2E2E]">{fullName(r.reporter)}</span>
+                    <span className="text-[#3D2E2E]/40"> ({r.reporter.email})</span>
                     <span className="text-[#3D2E2E]/50"> reported </span>
-                    <span className="font-medium text-[#3D2E2E]">{r.reported.first_name} {r.reported.last_initial}.</span>
+                    <span className="font-medium text-[#3D2E2E]">{fullName(r.reported)}</span>
+                    <span className="text-[#3D2E2E]/40"> ({r.reported.email})</span>
                   </div>
                   <div className="text-sm font-semibold text-[#8C4A58] mb-1">{r.reason}</div>
                   {r.details && <div className="text-sm text-[#3D2E2E]/60">{r.details}</div>}
@@ -194,7 +203,9 @@ export default function ReportsPage() {
           <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl">
             <h2 className="text-lg font-bold text-[#3D2E2E] mb-1 capitalize">{actionModal.action}</h2>
             <p className="text-sm text-[#3D2E2E]/60 mb-4">
-              Acting on: {actionModal.report.reported.first_name} {actionModal.report.reported.last_initial}.
+              Acting on: <span className="font-medium text-[#3D2E2E]">{fullName(actionModal.report.reported)}</span>
+              {' '}— {actionModal.report.reported.email}
+              <span className="block text-xs text-[#3D2E2E]/40 mt-0.5">id {actionModal.report.reported.id}</span>
             </p>
             {actionModal.action === 'suspend' && (
               <div className="mb-4">

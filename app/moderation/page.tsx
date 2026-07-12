@@ -23,6 +23,7 @@ interface FlaggedContent {
   matched_words: string[]
   user_id: string
   user_name: string
+  user_email: string | null
 }
 
 export default function ModerationPage() {
@@ -65,19 +66,23 @@ export default function ModerationPage() {
     const re = new RegExp(`(${pattern})`, 'gi')
 
     const [{ data: msgs }, { data: revs }] = await Promise.all([
-      supabase.from('messages').select('id, body, created_at, sender_id, sender:users!sender_id(first_name, last_initial)').limit(500),
-      supabase.from('reviews').select('id, comment, created_at, reviewer_id, reviewer:users!reviewer_id(first_name, last_initial)').limit(500),
+      supabase.from('messages').select('id, body, created_at, sender_id, sender:users!sender_id(first_name, last_name, last_initial, email)').limit(500),
+      supabase.from('reviews').select('id, comment, created_at, reviewer_id, reviewer:users!reviewer_id(first_name, last_name, last_initial, email)').limit(500),
     ])
 
+    // Admin-only full identity: prefer the private full surname, fall back to the initial.
+    const fullName = (u: { first_name: string; last_name: string | null; last_initial: string | null }) =>
+      `${u.first_name} ${u.last_name ?? (u.last_initial ? `${u.last_initial}.` : '')}`.trim()
+
     const results: FlaggedContent[] = []
-    for (const m of (msgs ?? []) as unknown as { id: string; body: string; created_at: string; sender_id: string; sender: { first_name: string; last_initial: string } }[]) {
+    for (const m of (msgs ?? []) as unknown as { id: string; body: string; created_at: string; sender_id: string; sender: { first_name: string; last_name: string | null; last_initial: string | null; email: string | null } }[]) {
       const matches = m.body.match(re)
-      if (matches) results.push({ id: m.id, type: 'message', body: m.body, created_at: m.created_at, matched_words: matches, user_id: m.sender_id, user_name: `${m.sender.first_name} ${m.sender.last_initial}.` })
+      if (matches) results.push({ id: m.id, type: 'message', body: m.body, created_at: m.created_at, matched_words: matches, user_id: m.sender_id, user_name: fullName(m.sender), user_email: m.sender.email })
     }
-    for (const r of (revs ?? []) as unknown as { id: string; comment: string | null; created_at: string; reviewer_id: string; reviewer: { first_name: string; last_initial: string } }[]) {
+    for (const r of (revs ?? []) as unknown as { id: string; comment: string | null; created_at: string; reviewer_id: string; reviewer: { first_name: string; last_name: string | null; last_initial: string | null; email: string | null } }[]) {
       if (!r.comment) continue
       const matches = r.comment.match(re)
-      if (matches) results.push({ id: r.id, type: 'review', body: r.comment, created_at: r.created_at, matched_words: matches, user_id: r.reviewer_id, user_name: `${r.reviewer.first_name} ${r.reviewer.last_initial}.` })
+      if (matches) results.push({ id: r.id, type: 'review', body: r.comment, created_at: r.created_at, matched_words: matches, user_id: r.reviewer_id, user_name: fullName(r.reviewer), user_email: r.reviewer.email })
     }
     setFlagged(results)
   }
@@ -186,7 +191,9 @@ export default function ModerationPage() {
                 <span className={`text-xs px-2 py-0.5 rounded-full font-medium capitalize ${
                   f.type === 'message' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'
                 }`}>{f.type}</span>
-                <span className="text-xs text-[#3D2E2E]/40">{f.user_name} · {new Date(f.created_at).toLocaleDateString('en-GB')}</span>
+                <span className="text-xs text-[#3D2E2E]/40">
+                  {f.user_name}{f.user_email ? ` (${f.user_email})` : ''} · id {f.user_id.slice(0, 8)} · {new Date(f.created_at).toLocaleDateString('en-GB')}
+                </span>
               </div>
               <p className="text-sm text-[#3D2E2E] mb-2">{f.body}</p>
               <div className="flex gap-1 flex-wrap">

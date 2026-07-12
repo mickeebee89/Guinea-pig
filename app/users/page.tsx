@@ -8,6 +8,7 @@ interface User {
   id: string
   email: string
   first_name: string
+  last_name: string | null
   last_initial: string | null
   role: string
   region: string
@@ -57,7 +58,7 @@ export default function UsersPage() {
 
   const filtered = users.filter(u =>
     !search || u.email.toLowerCase().includes(search.toLowerCase()) ||
-    `${u.first_name} ${u.last_initial ?? ''}`.toLowerCase().includes(search.toLowerCase())
+    `${u.first_name} ${u.last_name ?? ''} ${u.last_initial ?? ''}`.toLowerCase().includes(search.toLowerCase())
   )
 
   async function doAction() {
@@ -141,7 +142,7 @@ export default function UsersPage() {
               {filtered.map(u => (
                 <tr key={u.id} className={`border-b border-black/5 last:border-0 hover:bg-black/[0.01] ${u.fraud_flagged ? 'bg-red-50' : ''}`}>
                   <td className="px-4 py-3 font-medium">
-                    {u.first_name} {u.last_initial}.
+                    {u.first_name} {u.last_name ?? (u.last_initial ? `${u.last_initial}.` : '')}
                     {u.fraud_flagged && <span className="ml-1 text-red-500 text-xs">⚑</span>}
                     {u.is_founding_provider && <span className="ml-1 text-yellow-600 text-xs">★</span>}
                   </td>
@@ -186,7 +187,7 @@ export default function UsersPage() {
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
           <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl">
             <h2 className="text-lg font-bold text-[#3D2E2E] mb-1 capitalize">{modal.action} user</h2>
-            <p className="text-sm text-[#3D2E2E]/60 mb-4">{modal.user.first_name} {modal.user.last_initial}. — {modal.user.email}</p>
+            <p className="text-sm text-[#3D2E2E]/60 mb-4">{modal.user.first_name} {modal.user.last_name ?? (modal.user.last_initial ? `${modal.user.last_initial}.` : '')} — {modal.user.email}</p>
 
             {modal.action === 'suspend' && (
               <div className="mb-4">

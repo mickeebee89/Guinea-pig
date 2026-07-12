@@ -51,7 +51,7 @@ type UserData = {
 }
 
 type VerifStatus = 'none' | 'pending' | 'approved' | 'declined'
-type EditField   = 'first_name' | 'last_initial' | 'email' | 'bio'
+type EditField   = 'email' | 'bio'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -76,19 +76,17 @@ const LEGAL_LINKS = [
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function editLabel(f: EditField): string {
-  return { first_name: 'First name', last_initial: 'Last initial', email: 'Email address', bio: 'Bio' }[f]
+  return { email: 'Email address', bio: 'Bio' }[f]
 }
 
 function editMaxLength(f: EditField): number {
-  return { first_name: 50, last_initial: 1, email: 100, bio: 400 }[f]
+  return { email: 100, bio: 400 }[f]
 }
 
 function editPlaceholder(f: EditField): string {
   return {
-    first_name:   'e.g. Micky',
-    last_initial: 'e.g. B',
-    email:        'your@email.com',
-    bio:          'Tell models about your space, specialties, and what to expect from a treatment…',
+    email: 'your@email.com',
+    bio:   'Tell models about your space, specialties, and what to expect from a treatment…',
   }[f]
 }
 
@@ -414,13 +412,9 @@ export default function SettingsScreen() {
         Alert.alert('Confirmation sent', `Check ${val} to confirm the change.`)
         return
       }
-      if (editField === 'bio') {
-        if (providerId) await supabase.from('providers').update({ bio: val || null }).eq('id', providerId)
-        setProviderBio(val)
-      } else {
-        await supabase.from('users').update({ [editField]: val || null }).eq('id', userId)
-        setUserData(p => p ? { ...p, [editField]: val } : p)
-      }
+      // Only 'bio' remains (email returns above; name fields are no longer editable).
+      if (providerId) await supabase.from('providers').update({ bio: val || null }).eq('id', providerId)
+      setProviderBio(val)
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
       closeEdit()
     } catch (err: any) {
@@ -644,17 +638,16 @@ export default function SettingsScreen() {
         {/* ─────────────── ACCOUNT ─────────────── */}
         <Text style={styles.sectionTitle}>Account</Text>
         <View style={styles.card}>
+          {/* Name is fixed identity (set once at signup) — read-only, no onPress. */}
           <Row
             icon="person-outline"
             label="First name"
             value={userData?.first_name}
-            onPress={() => openEdit('first_name', userData?.first_name ?? '')}
           />
           <Row
             icon="at-outline"
             label="Last initial"
             value={userData?.last_initial ? `${userData.last_initial}.` : '—'}
-            onPress={() => openEdit('last_initial', userData?.last_initial ?? '')}
           />
           <Row
             icon="mail-outline"
@@ -942,7 +935,7 @@ export default function SettingsScreen() {
                 placeholder={editField ? editPlaceholder(editField) : ''}
                 placeholderTextColor={Colors.muted}
                 multiline={editField === 'bio'}
-                autoCapitalize={editField === 'email' ? 'none' : editField === 'last_initial' ? 'characters' : 'words'}
+                autoCapitalize={editField === 'email' ? 'none' : 'words'}
                 keyboardType={editField === 'email' ? 'email-address' : 'default'}
                 autoFocus
                 textAlignVertical={editField === 'bio' ? 'top' : 'auto'}
