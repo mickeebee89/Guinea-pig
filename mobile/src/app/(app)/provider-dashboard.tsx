@@ -230,6 +230,10 @@ export default function ProviderDashboardScreen() {
   // re-sync can't be dropped when `provider` is momentarily null. The shop toggle,
   // banner and badge read THIS. Written by both load() and the focus effect.
   const [isVerified,        setIsVerified]        = useState(false)
+  // Provider fee is "settled" when they paid the £14.99, OR were granted free
+  // access (founding / admin waive). Publishing requires verified AND settled —
+  // identity alone is NOT enough (models are identity-verified for free).
+  const [feeSettled,        setFeeSettled]        = useState(false)
   const [pendingSessions,   setPendingSessions]   = useState<SessionCard[]>([])
   const [upcomingSessions,  setUpcomingSessions]  = useState<SessionCard[]>([])
   const [toReview,          setToReview]          = useState<ReviewCard[]>([])
@@ -262,14 +266,18 @@ export default function ProviderDashboardScreen() {
     setLoadError(false)
 
     try {
-      // Phase 1: fetch user profile + provider row in parallel; derive display name from users
-      const [{ data: userRow }, { data: provRow }] = await Promise.all([
-        supabase.from('users').select('first_name, last_initial, profile_pic_url, is_verified').eq('id', userId).single(),
+      // Phase 1: fetch user profile + provider row + provider-fee status in parallel.
+      const [{ data: userRow }, { data: provRow }, { data: payRow }] = await Promise.all([
+        supabase.from('users').select('first_name, last_initial, profile_pic_url, is_verified, is_founding_provider, provider_fee_waived').eq('id', userId).single(),
         supabase.from('providers').select('id, user_id, bio, is_published, shop_handle, rating, review_count').eq('user_id', userId).maybeSingle(),
+        supabase.from('verification_payments').select('id').eq('user_id', userId).limit(1).maybeSingle(),
       ])
 
       const userVerified = !!(userRow as any)?.is_verified
       setIsVerified(userVerified)
+      // Fee settled = paid the £14.99, OR founding provider, OR admin-waived (free access).
+      const settled = !!payRow || !!(userRow as any)?.is_founding_provider || !!(userRow as any)?.provider_fee_waived
+      setFeeSettled(settled)
       const first       = (userRow as any)?.first_name ?? ''
       const initial     = (userRow as any)?.last_initial ?? ''
       const displayName = first ? `${first}${initial ? ` ${initial}.` : ''}`.trim() : 'Stylist'
@@ -508,15 +516,18 @@ export default function ProviderDashboardScreen() {
       if (!userId) return
       let cancelled = false
       ;(async () => {
-        const [{ data: u }, { data: pr }] = await Promise.all([
-          supabase.from('users').select('is_verified').eq('id', userId).single(),
+        const [{ data: u }, { data: pr }, { data: pay }] = await Promise.all([
+          supabase.from('users').select('is_verified, is_founding_provider, provider_fee_waived').eq('id', userId).single(),
           supabase.from('providers').select('is_published').eq('user_id', userId).maybeSingle(),
+          supabase.from('verification_payments').select('id').eq('user_id', userId).limit(1).maybeSingle(),
         ])
         if (cancelled) return
         const v = !!(u as any)?.is_verified
         // Apply verified to its own state — this can NEVER be dropped, even if
         // `provider` is still null (focus fired before load() finished).
         setIsVerified(v)
+        // Re-derive fee-settled too, so paying the £14.99 and returning enables the toggle.
+        setFeeSettled(!!pay || !!(u as any)?.is_founding_provider || !!(u as any)?.provider_fee_waived)
         // Publish flag lives on `provider`; merge when present (harmless if null —
         // load() will set it). Log whether provider existed at merge time.
         setProvider(p => {
@@ -669,10 +680,18 @@ export default function ProviderDashboardScreen() {
   const togglePublished = async (value: boolean) => {
     if (!provider) return
 
-    // Only a verified provider can go live — the DB blocks is_published=true for
-    // unverified providers, so guard here too (the UI toggle is disabled for them).
+    // Going live requires BOTH identity verification AND the provider fee settled
+    // (paid £14.99 / founding / admin-waived). Identity alone is not enough — models
+    // are identity-verified for free, so is_verified is not proof of payment.
     if (value && !isVerified) {
       Alert.alert('Verify first', 'Get verified to make your shop live.')
+      return
+    }
+    if (value && !feeSettled) {
+      Alert.alert('Payment needed', 'Pay the £14.99 verification fee to make your shop live.', [
+        { text: 'Not now', style: 'cancel' },
+        { text: 'Pay now', onPress: () => router.push('/(app)/verify-payment' as any) },
+      ])
       return
     }
 
@@ -864,7 +883,7 @@ export default function ProviderDashboardScreen() {
           </View>
           {publishLoading ? (
             <ActivityIndicator size="small" color={Colors.roseDark} />
-          ) : isVerified ? (
+          ) : (isVerified && feeSettled) ? (
             <Switch
               value={isPublished}
               onValueChange={togglePublished}
@@ -881,13 +900,15 @@ export default function ProviderDashboardScreen() {
                 thumbColor={Colors.border}
                 ios_backgroundColor={Colors.border}
               />
-              <Text style={styles.publishHint}>Verify to make your shop live</Text>
+              <Text style={styles.publishHint}>
+                {!isVerified ? 'Verify to make your shop live' : 'Pay the £14.99 fee to make your shop live'}
+              </Text>
             </View>
           )}
         </View>
 
-        {/* ── Get verified banner (hidden once verified) ── */}
-        {!isVerified && (
+        {/* ── Get set up banner (hidden once verified AND fee settled) ── */}
+        {!(isVerified && feeSettled) && (
           <TouchableOpacity
             style={styles.verifyBanner}
             onPress={async () => {
@@ -900,8 +921,12 @@ export default function ProviderDashboardScreen() {
               <Ionicons name="shield-checkmark-outline" size={26} color={Colors.roseDark} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.verifyBannerTitle}>Get verified</Text>
-              <Text style={styles.verifyBannerSub}>Verify your identity to make your shop live and start getting bookings.</Text>
+              <Text style={styles.verifyBannerTitle}>{!isVerified ? 'Get verified' : 'Pay to go live'}</Text>
+              <Text style={styles.verifyBannerSub}>
+                {!isVerified
+                  ? 'Verify your identity to make your shop live and start getting bookings.'
+                  : 'Pay the £14.99 verification fee to make your shop live and start getting bookings.'}
+              </Text>
             </View>
             <Ionicons name="chevron-forward" size={20} color={Colors.roseDark} />
           </TouchableOpacity>

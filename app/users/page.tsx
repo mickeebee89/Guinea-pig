@@ -16,9 +16,11 @@ interface User {
   fraud_flagged: boolean
   subscription_status: string
   is_founding_provider: boolean
+  provider_fee_waived: boolean
   created_at: string
   session_count?: number
   report_count?: number
+  fee_paid?: boolean
 }
 
 const ROLES = ['all', 'model', 'provider', 'both']
@@ -44,11 +46,12 @@ export default function UsersPage() {
     if (!data) { setLoading(false); return }
 
     const enriched = await Promise.all(data.map(async (u) => {
-      const [{ count: sc }, { count: rc }] = await Promise.all([
+      const [{ count: sc }, { count: rc }, { count: pc }] = await Promise.all([
         supabase.from('sessions').select('*', { count: 'exact', head: true }).or(`model_id.eq.${u.id}`),
         supabase.from('reports').select('*', { count: 'exact', head: true }).eq('reported_id', u.id),
+        supabase.from('verification_payments').select('*', { count: 'exact', head: true }).eq('user_id', u.id),
       ])
-      return { ...u, session_count: sc ?? 0, report_count: rc ?? 0 }
+      return { ...u, session_count: sc ?? 0, report_count: rc ?? 0, fee_paid: (pc ?? 0) > 0 }
     }))
     setUsers(enriched)
     setLoading(false)
@@ -89,6 +92,11 @@ export default function UsersPage() {
     if (action === 'flag') {
       await supabase.from('users').update({ fraud_flagged: !user.fraud_flagged }).eq('id', user.id)
     }
+    if (action === 'waive') {
+      // Free access: waive the £14.99 provider fee (or revoke it). The mobile publish
+      // gate treats a waived provider as fee-settled, so they can make their shop live.
+      await supabase.from('users').update({ provider_fee_waived: !user.provider_fee_waived }).eq('id', user.id)
+    }
     await logAction(action, { targetUserId: user.id, adminNote: reason })
     setModal(null)
     setReason('')
@@ -97,6 +105,16 @@ export default function UsersPage() {
 
   const badge = (v: boolean, t: string, f: string) =>
     <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${v ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>{v ? t : f}</span>
+
+  // Provider £14.99 fee state → what unlocks "make shop live" on mobile.
+  const feeStatus = (u: User) => {
+    const [label, cls] =
+      u.provider_fee_waived      ? ['Waived',   'bg-purple-100 text-purple-700'] :
+      u.is_founding_provider     ? ['Founding', 'bg-yellow-100 text-yellow-700'] :
+      u.fee_paid                 ? ['Paid',     'bg-green-100 text-green-700']   :
+                                   ['Unpaid',   'bg-red-100 text-red-700']
+    return <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${cls}`}>{label}</span>
+  }
 
   return (
     <div>
@@ -131,6 +149,7 @@ export default function UsersPage() {
                 <th className="text-left px-4 py-3">Email</th>
                 <th className="text-left px-4 py-3">Role</th>
                 <th className="text-left px-4 py-3">Verified</th>
+                <th className="text-left px-4 py-3">Fee</th>
                 <th className="text-left px-4 py-3">Subscription</th>
                 <th className="text-left px-4 py-3">Sessions</th>
                 <th className="text-left px-4 py-3">Reports</th>
@@ -149,6 +168,7 @@ export default function UsersPage() {
                   <td className="px-4 py-3 text-[#3D2E2E]/60">{u.email}</td>
                   <td className="px-4 py-3 capitalize">{u.role}</td>
                   <td className="px-4 py-3">{badge(u.is_verified, 'Verified', 'No')}</td>
+                  <td className="px-4 py-3">{(u.role === 'provider' || u.role === 'both') ? feeStatus(u) : <span className="text-[#3D2E2E]/30">—</span>}</td>
                   <td className="px-4 py-3 capitalize text-[#3D2E2E]/60">{u.subscription_status}</td>
                   <td className="px-4 py-3">{u.session_count}</td>
                   <td className="px-4 py-3">{u.report_count && u.report_count > 0
@@ -171,6 +191,12 @@ export default function UsersPage() {
                           {label}
                         </button>
                       ))}
+                      {(u.role === 'provider' || u.role === 'both') && (
+                        <button onClick={() => { setModal({ user: u, action: 'waive' }); setReason('') }}
+                          className="text-xs px-2 py-1 rounded-md font-medium bg-purple-100 text-purple-700">
+                          {u.provider_fee_waived ? 'Revoke free access' : 'Free access'}
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>

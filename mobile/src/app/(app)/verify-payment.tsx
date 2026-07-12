@@ -40,6 +40,7 @@ export default function VerifyPaymentScreen() {
   const [requestNotes,   setRequestNotes]   = useState<string | null>(null)
   const [paymentLoading, setPaymentLoading] = useState(false)
   const [hasPaid,        setHasPaid]        = useState(false)   // provider paid (pay-first)
+  const [feeOnly,        setFeeOnly]        = useState(false)   // already identity-verified provider who only owes the £14.99 fee (skip selfie)
   const [favourited,     setFavourited]     = useState(false)   // added this provider to favourites
   const [favLoading,     setFavLoading]     = useState(false)
 
@@ -50,14 +51,9 @@ export default function VerifyPaymentScreen() {
     try {
       const { data: ud } = await supabase
         .from('users')
-        .select('is_verified')
+        .select('is_verified, is_founding_provider, provider_fee_waived')
         .eq('id', userId)
         .single()
-      if ((ud as any)?.is_verified) {
-        Alert.alert("You're already verified!", 'Your verified badge is active on your profile.')
-        router.back()
-        return
-      }
 
       // Pay-first (providers only): have they already paid? Used to avoid a second
       // charge on the instructions / resubmit paths.
@@ -71,6 +67,21 @@ export default function VerifyPaymentScreen() {
           .maybeSingle()
         paid = !!payRow
         setHasPaid(paid)
+      }
+
+      const feeCovered = paid || !!(ud as any)?.is_founding_provider || !!(ud as any)?.provider_fee_waived
+
+      if ((ud as any)?.is_verified) {
+        // A verified provider who still owes the £14.99 can pay it here — identity is
+        // already done, so skip the selfie. Everyone else verified is fully finished.
+        if (isProvider && !feeCovered) {
+          setFeeOnly(true)
+          setStep('instructions')
+          return
+        }
+        Alert.alert("You're already verified!", 'Your verified badge is active on your profile.')
+        router.back()
+        return
       }
 
       const { data: existing } = await supabase
@@ -247,10 +258,17 @@ export default function VerifyPaymentScreen() {
         body: { action: 'confirm_verification', userId, paymentIntentId },
       })
 
-      // Pay-first: payment done → now take the verification photo. No is_verified here,
-      // no jump to success — verification/unlock happens when the admin approves.
       setHasPaid(true)
-      setStep('camera')
+      if (feeOnly) {
+        // Already identity-verified — the fee was the only outstanding step, so they're
+        // done: no selfie, no admin re-approval. Returning to the dashboard enables the
+        // shop toggle (its focus re-sync re-derives fee-settled).
+        setStep('success')
+      } else {
+        // Pay-first: payment done → now take the verification photo. No is_verified here,
+        // no jump to success — verification/unlock happens when the admin approves.
+        setStep('camera')
+      }
     } catch (err: any) {
       setPaymentLoading(false)
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)
@@ -288,11 +306,11 @@ export default function VerifyPaymentScreen() {
             <View style={styles.heroIconCircle}>
               <Ionicons name="shield-checkmark" size={44} color={Colors.white} />
             </View>
-            <Text style={styles.heroTitle}>Identity check</Text>
+            <Text style={styles.heroTitle}>{feeOnly ? 'Verification fee' : 'Identity check'}</Text>
             <Text style={styles.heroSub}>
-              Take a selfie holding a piece of paper with your first name and{' '}
-              <Text style={{ fontWeight: '800', color: Colors.warmDark }}>"Guinea Pig"</Text>
-              {' '}written on it. Our team reviews within 24 hours.
+              {feeOnly
+                ? 'You\'re already identity-verified. Pay the one-off £14.99 fee to make your shop live — no selfie needed.'
+                : <>Take a selfie holding a piece of paper with your first name and <Text style={{ fontWeight: '800', color: Colors.warmDark }}>"Guinea Pig"</Text> written on it. Our team reviews within 24 hours.</>}
             </Text>
             {isProvider && !hasPaid && (
               <View style={styles.priceTag}>
@@ -301,8 +319,8 @@ export default function VerifyPaymentScreen() {
             )}
           </View>
 
-          <Text style={styles.sectionLabel}>What to do</Text>
-          {[
+          {!feeOnly && <Text style={styles.sectionLabel}>What to do</Text>}
+          {!feeOnly && [
             { icon: 'person-circle-outline',    step: '1', text: 'Make sure your profile picture clearly shows your face — we compare it to this selfie' },
             { icon: 'pencil-outline',          step: '2', text: 'Write your first name and "Guinea Pig" on a piece of paper' },
             { icon: 'camera-outline',           step: '3', text: 'Take a clear selfie holding the paper — face and writing both visible' },
@@ -341,7 +359,9 @@ export default function VerifyPaymentScreen() {
           )}
 
           <Text style={styles.legalNote}>
-            {isProvider && !hasPaid
+            {feeOnly
+              ? 'Secured by Stripe. Paying makes your shop eligible to go live.'
+              : isProvider && !hasPaid
               ? 'Secured by Stripe. After payment you\'ll take your verification selfie.'
               : 'Your selfie is stored securely and only used for identity verification.'}
           </Text>
