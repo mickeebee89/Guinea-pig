@@ -65,6 +65,7 @@ Verification queue, Reports, Moderation, Users (with **Free access / waive-fee**
 ---
 
 ## Recent changes (latest first)
+- **`5ef4180` + RLS fix — "£14.99 not recorded / £0 revenue" was NOT a write bug.** Payments were always recording (`verification_payments` had rows). Three causes stacked: **(1) RLS** — `verification_payments` had RLS **on with ZERO policies** (only the service-role edge fn could touch it), so the admin, the mobile "already paid?" check, and the dashboard `feeSettled` all read **nothing**; `subscriptions` SELECT was owner-only (no admin read). Fixed with two SELECT policies. **(2) Revenue read logic** — verification total only counted `selfie_status='passed'` (never set → always £0); now counts ALL payments (both Revenue page + dashboard). **(3) `confirm_subscription` never wrote `amount_pence`** → sub revenue £0; now writes amount/currency/plan (from the Stripe price) + existing rows backfilled. Also added a `create_verification_intent` dedupe so a stale client can't double-charge (that double-charge WAS the RLS bug — the client couldn't see its own payment row). Verified: admin Fee flips to **Paid** once the RLS policy is added.
 - **`5f21c20` — Cancel bug root cause + cleanup (DONE + VERIFIED).** The cancel wrote `subscription_status='canceling'`, but `users.subscription_status` has a **CHECK constraint** that rejected it → the DB write failed (Stripe was already cancelled, so it looked half-done). Fixed by allowing the value; then standardised on **British `'cancelling'`** across code + DB, and replaced the app's stale `'free'` checks with the real values (`'none'`, `isPaid = active/trialling/cancelling`). Constraint migration applied in the live DB (`['none','trialling','active','cancelled','cancelling']`). **Verified on device + Stripe:** app shows "Ends on {date}", Stripe cancels at period end, DB persists `'cancelling'`.
 - **`0db4cf4`** — **Subscription cancel + account delete now actually stop Stripe billing** (were local-flag-only / no-op). New `cancel_subscription` edge action (`cancel_at_period_end`, `status='canceling'`, access until period end); `delete-account` cancels the Stripe sub before the cascade, keeps the customer, logs an orphan to `admin_audit_log` on failure.
 - **`154fbcf`** — **Fixed the £14.99 verification payment not recording.** `confirm_verification` inserted two non-existent columns (`stripe_payment_intent_id`/`currency`) and swallowed the error → charge succeeded, no row, payer locked out. Now uses `stripe_payment_id`/`currency_code`, captures the error, and the client shows a Retry screen instead of a false success.
@@ -101,7 +102,12 @@ There are no migration files; schema changes are run by hand in the SQL editor. 
 - `users.provider_fee_waived boolean not null default false` (admin free-access for the £14.99 gate) + backfill of existing verified-unpaid providers.
 - `users.last_name text` (private full surname) + `handle_new_auth_user` trigger updated to populate it.
 - `users.subscription_status` CHECK constraint standardised to `['none','trialling','active','cancelled','cancelling']`.
-- `verification_payments` real columns are `stripe_payment_id` + `currency_code` (the edge fn was fixed to match).
+- `verification_payments` real columns are `stripe_payment_id` + `currency_code` (the edge fn was fixed to match). Also has a CHECK on `selfie_status` (`pending/passed/failed/locked/refunded`).
+- **RLS read policies (critical — without these the admin + app see nothing):**
+  - `verification_payments` had RLS ON with **no policies** → added `verification_payments_select_own` = `for select to authenticated using (user_id = auth.uid() or is_admin())`.
+  - `subscriptions` had owner-only SELECT → added `subscriptions_select_admin` = `for select to authenticated using (is_admin())`.
+  - Writes go through the service-role edge fn (bypasses RLS), so no INSERT policy is needed.
+- `subscriptions.amount_pence` backfilled to 499 (+ `currency_code='GBP'`, `plan='monthly'`) for rows the old `confirm_subscription` left null.
 
 ## Testing quick-reference
 - **No new APK for JS changes** — the installed **dev build** hot-loads JS via Metro. Reload with `npx expo start -c --dev-client` (the `-c` avoids stale bundles). Both phones need the dev client installed (same APK). A new EAS build is only needed for native changes.
