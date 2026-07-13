@@ -8,6 +8,7 @@ import {
   Platform,
   TouchableOpacity,
   Image,
+  Alert,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import * as Haptics from 'expo-haptics'
@@ -71,9 +72,18 @@ export default function LoginScreen({ onBack, onGoSignup }: Props) {
       setError('Enter your email above first.')
       return
     }
-    await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase())
+    // Send them to the web reset page (works whether or not the app is installed).
+    // Its URL must be in Supabase → Auth → URL Configuration → Redirect URLs.
+    const { error: resetErr } = await supabase.auth.resetPasswordForEmail(
+      email.trim().toLowerCase(),
+      { redirectTo: 'https://guineapigapp.co.uk/auth/reset' },
+    )
     setError('')
-    alert('Check your email for a reset link.')
+    if (resetErr) {
+      Alert.alert('Something went wrong', 'Could not send the reset email. Please try again.')
+      return
+    }
+    Alert.alert('Check your email', 'We\'ve sent you a link to reset your password.')
   }
 
   return (

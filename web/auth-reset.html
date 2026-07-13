@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="robots" content="noindex" />
+  <title>Reset your password · Guinea Pig</title>
+  <!--
+    Guinea Pig — password reset page.
+    Host at: https://guineapigapp.co.uk/auth/reset  (must match the redirect used by the app
+    and be added to Supabase → Auth → URL Configuration → Redirect URLs).
+
+    SECURITY: this page uses the ANON / PUBLIC key ONLY (the same one already public in the
+    mobile app). NEVER paste the service_role key here — it bypasses RLS and would expose the
+    whole database. The reset is secured by the one-time recovery token in the email link,
+    not by the key.
+  -->
+  <style>
+    :root{
+      --rose:#F45D9E; --roseDark:#A8862E; --gold:#C2A14D; --softPink:#F4DADC;
+      --cream:#FBF6F1; --warmDark:#3A302C; --muted:#8A7F79; --border:#EADFD6;
+      --error:#D64545; --ok:#2E9E5B; --white:#fff;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0; min-height:100dvh; display:flex; align-items:center; justify-content:center;
+      background:var(--cream); color:var(--warmDark);
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+      padding:24px;
+    }
+    .card{
+      width:100%; max-width:400px; background:var(--white); border:1px solid var(--border);
+      border-radius:20px; padding:28px 24px; box-shadow:0 10px 30px rgba(58,48,44,.08);
+    }
+    .brand{font-size:14px; font-weight:700; letter-spacing:.3px; color:var(--rose); margin-bottom:4px}
+    h1{font-size:22px; margin:0 0 6px}
+    p.sub{margin:0 0 20px; color:var(--muted); font-size:14px; line-height:1.5}
+    label{display:block; font-size:13px; font-weight:600; margin:14px 0 6px}
+    input{
+      width:100%; padding:13px 14px; font-size:16px; border:1.5px solid var(--border);
+      border-radius:12px; background:#fff; outline:none;
+    }
+    input:focus{border-color:var(--rose)}
+    button{
+      width:100%; margin-top:20px; padding:14px; font-size:16px; font-weight:700; color:#fff;
+      background:var(--rose); border:none; border-radius:12px; cursor:pointer;
+    }
+    button:disabled{opacity:.6; cursor:default}
+    .msg{margin-top:14px; font-size:14px; line-height:1.5}
+    .msg.err{color:var(--error)}
+    .msg.ok{color:var(--ok)}
+    .hidden{display:none}
+    .center{text-align:center}
+    .big{font-size:40px; line-height:1; margin-bottom:8px}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="brand">GUINEA PIG</div>
+
+    <!-- Loading -->
+    <div id="loading">
+      <h1>Checking your link…</h1>
+      <p class="sub">One moment.</p>
+    </div>
+
+    <!-- Reset form -->
+    <div id="form" class="hidden">
+      <h1>Set a new password</h1>
+      <p class="sub">Enter a new password for your Guinea Pig account.</p>
+      <label for="pw">New password</label>
+      <input id="pw" type="password" autocomplete="new-password" placeholder="At least 8 characters" />
+      <label for="pw2">Confirm new password</label>
+      <input id="pw2" type="password" autocomplete="new-password" placeholder="Re-enter password" />
+      <div id="formMsg" class="msg err hidden"></div>
+      <button id="submit">Update password</button>
+    </div>
+
+    <!-- Success -->
+    <div id="success" class="hidden center">
+      <div class="big">✅</div>
+      <h1>Password updated</h1>
+      <p class="sub">You're all set. Open the Guinea Pig app and log in with your new password.</p>
+    </div>
+
+    <!-- Expired / invalid -->
+    <div id="expired" class="hidden center">
+      <div class="big">⏳</div>
+      <h1>This link has expired</h1>
+      <p class="sub">Password reset links can only be used once and expire after a short time. Open the Guinea Pig app, tap “Forgot password”, and request a new one.</p>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script>
+    // ── Config ──────────────────────────────────────────────────────────────
+    // Supabase project URL + ANON/PUBLIC key. Get the anon key from
+    // Supabase → Settings → API → "Project API keys" → `anon` `public`.
+    // 🔒 NEVER use the service_role key here.
+    var SUPABASE_URL = 'https://ptluekkhiopowuyvkgnd.supabase.co';
+    var SUPABASE_ANON_KEY = 'PASTE_YOUR_ANON_PUBLIC_KEY_HERE';
+
+    var show = function (id) {
+      ['loading', 'form', 'success', 'expired'].forEach(function (x) {
+        document.getElementById(x).classList.toggle('hidden', x !== id);
+      });
+    };
+    var formMsg = function (text) {
+      var el = document.getElementById('formMsg');
+      el.textContent = text; el.classList.remove('hidden');
+    };
+
+    // If Supabase redirected here with an error in the hash (expired/used link), show that.
+    var hash = new URLSearchParams((window.location.hash || '').replace(/^#/, ''));
+    if (hash.get('error')) { show('expired'); }
+
+    var client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      auth: { detectSessionInUrl: true, flowType: 'implicit', persistSession: false }
+    });
+
+    var ready = false;
+    // The recovery token in the URL establishes a temporary, user-scoped session.
+    client.auth.onAuthStateChange(function (event, session) {
+      if (ready) return;
+      if (event === 'PASSWORD_RECOVERY' || (event === 'SIGNED_IN' && session)) {
+        ready = true; show('form');
+      }
+    });
+
+    // Fallback: if no recovery session appeared shortly after load, the link is invalid/expired.
+    setTimeout(function () {
+      if (!ready && !hash.get('error')) {
+        client.auth.getSession().then(function (res) {
+          if (res.data && res.data.session) { ready = true; show('form'); }
+          else { show('expired'); }
+        });
+      }
+    }, 1500);
+
+    document.getElementById('submit').addEventListener('click', async function () {
+      var pw = document.getElementById('pw').value;
+      var pw2 = document.getElementById('pw2').value;
+      document.getElementById('formMsg').classList.add('hidden');
+      if (pw.length < 8) { formMsg('Password must be at least 8 characters.'); return; }
+      if (pw !== pw2) { formMsg('Passwords do not match.'); return; }
+      var btn = document.getElementById('submit');
+      btn.disabled = true; btn.textContent = 'Updating…';
+      var res = await client.auth.updateUser({ password: pw });
+      if (res.error) {
+        formMsg(res.error.message || 'Could not update password. The link may have expired.');
+        btn.disabled = false; btn.textContent = 'Update password';
+        return;
+      }
+      // Don't leave a lingering session on this shared web page.
+      try { await client.auth.signOut(); } catch (e) {}
+      show('success');
+    });
+  </script>
+</body>
+</html>
