@@ -5,6 +5,7 @@
 // Deploy: supabase functions deploy delete-account
 
 import { createClient } from 'npm:@supabase/supabase-js@2'
+import Stripe from 'npm:stripe@14'
 
 // ── Clients ───────────────────────────────────────────────────────────────────
 
@@ -13,6 +14,10 @@ const db = createClient(
   Deno.env.get('SUPABASE_URL')!,
   Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
 )
+
+// Stripe — to cancel the subscription before the DB row (and its id) is deleted.
+// The secret is project-wide (already set for the stripe-payment function).
+const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY')!, { apiVersion: '2024-06-20' })
 
 // ── CORS ──────────────────────────────────────────────────────────────────────
 
@@ -77,6 +82,31 @@ async function deleteAccount(me: string) {
 
   const { data: provRows } = await db.from('providers').select('id').eq('user_id', me)
   const providerIds: string[] = (provRows ?? []).map((r: any) => r.id)
+
+  // ── Stop billing on Stripe BEFORE the DB cascade discards the subscription id ──
+  // Cancel the subscription immediately (the account is being erased). KEEP the Stripe
+  // customer + invoices (legal/tax retention). Erasure must not be blocked by a Stripe
+  // failure (GDPR) — but a real failure is flagged, never silently swallowed.
+  const { data: subRow } = await db.from('subscriptions')
+    .select('stripe_subscription_id, stripe_customer_id').eq('user_id', me).maybeSingle()
+  if (subRow?.stripe_subscription_id) {
+    try {
+      await stripe.subscriptions.cancel(subRow.stripe_subscription_id)
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      // Already gone on Stripe's side = success. Any other error → flag the orphan so
+      // billing can be stopped manually, then continue erasing.
+      if (!/no such subscription|already canceled|resource_missing/i.test(msg)) {
+        errors['stripe_cancel'] = msg
+        await db.from('admin_audit_log').insert({
+          action: 'billing_orphan_on_delete',
+          admin_id: null,
+          target_user_id: null,   // NULL — avoids re-adding the NO-ACTION FK cleared below; id lives in details
+          details: { user_id: me, stripe_subscription_id: subRow.stripe_subscription_id, stripe_customer_id: subRow.stripe_customer_id, error: msg },
+        })
+      }
+    }
+  }
 
   // sessions has BOTH model_id and model_user_id (both hold the model's user id) —
   // resolve via both plus provider_id so no session is missed.

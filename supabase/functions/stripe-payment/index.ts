@@ -76,6 +76,8 @@ Deno.serve(async (req) => {
         return await confirmVerification(userId, body.paymentIntentId)
       case 'confirm_subscription':
         return await confirmSubscription(userId, body.subscriptionId, body.customerId)
+      case 'cancel_subscription':
+        return await cancelSubscription(userId)
       default:
         return respond({ error: `Unknown action: ${body.action}` }, 400)
     }
@@ -219,6 +221,40 @@ async function confirmVerification(userId: string, paymentIntentId: string) {
   }
 
   return respond({ success: true })
+}
+
+// ── cancel_subscription ───────────────────────────────────────────────────────
+// Cancels the user's subscription AT PERIOD END on Stripe (they keep access until
+// then), and records it. Actually calls Stripe — never just a local flag.
+
+async function cancelSubscription(userId: string) {
+  const { data: row } = await db
+    .from('subscriptions')
+    .select('stripe_subscription_id, status, current_period_end')
+    .eq('user_id', userId)
+    .maybeSingle()
+
+  if (!row?.stripe_subscription_id) return respond({ error: 'No subscription to cancel' }, 404)
+  // Idempotent: already scheduled to cancel → report success with the same end date.
+  if (row.status === 'canceling') return respond({ success: true, cancelsAt: row.current_period_end })
+
+  // Real Stripe call — cancel at period end so they keep what they paid for.
+  await stripe.subscriptions.update(row.stripe_subscription_id, { cancel_at_period_end: true })
+
+  // Reflect it in BOTH sources of truth: the gate reads subscriptions.status; the
+  // Settings panel reads users.subscription_status.
+  const [{ error: subErr }, { error: userErr }] = await Promise.all([
+    db.from('subscriptions').update({ status: 'canceling' }).eq('user_id', userId),
+    db.from('users')
+      .update({ subscription_status: 'canceling', subscription_next_billing: row.current_period_end })
+      .eq('id', userId),
+  ])
+  if (subErr || userErr) {
+    console.error('[stripe-payment] cancel_subscription db write failed', { subErr, userErr })
+    return respond({ success: false, error: (subErr || userErr)!.message }, 500)
+  }
+
+  return respond({ success: true, cancelsAt: row.current_period_end })
 }
 
 // ── confirm_subscription ──────────────────────────────────────────────────────

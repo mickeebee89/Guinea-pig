@@ -12,16 +12,24 @@ export async function isIdentityVerified(userId: string): Promise<boolean> {
   return !!(data as any)?.is_verified
 }
 
-// Active £4.99/mo subscription (subscriptions.status = 'active').
+// Active £4.99/mo subscription. Grants access while 'active', or while 'canceling'
+// (cancel-at-period-end) up to current_period_end — so a cancelled user keeps what
+// they paid for and access lapses at period end (date-driven; there is no webhook).
 export async function hasActiveSubscription(userId: string): Promise<boolean> {
   const { data, error } = await supabase
     .from('subscriptions')
-    .select('status')
+    .select('status, current_period_end')
     .eq('user_id', userId)
-    .eq('status', 'active')
     .maybeSingle()
   if (error) throw error
-  return !!data
+  if (!data) return false
+  const status = (data as any).status as string
+  if (status === 'active') return true
+  if (status === 'canceling') {
+    const end = (data as any).current_period_end
+    return !!end && new Date(end) > new Date()
+  }
+  return false
 }
 
 // Apply gate: a model may apply ONLY with BOTH an active subscription AND identity

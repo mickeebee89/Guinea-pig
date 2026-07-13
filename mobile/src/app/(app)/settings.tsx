@@ -92,9 +92,11 @@ function editPlaceholder(f: EditField): string {
 
 function subscriptionLabel(status: string | null | undefined) {
   switch (status) {
-    case 'premium': return { text: '✨ Premium', color: Colors.roseDark }
-    case 'pro':     return { text: '🌟 Pro',     color: Colors.rose     }
-    default:        return { text: 'Free Plan',  color: Colors.muted    }
+    case 'premium':   return { text: '✨ Premium',  color: Colors.roseDark }
+    case 'pro':       return { text: '🌟 Pro',      color: Colors.rose     }
+    case 'active':    return { text: '✨ Premium',  color: Colors.roseDark }
+    case 'canceling': return { text: 'Cancelling',  color: Colors.muted    }
+    default:          return { text: 'Free Plan',   color: Colors.muted    }
   }
 }
 
@@ -477,15 +479,20 @@ export default function SettingsScreen() {
           text: 'Cancel subscription',
           style: 'destructive',
           onPress: async () => {
-            try {
-              await supabase.from('users').update({
-                subscription_status: 'free', subscription_next_billing: null,
-              }).eq('id', userId)
-              setUserData(p => p ? { ...p, subscription_status: 'free', subscription_next_billing: null } : p)
-              await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
-            } catch {
-              Alert.alert('Error', 'Could not cancel subscription. Contact support.')
+            // Real cancellation: the edge fn calls Stripe (cancel_at_period_end) and
+            // updates the DB. Only reflect it locally if the call actually succeeds —
+            // never flip to "cancelled" on a silent failure.
+            const { data, error } = await supabase.functions.invoke('stripe-payment', {
+              body: { action: 'cancel_subscription' },
+            })
+            if (error || (data as { success?: boolean } | null)?.success === false) {
+              await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)
+              Alert.alert('Couldn\'t cancel', 'Please try again, or contact support if it keeps happening.')
+              return
             }
+            const cancelsAt = (data as { cancelsAt?: string } | null)?.cancelsAt ?? null
+            setUserData(p => p ? { ...p, subscription_status: 'canceling', subscription_next_billing: cancelsAt } : p)
+            await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
           },
         },
       ]
@@ -602,8 +609,9 @@ export default function SettingsScreen() {
   const isProvider = dbRole === 'provider' || dbRole === 'both'
   const isModel    = dbRole === 'model'    || dbRole === 'both'
   const isBoth     = dbRole === 'both'
-  const isPaid     = !!userData?.subscription_status && userData.subscription_status !== 'free'
-  const sub        = subscriptionLabel(userData?.subscription_status)
+  const isPaid      = !!userData?.subscription_status && userData.subscription_status !== 'free'
+  const isCanceling = userData?.subscription_status === 'canceling'
+  const sub         = subscriptionLabel(userData?.subscription_status)
 
   const displayName = userData
     ? `${userData.first_name}${userData.last_initial ? ` ${userData.last_initial}.` : ''}`
@@ -729,11 +737,18 @@ export default function SettingsScreen() {
                   <Text style={[rowSt.value, { color: sub.color, fontWeight: '700' }]}>{sub.text}</Text>
                 }
               />
-              {isPaid && userData?.subscription_next_billing && (
+              {isPaid && !isCanceling && userData?.subscription_next_billing && (
                 <Row
                   icon="time-outline"
                   label="Next billing"
                   value={formatBillingDate(userData.subscription_next_billing)}
+                />
+              )}
+              {isCanceling && (
+                <Row
+                  icon="time-outline"
+                  label="Ends on"
+                  value={formatBillingDate(userData?.subscription_next_billing)}
                 />
               )}
               {!isPaid && (
@@ -748,7 +763,7 @@ export default function SettingsScreen() {
                   }
                 />
               )}
-              {isPaid && (
+              {isPaid && !isCanceling && (
                 <Row
                   icon="close-circle-outline"
                   label="Cancel subscription"
@@ -757,7 +772,7 @@ export default function SettingsScreen() {
                   last
                 />
               )}
-              {!isPaid && <View style={{ height: 1 }} />}
+              {(!isPaid || isCanceling) && <View style={{ height: 1 }} />}
             </View>
           </>
         )}
