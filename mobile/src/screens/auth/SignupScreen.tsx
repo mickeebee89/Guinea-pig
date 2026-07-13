@@ -103,7 +103,13 @@ export default function SignupScreen({ role, onBack, onGoLogin, onNeedConfirmati
       // Persist name into user_metadata too, so a later login self-heal of a
       // half-created account can recreate the users row with the real name
       // instead of a placeholder.
-      options: { data: { role, first_name: cleanFirst, last_name: cleanLast, last_initial: cleanInitial, age_confirmed: true, terms_accepted: true } },
+      // emailRedirectTo: where the confirmation link lands (must be in Supabase
+      // Redirect URLs). Confirmation completes server-side; this is a friendly
+      // landing. Only used when email confirmation is enabled in Supabase.
+      options: {
+        emailRedirectTo: 'https://guineapigapp.co.uk/auth/confirmed',
+        data: { role, first_name: cleanFirst, last_name: cleanLast, last_initial: cleanInitial, age_confirmed: true, terms_accepted: true },
+      },
     })
 
     if (error) {
