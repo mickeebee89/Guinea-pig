@@ -21,7 +21,7 @@ import { Colors, Fonts, Radius, Shadow } from '@/constants/Colors'
 import { useAuth } from '@/context/auth'
 import { supabase } from '@/lib/supabase'
 
-type Step = 'loading' | 'instructions' | 'camera' | 'uploading' | 'submitted' | 'confirming' | 'success' | 'rejected'
+type Step = 'loading' | 'instructions' | 'camera' | 'uploading' | 'submitted' | 'confirming' | 'confirm-failed' | 'success' | 'rejected'
 
 export default function VerifyPaymentScreen() {
   const router  = useRouter()
@@ -41,6 +41,7 @@ export default function VerifyPaymentScreen() {
   const [paymentLoading, setPaymentLoading] = useState(false)
   const [hasPaid,        setHasPaid]        = useState(false)   // provider paid (pay-first)
   const [feeOnly,        setFeeOnly]        = useState(false)   // already identity-verified provider who only owes the £14.99 fee (skip selfie)
+  const [pendingIntentId, setPendingIntentId] = useState<string | null>(null)   // set when a charge succeeded but recording it failed → Retry target
   const [favourited,     setFavourited]     = useState(false)   // added this provider to favourites
   const [favLoading,     setFavLoading]     = useState(false)
 
@@ -227,10 +228,10 @@ export default function VerifyPaymentScreen() {
         'stripe-payment',
         { body: { action: 'create_verification_intent' } },
       )
-      if (fnErr || !intentData?.clientSecret) {
+      if (fnErr || !intentData?.clientSecret || !intentData?.paymentIntentId) {
         throw new Error(fnErr?.message ?? 'Could not start payment. Please try again.')
       }
-      const paymentIntentId = intentData.paymentIntentId as string | undefined
+      const paymentIntentId = intentData.paymentIntentId as string
 
       const { error: initErr } = await initPaymentSheet({
         merchantDisplayName:        'Guinea Pig',
@@ -252,27 +253,41 @@ export default function VerifyPaymentScreen() {
         throw new Error(presentErr.message)
       }
 
-      setStep('confirming')
-      // Record the payment (record-only — does NOT verify; unlock is via admin approval).
-      await supabase.functions.invoke('stripe-payment', {
-        body: { action: 'confirm_verification', userId, paymentIntentId },
-      })
-
-      setHasPaid(true)
-      if (feeOnly) {
-        // Already identity-verified — the fee was the only outstanding step, so they're
-        // done: no selfie, no admin re-approval. Returning to the dashboard enables the
-        // shop toggle (its focus re-sync re-derives fee-settled).
-        setStep('success')
-      } else {
-        // Pay-first: payment done → now take the verification photo. No is_verified here,
-        // no jump to success — verification/unlock happens when the admin approves.
-        setStep('camera')
-      }
+      // Payment has ALREADY succeeded on Stripe here. Recording it must not silently
+      // fail — if it does we hold on a retry screen (never advance, never re-charge).
+      await finalisePayment(paymentIntentId)
     } catch (err: any) {
       setPaymentLoading(false)
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)
       Alert.alert('Payment failed', err.message ?? 'Please try a different card or contact support.')
+    }
+  }
+
+  // Records a SUCCEEDED payment via the edge fn and only then advances. If recording
+  // fails (network / server), the money is already taken, so we DON'T re-charge or
+  // advance — we surface a Retry that re-runs this same confirm for the same intent.
+  const finalisePayment = async (intentId: string) => {
+    setStep('confirming')
+    const { data, error } = await supabase.functions.invoke('stripe-payment', {
+      body: { action: 'confirm_verification', paymentIntentId: intentId },
+    })
+    if (error || (data as { success?: boolean } | null)?.success === false) {
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)
+      setPendingIntentId(intentId)
+      setStep('confirm-failed')
+      return
+    }
+    setPendingIntentId(null)
+    setHasPaid(true)
+    if (feeOnly) {
+      // Already identity-verified — the fee was the only outstanding step, so they're
+      // done: no selfie, no admin re-approval. Returning to the dashboard enables the
+      // shop toggle (its focus re-sync re-derives fee-settled).
+      setStep('success')
+    } else {
+      // Pay-first: payment recorded → now take the verification photo. No is_verified
+      // here — verification/unlock happens when the admin approves.
+      setStep('camera')
     }
   }
 
@@ -465,7 +480,29 @@ export default function VerifyPaymentScreen() {
       {step === 'confirming' && (
         <View style={styles.centred}>
           <ActivityIndicator color={Colors.roseDark} size="large" />
-          <Text style={styles.centredTitle}>Payment received — now take your selfie…</Text>
+          <Text style={styles.centredTitle}>Payment received — finalising…</Text>
+        </View>
+      )}
+
+      {/* ── CONFIRM FAILED (paid, but recording failed) ── */}
+      {step === 'confirm-failed' && (
+        <View style={styles.centred}>
+          <View style={[styles.bigIcon, { backgroundColor: Colors.softPink + '50', width: 100, height: 100, borderRadius: 50 }]}>
+            <Ionicons name="time-outline" size={52} color={Colors.roseDark} />
+          </View>
+          <Text style={styles.centredTitle}>Payment received</Text>
+          <Text style={styles.centredSub}>
+            We&apos;ve taken your payment but couldn&apos;t finish setting up your verification. Tap retry — you won&apos;t be charged again.
+          </Text>
+          <TouchableOpacity
+            style={styles.primaryBtn}
+            onPress={() => { if (pendingIntentId) finalisePayment(pendingIntentId) }}
+            activeOpacity={0.9}
+          >
+            <Ionicons name="refresh" size={20} color={Colors.white} />
+            <Text style={styles.primaryBtnText}>Retry</Text>
+          </TouchableOpacity>
+          <Text style={styles.legalNote}>If this keeps happening, contact support@guineapigapp.co.uk — your payment is safe.</Text>
         </View>
       )}
 

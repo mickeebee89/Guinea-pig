@@ -200,13 +200,23 @@ async function confirmVerification(userId: string, paymentIntentId: string) {
 
   // Record the payment ONLY. Do not set is_verified and do not mark the attempt
   // passed — verification/unlock is granted by admin approval, not by paying.
-  await db.from('verification_payments')
+  // Column names MUST match the live table: stripe_payment_id / currency_code.
+  const { error: insertErr } = await db.from('verification_payments')
     .insert({
-      user_id:                  userId,
-      stripe_payment_intent_id: paymentIntentId,
-      amount:                   intent.amount,
-      currency:                 intent.currency,
+      user_id:           userId,
+      stripe_payment_id: paymentIntentId,
+      amount:            intent.amount,
+      currency_code:     (intent.currency ?? 'gbp').toUpperCase(),
     })
+
+  // 23505 = this intent is already recorded (idempotent retry) → benign success.
+  // Any other error means the payment was NOT recorded — surface it (never report
+  // success on a failed write) so the client can retry instead of silently locking
+  // out a user who was charged.
+  if (insertErr && (insertErr as { code?: string }).code !== '23505') {
+    console.error('[stripe-payment] confirm_verification insert failed', insertErr)
+    return respond({ success: false, error: insertErr.message }, 500)
+  }
 
   return respond({ success: true })
 }
