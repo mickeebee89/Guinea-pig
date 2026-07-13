@@ -479,7 +479,7 @@ export default function ApplySessionScreen() {
       if (providerUserId && sessionData) {
         const notifPayload = {
           user_id:    providerUserId,
-          type:       'session_application',
+          type:       'session_applied',
           title:      'New treatment application',
           body:       `A model has applied for ${selectedTreatment?.name ?? 'a treatment'} on ${formatDateShort(selectedDate)} at ${selectedSlot.start_time}`,
           // session_id must be TOP-LEVEL so tap/deep-link + the Leave-review CTA can read
@@ -489,7 +489,7 @@ export default function ApplySessionScreen() {
           data:       { provider_id: providerId },
         }
         const { error: notifErr } = await supabase.from('notifications').insert(notifPayload)
-        if (notifErr) console.error('session_application notification insert failed:', notifErr)
+        if (notifErr) console.error('session_applied notification insert failed:', notifErr)
         consentErr = notifErr
       }
       if (sessionErr) throw sessionErr
