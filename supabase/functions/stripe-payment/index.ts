@@ -78,6 +78,8 @@ Deno.serve(async (req) => {
         return await confirmSubscription(userId, body.subscriptionId, body.customerId)
       case 'cancel_subscription':
         return await cancelSubscription(userId)
+      case 'revenue_summary':
+        return await revenueSummary(userId)
       default:
         return respond({ error: `Unknown action: ${body.action}` }, 400)
     }
@@ -320,4 +322,54 @@ async function confirmSubscription(
   if (subErr || userErr) return respond({ success: false, userErr, subErr })
 
   return respond({ success: true, periodEnd })
+}
+
+// ── revenue_summary ───────────────────────────────────────────────────────────
+// ADMIN ONLY. Computes ACTUAL collected revenue straight from Stripe (the source
+// of truth) — every succeeded charge, net of refunds, split into subscription vs
+// one-off verification. Our DB tables are summaries (one sub row per user; rows
+// only for recorded verifications) and cannot equal the Stripe transaction list,
+// so revenue is read from Stripe directly.
+
+async function revenueSummary(userId: string) {
+  // Gate to admins (admin status lives in the `admins` table).
+  const { data: adminRow } = await db.from('admins').select('user_id').eq('user_id', userId).maybeSingle()
+  if (!adminRow) return respond({ error: 'Forbidden' }, 403)
+
+  const now        = new Date()
+  const dayStart   = Math.floor(new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() / 1000)
+  const weekStart  = Math.floor((now.getTime() - 7 * 864e5) / 1000)
+  const monthStart = Math.floor(new Date(now.getFullYear(), now.getMonth(), 1).getTime() / 1000)
+
+  const blank = () => ({ count: 0, today: 0, week: 0, month: 0, allTime: 0 })
+  const verifications = blank()
+  const subscriptions = blank()
+  const recent: { type: string; amountPence: number; created: number; email: string | null }[] = []
+
+  // Page through every charge (newest first). Guard caps the loop far above any real volume.
+  let startingAfter: string | undefined
+  for (let guard = 0; guard < 100; guard++) {
+    const page = await stripe.charges.list({ limit: 100, ...(startingAfter ? { starting_after: startingAfter } : {}) })
+    for (const c of page.data) {
+      if (c.status !== 'succeeded') continue
+      const net = c.amount - (c.amount_refunded ?? 0)   // refunds reduce the total
+      if (net <= 0) continue
+      // Subscription charges belong to an invoice; one-off verification PaymentIntents don't.
+      const isSub  = !!c.invoice
+      const bucket = isSub ? subscriptions : verifications
+      bucket.count   += 1
+      bucket.allTime += net
+      if (c.created >= monthStart) bucket.month += net
+      if (c.created >= weekStart)  bucket.week  += net
+      if (c.created >= dayStart)   bucket.today += net
+      if (recent.length < 50) {
+        recent.push({ type: isSub ? 'subscription' : 'verification', amountPence: net, created: c.created, email: c.billing_details?.email ?? c.receipt_email ?? null })
+      }
+    }
+    if (!page.has_more) break
+    startingAfter = page.data[page.data.length - 1]?.id
+    if (!startingAfter) break
+  }
+
+  return respond({ verifications, subscriptions, recent })
 }

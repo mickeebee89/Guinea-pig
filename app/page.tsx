@@ -41,10 +41,7 @@ export default function Dashboard() {
   useEffect(() => {
     async function load() {
       const now = new Date()
-      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString()
-      const weekStart  = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7).toISOString()
-      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
-      const last7      = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString()
+      const last7 = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString()
 
       const [
         { count: openReports },
@@ -55,9 +52,6 @@ export default function Dashboard() {
         { count: fraudFlagged },
         { data: failedAll },
         { data: failedRecent },
-        { data: revToday },
-        { data: revWeek },
-        { data: revMonth },
       ] = await Promise.all([
         supabase.from('reports').select('*', { count: 'exact', head: true }).eq('status', 'open'),
         supabase.from('users').select('*', { count: 'exact', head: true }),
@@ -67,13 +61,13 @@ export default function Dashboard() {
         supabase.from('users').select('*', { count: 'exact', head: true }).eq('fraud_flagged', true),
         supabase.from('verification_payments').select('amount').in('selfie_status', ['failed', 'locked']),
         supabase.from('verification_payments').select('amount').in('selfie_status', ['failed', 'locked']).gte('created_at', last7),
-        supabase.from('verification_payments').select('amount').gte('created_at', todayStart),
-        supabase.from('verification_payments').select('amount').gte('created_at', weekStart),
-        supabase.from('verification_payments').select('amount').gte('created_at', monthStart),
       ])
 
-      const sumPence = (rows: { amount: number }[] | null) =>
-        (rows ?? []).reduce((a, r) => a + r.amount, 0)
+      // Revenue from Stripe (source of truth) so the dashboard matches Stripe + the Revenue page.
+      const { data: summary } = await supabase.functions.invoke('stripe-payment', {
+        body: { action: 'revenue_summary' },
+      })
+      const v = (summary?.verifications ?? { today: 0, week: 0, month: 0 }) as { today: number; week: number; month: number }
 
       setStats({
         openReports:         openReports ?? 0,
@@ -84,9 +78,9 @@ export default function Dashboard() {
         failedVerifications: (failedAll ?? []).length,
         failedLast7Days:     (failedRecent ?? []).length,
         fraudFlagged:        fraudFlagged ?? 0,
-        revenueToday:        sumPence(revToday),
-        revenueWeek:         sumPence(revWeek),
-        revenueMonth:        sumPence(revMonth),
+        revenueToday:        v.today,
+        revenueWeek:         v.week,
+        revenueMonth:        v.month,
       })
     }
     load()
