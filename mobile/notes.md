@@ -2,7 +2,7 @@
 
 Quick current-state snapshot of the mobile app. Durable stack/schema lives in `CLAUDE.md`; blow-by-blow session history lives in `guinea-pig-handover.md`. This is the "where is the app right now" reference.
 
-_Anchored to latest commit `0db4cf4`._
+_Anchored to latest commit `5f21c20`._
 
 ---
 
@@ -65,7 +65,7 @@ Verification queue, Reports, Moderation, Users (with **Free access / waive-fee**
 ---
 
 ## Recent changes (latest first)
-- **Cancel bug root cause + cleanup** — the cancel wrote `subscription_status='canceling'`, but `users.subscription_status` has a **CHECK constraint** that rejected it → the DB write failed (Stripe was already cancelled, so it looked half-done). Fixed by allowing the value; then standardised on **British `'cancelling'`** across code + DB, and replaced the app's stale `'free'` checks with the real values (`'none'`, `isPaid = active/trialling/cancelling`). Verified end-to-end (app shows "Ends on {date}", Stripe cancels at period end, DB persists `'cancelling'`).
+- **`5f21c20` — Cancel bug root cause + cleanup (DONE + VERIFIED).** The cancel wrote `subscription_status='canceling'`, but `users.subscription_status` has a **CHECK constraint** that rejected it → the DB write failed (Stripe was already cancelled, so it looked half-done). Fixed by allowing the value; then standardised on **British `'cancelling'`** across code + DB, and replaced the app's stale `'free'` checks with the real values (`'none'`, `isPaid = active/trialling/cancelling`). Constraint migration applied in the live DB (`['none','trialling','active','cancelled','cancelling']`). **Verified on device + Stripe:** app shows "Ends on {date}", Stripe cancels at period end, DB persists `'cancelling'`.
 - **`0db4cf4`** — **Subscription cancel + account delete now actually stop Stripe billing** (were local-flag-only / no-op). New `cancel_subscription` edge action (`cancel_at_period_end`, `status='canceling'`, access until period end); `delete-account` cancels the Stripe sub before the cascade, keeps the customer, logs an orphan to `admin_audit_log` on failure.
 - **`154fbcf`** — **Fixed the £14.99 verification payment not recording.** `confirm_verification` inserted two non-existent columns (`stripe_payment_intent_id`/`currency`) and swallowed the error → charge succeeded, no row, payer locked out. Now uses `stripe_payment_id`/`currency_code`, captures the error, and the client shows a Retry screen instead of a false success.
 - **`cc111dd`** — Fixed model→stylist application notification type (`session_application` → `session_applied`) so the stylist's "New application" push is tappable and routes to the dashboard.
