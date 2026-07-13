@@ -67,9 +67,9 @@ export default function Dashboard() {
         supabase.from('users').select('*', { count: 'exact', head: true }).eq('fraud_flagged', true),
         supabase.from('verification_payments').select('amount').in('selfie_status', ['failed', 'locked']),
         supabase.from('verification_payments').select('amount').in('selfie_status', ['failed', 'locked']).gte('created_at', last7),
-        supabase.from('verification_payments').select('amount').eq('selfie_status', 'passed').gte('created_at', todayStart),
-        supabase.from('verification_payments').select('amount').eq('selfie_status', 'passed').gte('created_at', weekStart),
-        supabase.from('verification_payments').select('amount').eq('selfie_status', 'passed').gte('created_at', monthStart),
+        supabase.from('verification_payments').select('amount').gte('created_at', todayStart),
+        supabase.from('verification_payments').select('amount').gte('created_at', weekStart),
+        supabase.from('verification_payments').select('amount').gte('created_at', monthStart),
       ])
 
       const sumPence = (rows: { amount: number }[] | null) =>

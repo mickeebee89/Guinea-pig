@@ -92,6 +92,12 @@ Deno.serve(async (req) => {
 // Creates a one-off PaymentIntent for £14.99 verification fee.
 
 async function createVerificationIntent(userId: string) {
+  // Dedupe: if this user already paid, never issue a second PaymentIntent — prevents a
+  // stale/looping client from double-charging. The client treats this as "already paid".
+  const { data: existingPay } = await db.from('verification_payments')
+    .select('id').eq('user_id', userId).limit(1).maybeSingle()
+  if (existingPay) return respond({ alreadyPaid: true })
+
   const intent = await stripe.paymentIntents.create({
     amount:   1499,   // £14.99 in pence
     currency: 'gbp',
@@ -277,6 +283,12 @@ async function confirmSubscription(
   const periodStart = new Date(sub.current_period_start * 1000).toISOString()
   const periodEnd   = new Date(sub.current_period_end   * 1000).toISOString()
 
+  // Capture the real billed amount so the Revenue report can total subscriptions
+  // (previously left null → subscription revenue always showed £0).
+  const price       = sub.items?.data?.[0]?.price
+  const amountPence  = price?.unit_amount ?? 499
+  const currencyCode = (price?.currency ?? 'gbp').toUpperCase()
+
   const [{ error: userErr }, { error: subErr }] = await Promise.all([
     // Update users table
     db.from('users')
@@ -296,6 +308,9 @@ async function confirmSubscription(
           status:                 'active',
           current_period_start:   periodStart,
           current_period_end:     periodEnd,
+          amount_pence:           amountPence,
+          currency_code:          currencyCode,
+          plan:                   'monthly',
         },
         { onConflict: 'user_id' },
       ),

@@ -76,8 +76,10 @@ export default function RevenuePage() {
       setVerif(vRows)
       setSubs(sRows)
 
+      // Revenue = ALL recorded verification payments (the £14.99 is charged pay-first,
+      // before the selfie/approval, and isn't auto-refunded) — not just 'passed' ones.
       const sum = (rows: VerifTx[], since?: string) =>
-        rows.filter(r => r.selfie_status === 'passed' && (!since || r.created_at >= since))
+        rows.filter(r => !since || r.created_at >= since)
             .reduce((a, r) => a + r.amount, 0)
       const sumS = (rows: SubTx[], since?: string) =>
         rows.filter(r => !since || r.created_at >= since).reduce((a, r) => a + r.amount_pence, 0)

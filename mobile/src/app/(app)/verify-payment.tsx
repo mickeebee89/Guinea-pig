@@ -228,6 +228,13 @@ export default function VerifyPaymentScreen() {
         'stripe-payment',
         { body: { action: 'create_verification_intent' } },
       )
+      // Server says this user already paid → don't charge again; move straight on.
+      if ((intentData as { alreadyPaid?: boolean } | null)?.alreadyPaid) {
+        setPaymentLoading(false)
+        setHasPaid(true)
+        setStep(feeOnly ? 'success' : 'camera')
+        return
+      }
       if (fnErr || !intentData?.clientSecret || !intentData?.paymentIntentId) {
         throw new Error(fnErr?.message ?? 'Could not start payment. Please try again.')
       }
