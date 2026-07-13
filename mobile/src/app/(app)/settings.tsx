@@ -94,9 +94,10 @@ function subscriptionLabel(status: string | null | undefined) {
   switch (status) {
     case 'premium':   return { text: '✨ Premium',  color: Colors.roseDark }
     case 'pro':       return { text: '🌟 Pro',      color: Colors.rose     }
-    case 'active':    return { text: '✨ Premium',  color: Colors.roseDark }
-    case 'canceling': return { text: 'Cancelling',  color: Colors.muted    }
-    default:          return { text: 'Free Plan',   color: Colors.muted    }
+    case 'active':     return { text: '✨ Premium',  color: Colors.roseDark }
+    case 'trialling':  return { text: '✨ Premium (trial)', color: Colors.roseDark }
+    case 'cancelling': return { text: 'Cancelling',  color: Colors.muted    }
+    default:           return { text: 'Free Plan',   color: Colors.muted    }   // none / cancelled / null
   }
 }
 
@@ -491,7 +492,7 @@ export default function SettingsScreen() {
               return
             }
             const cancelsAt = (data as { cancelsAt?: string } | null)?.cancelsAt ?? null
-            setUserData(p => p ? { ...p, subscription_status: 'canceling', subscription_next_billing: cancelsAt } : p)
+            setUserData(p => p ? { ...p, subscription_status: 'cancelling', subscription_next_billing: cancelsAt } : p)
             await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
           },
         },
@@ -609,8 +610,10 @@ export default function SettingsScreen() {
   const isProvider = dbRole === 'provider' || dbRole === 'both'
   const isModel    = dbRole === 'model'    || dbRole === 'both'
   const isBoth     = dbRole === 'both'
-  const isPaid      = !!userData?.subscription_status && userData.subscription_status !== 'free'
-  const isCanceling = userData?.subscription_status === 'canceling'
+  // Has an active-ish plan (grants access): active, trialling, or cancelling-at-period-end.
+  // 'none'/'cancelled'/null = no plan → show Upgrade. (DB never uses 'free'.)
+  const isPaid      = ['active', 'trialling', 'cancelling'].includes(userData?.subscription_status ?? '')
+  const isCanceling = userData?.subscription_status === 'cancelling'
   const sub         = subscriptionLabel(userData?.subscription_status)
 
   const displayName = userData

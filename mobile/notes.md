@@ -47,7 +47,8 @@ _Anchored to latest commit `0db4cf4`._
 
 ### Payments / billing (Stripe — TEST mode)
 - **£14.99 provider fee** + **£4.99/mo model sub** via the `stripe-payment` edge fn (pay-first for providers). Successful payments are recorded server-side (`verification_payments` / `subscriptions`) with **errors surfaced** — the client never reports success on a failed write (a failed record shows a Retry screen; the money is never re-charged).
-- **Cancel subscription = end-of-period:** calls Stripe `cancel_at_period_end`, sets `subscriptions.status='canceling'`; access continues until `current_period_end`, then the apply gate blocks. Settings shows "Ends on {date}".
+- **Cancel subscription = end-of-period:** calls Stripe `cancel_at_period_end`, sets `subscriptions.status` + `users.subscription_status='cancelling'`; access continues until `current_period_end`, then the apply gate blocks. Settings shows "Ends on {date}".
+- **`users.subscription_status` is CHECK-constrained** to `['none','trialling','active','cancelled','cancelling']` (British spelling). `'none'` = no sub (NOT `'free'`). Writing a value outside this set fails — that's what silently broke the first cancel attempt (wrote `'canceling'`).
 - **No Stripe webhook handler exists** — state is reconciled at write time and cancellation expiry is **date-driven** (`hasActiveSubscription` checks `current_period_end` for canceling subs).
 - Failed Stripe cancel during account delete → logged to `admin_audit_log` (`billing_orphan_on_delete`); erasure still proceeds.
 
@@ -64,6 +65,7 @@ Verification queue, Reports, Moderation, Users (with **Free access / waive-fee**
 ---
 
 ## Recent changes (latest first)
+- **Cancel bug root cause + cleanup** — the cancel wrote `subscription_status='canceling'`, but `users.subscription_status` has a **CHECK constraint** that rejected it → the DB write failed (Stripe was already cancelled, so it looked half-done). Fixed by allowing the value; then standardised on **British `'cancelling'`** across code + DB, and replaced the app's stale `'free'` checks with the real values (`'none'`, `isPaid = active/trialling/cancelling`). Verified end-to-end (app shows "Ends on {date}", Stripe cancels at period end, DB persists `'cancelling'`).
 - **`0db4cf4`** — **Subscription cancel + account delete now actually stop Stripe billing** (were local-flag-only / no-op). New `cancel_subscription` edge action (`cancel_at_period_end`, `status='canceling'`, access until period end); `delete-account` cancels the Stripe sub before the cascade, keeps the customer, logs an orphan to `admin_audit_log` on failure.
 - **`154fbcf`** — **Fixed the £14.99 verification payment not recording.** `confirm_verification` inserted two non-existent columns (`stripe_payment_intent_id`/`currency`) and swallowed the error → charge succeeded, no row, payer locked out. Now uses `stripe_payment_id`/`currency_code`, captures the error, and the client shows a Retry screen instead of a false success.
 - **`cc111dd`** — Fixed model→stylist application notification type (`session_application` → `session_applied`) so the stylist's "New application" push is tappable and routes to the dashboard.
@@ -93,6 +95,13 @@ Verification queue, Reports, Moderation, Users (with **Free access / waive-fee**
 - Production build tested on a 2nd physical device.
 
 ---
+
+## Live DB changes (applied directly in Supabase — NOT versioned in the repo)
+There are no migration files; schema changes are run by hand in the SQL editor. Recent ones to be aware of:
+- `users.provider_fee_waived boolean not null default false` (admin free-access for the £14.99 gate) + backfill of existing verified-unpaid providers.
+- `users.last_name text` (private full surname) + `handle_new_auth_user` trigger updated to populate it.
+- `users.subscription_status` CHECK constraint standardised to `['none','trialling','active','cancelled','cancelling']`.
+- `verification_payments` real columns are `stripe_payment_id` + `currency_code` (the edge fn was fixed to match).
 
 ## Testing quick-reference
 - **No new APK for JS changes** — the installed **dev build** hot-loads JS via Metro. Reload with `npx expo start -c --dev-client` (the `-c` avoids stale bundles). Both phones need the dev client installed (same APK). A new EAS build is only needed for native changes.

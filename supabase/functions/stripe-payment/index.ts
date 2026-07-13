@@ -236,7 +236,7 @@ async function cancelSubscription(userId: string) {
 
   if (!row?.stripe_subscription_id) return respond({ error: 'No subscription to cancel' }, 404)
   // Idempotent: already scheduled to cancel → report success with the same end date.
-  if (row.status === 'canceling') return respond({ success: true, cancelsAt: row.current_period_end })
+  if (row.status === 'cancelling') return respond({ success: true, cancelsAt: row.current_period_end })
 
   // Real Stripe call — cancel at period end so they keep what they paid for.
   await stripe.subscriptions.update(row.stripe_subscription_id, { cancel_at_period_end: true })
@@ -244,9 +244,9 @@ async function cancelSubscription(userId: string) {
   // Reflect it in BOTH sources of truth: the gate reads subscriptions.status; the
   // Settings panel reads users.subscription_status.
   const [{ error: subErr }, { error: userErr }] = await Promise.all([
-    db.from('subscriptions').update({ status: 'canceling' }).eq('user_id', userId),
+    db.from('subscriptions').update({ status: 'cancelling' }).eq('user_id', userId),
     db.from('users')
-      .update({ subscription_status: 'canceling', subscription_next_billing: row.current_period_end })
+      .update({ subscription_status: 'cancelling', subscription_next_billing: row.current_period_end })
       .eq('id', userId),
   ])
   if (subErr || userErr) {
