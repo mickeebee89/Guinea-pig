@@ -45,3 +45,7 @@ example
 # generated native folders
 /ios
 /android
+
+# Firebase (FCM) config — do not commit
+google-services.json
+GoogleService-Info.plist

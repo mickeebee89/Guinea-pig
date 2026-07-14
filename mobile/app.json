@@ -20,6 +20,7 @@
     },
     "android": {
       "package": "com.guineapig.app",
+      "googleServicesFile": "./google-services.json",
       "versionCode": 1,
       "adaptiveIcon": {
         "backgroundColor": "#FAF7F4",
