@@ -5,7 +5,6 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Switch,
   Image,
   TextInput,
   Modal,
@@ -32,12 +31,6 @@ import LoadErrorState from '@/components/LoadErrorState'
 
 type UserRole = 'model' | 'provider' | 'both' | null
 
-type NotifPrefs = {
-  session_updates: boolean
-  review_reminders:boolean
-  promotions:      boolean
-}
-
 type UserData = {
   first_name:                string
   last_initial:              string | null
@@ -47,7 +40,6 @@ type UserData = {
   is_verified:               boolean | null
   subscription_status:       string | null
   subscription_next_billing: string | null
-  notification_preferences:  NotifPrefs | null
 }
 
 type VerifStatus = 'none' | 'pending' | 'approved' | 'declined'
@@ -55,17 +47,6 @@ type EditField   = 'email' | 'bio'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const DEFAULT_PREFS: NotifPrefs = {
-  session_updates:  true,
-  review_reminders: true,
-  promotions:       false,
-}
-
-const NOTIF_ROWS: { key: keyof NotifPrefs; label: string; sub: string; icon: string }[] = [
-  { key: 'session_updates',   label: 'Treatment updates',  sub: 'Accepted, declined, and upcoming reminders', icon: 'calendar-outline' },
-  { key: 'review_reminders',  label: 'Review reminders',   sub: 'Prompts to rate completed treatments',       icon: 'star-outline'     },
-  { key: 'promotions',        label: 'Promotions',         sub: 'Special offers and platform news',           icon: 'gift-outline'     },
-]
 
 const LEGAL_LINKS = [
   { label: 'Terms of Service',   icon: 'document-outline',  url: 'https://guineapigapp.co.uk/terms'     },
@@ -178,34 +159,6 @@ const rowSt = StyleSheet.create({
   },
 })
 
-function TogRow({
-  label, sub, icon, value, onChange, last,
-}: {
-  label: string; sub: string; icon: string
-  value: boolean; onChange: (v: boolean) => void
-  last?: boolean
-}) {
-  return (
-    <View style={[rowSt.row, !last && rowSt.rowBorder, { alignItems: 'flex-start', paddingVertical: 14 }]}>
-      <View style={rowSt.iconWrap}>
-        <Ionicons name={icon as any} size={17} color={Colors.rose} />
-      </View>
-      <View style={{ flex: 1, gap: 2 }}>
-        <Text style={rowSt.label}>{label}</Text>
-        <Text style={{ fontSize: 11, color: Colors.muted, lineHeight: 15 }}>{sub}</Text>
-      </View>
-      <Switch
-        value={value}
-        onValueChange={onChange}
-        trackColor={{ false: Colors.border, true: Colors.rose }}
-        thumbColor={value ? Colors.roseDark : Colors.muted}
-        ios_backgroundColor={Colors.border}
-        style={{ flexShrink: 0, marginTop: 2 }}
-      />
-    </View>
-  )
-}
-
 // ── Screen ────────────────────────────────────────────────────────────────────
 
 export default function SettingsScreen() {
@@ -219,7 +172,6 @@ export default function SettingsScreen() {
   const [userData,     setUserData]     = useState<UserData | null>(null)
   const [providerId,   setProviderId]   = useState<string | null>(null)
   const [providerBio,  setProviderBio]  = useState<string>('')
-  const [notifPrefs,   setNotifPrefs]   = useState<NotifPrefs>(DEFAULT_PREFS)
   const [verifStatus,  setVerifStatus]  = useState<VerifStatus>('none')
   const [loading,      setLoading]      = useState(true)
   const [loadError,    setLoadError]    = useState(false)
@@ -251,7 +203,7 @@ export default function SettingsScreen() {
     try {
       const { data: ud } = await supabase
         .from('users')
-        .select('first_name, last_initial, role, profile_pic_url, is_verified, subscription_status, subscription_next_billing, notification_preferences')
+        .select('first_name, last_initial, role, profile_pic_url, is_verified, subscription_status, subscription_next_billing')
         .eq('id', userId)
         .single()
 
@@ -260,9 +212,6 @@ export default function SettingsScreen() {
           ...(ud as any),
           email: session?.user?.email ?? '',
         } as UserData)
-        if ((ud as any).notification_preferences) {
-          setNotifPrefs({ ...DEFAULT_PREFS, ...(ud as any).notification_preferences })
-        }
 
         // Load provider bio if this user has a provider role
         const role = (ud as any).role as UserRole
@@ -458,14 +407,6 @@ export default function SettingsScreen() {
     setPwdSaving(false)
   }
 
-  // ── Notification prefs ─────────────────────────────────────────────────────
-
-  const updatePref = async (key: keyof NotifPrefs, val: boolean) => {
-    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
-    const updated = { ...notifPrefs, [key]: val }
-    setNotifPrefs(updated)
-    try { await supabase.from('users').update({ notification_preferences: updated }).eq('id', userId) } catch {}
-  }
 
   // ── Subscription ───────────────────────────────────────────────────────────
 
@@ -711,22 +652,6 @@ export default function SettingsScreen() {
         <Text style={styles.picCaption}>
           Use a clear photo of your face — it's compared to your verification selfie.
         </Text>
-
-        {/* Notification preferences */}
-        <Text style={styles.subSectionTitle}>Notification preferences</Text>
-        <View style={styles.card}>
-          {NOTIF_ROWS.map((r, i) => (
-            <TogRow
-              key={r.key}
-              label={r.label}
-              sub={r.sub}
-              icon={r.icon}
-              value={notifPrefs[r.key]}
-              onChange={v => updatePref(r.key, v)}
-              last={i === NOTIF_ROWS.length - 1}
-            />
-          ))}
-        </View>
 
         {/* ─────────────── SUBSCRIPTION (models only) ─────────────── */}
         {isModel && (

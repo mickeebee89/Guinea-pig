@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   RefreshControl,
   ActivityIndicator,
+  Modal,
 } from 'react-native'
 import { useRouter } from 'expo-router'
 import * as Haptics from 'expo-haptics'
@@ -51,6 +52,8 @@ const TYPE_CFG: Record<string, IconCfg> = {
   new_availability: { icon: 'calendar',           color: Colors.roseDark,bg: Colors.softPink + '40', filter: 'Activity' },
   stylist_invite:   { icon: 'sparkles',           color: Colors.rose,    bg: Colors.softPink + '40', filter: 'Activity' },
   system:           { icon: 'information-circle', color: Colors.muted,   bg: Colors.inputBg,         filter: 'Activity' },
+  admin_warning:    { icon: 'warning',            color: Colors.error,   bg: '#FEF2F2',              filter: 'Activity' },
+  admin_message:    { icon: 'mail',               color: Colors.roseDark,bg: Colors.softPink + '30', filter: 'Activity' },
 }
 
 const DEFAULT_CFG: IconCfg = {
@@ -109,6 +112,8 @@ export default function NotificationsScreen() {
   const [refreshing,    setRefreshing]    = useState(false)
   const [markingAll,    setMarkingAll]    = useState(false)
   const [fetchError,    setFetchError]    = useState<string | null>(null)
+  // The admin-warning notification whose explanation modal is open (null = closed).
+  const [warningNotif,  setWarningNotif]  = useState<Notification | null>(null)
 
   // ── Load ───────────────────────────────────────────────────────────────────
 
@@ -168,6 +173,8 @@ export default function NotificationsScreen() {
   const handleTap = async (n: Notification) => {
     await Haptics.selectionAsync()
     if (!n.read_at) await markRead(n.id)
+    // Admin warnings don't deep-link anywhere — open an explanation instead.
+    if (n.type === 'admin_warning') { setWarningNotif(n); return }
     // Shared with push-notification taps (lib/notificationRouting).
     routeForNotification({ type: n.type, session_id: n.session_id, provider_id: n.data?.provider_id })
   }
@@ -294,6 +301,44 @@ export default function NotificationsScreen() {
           )}
         </ScrollView>
       )}
+
+      {/* Admin-warning explanation ("what a warning means") */}
+      <Modal
+        visible={warningNotif !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setWarningNotif(null)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setWarningNotif(null)}
+        >
+          <TouchableOpacity style={styles.modalCard} activeOpacity={1}>
+            <View style={[styles.iconCircle, { backgroundColor: '#FEF2F2', alignSelf: 'center' }]}>
+              <Ionicons name="warning" size={24} color={Colors.error} />
+            </View>
+            <Text style={styles.modalTitle}>About this warning</Text>
+            <Text style={styles.modalText}>
+              This is a formal notice from the Guinea Pig team. It means your account was flagged
+              for content or behaviour that breached our community guidelines.
+            </Text>
+            {!!warningNotif?.body && (
+              <View style={styles.modalReasonBox}>
+                <Text style={styles.modalReasonLabel}>Note from the team</Text>
+                <Text style={styles.modalReasonText}>{warningNotif.body}</Text>
+              </View>
+            )}
+            <TouchableOpacity
+              style={styles.modalCloseBtn}
+              activeOpacity={0.85}
+              onPress={async () => { await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setWarningNotif(null) }}
+            >
+              <Text style={styles.modalCloseText}>Got it</Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </View>
   )
 }
@@ -372,7 +417,7 @@ function NotifItem({ notif: n, onPress }: { notif: Notification; onPress: () => 
     (n.session_id || n.type === 'session_applied')
   ) || (
     ['new_availability', 'stylist_invite'].includes(n.type) && !!n.data?.provider_id
-  ) || n.type === 'verification'
+  ) || n.type === 'verification' || n.type === 'admin_warning'
 
   return (
     <TouchableOpacity
@@ -392,6 +437,11 @@ function NotifItem({ notif: n, onPress }: { notif: Notification; onPress: () => 
           <Text style={styles.notifTime}>{formatTime(n.created_at)}</Text>
         </View>
         <Text style={styles.notifBody} numberOfLines={2}>{n.body}</Text>
+        {n.type === 'admin_warning' && (
+          <Text style={styles.warningHint} numberOfLines={3}>
+            A formal notice that your account was flagged for breaching our community guidelines. Tap for details.
+          </Text>
+        )}
         {n.type === 'session_completed' && n.session_id && (
           <ReviewCTA sessionId={n.session_id} />
         )}
@@ -422,6 +472,72 @@ const styles = StyleSheet.create({
     ...Shadow.card,
   },
   reviewCtaText: { color: Colors.white, fontFamily: Fonts.bodyBold, fontSize: 13, letterSpacing: 0.2 },
+
+  // Short explanatory line under an admin-warning row
+  warningHint: {
+    marginTop: 6,
+    fontSize: 12,
+    lineHeight: 16,
+    color: Colors.error,
+    fontStyle: 'italic',
+  },
+
+  // Admin-warning explanation modal
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 28,
+  },
+  modalCard: {
+    width: '100%',
+    backgroundColor: Colors.white,
+    borderRadius: Radius.lg,
+    padding: 22,
+    gap: 12,
+    ...Shadow.card,
+  },
+  modalTitle: {
+    fontFamily: Fonts.bodyBold,
+    fontSize: 18,
+    color: Colors.warmDark,
+    textAlign: 'center',
+  },
+  modalText: {
+    fontFamily: Fonts.body,
+    fontSize: 14,
+    lineHeight: 20,
+    color: Colors.muted,
+    textAlign: 'center',
+  },
+  modalReasonBox: {
+    backgroundColor: Colors.inputBg,
+    borderRadius: 12,
+    padding: 12,
+    gap: 4,
+  },
+  modalReasonLabel: {
+    fontFamily: Fonts.bodyBold,
+    fontSize: 11,
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
+    color: Colors.muted,
+  },
+  modalReasonText: {
+    fontFamily: Fonts.body,
+    fontSize: 14,
+    lineHeight: 20,
+    color: Colors.warmDark,
+  },
+  modalCloseBtn: {
+    marginTop: 4,
+    backgroundColor: Colors.rose,
+    borderRadius: Radius.pill,
+    paddingVertical: 13,
+    alignItems: 'center',
+  },
+  modalCloseText: { color: Colors.white, fontFamily: Fonts.bodyBold, fontSize: 15 },
   reviewedPill: {
     alignSelf: 'flex-start',
     flexDirection: 'row',

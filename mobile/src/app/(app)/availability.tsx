@@ -424,6 +424,9 @@ export default function AvailabilityScreen() {
               type:    'new_availability',
               title:   'New availability posted',
               body:    `${providerName} has new slots available — tap to view their shop`,
+              // provider_id lets the notification tap deep-link to the shop
+              // (notificationRouting routes new_availability via data.provider_id).
+              data:    { provider_id: providerId },
             }))
           )
           if (error) console.warn('new availability notification failed (non-blocking):', error)

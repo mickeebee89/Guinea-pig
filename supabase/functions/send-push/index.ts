@@ -22,19 +22,6 @@ function respond(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { ...CORS, 'Content-Type': 'application/json' } })
 }
 
-// Which on/off preference bucket gates each type. Types not listed are ALWAYS sent
-// (transactional / safety: verification, admin_warning, admin_message, system).
-function prefBucket(type: string | undefined): 'session_updates' | 'review_reminders' | 'promotions' | null {
-  switch (type) {
-    case 'session_accepted': case 'session_declined': case 'session_completed':
-    case 'session_cancelled': case 'session_applied': case 'new_message':
-      return 'session_updates'
-    case 'review_reminder': return 'review_reminders'
-    case 'new_availability': case 'stylist_invite': return 'promotions'
-    default: return null
-  }
-}
-
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
 
@@ -50,14 +37,8 @@ Deno.serve(async (req) => {
   if (!userId || !body.title) return respond({ error: 'user_id and title required' }, 400)
 
   try {
-    // Respect the recipient's notification preferences (default: promotions off).
-    const bucket = prefBucket(body.data?.type as string | undefined)
-    if (bucket) {
-      const { data: u } = await db.from('users').select('notification_preferences').eq('id', userId).maybeSingle()
-      const prefs = ((u as any)?.notification_preferences ?? { session_updates: true, review_reminders: true, promotions: false }) as Record<string, boolean>
-      if (prefs[bucket] === false) return respond({ skipped: 'pref_off' })
-    }
-
+    // No preference gating: notification toggles were removed, so every notification
+    // pushes. (A future opt-out would re-introduce a check here.)
     const { data: tokenRows } = await db.from('push_tokens').select('token').eq('user_id', userId)
     const tokens = (tokenRows ?? []).map((r: any) => r.token as string).filter(Boolean)
     if (tokens.length === 0) return respond({ sent: 0 })

@@ -43,6 +43,17 @@ _Use this to start a fresh chat with full context. Hand it to Claude at the star
 
 ## ✅ DONE THIS SESSION
 
+### 🟢 P5 — NOTIFICATION-TYPE AUDIT + REMOVE NON-FUNCTIONAL TOGGLES — DONE + verified
+Full audit of the notification system (every `type` created vs every `type` handled/routed, plus the settings toggles). **Client-side JS + one edge-fn redeploy; no DB migration.**
+- **Part 1 — type-string audit: no silent create/handle mismatches remain** (the old `session_application`→`session_applied` class of bug is not repeated; all 10 created types have handlers). Three real issues found + fixed:
+  - **`new_availability` tap dead-ended** — the insert (`availability.tsx`) omitted `data.provider_id` that routing needs → added it; tapping now opens the stylist's shop (chevron shows). ✅ verified.
+  - **`admin_warning`/`admin_message`** were created by the admin app but missing from the inbox `TYPE_CFG` → added icons (warning / mail) instead of the generic grey dot. ✅ verified.
+  - **`review_reminder` is a dead path** (consumed everywhere — routing/icon/push-bucket/toggle — but **created nowhere**). Per decision, left the routing + icon **latent** for a future feature; only its dead toggle was removed (below). The existing "Leave a review" CTA on `session_completed` already covers prompting. (`new_message` never creating a row is by design — a push-only synthesized type.)
+- **Admin-warning explanation box (new, verified):** an `admin_warning` notification now shows a short italic line on the card and is tappable → a modal ("About this warning") explaining what a warning means + the team's note + "Got it". Scoped to "what a warning means" only (no consequences/links/appeal). `notifications.tsx`.
+- **Part 2 — removed ALL notification toggles.** The 3 toggles were: "Treatment updates" (essential/transactional, incl. chat messages), "Review reminders" (dead — no producer), "Promotions" (mislabelled — gated user-solicited availability + personal stylist invites, defaulted OFF so people silently missed invites). There is **no genuine marketing type** in the app, so per decision we send everything: deleted the whole Notification preferences section + helpers from `settings.tsx`. **Critically also removed the push preference gate in `send-push`** (`prefBucket` + prefs read) and **redeployed** — otherwise existing users' stored `promotions:false` would keep silently suppressing pushes after the UI was gone. The `users.notification_preferences` column is left in place, now unread/harmless.
+- **Verified on device:** `new_availability` tap opens shop ✅; admin-warning icon + explanation modal ✅; Settings preferences section gone ✅; a `stylist_invite` push **arrives on an account with `promotions:false`** (gate removal confirmed) ✅.
+- **Optional follow-up (NOT done):** centralise notification `type` string literals into one shared constants module so a future create/handle drift becomes a compile error (touches ~8 files) — flagged as a separate hardening task.
+
 ### 🟢 P7 — DOUBLE-BOOKING RACE (new issue found 14 Jul) — DONE + verified (DB guard live + 23505 handler reviewed)
 > **Numbering note:** this was a NEW issue that surfaced during testing on 14 Jul, numbered **P7** so it does NOT collide with the still-open **P5 (notification-type audit + remove the non-functional notification toggles)** and **P6 (email / forgot-password UX)** — both of those remain **OPEN / not started**.
 
