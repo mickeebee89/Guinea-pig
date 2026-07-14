@@ -1,9 +1,9 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect, useMemo } from 'react'
 import {
   View,
   Text,
   StyleSheet,
-  FlatList,
+  SectionList,
   TouchableOpacity,
   Image,
   RefreshControl,
@@ -34,6 +34,12 @@ type ConvItem = {
   lastSenderId: string | null
   unreadCount: number
   isModel: boolean
+}
+
+type ConvSection = {
+  title: string | null
+  collapsible: boolean
+  data: ConvItem[]
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -88,6 +94,7 @@ export default function MessagesScreen() {
   const [loading,    setLoading]    = useState(true)
   const [loadError,  setLoadError]  = useState(false)
   const [refreshing, setRefreshing] = useState(false)
+  const [showPast,   setShowPast]   = useState(false)
 
   const load = useCallback(async () => {
     if (!userId) return
@@ -110,9 +117,10 @@ export default function MessagesScreen() {
         .from('sessions')
         .select('id, provider_id, model_user_id, date, treatment_id, status, created_at')
         .or(orClause)
-        // Hide finished/dead conversations: completed, cancelled and declined bookings drop
-        // off the list. Keeps pending ("Awaiting acceptance…") and accepted.
-        .not('status', 'in', '(completed,cancelled,declined)')
+        // Hide only dead conversations: cancelled and declined bookings drop off the list.
+        // Keeps pending ("Awaiting acceptance…"), accepted, and completed — completed shows
+        // read-only under "Past treatments" so history stays reachable.
+        .not('status', 'in', '(cancelled,declined)')
         .order('created_at', { ascending: false })
 
       const sessions = (sessionsRaw ?? []) as {
@@ -184,12 +192,14 @@ export default function MessagesScreen() {
       const lastMsgBySession: Record<string, typeof msgs[0]> = {}
       const unreadBySession:  Record<string, number>          = {}
 
-      // Only 'accepted' bookings have an openable chat that runs the mark-as-read step.
-      // Unread in a locked session (cancelled/pending/declined) can never be cleared, so
-      // it must not show a badge — otherwise it sticks forever (e.g. after a block cancels
-      // the booking). Mirrors the HeaderIcons unread-count rule.
+      // Only openable chats run the mark-as-read step, so only they may show an unread
+      // badge — otherwise it sticks forever. 'accepted' AND 'completed' are both openable
+      // (completed is read-only but still runs mark-as-read on open); locked sessions
+      // (cancelled/pending/declined) never clear, so they're excluded. Mirrors HeaderIcons.
       const openableSessionIds = new Set(
-        sessions.filter(s => s.status === 'accepted').map(s => s.id)
+        sessions
+          .filter(s => s.status === 'accepted' || s.status === 'completed')
+          .map(s => s.id)
       )
 
       for (const m of msgs) {
@@ -260,6 +270,19 @@ export default function MessagesScreen() {
   // from a chat — matches HeaderIcons / provider-dashboard focus-refresh pattern.
   useFocusEffect(useCallback(() => { load() }, [load]))
 
+  // Live updates: bump the list when any message in my sessions changes (RLS-scoped),
+  // so rows + unread badges update in realtime, not just on focus.
+  useEffect(() => {
+    if (!userId) return
+    let t: ReturnType<typeof setTimeout> | null = null
+    const bump = () => { if (t) clearTimeout(t); t = setTimeout(() => { load() }, 300) }
+    const channel = supabase
+      .channel(`messages-list-${userId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, bump)
+      .subscribe()
+    return () => { if (t) clearTimeout(t); supabase.removeChannel(channel) }
+  }, [userId, load])
+
   const onRefresh = useCallback(async () => {
     setRefreshing(true)
     await load()
@@ -275,6 +298,23 @@ export default function MessagesScreen() {
     router.back()
   }
 
+  const togglePast = useCallback(async () => {
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+    setShowPast(v => !v)
+  }, [])
+
+  // Active (pending/accepted) on top; completed grouped into a collapsible "Past
+  // treatments" section so history stays reachable read-only without cluttering the top.
+  const sections = useMemo<ConvSection[]>(() => {
+    const active = convs.filter(c => c.status !== 'completed')
+    const past   = convs.filter(c => c.status === 'completed')
+    const out: ConvSection[] = [{ title: null, collapsible: false, data: active }]
+    if (past.length > 0) {
+      out.push({ title: 'Past chats', collapsible: true, data: showPast ? past : [] })
+    }
+    return out
+  }, [convs, showPast])
+
   return (
     <View style={styles.container}>
       <ScreenDecor />
@@ -288,8 +328,8 @@ export default function MessagesScreen() {
       </View>
 
       {/* ── List ── */}
-      <FlatList
-        data={convs}
+      <SectionList
+        sections={sections}
         keyExtractor={c => c.sessionId}
         renderItem={({ item }) => (
           <ConvRow
@@ -298,6 +338,23 @@ export default function MessagesScreen() {
             onPress={() => openChat(item.sessionId)}
           />
         )}
+        renderSectionHeader={({ section }) =>
+          (section as ConvSection).collapsible ? (
+            <TouchableOpacity
+              style={styles.sectionHeader}
+              onPress={togglePast}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.sectionHeaderText}>Past chats</Text>
+              <Ionicons
+                name={showPast ? 'chevron-up' : 'chevron-down'}
+                size={16}
+                color={Colors.muted}
+              />
+            </TouchableOpacity>
+          ) : null
+        }
+        stickySectionHeadersEnabled={false}
         contentContainerStyle={convs.length === 0 ? styles.emptyContainer : styles.list}
         showsVerticalScrollIndicator={false}
         refreshControl={
@@ -309,7 +366,7 @@ export default function MessagesScreen() {
           />
         }
         ListEmptyComponent={
-          loading ? null : loadError ? (
+          loading || convs.length > 0 ? null : loadError ? (
             <LoadErrorState onRetry={() => load()} fill={false} />
           ) : (
             <View style={styles.emptyState}>
@@ -337,7 +394,10 @@ function ConvRow({
   userId: string
   onPress: () => void
 }) {
-  const isLocked  = item.status !== 'accepted'
+  const isCompleted = item.status === 'completed'
+  // 'locked' = pending/declined/cancelled (chat not open). Completed is NOT locked — it's
+  // read-only history, shown with a softer "Completed" affordance instead of the lock.
+  const isLocked  = item.status !== 'accepted' && !isCompleted
   const catColor  = item.treatmentCategory ? (CATEGORY_COLOR[item.treatmentCategory] ?? Colors.muted) : Colors.muted
   const preview   = previewText(item, userId)
   const hasUnread = item.unreadCount > 0
@@ -363,6 +423,11 @@ function ConvRow({
         {isLocked && (
           <View style={styles.lockBadge}>
             <Ionicons name="lock-closed" size={9} color={Colors.white} />
+          </View>
+        )}
+        {isCompleted && (
+          <View style={styles.doneBadge}>
+            <Ionicons name="checkmark" size={10} color={Colors.white} />
           </View>
         )}
       </View>
@@ -405,6 +470,12 @@ function ConvRow({
               <Text style={[styles.rowMetaTreat, { color: catColor }]}>{item.treatmentName}</Text>
             </>
           )}
+          {isCompleted && (
+            <>
+              <Text style={styles.rowMetaDot}>·</Text>
+              <Text style={styles.completedTag}>Completed</Text>
+            </>
+          )}
         </View>
       </View>
     </TouchableOpacity>
@@ -445,8 +516,25 @@ const styles = StyleSheet.create({
   },
   headerRight: { width: 36 },
 
-  list:           { paddingTop: 4 },
+  list:           { paddingTop: 4, paddingBottom: 24 },
   emptyContainer: { flex: 1 },
+
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginHorizontal: 20,
+    marginTop: 18,
+    marginBottom: 2,
+    paddingBottom: 6,
+  },
+  sectionHeaderText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: Colors.muted,
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
+  },
 
   emptyState: {
     flex: 1,
@@ -518,6 +606,19 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: Colors.white,
   },
+  doneBadge: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: Colors.roseDark,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: Colors.white,
+  },
 
   rowContent: { flex: 1, gap: 3 },
   rowTopLine: {
@@ -576,6 +677,11 @@ const styles = StyleSheet.create({
   rowMetaText: {
     fontSize: 11,
     color: Colors.muted,
+  },
+  completedTag: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: Colors.roseDark,
   },
   rowMetaDot: {
     fontSize: 11,

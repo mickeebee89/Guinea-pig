@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native'
 import { useRouter, useFocusEffect } from 'expo-router'
 import * as Haptics from 'expo-haptics'
@@ -49,6 +49,22 @@ export default function HeaderIcons() {
 
   // Refresh both indicators whenever the screen regains focus (after reading msgs/notifs).
   useFocusEffect(useCallback(() => { refresh() }, [refresh]))
+
+  // Also refresh LIVE (not just on focus): subscribe to message changes in my sessions
+  // (RLS-scoped) so the unread dot appears/clears in realtime. Unique channel per mount —
+  // HeaderIcons renders on both the model home and the provider dashboard, so a shared
+  // channel name could collide.
+  const instanceRef = useRef(Math.random().toString(36).slice(2))
+  useEffect(() => {
+    if (!userId) return
+    let t: ReturnType<typeof setTimeout> | null = null
+    const bump = () => { if (t) clearTimeout(t); t = setTimeout(() => { refresh() }, 300) }
+    const channel = supabase
+      .channel(`hdr-unread-${userId}-${instanceRef.current}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, bump)
+      .subscribe()
+    return () => { if (t) clearTimeout(t); supabase.removeChannel(channel) }
+  }, [userId, refresh])
 
   return (
     <>
