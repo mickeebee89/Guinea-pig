@@ -124,6 +124,9 @@ export default function ApplySessionScreen() {
   // client. Keyed by normalised `start|end`. takenError → conservative: treat all taken.
   const [takenSlotKeys,   setTakenSlotKeys]   = useState<Set<string>>(new Set())
   const [takenError,      setTakenError]      = useState<string | null>(null)
+  // Bumped to force a taken_slots re-fetch for the same date (e.g. after a booking
+  // conflict) so the just-taken slot flips to "Booked" without changing selectedDate.
+  const [takenNonce,      setTakenNonce]      = useState(0)
 
   // ── Wizard state ───────────────────────────────────────────────────────────
 
@@ -247,7 +250,7 @@ export default function ApplySessionScreen() {
       setTakenSlotKeys(new Set(rows.map(r => slotKey(r.start_time, r.end_time))))
     })()
     return () => { cancelled = true }
-  }, [providerId, selectedDate])
+  }, [providerId, selectedDate, takenNonce])
 
   // ── Derived ────────────────────────────────────────────────────────────────
 
@@ -474,6 +477,22 @@ export default function ApplySessionScreen() {
 
       const sessionData = data
       const sessionErr  = error
+
+      // Lost the race for this slot: the partial unique index (sessions_active_slot_uniq)
+      // rejected a second active booking for the same provider+date+start_time. Show a
+      // friendly nudge, refresh taken_slots so the slot flips to "Booked", and drop the
+      // model back on the time step to pick another — never a raw DB error or silent fail.
+      if (sessionErr?.code === '23505') {
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning)
+        setSelectedSlot(null)
+        setTakenNonce(n => n + 1)
+        setStep(2)
+        Alert.alert(
+          'That time was just booked',
+          'Someone grabbed this slot moments ago — please choose another time.',
+        )
+        return
+      }
 
       let consentErr: any = null
       if (providerUserId && sessionData) {

@@ -112,6 +112,7 @@ There are no migration files; schema changes are run by hand in the SQL editor. 
   - `subscriptions` had owner-only SELECT → added `subscriptions_select_admin` = `for select to authenticated using (is_admin())`.
   - Writes go through the service-role edge fn (bypasses RLS), so no INSERT policy is needed.
 - `subscriptions.amount_pence` backfilled to 499 (+ `currency_code='GBP'`, `plan='monthly'`) for rows the old `confirm_subscription` left null.
+- **Booking guard (see `supabase/booking-guard.sql`):** partial unique index `sessions_active_slot_uniq` on `sessions (provider_id, date, start_time) where status in ('pending','accepted')` — atomically blocks a second active booking for the same slot (double-booking race). Completed/declined/cancelled are excluded, so a slot re-opens once its booking ends.
 - **Push (see `supabase/push-setup.sql`):** `push_tokens` table (+RLS `push_tokens_own`), `pg_net` enabled, and two `AFTER INSERT` triggers — `notify_push` on `notifications` and `message_push` on `messages` — both call the `send-push` edge fn via `net.http_post` with the `PUSH_HOOK_SECRET` (set via `supabase secrets set`; the trigger bodies hold the literal — re-paste from the secret, don't commit it).
 
 ## Testing quick-reference
