@@ -15,6 +15,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Colors, Fonts, Radius, Shadow } from '@/constants/Colors'
 import { useAuth } from '@/context/auth'
 import { supabase } from '@/lib/supabase'
+import { routeForNotification } from '@/lib/notificationRouting'
 import ScreenDecor from '@/components/ScreenDecor'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -167,38 +168,8 @@ export default function NotificationsScreen() {
   const handleTap = async (n: Notification) => {
     await Haptics.selectionAsync()
     if (!n.read_at) await markRead(n.id)
-
-    const sessionId = n.session_id
-
-    switch (n.type) {
-      case 'session_accepted':
-      case 'new_message':
-        if (sessionId) {
-          router.push({ pathname: '/(app)/chat/[sessionId]' as any, params: { sessionId } })
-        }
-        break
-      case 'session_applied':
-        router.push('/provider-dashboard')
-        break
-      case 'review_reminder':
-        if (sessionId) {
-          router.push({ pathname: '/(app)/leave-review' as any, params: { sessionId } })
-        }
-        break
-      case 'new_availability':
-      case 'stylist_invite': {
-        const providerId = n.data?.provider_id
-        if (providerId) {
-          router.push({ pathname: '/(app)/provider/[id]' as any, params: { id: providerId } })
-        }
-        break
-      }
-      case 'verification':
-        router.push('/(app)/verify-payment' as any)
-        break
-      default:
-        break
-    }
+    // Shared with push-notification taps (lib/notificationRouting).
+    routeForNotification({ type: n.type, session_id: n.session_id, provider_id: n.data?.provider_id })
   }
 
   // ── Derived ────────────────────────────────────────────────────────────────

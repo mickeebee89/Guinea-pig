@@ -70,6 +70,13 @@
           "cameraPermission": "Guinea Pig uses your camera to take your identity verification selfie and profile photo.",
           "microphonePermission": false
         }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#F45D9E",
+          "defaultChannel": "default"
+        }
       ]
     ],
     "experiments": {

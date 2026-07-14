@@ -3,6 +3,7 @@ import { View, ActivityIndicator, Alert } from 'react-native'
 import { Stack } from 'expo-router'
 import { useAuth } from '@/context/auth'
 import { ensureProfile } from '@/lib/ensureProfile'
+import { usePushRegistration } from '@/lib/push'
 import { Colors } from '@/constants/Colors'
 import WelcomeScreen    from '@/screens/auth/WelcomeScreen'
 import LoginScreen      from '@/screens/auth/LoginScreen'
@@ -23,6 +24,9 @@ export const useAppRole = () => useContext(RoleContext)
 
 export default function AppEntry() {
   const { session } = useAuth()
+
+  // Register this device for push once signed in (no-op when signed out / on emulators).
+  usePushRegistration(session?.user?.id)
 
   // Auth-screen navigation state (only used when !session)
   const [authView,       setAuthView]       = useState<AuthView>('welcome')

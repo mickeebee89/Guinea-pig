@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react'
 import { Session } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase'
+import { clearPushToken } from '@/lib/push'
 
 interface AuthContextType {
   session: Session | null
@@ -40,6 +41,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const signOut = async () => {
+    // Remove this device's push token first — needs the still-valid session for RLS.
+    await clearPushToken()
     setSession(null)
     await supabase.auth.signOut()
   }
