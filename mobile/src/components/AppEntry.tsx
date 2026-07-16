@@ -9,8 +9,9 @@ import WelcomeScreen    from '@/screens/auth/WelcomeScreen'
 import LoginScreen      from '@/screens/auth/LoginScreen'
 import SignupScreen     from '@/screens/auth/SignupScreen'
 import ConfirmEmailScreen from '@/screens/auth/ConfirmEmailScreen'
+import ForgotPasswordScreen from '@/screens/auth/ForgotPasswordScreen'
 
-type AuthView = 'welcome' | 'login' | 'signup' | 'confirm-email'
+type AuthView = 'welcome' | 'login' | 'signup' | 'confirm-email' | 'forgot-password'
 
 interface ConfirmParams {
   email:   string
@@ -32,6 +33,7 @@ export default function AppEntry() {
   const [authView,       setAuthView]       = useState<AuthView>('welcome')
   const [signupRole,     setSignupRole]     = useState<'model' | 'provider'>('model')
   const [confirmParams,  setConfirmParams]  = useState<ConfirmParams | null>(null)
+  const [forgotEmail,    setForgotEmail]    = useState('')
 
   // Role for the authenticated app
   const [role,        setRole]        = useState<string | null>(null)
@@ -81,6 +83,7 @@ export default function AppEntry() {
         <LoginScreen
           onBack={() => setAuthView('welcome')}
           onGoSignup={() => setAuthView('signup')}
+          onGoForgot={(e) => { setForgotEmail(e); setAuthView('forgot-password') }}
         />
       )
     }
@@ -95,6 +98,16 @@ export default function AppEntry() {
             setConfirmParams(params)
             setAuthView('confirm-email')
           }}
+        />
+      )
+    }
+
+    if (authView === 'forgot-password') {
+      return (
+        <ForgotPasswordScreen
+          initialEmail={forgotEmail}
+          onBack={() => setAuthView('login')}
+          onGoLogin={() => setAuthView('login')}
         />
       )
     }

@@ -43,7 +43,7 @@ type UserData = {
 }
 
 type VerifStatus = 'none' | 'pending' | 'approved' | 'declined'
-type EditField   = 'email' | 'bio'
+type EditField   = 'bio'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -57,17 +57,16 @@ const LEGAL_LINKS = [
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function editLabel(f: EditField): string {
-  return { email: 'Email address', bio: 'Bio' }[f]
+  return { bio: 'Bio' }[f]
 }
 
 function editMaxLength(f: EditField): number {
-  return { email: 100, bio: 400 }[f]
+  return { bio: 400 }[f]
 }
 
 function editPlaceholder(f: EditField): string {
   return {
-    email: 'your@email.com',
-    bio:   'Tell models about your space, specialties, and what to expect from a treatment…',
+    bio: 'Tell models about your space, specialties, and what to expect from a treatment…',
   }[f]
 }
 
@@ -356,15 +355,7 @@ export default function SettingsScreen() {
     setEditSaving(true)
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
     try {
-      if (editField === 'email') {
-        const { error } = await supabase.auth.updateUser({ email: val })
-        if (error) throw error
-        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
-        closeEdit()
-        Alert.alert('Confirmation sent', `Check ${val} to confirm the change.`)
-        return
-      }
-      // Only 'bio' remains (email returns above; name fields are no longer editable).
+      // Only 'bio' is editable (email is read-only; name fields are fixed identity).
       if (providerId) await supabase.from('providers').update({ bio: val || null }).eq('id', providerId)
       setProviderBio(val)
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
@@ -601,11 +592,11 @@ export default function SettingsScreen() {
             label="Last initial"
             value={userData?.last_initial ? `${userData.last_initial}.` : '—'}
           />
+          {/* Email is read-only for now (change flow deferred pre-launch). */}
           <Row
             icon="mail-outline"
             label="Email"
             value={userData?.email}
-            onPress={() => openEdit('email', userData?.email ?? '')}
           />
           <Row
             icon="lock-closed-outline"
@@ -869,28 +860,19 @@ export default function SettingsScreen() {
               <View style={styles.sheetHandle} />
               <Text style={styles.modalTitle}>{editField ? editLabel(editField) : ''}</Text>
               <TextInput
-                style={[
-                  styles.editInput,
-                  editField === 'bio' && styles.editInputMultiline,
-                ]}
+                style={[styles.editInput, styles.editInputMultiline]}
                 value={editValue}
-                onChangeText={v => setEditValue(v.slice(0, editField ? editMaxLength(editField) : 100))}
+                onChangeText={v => setEditValue(v.slice(0, editField ? editMaxLength(editField) : 400))}
                 placeholder={editField ? editPlaceholder(editField) : ''}
                 placeholderTextColor={Colors.muted}
-                multiline={editField === 'bio'}
-                autoCapitalize={editField === 'email' ? 'none' : 'words'}
-                keyboardType={editField === 'email' ? 'email-address' : 'default'}
+                multiline
+                autoCapitalize="words"
                 autoFocus
-                textAlignVertical={editField === 'bio' ? 'top' : 'auto'}
+                textAlignVertical="top"
               />
               {editField && (
                 <Text style={styles.charCount}>
                   {editValue.length}/{editMaxLength(editField)}
-                </Text>
-              )}
-              {editField === 'email' && (
-                <Text style={styles.editHint}>
-                  We'll send a confirmation link to the new address.
                 </Text>
               )}
               <View style={styles.modalActions}>

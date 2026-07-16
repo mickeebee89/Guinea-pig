@@ -43,6 +43,13 @@ _Use this to start a fresh chat with full context. Hand it to Claude at the star
 
 ## ✅ DONE THIS SESSION
 
+### 🟢 P6 — AUTH UX: email read-only + dedicated forgot-password screen — DONE + verified
+Two small pre-launch auth UX fixes. **Client-side JS only** (no rebuild, no backend/config change — the P2 reset URL is already registered).
+- **Email read-only** (`settings.tsx`): the email Row lost its `onPress`, so it renders read-only exactly like the First name / Last initial rows (Row auto-drops the chevron + tap target — no dead button, no layout change). The email-change flow left a blank page and wasn't worth the surface area pre-launch; a proper flow comes later. **Dead-email cleanup done:** `EditField` narrowed to `'bio'`, email branch removed from `saveEdit`, email-only conditionals stripped from the shared edit modal. **Bio editing fully intact.**
+- **Dedicated forgot-password screen** (new `src/screens/auth/ForgotPasswordScreen.tsx`): previously "Forgot password?" reused the login screen (both email + password fields visible — confusing). Now a clean screen mirroring LoginScreen: **email field only**, "Send reset link", validation (presence + `@`), and a **persistent "Check your email" confirmation** (replaces the old transient Alert) with a "Back to login" button. Full haptics. The reset handler moved out of `LoginScreen.forgotPassword` into it (same `resetPasswordForEmail` + `redirectTo: guineapigapp.co.uk/auth/reset`).
+- **Wiring:** `AppEntry.tsx` gained a `'forgot-password'` auth-view + render branch and a `forgotEmail` state; Login's "Forgot password?" now calls a new `onGoForgot(email)` prop that carries the typed email across (**prefilled** on the new screen). Old inline handler + unused `Alert` import removed from LoginScreen.
+- **Verified on device:** email row not tappable + bio still edits; Login → Forgot opens the email-only screen with prefill, sends the link, confirmation shows, reset completes and the new password logs in.
+
 ### 🟢 P5 — NOTIFICATION-TYPE AUDIT + REMOVE NON-FUNCTIONAL TOGGLES — DONE + verified
 Full audit of the notification system (every `type` created vs every `type` handled/routed, plus the settings toggles). **Client-side JS + one edge-fn redeploy; no DB migration.**
 - **Part 1 — type-string audit: no silent create/handle mismatches remain** (the old `session_application`→`session_applied` class of bug is not repeated; all 10 created types have handlers). Three real issues found + fixed:
