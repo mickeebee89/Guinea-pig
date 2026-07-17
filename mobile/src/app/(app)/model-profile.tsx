@@ -944,31 +944,9 @@ export default function ModelProfileScreen() {
           ))}
         </View>
 
-        {/* ── Get Verified card ── */}
-        {!isVerified && (
-          <View style={styles.verifyCard}>
-            <View style={styles.verifyIconCircle}>
-              <Ionicons name="shield-checkmark-outline" size={28} color={Colors.roseDark} />
-            </View>
-            <View style={styles.verifyText}>
-              <Text style={styles.verifyTitle}>Get verified</Text>
-              <Text style={styles.verifySub}>
-                A verified badge builds trust with providers and helps you get more treatments.
-              </Text>
-            </View>
-            <TouchableOpacity
-              style={styles.verifyBtn}
-              onPress={async () => {
-                await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
-                router.push('/(app)/verify-payment' as any)
-              }}
-              activeOpacity={0.85}
-            >
-              <Text style={styles.verifyBtnText}>Start</Text>
-              <Ionicons name="arrow-forward" size={14} color={Colors.roseDark} />
-            </TouchableOpacity>
-          </View>
-        )}
+        {/* Model verification is NOT started here — it happens only via the apply flow
+           (subscribe + selfie at apply-time), so browsing stays free and we don't create
+           stranded "verified but unsubscribed" accounts. Providers verify elsewhere. */}
 
         {/* ── My Reviews ── */}
         <View style={styles.section}>
@@ -1034,7 +1012,7 @@ export default function ModelProfileScreen() {
           </View>
           {!isVerified && (
             <Text style={styles.sectionSub}>
-              Get verified to apply for treatments and build trust with providers.
+              You'll verify your identity and start your membership when you apply for a treatment.
             </Text>
           )}
         </View>

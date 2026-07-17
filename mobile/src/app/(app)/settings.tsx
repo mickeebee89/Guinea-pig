@@ -743,7 +743,10 @@ export default function SettingsScreen() {
               />
             </>
           )}
-          {verifStatus === 'none' && (
+          {/* Providers start verification here (pay-first £14.99). Models do NOT —
+             their identity check + £4.99/mo membership happen together at apply-time,
+             so we show an expectation-setting line instead of a standalone selfie action. */}
+          {verifStatus === 'none' && isProvider && (
             <Row
               icon="shield-outline"
               label="Get verified"
@@ -754,6 +757,13 @@ export default function SettingsScreen() {
                   <Ionicons name="arrow-forward" size={12} color={Colors.roseDark} />
                 </View>
               }
+              last
+            />
+          )}
+          {verifStatus === 'none' && isModel && !isProvider && (
+            <Row
+              icon="information-circle-outline"
+              label="Verification and membership happen when you apply for a treatment"
               last
             />
           )}

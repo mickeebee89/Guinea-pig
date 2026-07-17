@@ -43,9 +43,8 @@ _This file is read automatically at the start of every Claude Code session. It h
 ## Payments / pricing (TEST mode — swap to LIVE before launch)
 
 - Provider: **£14.99 one-off** verification (first 100–200 free — "Founding Providers"). Model: **£4.99/mo** subscription.
-- Both flows are **PAY-FIRST:** Get Verified → pay → selfie → admin approves → unlock.
-  - Provider unlock = `is_verified` + `is_published`.
-  - Model = active subscription AND identity verification, both required to apply (browsing is free).
+- **Provider is PAY-FIRST:** Get Verified → pay £14.99 → selfie → admin approves → unlock (`is_verified` + `is_published`). Provider entry points: provider-dashboard + settings.
+- **Model has NO standalone verification entry.** Browsing/search is FREE and open (no gate). The £4.99/mo subscribe **and** the identity selfie happen together **only at apply-time** (apply-gate in `apply-session.tsx`: subscribe-first → selfie). Model needs active subscription AND identity verification to apply. (The old model "Get verified" buttons were removed — they created stranded verified-but-unsubscribed accounts.)
 - Admin `approve()` unlocks unconditionally (free-account override).
 - Test card: `4242 4242 4242 4242`, exp `12/34`, CVC `123`.
 
