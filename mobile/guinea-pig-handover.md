@@ -22,6 +22,9 @@ _Use this to start a fresh chat with full context. Hand it to Claude at the star
 - I work via Claude Code (terminal) + Supabase SQL editor + phone testing. I paste prompts/results/screenshots back. Claude Code paste-backs sometimes arrive empty — I re-paste in sections.
 
 ## KEY IDENTIFIERS
+- **Admin access = a row in the `admins` table** (keyed to the immutable `auth.users.id`); server-enforced by `proxy.ts` (`is_admin()` on every route, fail-closed) + `is_admin()`-gated RLS. **TWO admins (hardened 17 Jul):**
+  - **Dedicated console-only admin (PRIMARY)** — a separate email that is **never** an app user (no model/stylist role, never signed into the mobile app). This is the fix for the old coupling where the admin login doubled as a stylist account and an app-side email change locked admin out. **Rule: never sign the dedicated admin into the app; never delete its auth user (`admins.user_id` is `on delete cascade`).**
+  - **"Micky B" `ff06d568…` (BACKUP / break-glass)** — the original shared provider+admin account, kept as a second admin so no single deletion locks us out.
 - Admin/provider "Micky B": user_id `ff06d568-8936-45fa-ad5f-0b88c150ec30` (micky.buckfield@gmail.com); providers.id `49d40aae-a830-41d1-bca8-0fbdb2695455`.
 - Model test acct: `b0df9c2f-02c5-4fef-afb0-9b184c3b9130` (micky.buckfield@hotmail.co.uk, subscribed+verified).
 - Provider test acct `nahitih259@bevriz.com`: user_id `517c2853-50bb-4e8f-87fe-d79311bc37c0`.
