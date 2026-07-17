@@ -114,6 +114,33 @@ async function createVerificationIntent(userId: string) {
   })
 }
 
+// ── Monthly subscription price ──────────────────────────────────────────────────
+// Prefer STRIPE_MONTHLY_PRICE_ID (the dashboard price's real `price_...` id) so we
+// NEVER create prices at runtime — set this secret in live (and ideally test). If it
+// is unset, fall back to a find-or-create keyed by lookup_key, which returns the SAME
+// price on every call. (The old code did `prices.retrieve('guinea_pig_monthly_499')`,
+// but that string isn't a valid price id, so the retrieve always missed and a new
+// Product+Price was spawned on every single signup.)
+const MONTHLY_LOOKUP_KEY = 'guinea_pig_monthly_499'
+
+async function resolveMonthlyPriceId(): Promise<string> {
+  const envId = Deno.env.get('STRIPE_MONTHLY_PRICE_ID')
+  if (envId) return envId
+
+  console.warn('[stripe-payment] STRIPE_MONTHLY_PRICE_ID not set — using lookup_key find-or-create. Set this secret before going live.')
+  const found = await stripe.prices.list({ lookup_keys: [MONTHLY_LOOKUP_KEY], active: true, limit: 1 })
+  if (found.data[0]) return found.data[0].id
+
+  const price = await stripe.prices.create({
+    unit_amount:  499,
+    currency:     'gbp',
+    recurring:    { interval: 'month' },
+    product_data: { name: 'Guinea Pig Monthly' },
+    lookup_key:   MONTHLY_LOOKUP_KEY,
+  })
+  return price.id
+}
+
 // ── create_subscription ───────────────────────────────────────────────────────
 // Creates (or retrieves) a Stripe Customer then creates a £4.99/month
 // subscription, returning the first invoice's PaymentIntent client_secret.
@@ -141,22 +168,8 @@ async function createSubscription(userId: string, email: string) {
     customerId = customer.id
   }
 
-  // Get or create the monthly recurring price via lookup key
-  let priceId: string
-  try {
-    const existing = await stripe.prices.retrieve('guinea_pig_monthly_499')
-    priceId = existing.id
-  } catch {
-    // Price doesn't exist yet — create it
-    const price = await stripe.prices.create({
-      unit_amount: 499,
-      currency:    'gbp',
-      recurring:   { interval: 'month' },
-      product_data: { name: 'Guinea Pig Monthly' },
-      // Stripe doesn't support lookup_key on creation via this API; store by id below
-    })
-    priceId = price.id
-  }
+  // Resolve the £4.99/mo price (env-var'd real price id in live; safe find-or-create otherwise).
+  const priceId = await resolveMonthlyPriceId()
 
   // Cancel any existing incomplete subscription before creating a new one
   if (existingRow?.stripe_subscription_id) {
