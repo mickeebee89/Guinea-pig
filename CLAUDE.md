@@ -27,7 +27,8 @@ _This file is read automatically at the start of every Claude Code session. It h
 
 ## Key identifiers
 
-- **Admin / provider "Micky B":** user_id `ff06d568-8936-45fa-ad5f-0b88c150ec30` (micky.buckfield@gmail.com); `providers.id` `49d40aae-a830-41d1-bca8-0fbdb2695455`.
+- **Admin access = a row in the `admins` table** (keyed to the immutable `auth.users.id`); enforced server-side by `proxy.ts` (`is_admin()` on every route) + RLS. **Two admins:** a **dedicated console-only admin on a separate email (primary, added 17 Jul)** that is NEVER an app user — so app-side changes can't affect admin login — plus **Micky B `ff06d568…` as break-glass backup**. Never sign the dedicated admin into the mobile app; never delete its auth user (`admins.user_id` cascades).
+- **"Micky B" (provider/app + backup admin):** user_id `ff06d568-8936-45fa-ad5f-0b88c150ec30` (micky.buckfield@gmail.com); `providers.id` `49d40aae-a830-41d1-bca8-0fbdb2695455`.
 - **Model test acct:** `b0df9c2f-02c5-4fef-afb0-9b184c3b9130` (micky.buckfield@hotmail.co.uk — subscribed + verified).
 - **Provider test acct** `nahitih259@bevriz.com`: user_id `517c2853-50bb-4e8f-87fe-d79311bc37c0`.
 - **Palette:** gold `#C2A14D`, blush/softPink `#F4DADC`, off-white `#FBF6F1`, warmDark `#3A302C`, pinkVibrant `#F45D9E`, roseDark `#A8862E`.
