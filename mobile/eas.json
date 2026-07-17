@@ -23,7 +23,7 @@
         "GRADLE_OPTS": "-Xmx2g -XX:MaxMetaspaceSize=512m",
         "EXPO_PUBLIC_SUPABASE_URL": "https://ptluekkhiopowuyvkgnd.supabase.co",
         "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_g-YDwagWoZBMvrBoZPQmYQ_VXfWZ40T",
-        "EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY": "pk_test_51Tg8Uf2NT7OAGIRcJqI0IpvuQIpxxTxVvSsccfIapBqlhEGczUlBVXQHmvbieIbRYz28q75nJdt1zeQLT0C9Mb2K00KWePIH3S"
+        "EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY": "pk_live_51Tg8Uf2NT7OAGIRc4DSmTZuNjYyKYLJJgvSbYe7eaIJ3KTDMsHaXui9DTeMOHgY7VAf287bRlI51SlhI0S49oQHG00wJia2Rfu"
       },
       "android": {
         "buildType": "apk",
@@ -31,6 +31,12 @@
       }
     },
     "production": {
+      "env": {
+        "GRADLE_OPTS": "-Xmx2g -XX:MaxMetaspaceSize=512m",
+        "EXPO_PUBLIC_SUPABASE_URL": "https://ptluekkhiopowuyvkgnd.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_g-YDwagWoZBMvrBoZPQmYQ_VXfWZ40T",
+        "EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY": "pk_live_51Tg8Uf2NT7OAGIRc4DSmTZuNjYyKYLJJgvSbYe7eaIJ3KTDMsHaXui9DTeMOHgY7VAf287bRlI51SlhI0S49oQHG00wJia2Rfu"
+      },
       "android": {
         "buildType": "app-bundle"
       }

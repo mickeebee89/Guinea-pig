@@ -85,7 +85,7 @@ Verification queue, Reports, Moderation, Users (with **Free access / waive-fee**
 
 ## Known issues / watch-list
 - 🔒 **Email confirmation is OFF** — re-enable before launch, then re-test. The landing page (`web/auth-confirmed.html` at `/auth/confirmed`) + `SignupScreen` `emailRedirectTo` are already wired and the URL is in Supabase Redirect URLs, so re-enabling should just work (confirmation completes server-side; the page is a friendly landing).
-- 💳 **Stripe is TEST mode** — swap to LIVE keys (mobile `pk_live` + edge fn `sk_live`) before launch.
+- 💳 **Stripe is LIVE** — mobile `pk_live` in `.env` (local) + `eas.json` (preview + production); edge fns `stripe-payment` + `delete-account` on `sk_live` + live `STRIPE_MONTHLY_PRICE_ID` (`price_1Tu7cA…`). Standard Stripe, we're merchant of record (VAT/tax is ours). _(Keys swapped + functions redeployed; confirm with one real live transaction.)_
 - 🧾 Mobile treatments are **category-only** (no per-treatment pricing/colour in the app UI).
 - ⚠️ **No Stripe webhook** — payment/sub state is reconciled at write time; cancellation expiry is date-driven. Fine for now, but a webhook would be the robust long-term reconciler (e.g. external cancellations, failed renewals).
 - ✅ ~~Provider "New application" notification not tappable~~ — **fixed** in `cc111dd`.
