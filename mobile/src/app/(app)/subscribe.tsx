@@ -173,7 +173,7 @@ export default function SubscribeScreen() {
               <Text style={styles.priceAmount}>£4.99</Text>
               <Text style={styles.pricePeriod}> / month</Text>
             </View>
-            <Text style={styles.cancelNote}>Cancel anytime · No hidden fees</Text>
+            <Text style={styles.cancelNote}>Auto-renews monthly · Cancel anytime · No hidden fees</Text>
           </View>
 
           {/* What's included */}
@@ -202,6 +202,15 @@ export default function SubscribeScreen() {
             </Text>
           </View>
 
+          {/* Subscription terms — kept next to the CTA (not in the footer fine print)
+             so price, renewal frequency, auto-renewal and cancellation are all clear
+             BEFORE purchase. */}
+          <Text style={styles.renewalNote}>
+            You'll be charged <Text style={styles.renewalStrong}>£4.99 today</Text>, then{' '}
+            <Text style={styles.renewalStrong}>£4.99 every month</Text> until you cancel.
+            Cancel anytime in Settings.
+          </Text>
+
           {/* CTA */}
           <TouchableOpacity
             style={[styles.primaryBtn, loading && { opacity: 0.7 }]}
@@ -227,7 +236,7 @@ export default function SubscribeScreen() {
           </TouchableOpacity>
 
           <Text style={styles.legalNote}>
-            Secured by Stripe · Your subscription renews monthly until cancelled · Cancel from Settings
+            Secured by Stripe · Manage or cancel anytime in Settings
           </Text>
         </ScrollView>
       )}
@@ -392,6 +401,13 @@ const styles = StyleSheet.create({
     fontSize: 11, color: Colors.muted, textAlign: 'center',
     lineHeight: 16, marginTop: 12, paddingHorizontal: 8,
   },
+  // Pre-purchase subscription terms — deliberately readable (not 11px fine print)
+  // and sat directly above the CTA.
+  renewalNote: {
+    fontSize: 13, color: Colors.warmDark, textAlign: 'center',
+    lineHeight: 19, marginBottom: 12, paddingHorizontal: 6,
+  },
+  renewalStrong: { fontFamily: Fonts.bodyBold, color: Colors.warmDark },
 
   // Success
   successIconRing: {

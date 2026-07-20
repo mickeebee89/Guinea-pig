@@ -817,6 +817,24 @@ export default function SettingsScreen() {
           )}
         </View>
 
+        {/* ─────────────── SUPPORT ─────────────── */}
+        <Text style={styles.sectionTitle}>Support</Text>
+        <View style={styles.card}>
+          <Row
+            icon="mail-outline"
+            label="Contact support"
+            onPress={async () => {
+              await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+              // Fall back to showing the address if the device has no mail app,
+              // so this never silently does nothing.
+              Linking.openURL('mailto:support@guineapigapp.co.uk?subject=Guinea%20Pig%20support')
+                .catch(() => Alert.alert('Contact support', 'Email us at support@guineapigapp.co.uk'))
+            }}
+            rightEl={<Ionicons name="open-outline" size={15} color={Colors.muted} />}
+            last
+          />
+        </View>
+
         {/* ─────────────── LEGAL ─────────────── */}
         <Text style={styles.sectionTitle}>Legal</Text>
         <View style={styles.card}>
