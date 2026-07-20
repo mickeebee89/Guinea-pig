@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
+  Linking,
 } from 'react-native'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import * as Haptics from 'expo-haptics'
@@ -17,6 +18,9 @@ import { Colors, Fonts, Radius, Shadow } from '@/constants/Colors'
 import { useAuth } from '@/context/auth'
 import { supabase } from '@/lib/supabase'
 import { isIdentityVerified } from '@/lib/verification'
+
+// Full refund/cancellation policy lives in Terms section 9.
+const TERMS_URL = 'https://guineapigapp.co.uk/terms'
 
 // ── Screen ────────────────────────────────────────────────────────────────────
 
@@ -208,7 +212,12 @@ export default function SubscribeScreen() {
           <Text style={styles.renewalNote}>
             You'll be charged <Text style={styles.renewalStrong}>£4.99 today</Text>, then{' '}
             <Text style={styles.renewalStrong}>£4.99 every month</Text> until you cancel.
-            Cancel anytime in Settings.
+          </Text>
+          <Text style={styles.refundNote}>
+            Cancel anytime in Settings — your membership runs to the end of the month
+            you've paid for. See{' '}
+            <Text style={styles.termsLink} onPress={() => Linking.openURL(TERMS_URL)}>Terms</Text>
+            {' '}for our full refund policy.
           </Text>
 
           {/* CTA */}
@@ -236,7 +245,7 @@ export default function SubscribeScreen() {
           </TouchableOpacity>
 
           <Text style={styles.legalNote}>
-            Secured by Stripe · Manage or cancel anytime in Settings
+            Secured by Stripe
           </Text>
         </ScrollView>
       )}
@@ -408,6 +417,16 @@ const styles = StyleSheet.create({
     lineHeight: 19, marginBottom: 12, paddingHorizontal: 6,
   },
   renewalStrong: { fontFamily: Fonts.bodyBold, color: Colors.warmDark },
+  // Cancellation + refund terms (full policy: Terms section 9).
+  refundNote: {
+    fontSize: 12, color: Colors.muted, textAlign: 'center',
+    lineHeight: 17, marginBottom: 14, paddingHorizontal: 6,
+  },
+  termsLink: {
+    color: Colors.roseDark,
+    fontFamily: Fonts.bodyBold,
+    textDecorationLine: 'underline',
+  },
 
   // Success
   successIconRing: {

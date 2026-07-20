@@ -8,6 +8,7 @@ import {
   Image,
   ActivityIndicator,
   Alert,
+  Linking,
 } from 'react-native'
 import { useRouter, useLocalSearchParams } from 'expo-router'
 import * as Haptics from 'expo-haptics'
@@ -20,6 +21,9 @@ import { useStripe } from '@stripe/stripe-react-native'
 import { Colors, Fonts, Radius, Shadow } from '@/constants/Colors'
 import { useAuth } from '@/context/auth'
 import { supabase } from '@/lib/supabase'
+
+// Full refund policy lives in Terms section 9.
+const TERMS_URL = 'https://guineapigapp.co.uk/terms'
 
 type Step = 'loading' | 'instructions' | 'camera' | 'uploading' | 'submitted' | 'confirming' | 'confirm-failed' | 'success' | 'rejected'
 
@@ -358,6 +362,16 @@ export default function VerifyPaymentScreen() {
             </View>
           ))}
 
+          {/* Refund terms shown BEFORE the charge (full policy: Terms section 9). */}
+          {isProvider && !hasPaid && (
+            <Text style={styles.refundNote}>
+              This one-off fee covers processing your verification and is non-refundable
+              once your verification has been completed. See{' '}
+              <Text style={styles.termsLink} onPress={() => Linking.openURL(TERMS_URL)}>Terms</Text>
+              {' '}for details.
+            </Text>
+          )}
+
           {isProvider && !hasPaid ? (
             <TouchableOpacity
               style={[styles.primaryBtn, paymentLoading && { opacity: 0.7 }]}
@@ -650,5 +664,15 @@ const styles = StyleSheet.create({
   legalNote: {
     fontSize: 11, color: Colors.muted, textAlign: 'center',
     lineHeight: 16, marginTop: 8, paddingHorizontal: 8,
+  },
+  // Refund terms for the one-off £14.99 fee, shown before the charge.
+  refundNote: {
+    fontSize: 12, color: Colors.muted, textAlign: 'center',
+    lineHeight: 17, marginBottom: 12, paddingHorizontal: 6,
+  },
+  termsLink: {
+    color: Colors.roseDark,
+    fontFamily: Fonts.bodyBold,
+    textDecorationLine: 'underline',
   },
 })
