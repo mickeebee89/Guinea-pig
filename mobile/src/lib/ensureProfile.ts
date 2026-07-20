@@ -22,7 +22,7 @@ export async function ensureProfile(session: Session): Promise<EnsureProfileResu
   // 1. Does the users row exist? (existence check doubles as the role lookup)
   const { data: existingUser, error: userSelErr } = await supabase
     .from('users')
-    .select('role')
+    .select('role, date_of_birth')
     .eq('id', uid)
     .maybeSingle()
 
@@ -48,6 +48,7 @@ export async function ensureProfile(session: Session): Promise<EnsureProfileResu
       first_name:   (meta.first_name as string | undefined) || '',
       last_name:    (meta.last_name as string | undefined) || null,
       last_initial: (meta.last_initial as string | undefined) || null,
+      date_of_birth:(meta.date_of_birth as string | undefined) || null,
       region:       'UK',
     }, { onConflict: 'id', ignoreDuplicates: true })
     // ignoreDuplicates makes this ON CONFLICT DO NOTHING, so a row the auth.users
@@ -58,6 +59,20 @@ export async function ensureProfile(session: Session): Promise<EnsureProfileResu
       return { role: metaRole, error: userUpsertErr }
     }
     role = metaRole
+  }
+
+  // 2b. Backfill date_of_birth from signup metadata when the column is still null.
+  //     The auth.users trigger creates the users row WITHOUT the DOB, so a normal
+  //     signup lands here — this is what actually gets the DOB into public.users.
+  //     Guarded on null, so a healthy row is written at most once and an existing
+  //     value is never overwritten. Non-fatal: a failure here must not block login.
+  const metaDob = meta.date_of_birth as string | undefined
+  if (existingUser && !(existingUser as any).date_of_birth && metaDob) {
+    const { error: dobErr } = await supabase
+      .from('users')
+      .update({ date_of_birth: metaDob })
+      .eq('id', uid)
+    if (dobErr) console.error('ensureProfile: date_of_birth backfill failed:', dobErr)
   }
 
   // 3. Providers row — self-heal only if genuinely missing. The auth.users trigger is

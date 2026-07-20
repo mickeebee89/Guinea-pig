@@ -21,6 +21,30 @@ import { pendingAuth } from '@/lib/pendingAuth'
 const TERMS_URL   = 'https://guineapigapp.co.uk/terms'
 const PRIVACY_URL = 'https://guineapigapp.co.uk/privacy'
 
+// ── Age gate (18+) ────────────────────────────────────────────────────────────
+// Real date-of-birth check, not just a tick-box: the app matches strangers for
+// in-person appointments, so store policy expects a genuine age safeguard.
+
+// Age today, accounting for whether this year's birthday has already passed.
+function ageOn(dob: Date, today = new Date()): number {
+  let age = today.getFullYear() - dob.getFullYear()
+  const m = today.getMonth() - dob.getMonth()
+  if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) age--
+  return age
+}
+
+// Parse DD/MM/YYYY parts into a real Date, or null if that date doesn't exist.
+// Built from parts (not Date.parse) so there's no timezone shift, and the
+// round-trip check rejects rollovers like 31/02 that JS would silently accept.
+function parseDob(d: string, m: string, y: string): Date | null {
+  if (!/^\d{1,2}$/.test(d) || !/^\d{1,2}$/.test(m) || !/^\d{4}$/.test(y)) return null
+  const day = Number(d), month = Number(m), year = Number(y)
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null
+  const dt = new Date(year, month - 1, day)
+  if (dt.getFullYear() !== year || dt.getMonth() !== month - 1 || dt.getDate() !== day) return null
+  return dt
+}
+
 interface ConfirmParams {
   email: string
   role: string
@@ -41,6 +65,9 @@ export default function SignupScreen({ role, onBack, onGoLogin, onNeedConfirmati
   const [email, setEmail]             = useState('')
   const [password, setPassword]       = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+  const [dobDay, setDobDay]           = useState('')
+  const [dobMonth, setDobMonth]       = useState('')
+  const [dobYear, setDobYear]         = useState('')
   const [ageConfirmed, setAgeConfirmed] = useState(false)
   const [termsAccepted, setTermsAccepted] = useState(false)
   const [loading, setLoading]         = useState(false)
@@ -73,6 +100,18 @@ export default function SignupScreen({ role, onBack, onGoLogin, onNeedConfirmati
     if (!email.includes('@'))    e.email       = 'Enter a valid email'
     if (password.length < 8)     e.password    = 'At least 8 characters'
     if (password !== confirmPassword) e.confirmPassword = 'Passwords do not match'
+
+    // Date of birth — the real 18+ gate.
+    if (!dobDay.trim() || !dobMonth.trim() || !dobYear.trim()) {
+      e.dob = 'Enter your date of birth'
+    } else {
+      const dob = parseDob(dobDay, dobMonth, dobYear)
+      if (!dob)                    e.dob = 'Enter a valid date of birth'
+      else if (dob > new Date())   e.dob = 'Date of birth cannot be in the future'
+      else if (ageOn(dob) > 120)   e.dob = 'Enter a valid date of birth'
+      else if (ageOn(dob) < 18)    e.dob = 'You must be 18 or over to use Guinea Pig'
+    }
+
     if (!ageConfirmed)           e.age         = 'You must confirm you are 18 or over'
     if (!termsAccepted)          e.terms       = 'Please agree to the Terms and Privacy Policy'
     return e
@@ -97,6 +136,11 @@ export default function SignupScreen({ role, onBack, onGoLogin, onNeedConfirmati
     const cleanLast    = lastName.trim()
     const cleanInitial = (cleanLast.match(/[a-z]/i)?.[0] ?? cleanLast.charAt(0)).toUpperCase()
 
+    // Already validated above. Build the ISO date from the local parts so the
+    // stored day can't shift a timezone either way.
+    const dob    = parseDob(dobDay, dobMonth, dobYear)!
+    const dobIso = `${dob.getFullYear()}-${String(dob.getMonth() + 1).padStart(2, '0')}-${String(dob.getDate()).padStart(2, '0')}`
+
     const { data, error } = await supabase.auth.signUp({
       email: email.trim().toLowerCase(),
       password,
@@ -108,7 +152,7 @@ export default function SignupScreen({ role, onBack, onGoLogin, onNeedConfirmati
       // landing. Only used when email confirmation is enabled in Supabase.
       options: {
         emailRedirectTo: 'https://guineapigapp.co.uk/auth/confirmed',
-        data: { role, first_name: cleanFirst, last_name: cleanLast, last_initial: cleanInitial, age_confirmed: true, terms_accepted: true },
+        data: { role, first_name: cleanFirst, last_name: cleanLast, last_initial: cleanInitial, date_of_birth: dobIso, age_confirmed: true, terms_accepted: true },
       },
     })
 
@@ -246,6 +290,42 @@ export default function SignupScreen({ role, onBack, onGoLogin, onNeedConfirmati
                 error={errors.confirmPassword}
               />
 
+              {/* Date of birth — the real 18+ gate (the tick below is the declaration) */}
+              <Text style={styles.dobLabel}>Date of birth</Text>
+              <View style={styles.dobRow}>
+                <View style={styles.dobPart}>
+                  <Input
+                    placeholder="DD"
+                    value={dobDay}
+                    onChangeText={t => setDobDay(t.replace(/\D/g, ''))}
+                    keyboardType="number-pad"
+                    maxLength={2}
+                  />
+                </View>
+                <View style={styles.dobPart}>
+                  <Input
+                    placeholder="MM"
+                    value={dobMonth}
+                    onChangeText={t => setDobMonth(t.replace(/\D/g, ''))}
+                    keyboardType="number-pad"
+                    maxLength={2}
+                  />
+                </View>
+                <View style={styles.dobYearPart}>
+                  <Input
+                    placeholder="YYYY"
+                    value={dobYear}
+                    onChangeText={t => setDobYear(t.replace(/\D/g, ''))}
+                    keyboardType="number-pad"
+                    maxLength={4}
+                  />
+                </View>
+              </View>
+              {errors.dob && <Text style={styles.dobError}>{errors.dob}</Text>}
+              <Text style={styles.nameHint}>
+                We use this to confirm you're 18 or over. It's never shown publicly.
+              </Text>
+
               {/* 18+ age confirmation — required (store compliance gate) */}
               <TouchableOpacity style={styles.checkRow} onPress={toggleAge} activeOpacity={0.8}>
                 <View style={[styles.checkbox, ageConfirmed && styles.checkboxActive]}>
@@ -334,6 +414,24 @@ const styles = StyleSheet.create({
     lineHeight: 17,
     marginTop: 6,
     marginBottom: 4,
+    marginLeft: 4,
+  },
+  // Date of birth — label mirrors the shared Input's own label styling so the
+  // three-part row reads as one field.
+  dobLabel: {
+    fontSize: 13,
+    fontFamily: Fonts.bodyBold,
+    color: Colors.warmDark,
+    marginBottom: 6,
+    opacity: 0.7,
+  },
+  dobRow:      { flexDirection: 'row', gap: 12 },
+  dobPart:     { flex: 1 },
+  dobYearPart: { flex: 1.4 },
+  dobError: {
+    color: Colors.error,
+    fontSize: 12,
+    marginTop: -8,   // pull up under the Input's own 16px bottom margin
     marginLeft: 4,
   },
   checkRow: {

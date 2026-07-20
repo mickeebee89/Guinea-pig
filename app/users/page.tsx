@@ -18,6 +18,7 @@ interface User {
   is_founding_provider: boolean
   provider_fee_waived: boolean
   subscription_waived: boolean
+  date_of_birth: string | null
   created_at: string
   session_count?: number
   report_count?: number
@@ -110,6 +111,19 @@ export default function UsersPage() {
     load()
   }
 
+  // Age from the signup date of birth (18+ is enforced at signup). Null for
+  // accounts created before the DOB field existed — shown as "—".
+  const ageFrom = (dob: string | null) => {
+    if (!dob) return null
+    const d = new Date(dob)
+    if (isNaN(d.getTime())) return null
+    const today = new Date()
+    let age = today.getFullYear() - d.getFullYear()
+    const m = today.getMonth() - d.getMonth()
+    if (m < 0 || (m === 0 && today.getDate() < d.getDate())) age--
+    return age
+  }
+
   const badge = (v: boolean, t: string, f: string) =>
     <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${v ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>{v ? t : f}</span>
 
@@ -155,6 +169,7 @@ export default function UsersPage() {
                 <th className="text-left px-4 py-2">Name</th>
                 <th className="text-left px-4 py-2">Email</th>
                 <th className="text-left px-4 py-2">Role</th>
+                <th className="text-left px-4 py-2">Age</th>
                 <th className="text-left px-4 py-2">Verified</th>
                 <th className="text-left px-4 py-2">Fee</th>
                 <th className="text-left px-4 py-2">Subscription</th>
@@ -174,6 +189,9 @@ export default function UsersPage() {
                   </td>
                   <td className="px-4 py-2 text-[#3D2E2E]/60">{u.email}</td>
                   <td className="px-4 py-2 capitalize">{u.role}</td>
+                  <td className="px-4 py-2 text-[#3D2E2E]/60" title={u.date_of_birth ? new Date(u.date_of_birth).toLocaleDateString('en-GB') : 'No date of birth on record'}>
+                    {ageFrom(u.date_of_birth) ?? <span className="text-[#3D2E2E]/30">—</span>}
+                  </td>
                   <td className="px-4 py-2">{badge(u.is_verified, 'Verified', 'No')}</td>
                   <td className="px-4 py-2">{(u.role === 'provider' || u.role === 'both') ? feeStatus(u) : <span className="text-[#3D2E2E]/30">—</span>}</td>
                   <td className="px-4 py-2 capitalize text-[#3D2E2E]/60">
