@@ -40,6 +40,7 @@ type UserData = {
   is_verified:               boolean | null
   subscription_status:       string | null
   subscription_next_billing: string | null
+  subscription_waived:       boolean | null
 }
 
 type VerifStatus = 'none' | 'pending' | 'approved' | 'declined'
@@ -202,7 +203,7 @@ export default function SettingsScreen() {
     try {
       const { data: ud } = await supabase
         .from('users')
-        .select('first_name, last_initial, role, profile_pic_url, is_verified, subscription_status, subscription_next_billing')
+        .select('first_name, last_initial, role, profile_pic_url, is_verified, subscription_status, subscription_next_billing, subscription_waived')
         .eq('id', userId)
         .single()
 
@@ -544,9 +545,12 @@ export default function SettingsScreen() {
   const isBoth     = dbRole === 'both'
   // Has an active-ish plan (grants access): active, trialling, or cancelling-at-period-end.
   // 'none'/'cancelled'/null = no plan → show Upgrade. (DB never uses 'free'.)
+  const isComped    = !!userData?.subscription_waived
   const isPaid      = ['active', 'trialling', 'cancelling'].includes(userData?.subscription_status ?? '')
   const isCanceling = userData?.subscription_status === 'cancelling'
-  const sub         = subscriptionLabel(userData?.subscription_status)
+  const sub         = isComped
+    ? { text: '✨ Complimentary', color: Colors.roseDark }
+    : subscriptionLabel(userData?.subscription_status)
 
   const displayName = userData
     ? `${userData.first_name}${userData.last_initial ? ` ${userData.last_initial}.` : ''}`
@@ -670,7 +674,7 @@ export default function SettingsScreen() {
                   value={formatBillingDate(userData?.subscription_next_billing)}
                 />
               )}
-              {!isPaid && (
+              {!isPaid && !isComped && (
                 <Row
                   icon="sparkles-outline"
                   label="Upgrade to Premium"

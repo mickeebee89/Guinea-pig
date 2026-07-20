@@ -16,6 +16,16 @@ export async function isIdentityVerified(userId: string): Promise<boolean> {
 // (cancel-at-period-end) up to current_period_end — so a cancelled user keeps what
 // they paid for and access lapses at period end (date-driven; there is no webhook).
 export async function hasActiveSubscription(userId: string): Promise<boolean> {
+  // Admin comp / promo: a waived membership grants access WITHOUT a Stripe subscription
+  // (mirrors provider_fee_waived on the provider side). Used for App-Review demo accounts,
+  // comps and promos. Read defensively — a hiccup here must never block a real subscriber.
+  const { data: u } = await supabase
+    .from('users')
+    .select('subscription_waived')
+    .eq('id', userId)
+    .maybeSingle()
+  if ((u as any)?.subscription_waived) return true
+
   const { data, error } = await supabase
     .from('subscriptions')
     .select('status, current_period_end')

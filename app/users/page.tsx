@@ -17,6 +17,7 @@ interface User {
   subscription_status: string
   is_founding_provider: boolean
   provider_fee_waived: boolean
+  subscription_waived: boolean
   created_at: string
   session_count?: number
   report_count?: number
@@ -97,6 +98,12 @@ export default function UsersPage() {
       // gate treats a waived provider as fee-settled, so they can make their shop live.
       await supabase.from('users').update({ provider_fee_waived: !user.provider_fee_waived }).eq('id', user.id)
     }
+    if (action === 'comp') {
+      // Free membership: grant/revoke a comped model subscription (no Stripe charge). The
+      // mobile apply-gate (hasActiveSubscription) treats a waived member as subscribed —
+      // for App-Review demo accounts, comps and promos.
+      await supabase.from('users').update({ subscription_waived: !user.subscription_waived }).eq('id', user.id)
+    }
     await logAction(action, { targetUserId: user.id, adminNote: reason })
     setModal(null)
     setReason('')
@@ -145,58 +152,78 @@ export default function UsersPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-black/5 text-[#3D2E2E]/50 text-xs uppercase tracking-wide">
-                <th className="text-left px-4 py-3">Name</th>
-                <th className="text-left px-4 py-3">Email</th>
-                <th className="text-left px-4 py-3">Role</th>
-                <th className="text-left px-4 py-3">Verified</th>
-                <th className="text-left px-4 py-3">Fee</th>
-                <th className="text-left px-4 py-3">Subscription</th>
-                <th className="text-left px-4 py-3">Sessions</th>
-                <th className="text-left px-4 py-3">Reports</th>
-                <th className="text-left px-4 py-3">Joined</th>
-                <th className="text-left px-4 py-3">Actions</th>
+                <th className="text-left px-4 py-2">Name</th>
+                <th className="text-left px-4 py-2">Email</th>
+                <th className="text-left px-4 py-2">Role</th>
+                <th className="text-left px-4 py-2">Verified</th>
+                <th className="text-left px-4 py-2">Fee</th>
+                <th className="text-left px-4 py-2">Subscription</th>
+                <th className="text-left px-4 py-2">Sessions</th>
+                <th className="text-left px-4 py-2">Reports</th>
+                <th className="text-left px-4 py-2">Joined</th>
+                <th className="text-left px-4 py-2">Actions</th>
               </tr>
             </thead>
             <tbody>
               {filtered.map(u => (
                 <tr key={u.id} className={`border-b border-black/5 last:border-0 hover:bg-black/[0.01] ${u.fraud_flagged ? 'bg-red-50' : ''}`}>
-                  <td className="px-4 py-3 font-medium">
+                  <td className="px-4 py-2 font-medium">
                     {u.first_name} {u.last_name ?? (u.last_initial ? `${u.last_initial}.` : '')}
                     {u.fraud_flagged && <span className="ml-1 text-red-500 text-xs">⚑</span>}
                     {u.is_founding_provider && <span className="ml-1 text-yellow-600 text-xs">★</span>}
                   </td>
-                  <td className="px-4 py-3 text-[#3D2E2E]/60">{u.email}</td>
-                  <td className="px-4 py-3 capitalize">{u.role}</td>
-                  <td className="px-4 py-3">{badge(u.is_verified, 'Verified', 'No')}</td>
-                  <td className="px-4 py-3">{(u.role === 'provider' || u.role === 'both') ? feeStatus(u) : <span className="text-[#3D2E2E]/30">—</span>}</td>
-                  <td className="px-4 py-3 capitalize text-[#3D2E2E]/60">{u.subscription_status}</td>
-                  <td className="px-4 py-3">{u.session_count}</td>
-                  <td className="px-4 py-3">{u.report_count && u.report_count > 0
+                  <td className="px-4 py-2 text-[#3D2E2E]/60">{u.email}</td>
+                  <td className="px-4 py-2 capitalize">{u.role}</td>
+                  <td className="px-4 py-2">{badge(u.is_verified, 'Verified', 'No')}</td>
+                  <td className="px-4 py-2">{(u.role === 'provider' || u.role === 'both') ? feeStatus(u) : <span className="text-[#3D2E2E]/30">—</span>}</td>
+                  <td className="px-4 py-2 capitalize text-[#3D2E2E]/60">
+                    {u.subscription_waived
+                      ? <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-purple-100 text-purple-700">Comp</span>
+                      : u.subscription_status}
+                  </td>
+                  <td className="px-4 py-2">{u.session_count}</td>
+                  <td className="px-4 py-2">{u.report_count && u.report_count > 0
                     ? <span className="text-red-600 font-medium">{u.report_count}</span>
                     : u.report_count}
                   </td>
-                  <td className="px-4 py-3 text-[#3D2E2E]/50">{new Date(u.created_at).toLocaleDateString('en-GB')}</td>
-                  <td className="px-4 py-3">
-                    <div className="flex gap-1 flex-wrap">
-                      {[
-                        { a: 'warn',      label: 'Warn',      color: 'bg-amber-100 text-amber-700' },
-                        { a: 'suspend',   label: 'Suspend',   color: 'bg-orange-100 text-orange-700' },
-                        { a: 'ban',       label: 'Ban',       color: 'bg-red-100 text-red-700' },
-                        { a: 'reinstate', label: 'Reinstate', color: 'bg-green-100 text-green-700' },
-                        { a: 'verify',    label: 'Verify',    color: 'bg-blue-100 text-blue-700' },
-                        { a: 'flag',      label: u.fraud_flagged ? 'Unflag' : 'Flag', color: 'bg-gray-100 text-gray-600' },
-                      ].map(({ a, label, color }) => (
-                        <button key={a} onClick={() => { setModal({ user: u, action: a }); setReason('') }}
-                          className={`text-xs px-2 py-1 rounded-md font-medium ${color}`}>
-                          {label}
-                        </button>
-                      ))}
+                  <td className="px-4 py-2 text-[#3D2E2E]/50">{new Date(u.created_at).toLocaleDateString('en-GB')}</td>
+                  <td className="px-4 py-2 whitespace-nowrap">
+                    <div className="flex gap-1 flex-nowrap items-center">
+                      {/* Primary: the actions used constantly for review/comp setup. */}
+                      <button onClick={() => { setModal({ user: u, action: 'verify' }); setReason('') }}
+                        title="Mark this user identity-verified"
+                        className="text-[11px] px-2 py-1 rounded-md font-medium bg-blue-100 text-blue-700">
+                        Verify
+                      </button>
                       {(u.role === 'provider' || u.role === 'both') && (
                         <button onClick={() => { setModal({ user: u, action: 'waive' }); setReason('') }}
-                          className="text-xs px-2 py-1 rounded-md font-medium bg-purple-100 text-purple-700">
-                          {u.provider_fee_waived ? 'Revoke free access' : 'Free access'}
+                          title={u.provider_fee_waived ? 'Revoke free access' : 'Waive the £14.99 verification fee'}
+                          className="text-[11px] px-2 py-1 rounded-md font-medium bg-purple-100 text-purple-700">
+                          {u.provider_fee_waived ? 'Revoke fee' : 'Free fee'}
                         </button>
                       )}
+                      {(u.role === 'model' || u.role === 'both') && (
+                        <button onClick={() => { setModal({ user: u, action: 'comp' }); setReason('') }}
+                          title={u.subscription_waived ? 'Revoke complimentary membership' : 'Grant a complimentary membership (no Stripe charge)'}
+                          className="text-[11px] px-2 py-1 rounded-md font-medium bg-purple-100 text-purple-700">
+                          {u.subscription_waived ? 'Revoke sub' : 'Free sub'}
+                        </button>
+                      )}
+
+                      {/* Moderation: condensed to glyph buttons (tooltips keep them clear). */}
+                      {[
+                        { a: 'warn',      glyph: '⚠',                          title: 'Warn',      color: 'bg-amber-100 text-amber-700' },
+                        { a: 'suspend',   glyph: '⏸',                          title: 'Suspend',   color: 'bg-orange-100 text-orange-700' },
+                        { a: 'ban',       glyph: '⛔',                          title: 'Ban',       color: 'bg-red-100 text-red-700' },
+                        { a: 'reinstate', glyph: '↩',                          title: 'Reinstate', color: 'bg-green-100 text-green-700' },
+                        { a: 'flag',      glyph: u.fraud_flagged ? '⚐' : '⚑',  title: u.fraud_flagged ? 'Unflag fraud' : 'Flag fraud', color: 'bg-gray-100 text-gray-600' },
+                      ].map(({ a, glyph, title, color }) => (
+                        <button key={a} onClick={() => { setModal({ user: u, action: a }); setReason('') }}
+                          title={title}
+                          className={`w-6 h-6 flex items-center justify-center rounded-md text-xs leading-none ${color}`}>
+                          {glyph}
+                        </button>
+                      ))}
                     </div>
                   </td>
                 </tr>
