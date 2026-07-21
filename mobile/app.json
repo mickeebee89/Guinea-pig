@@ -16,6 +16,7 @@
     "scheme": "mobile",
     "userInterfaceStyle": "automatic",
     "ios": {
+      "bundleIdentifier": "com.guineapig.app",
       "icon": "./assets/expo.icon"
     },
     "android": {
@@ -37,6 +38,15 @@
     "plugins": [
       "expo-updates",
       "expo-router",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "compileSdkVersion": 36,
+            "targetSdkVersion": 36
+          }
+        }
+      ],
       [
         "expo-splash-screen",
         {
