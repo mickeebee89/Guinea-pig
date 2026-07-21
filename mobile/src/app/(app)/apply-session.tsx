@@ -87,6 +87,16 @@ function toHHMMSS(t: string): string {
   return t && t.length === 5 ? `${t}:00` : t
 }
 
+// DB times come back as 'HH:MM:SS' — never show the raw value to a user.
+// Mirrors fmtTime in sessions.tsx so both screens read '9:00am'.
+function fmtTime(t: string): string {
+  if (!t) return ''
+  const [h, min] = t.split(':')
+  const hour = parseInt(h, 10)
+  if (isNaN(hour)) return t
+  return `${hour % 12 || 12}:${min}${hour >= 12 ? 'pm' : 'am'}`
+}
+
 // Composite slot key so a taken booking matches its availability slot exactly.
 function slotKey(startTime: string, endTime: string): string {
   return `${toHHMMSS(startTime)}|${toHHMMSS(endTime)}`
@@ -500,7 +510,7 @@ export default function ApplySessionScreen() {
           user_id:    providerUserId,
           type:       'session_applied',
           title:      'New treatment application',
-          body:       `A model has applied for ${selectedTreatment?.name ?? 'a treatment'} on ${formatDateShort(selectedDate)} at ${selectedSlot.start_time}`,
+          body:       `A model has applied for ${selectedTreatment?.name ?? 'a treatment'} on ${formatDateShort(selectedDate)} at ${fmtTime(selectedSlot.start_time)}`,
           // session_id must be TOP-LEVEL so tap/deep-link + the Leave-review CTA can read
           // n.session_id (matches the model-directed inserts). Unread is tracked by read_at
           // (null = unread) — there is NO `read` column, so we don't set one.
@@ -647,7 +657,7 @@ export default function ApplySessionScreen() {
                         color={isSelected && !taken ? Colors.rose : Colors.muted}
                       />
                       <Text style={[styles.slotTimeText, isSelected && !taken && styles.slotTimeTextSelected, taken && styles.slotTimeTextTaken]}>
-                        {slot.start_time} – {slot.end_time}
+                        {fmtTime(slot.start_time)} – {fmtTime(slot.end_time)}
                       </Text>
                     </View>
                     {taken ? (
@@ -801,7 +811,7 @@ export default function ApplySessionScreen() {
 
             <ConfirmRow icon="person-outline"   label="Provider"  value={providerName ?? ''} />
             <ConfirmRow icon="calendar-outline" label="Date"      value={formatDayLabel(selectedDate)} />
-            <ConfirmRow icon="time-outline"     label="Time"      value={`${selectedSlot.start_time} – ${selectedSlot.end_time}`} />
+            <ConfirmRow icon="time-outline"     label="Time"      value={`${fmtTime(selectedSlot.start_time)} – ${fmtTime(selectedSlot.end_time)}`} />
 
             {/* Treatment — special row with colour stripe */}
             <View style={styles.confirmRow}>
@@ -851,6 +861,27 @@ export default function ApplySessionScreen() {
             </Text>
           </TouchableOpacity>
           </>
+        )}
+
+        {/* Step 7 with an incomplete selection would otherwise render an empty screen
+           behind a permanently-disabled Confirm button — give a way back instead. */}
+        {step === 7 && !(selectedDate && selectedSlot && selectedTreatment) && (
+          <View style={styles.card}>
+            <Text style={styles.emptyTitle}>Something's missing</Text>
+            <Text style={styles.emptySub}>
+              We lost part of your booking details. Go back and pick your date, time and treatment again.
+            </Text>
+            <TouchableOpacity
+              style={[styles.actionBtn, { marginTop: 16 }]}
+              onPress={async () => {
+                await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+                setStep(1)
+              }}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.actionBtnText}>Start again</Text>
+            </TouchableOpacity>
+          </View>
         )}
 
         <View style={{ height: 16 }} />

@@ -492,7 +492,7 @@ export default function VerifyPaymentScreen() {
             onPress={async () => { await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.back() }}
             activeOpacity={0.85}
           >
-            <Text style={styles.ghostBtnText}>Back to settings</Text>
+            <Text style={styles.ghostBtnText}>Done</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -542,7 +542,7 @@ export default function VerifyPaymentScreen() {
             onPress={async () => { await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.back() }}
             activeOpacity={0.9}
           >
-            <Text style={styles.primaryBtnText}>Back to settings</Text>
+            <Text style={styles.primaryBtnText}>Done</Text>
           </TouchableOpacity>
         </View>
       )}

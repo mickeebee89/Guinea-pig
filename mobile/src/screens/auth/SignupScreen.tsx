@@ -127,7 +127,6 @@ export default function SignupScreen({ role, onBack, onGoLogin, onNeedConfirmati
     }
     setErrors({})
     setLoading(true)
-    setCooldown(60)
 
     const cleanFirst   = firstName.trim()
     // Store the FULL surname privately (last_name) and derive the PUBLIC single
@@ -173,6 +172,10 @@ export default function SignupScreen({ role, onBack, onGoLogin, onNeedConfirmati
 
     await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
     setLoading(false)
+    // Rate-limit only AFTER a successful signup. Starting the cooldown before the
+    // request meant a wrong password or a Supabase error locked the button for 60s
+    // with no way to correct the mistake.
+    setCooldown(60)
 
     if (!data.session) {
       pendingAuth.set(email.trim().toLowerCase(), password)

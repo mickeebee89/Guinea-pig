@@ -431,14 +431,20 @@ export default function ProviderShopScreen() {
           </View>
 
           {/* ── Treatments ── */}
-          {treatments.length > 0 ? (
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Treatments</Text>
-              {treatments.map(t => (
+          {/* Always render the section: a model needs to know whether this stylist has
+             listed anything. Silently omitting it made an empty shop look broken. */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Treatments</Text>
+            {treatments.length > 0 ? (
+              treatments.map(t => (
                 <TreatmentRow key={t.id} treatment={t} />
-              ))}
-            </View>
-          ) : null}
+              ))
+            ) : (
+              <Text style={styles.emptyReviews}>
+                No treatments listed yet — check back soon.
+              </Text>
+            )}
+          </View>
 
           {/* ── Portfolio (grouped by category) ── */}
           {portfolioGroups.length > 0 ? (

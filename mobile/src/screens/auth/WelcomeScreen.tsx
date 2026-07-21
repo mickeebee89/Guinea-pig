@@ -72,14 +72,18 @@ export default function WelcomeScreen({ onSelectRole, onGoLogin }: Props) {
 
       <View style={styles.footer}>
         <Text style={styles.footerText}>Already have an account? </Text>
-        <TouchableOpacity onPress={goLogin}>
+        <TouchableOpacity onPress={goLogin} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
           <Text style={styles.loginLink}>Log in</Text>
         </TouchableOpacity>
       </View>
 
-      <Text style={styles.buildTag}>
-        {Updates.updateId ? `upd:${Updates.updateId.slice(-6)}` : 'local'}
-      </Text>
+      {/* Build tag is a debug aid — hidden in release so it isn't the first thing a
+         new user (or an app-store reviewer) sees on the welcome screen. */}
+      {__DEV__ && (
+        <Text style={styles.buildTag}>
+          {Updates.updateId ? `upd:${Updates.updateId.slice(-6)}` : 'local'}
+        </Text>
+      )}
     </SafeAreaView>
   )
 }

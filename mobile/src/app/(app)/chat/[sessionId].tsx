@@ -615,6 +615,21 @@ export default function ChatScreen() {
       )}
 
       {/* ── Messages ── */}
+      {/* The list is `inverted`, which flips its whole subtree — anything rendered inside
+         it (including ListEmptyComponent) comes out mirrored. Rather than counter-
+         transform, render the empty state as a normal sibling and only mount the list
+         when there's something to show. */}
+      {messages.length === 0 ? (
+        <View style={styles.emptyThread}>
+          <Ionicons name="chatbubble-ellipses-outline" size={34} color={Colors.muted} />
+          <Text style={styles.emptyThreadTitle}>No messages yet</Text>
+          <Text style={styles.emptyThreadSub}>
+            {isAccepted
+              ? 'Say hello and share any details about the look you have in mind.'
+              : 'Messages will appear here.'}
+          </Text>
+        </View>
+      ) : (
       <FlatList
         ref={listRef}
         inverted
@@ -702,6 +717,7 @@ export default function ChatScreen() {
           ) : null
         }
       />
+      )}
 
       {/* ── Input bar (accepted only) — blocked users can't message ── */}
       {isBlocked ? (
@@ -730,9 +746,17 @@ export default function ChatScreen() {
             <Ionicons name="send" size={18} color={Colors.white} />
           </TouchableOpacity>
         </View>
+      ) : isCompleted ? (
+        // Read-only: say WHY there's no composer rather than just omitting it.
+        <View style={[styles.readOnlyBar, { paddingBottom: Math.max(insets.bottom, 10) }]}>
+          <Ionicons name="lock-closed" size={13} color={Colors.muted} />
+          <Text style={styles.readOnlyText}>
+            This treatment is complete — the chat is now read-only.
+          </Text>
+        </View>
       ) : (
-        // Completed / other states have no bottom bar — pad for the safe area so the
-        // last message isn't obscured by the system nav bar.
+        // Other states have no bottom bar — pad for the safe area so the last message
+        // isn't obscured by the system nav bar.
         <View style={{ height: Math.max(insets.bottom, 8) }} />
       )}
 
@@ -935,6 +959,23 @@ const styles = StyleSheet.create({
   // Message list
   messageList:    { flex: 1 },
   messageContent: { paddingHorizontal: 12, paddingVertical: 8 },
+
+  // Empty thread (a brand-new accepted booking) + read-only notice
+  // flex:1 so it fills the same space the (flexed) message list would, keeping the
+  // input bar pinned to the bottom.
+  emptyThread: { flex: 1, alignItems: 'center', paddingTop: 56, paddingHorizontal: 32, gap: 8 },
+  emptyThreadTitle: { fontFamily: Fonts.heading, fontSize: 17, color: Colors.warmDark },
+  emptyThreadSub: {
+    fontFamily: Fonts.body, fontSize: 13, color: Colors.muted,
+    textAlign: 'center', lineHeight: 19,
+  },
+  readOnlyBar: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    paddingHorizontal: 16, paddingTop: 12,
+    borderTopWidth: 1, borderTopColor: Colors.border,
+    backgroundColor: Colors.cream,
+  },
+  readOnlyText: { fontFamily: Fonts.body, fontSize: 12, color: Colors.muted },
 
   // Date separator
   dateSeparator: {

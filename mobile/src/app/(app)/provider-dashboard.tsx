@@ -242,6 +242,9 @@ export default function ProviderDashboardScreen() {
   // Mutually-blocked user ids (either direction) — filtered out of applications & nearby.
   const [blockedIds,        setBlockedIds]        = useState<Set<string>>(new Set())
   const [nearbyLoading,     setNearbyLoading]     = useState(true)
+  // Location unavailable (permission denied or GPS failed). Without this the nearby
+  // effect waits on coords that will never arrive and spins forever.
+  const [locationDenied,    setLocationDenied]    = useState(false)
   const [modelSearch,       setModelSearch]       = useState('')
   const [showModelFilters,  setShowModelFilters]  = useState(false)
   const [filterHairColour,  setFilterHairColour]  = useState<string | null>(null)
@@ -326,9 +329,11 @@ export default function ProviderDashboardScreen() {
           .single()
 
         if (insertErr) {
+          // Log the raw Postgres detail for us; show the stylist something human.
+          console.error('provider-dashboard: providers insert failed:', insertErr)
           Alert.alert(
-            'Provider row insert failed',
-            `code: ${insertErr.code}\nmessage: ${insertErr.message}\ndetails: ${insertErr.details ?? '—'}\nhint: ${insertErr.hint ?? '—'}`,
+            'Couldn’t finish setting up your shop',
+            'Please pull down to refresh. If this keeps happening, contact support@guineapigapp.co.uk.',
           )
         }
 
@@ -543,7 +548,9 @@ export default function ProviderDashboardScreen() {
   useEffect(() => {
     if (!userId) return
     Location.requestForegroundPermissionsAsync().then(({ status }) => {
-      if (status !== 'granted') return
+      // Denied → coords stay null forever, so the nearby effect would spin indefinitely.
+      // Flag it instead so the section can explain itself and stop loading.
+      if (status !== 'granted') { setLocationDenied(true); setNearbyLoading(false); return }
       Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }).then(async loc => {
         const lat = loc.coords.latitude
         const lng = loc.coords.longitude
@@ -553,8 +560,8 @@ export default function ProviderDashboardScreen() {
           supabase.from('users').update({ latitude: lat, longitude: lng }).eq('id', userId),
           supabase.from('providers').update({ latitude: lat, longitude: lng }).eq('user_id', userId),
         ]).catch(() => {})
-      }).catch(() => {})
-    }).catch(() => {})
+      }).catch(() => { setLocationDenied(true); setNearbyLoading(false) })
+    }).catch(() => { setLocationDenied(true); setNearbyLoading(false) })
   }, [userId])
 
   // ── Nearby models ────────────────────────────────────────────────────────────
@@ -564,8 +571,9 @@ export default function ProviderDashboardScreen() {
   // (coords start null); a distance-filter change refetches.
   useEffect(() => {
     // Guard: no coords yet (GPS still resolving) → skip RPC, stay in loading state.
+    // If location was denied/failed the coords will never arrive, so don't spin.
     if (providerLat == null || providerLng == null) {
-      setNearbyLoading(true)
+      setNearbyLoading(!locationDenied)
       return
     }
     let cancelled = false
@@ -581,12 +589,12 @@ export default function ProviderDashboardScreen() {
           id:              m.id,
           name:            `${m.first_name ?? ''}${m.last_initial ? ' ' + m.last_initial + '.' : ''}`.trim() || 'Model',
           profile_pic_url: m.profile_pic_url ?? null,
-          // NOTE: hair/skin attributes are NOT returned by the nearby_models RPC yet —
-          // set null for now (cards drop the attr chips; hair/skin filters won't match).
-          hair_colour:     null,
-          hair_type:       null,
-          hair_length:     null,
-          skin_tone:       null,
+          // nearby_models LEFT JOINs model_attributes, so these are present but null for
+          // models who haven't filled in their profile — the cards just drop those chips.
+          hair_colour:     m.hair_colour ?? null,
+          hair_type:       m.hair_type ?? null,
+          hair_length:     m.hair_length ?? null,
+          skin_tone:       m.skin_tone ?? null,
           is_verified:     !!(m.is_verified),
           distance:        m.distance_mi ?? null,
         })))
@@ -594,7 +602,7 @@ export default function ProviderDashboardScreen() {
       setNearbyLoading(false)
     })()
     return () => { cancelled = true }
-  }, [providerLat, providerLng, filterDistanceMi])
+  }, [providerLat, providerLng, filterDistanceMi, locationDenied])
 
   const onRefresh = () => {
     setRefreshing(true)
@@ -983,8 +991,12 @@ export default function ProviderDashboardScreen() {
 
         {pendingSessions.length === 0 ? (
           <View style={styles.emptyCard}>
-            <Ionicons name="checkmark-circle-outline" size={32} color={Colors.muted} />
-            <Text style={styles.emptyCardText}>All applications reviewed</Text>
+            <Ionicons name={stats.totalSessions > 0 ? 'checkmark-circle-outline' : 'mail-open-outline'} size={32} color={Colors.muted} />
+            <Text style={[styles.emptyCardText, { textAlign: 'center' }]}>
+              {stats.totalSessions > 0
+                ? 'All applications reviewed'
+                : 'No applications yet — they’ll appear here when models apply'}
+            </Text>
           </View>
         ) : (
           pendingSessions.map(s => (
@@ -1129,7 +1141,7 @@ export default function ProviderDashboardScreen() {
             onChangeText={setModelSearch}
           />
           {modelSearch.length > 0 && (
-            <TouchableOpacity onPress={() => setModelSearch('')}>
+            <TouchableOpacity onPress={() => setModelSearch('')} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
               <Ionicons name="close-circle" size={15} color={Colors.muted} />
             </TouchableOpacity>
           )}
@@ -1196,6 +1208,17 @@ export default function ProviderDashboardScreen() {
         )}
 
         {(() => {
+          // Location off → coords never arrive, so explain rather than spin forever.
+          if (locationDenied) {
+            return (
+              <View style={styles.emptyCard}>
+                <Ionicons name="location-outline" size={32} color={Colors.muted} />
+                <Text style={[styles.emptyCardText, { textAlign: 'center' }]}>
+                  Turn on location to see models near you. You can enable it in your device settings.
+                </Text>
+              </View>
+            )
+          }
           // Waiting on GPS (coords null) or the first RPC fetch → show finding state.
           if (nearbyLoading) {
             return (
@@ -1222,8 +1245,10 @@ export default function ProviderDashboardScreen() {
           return filtered.length === 0 ? (
             <View style={styles.emptyCard}>
               <Ionicons name="people-outline" size={32} color={Colors.muted} />
-              <Text style={styles.emptyCardText}>
-                {hasActiveFilter ? 'No models match your filters' : 'No models nearby yet — share Guinea Pig to grow your community'}
+              <Text style={[styles.emptyCardText, { textAlign: 'center' }]}>
+                {hasActiveFilter
+                  ? 'No models match your filters — few have added hair and skin details yet, so try clearing them.'
+                  : 'No models nearby yet — share Guinea Pig to grow your community'}
               </Text>
             </View>
           ) : (

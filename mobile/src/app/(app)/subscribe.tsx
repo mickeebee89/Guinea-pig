@@ -214,6 +214,10 @@ export default function SubscribeScreen() {
             <Text style={styles.renewalStrong}>£4.99 every month</Text> until you cancel.
           </Text>
           <Text style={styles.refundNote}>
+            After subscribing you'll complete a quick identity check (a selfie) before you
+            can apply — our team reviews it within 24 hours.
+          </Text>
+          <Text style={styles.refundNote}>
             Cancel anytime in Settings — your membership runs to the end of the month
             you've paid for. See{' '}
             <Text style={styles.termsLink} onPress={() => Linking.openURL(TERMS_URL)}>Terms</Text>

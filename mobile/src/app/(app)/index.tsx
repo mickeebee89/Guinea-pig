@@ -18,7 +18,7 @@ import { useRouter, useFocusEffect } from 'expo-router'
 import * as Haptics from 'expo-haptics'
 import * as Location from 'expo-location'
 import { Ionicons } from '@expo/vector-icons'
-import { Colors, CategoryColors, Fonts } from '@/constants/Colors'
+import { Colors, CategoryColors, Fonts, Radius } from '@/constants/Colors'
 import { useAuth } from '@/context/auth'
 import { supabase } from '@/lib/supabase'
 import { isIdentityVerified } from '@/lib/verification'
@@ -387,10 +387,10 @@ function ModelHomeContent() {
     })
     .sort((a, b) => (a.distance ?? Infinity) - (b.distance ?? Infinity))
 
-  // Fallback: if all filters produce no results, show all providers sorted by distance
-  const displayProviders = filtered.length === 0 && providers.length > 0
-    ? [...providersWithDist].sort((a, b) => (a.distance ?? Infinity) - (b.distance ?? Infinity))
-    : filtered
+  // Show exactly what the filters matched. (This used to silently fall back to the FULL
+  // list when nothing matched, which made search look broken — the chips stayed lit and
+  // the results contradicted them. A real "no matches" state is rendered below instead.)
+  const displayProviders = filtered
 
   const favouriteProviders = providersWithDist.filter(p => favouriteIds.has(p.id))
 
@@ -602,7 +602,7 @@ function ModelHomeContent() {
               <View style={styles.emptyFavs}>
                 <Text style={styles.emptyFavsEmoji}>🤍</Text>
                 <Text style={styles.emptyFavsText}>
-                  Save models you love — tap the heart on any profile
+                  Save stylists you love — tap the heart on any profile
                 </Text>
               </View>
             ) : (
@@ -648,7 +648,7 @@ function ModelHomeContent() {
                 returnKeyType="search"
               />
               {search.length > 0 && (
-                <TouchableOpacity onPress={() => setSearch('')}>
+                <TouchableOpacity onPress={() => setSearch('')} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
                   <Ionicons name="close-circle" size={15} color={Colors.muted} />
                 </TouchableOpacity>
               )}
@@ -721,13 +721,38 @@ function ModelHomeContent() {
             ) : loadError ? (
               <LoadErrorState onRetry={() => fetchData()} fill={false} />
             ) : displayProviders.length === 0 ? (
-              <View style={styles.emptyState}>
-                <Text style={styles.emptyStateEmoji}>🐹</Text>
-                <Text style={styles.emptyStateTitle}>No stylists yet</Text>
-                <Text style={styles.emptyStateText}>
-                  We're growing! Check back soon — new stylists join every week.
-                </Text>
-              </View>
+              // Distinguish "nobody has joined yet" from "your filters matched nothing" —
+              // the second is recoverable, so it gets a Clear filters action.
+              providers.length === 0 ? (
+                <View style={styles.emptyState}>
+                  <Text style={styles.emptyStateEmoji}>🐹</Text>
+                  <Text style={styles.emptyStateTitle}>No stylists yet</Text>
+                  <Text style={styles.emptyStateText}>
+                    We're growing! Check back soon — new stylists join every week.
+                  </Text>
+                </View>
+              ) : (
+                <View style={styles.emptyState}>
+                  <Text style={styles.emptyStateEmoji}>🔍</Text>
+                  <Text style={styles.emptyStateTitle}>No matches</Text>
+                  <Text style={styles.emptyStateText}>
+                    No stylists match your search or filters. Try widening the distance or clearing them.
+                  </Text>
+                  <TouchableOpacity
+                    style={styles.clearFiltersBtn}
+                    onPress={async () => {
+                      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+                      setSearch('')
+                      setSelectedCategory('All')
+                      setDistanceFilter('Any')
+                      setVerifiedOnly(false)
+                    }}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={styles.clearFiltersText}>Clear filters</Text>
+                  </TouchableOpacity>
+                </View>
+              )
             ) : (
               <FlatList
                 horizontal
@@ -1081,6 +1106,14 @@ const styles = StyleSheet.create({
     paddingVertical: 40,
     paddingHorizontal: 24,
   },
+  clearFiltersBtn: {
+    marginTop: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+    borderRadius: Radius.pill,
+    backgroundColor: Colors.rose,
+  },
+  clearFiltersText: { fontSize: 14, fontFamily: Fonts.bodyBold, color: Colors.white },
   emptyStateEmoji: { fontSize: 40, marginBottom: 12 },
   emptyStateTitle: {
     fontSize: 17,
