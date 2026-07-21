@@ -16,15 +16,14 @@
     "scheme": "mobile",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "bundleIdentifier": "com.guineapig.app",
-      "icon": "./assets/expo.icon"
+      "bundleIdentifier": "com.guineapig.app"
     },
     "android": {
       "package": "com.guineapig.app",
       "googleServicesFile": "./google-services.json",
       "versionCode": 1,
       "adaptiveIcon": {
-        "backgroundColor": "#FAF7F4",
+        "backgroundColor": "#FFE3EF",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
@@ -50,7 +49,7 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#208AEF",
+          "backgroundColor": "#FFE3EF",
           "android": {
             "image": "./assets/images/splash-icon.png",
             "imageWidth": 76
