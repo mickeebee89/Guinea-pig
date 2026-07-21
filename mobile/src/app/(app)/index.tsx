@@ -943,7 +943,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.roseDark,
     borderColor: Colors.roseDark,
   },
-  filterBtnText: { fontSize: 12, fontWeight: '700', color: Colors.roseDark },
+  filterBtnText: { fontSize: 12, fontFamily: Fonts.bodyBold, color: Colors.roseDark },
   profileBtn: {
     width: 36,
     height: 36,
@@ -978,15 +978,15 @@ const styles = StyleSheet.create({
     width: 64, height: 64, borderRadius: 32,
     backgroundColor: Colors.softPink, alignItems: 'center', justifyContent: 'center',
   },
-  nearbyAvatarInitial: { fontSize: 22, fontWeight: '700', color: Colors.roseDark },
+  nearbyAvatarInitial: { fontSize: 22, fontFamily: Fonts.bodyBold, color: Colors.roseDark },
   nearbyVerified: { position: 'absolute', bottom: 0, right: -2 },
-  nearbyName: { fontSize: 13, fontWeight: '700', color: Colors.warmDark, textAlign: 'center' },
+  nearbyName: { fontSize: 13, fontFamily: Fonts.bodyBold, color: Colors.warmDark, textAlign: 'center' },
   nearbyDistRow: { flexDirection: 'row', alignItems: 'center', gap: 2 },
-  nearbyDist: { fontSize: 11, color: Colors.roseDark, fontWeight: '600' },
+  nearbyDist: { fontSize: 11, color: Colors.roseDark, fontFamily: Fonts.bodyBold },
   nearbyRatingRow: { flexDirection: 'row', alignItems: 'center', gap: 3 },
-  nearbyRating: { fontSize: 11, fontWeight: '600', color: Colors.warmDark },
+  nearbyRating: { fontSize: 11, fontFamily: Fonts.bodyBold, color: Colors.warmDark },
   nearbyPill: { borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3, maxWidth: 100 },
-  nearbyPillText: { fontSize: 10, fontWeight: '700', textAlign: 'center' },
+  nearbyPillText: { fontSize: 10, fontFamily: Fonts.bodyBold, textAlign: 'center' },
 
   // Filter panel (inside the Nearby stylists section — mirrors provider dashboard)
   filterPanel: {
@@ -996,7 +996,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   filterPanelLabel: {
-    fontSize: 11, fontWeight: '700', color: Colors.muted,
+    fontSize: 11, fontFamily: Fonts.bodyBold, color: Colors.muted,
     textTransform: 'uppercase', letterSpacing: 0.6,
   },
   distChip: {
@@ -1004,12 +1004,12 @@ const styles = StyleSheet.create({
     borderWidth: 1.5, borderColor: Colors.border, backgroundColor: Colors.inputBg,
   },
   distChipActive: { backgroundColor: Colors.roseDark, borderColor: Colors.roseDark },
-  distChipText: { fontSize: 13, fontWeight: '600', color: Colors.muted },
+  distChipText: { fontSize: 13, fontFamily: Fonts.bodyBold, color: Colors.muted },
   distChipTextActive: { color: Colors.white },
   verifiedToggleRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
   },
-  verifiedToggleLabel: { fontSize: 14, fontWeight: '600', color: Colors.warmDark },
+  verifiedToggleLabel: { fontSize: 14, fontFamily: Fonts.bodyBold, color: Colors.warmDark },
   section: {
     marginTop: 20,
     paddingHorizontal: 16,
@@ -1074,12 +1074,12 @@ const styles = StyleSheet.create({
   },
   favAvatarInitial: {
     fontSize: 22,
-    fontWeight: '700',
+    fontFamily: Fonts.bodyBold,
     color: Colors.roseDark,
   },
   favName: {
     fontSize: 13,
-    fontWeight: '700',
+    fontFamily: Fonts.bodyBold,
     color: Colors.warmDark,
     marginBottom: 6,
     textAlign: 'center',
@@ -1097,7 +1097,7 @@ const styles = StyleSheet.create({
   },
   favPillText: {
     fontSize: 10,
-    fontWeight: '600',
+    fontFamily: Fonts.bodyBold,
     color: Colors.white,
   },
 
@@ -1117,7 +1117,7 @@ const styles = StyleSheet.create({
   emptyStateEmoji: { fontSize: 40, marginBottom: 12 },
   emptyStateTitle: {
     fontSize: 17,
-    fontWeight: '700',
+    fontFamily: Fonts.bodyBold,
     color: Colors.warmDark,
     marginBottom: 6,
   },
@@ -1170,9 +1170,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  dashAvatarInitial: { fontSize: 18, fontWeight: '700', color: Colors.roseDark },
+  dashAvatarInitial: { fontSize: 18, fontFamily: Fonts.bodyBold, color: Colors.roseDark },
   dashInfo: { flex: 1, gap: 3 },
-  dashTitle: { fontSize: 15, fontWeight: '600', color: Colors.warmDark },
+  dashTitle: { fontSize: 15, fontFamily: Fonts.bodyBold, color: Colors.warmDark },
   dashMeta: { fontSize: 13, color: Colors.muted },
   dashTag: {
     alignSelf: 'flex-start',
@@ -1182,7 +1182,7 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     marginTop: 2,
     fontSize: 11,
-    fontWeight: '600',
+    fontFamily: Fonts.bodyBold,
     overflow: 'hidden',
   },
   dashStatusBadge: {
@@ -1191,19 +1191,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
   },
-  dashStatusText: { fontSize: 11, fontWeight: '700', color: Colors.roseDark },
+  dashStatusText: { fontSize: 11, fontFamily: Fonts.bodyBold, color: Colors.roseDark },
   reviewPill: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
     backgroundColor: Colors.rose, borderRadius: 8,
     paddingHorizontal: 10, paddingVertical: 5, flexShrink: 0,
   },
-  reviewPillText: { fontSize: 12, fontWeight: '700', color: Colors.white },
+  reviewPillText: { fontSize: 12, fontFamily: Fonts.bodyBold, color: Colors.white },
   dashStatusPending: { backgroundColor: '#FFF3CD' },
   dashStatusTextPending: { color: '#856404' },
 
   attentionLabel: {
     fontSize: 13,
-    fontWeight: '600',
+    fontFamily: Fonts.bodyBold,
     color: Colors.muted,
     marginTop: 4,
     marginBottom: 8,
@@ -1234,7 +1234,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   subInfo: { flex: 1 },
-  subStatusText: { fontSize: 15, fontWeight: '600', color: Colors.warmDark },
+  subStatusText: { fontSize: 15, fontFamily: Fonts.bodyBold, color: Colors.warmDark },
   subRenew: { fontSize: 13, color: Colors.muted, marginTop: 2 },
   subBadge: {
     backgroundColor: Colors.roseDark,
@@ -1242,7 +1242,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 4,
   },
-  subBadgeText: { fontSize: 12, fontWeight: '700', color: '#fff' },
+  subBadgeText: { fontSize: 12, fontFamily: Fonts.bodyBold, color: '#fff' },
 
   // ── Impact stats ──
   impactRow: {
@@ -1261,7 +1261,7 @@ const styles = StyleSheet.create({
     shadowRadius: 3,
     elevation: 2,
   },
-  impactNum: { fontSize: 32, fontWeight: '800', color: Colors.roseDark },
+  impactNum: { fontSize: 32, fontFamily: Fonts.bodyBold, color: Colors.roseDark },
   impactLabel: {
     fontSize: 13,
     color: Colors.muted,
@@ -1288,7 +1288,7 @@ const styles = StyleSheet.create({
   wrongScreenText: {
     flex: 1,
     fontSize: 15,
-    fontWeight: '700',
+    fontFamily: Fonts.bodyBold,
     color: Colors.white,
     lineHeight: 21,
   },

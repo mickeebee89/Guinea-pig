@@ -1017,7 +1017,7 @@ const styles = StyleSheet.create({
   backText: {
     fontSize: 15,
     color: Colors.rose,
-    fontWeight: '500',
+    fontFamily: Fonts.body,
   },
   progressWrap: {
     flex: 1,
@@ -1039,7 +1039,7 @@ const styles = StyleSheet.create({
   },
   progressLabel: {
     fontSize: 12,
-    fontWeight: '600',
+    fontFamily: Fonts.bodyBold,
     color: Colors.muted,
     minWidth: 28,
     textAlign: 'right',
@@ -1052,7 +1052,7 @@ const styles = StyleSheet.create({
   },
   stepLabel: {
     fontSize: 11,
-    fontWeight: '700',
+    fontFamily: Fonts.bodyBold,
     color: Colors.rose,
     textTransform: 'uppercase',
     letterSpacing: 1,
@@ -1139,7 +1139,7 @@ const styles = StyleSheet.create({
   },
   selectionText: {
     fontSize: 13,
-    fontWeight: '600',
+    fontFamily: Fonts.bodyBold,
     color: Colors.rose,
   },
 
@@ -1169,7 +1169,7 @@ const styles = StyleSheet.create({
   },
   slotTakenLabel: {
     fontSize: 12,
-    fontWeight: '700',
+    fontFamily: Fonts.bodyBold,
     color: Colors.muted,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
@@ -1188,7 +1188,7 @@ const styles = StyleSheet.create({
   },
   slotTimeText: {
     fontSize: 15,
-    fontWeight: '700',
+    fontFamily: Fonts.bodyBold,
     color: Colors.warmDark,
   },
   slotTimeTextSelected: {
@@ -1207,7 +1207,7 @@ const styles = StyleSheet.create({
   },
   slotStripeText: {
     fontSize: 11,
-    fontWeight: '700',
+    fontFamily: Fonts.bodyBold,
     color: Colors.white,
   },
 
@@ -1227,7 +1227,7 @@ const styles = StyleSheet.create({
   },
   treatChipText: {
     fontSize: 14,
-    fontWeight: '600',
+    fontFamily: Fonts.bodyBold,
   },
 
   // Note
@@ -1257,7 +1257,7 @@ const styles = StyleSheet.create({
   },
   photoEmptyTitle: {
     fontSize: 16,
-    fontWeight: '700',
+    fontFamily: Fonts.bodyBold,
     color: Colors.warmDark,
   },
   photoEmptySub: {
@@ -1308,14 +1308,14 @@ const styles = StyleSheet.create({
   },
   addPhotoText: {
     fontSize: 14,
-    fontWeight: '600',
+    fontFamily: Fonts.bodyBold,
     color: Colors.rose,
   },
 
   // Confirmation
   confirmSectionTitle: {
     fontSize: 11,
-    fontWeight: '700',
+    fontFamily: Fonts.bodyBold,
     color: Colors.muted,
     textTransform: 'uppercase',
     letterSpacing: 0.8,
@@ -1332,7 +1332,7 @@ const styles = StyleSheet.create({
   confirmRowIcon: { flexShrink: 0 },
   confirmLabel: {
     fontSize: 13,
-    fontWeight: '600',
+    fontFamily: Fonts.bodyBold,
     color: Colors.muted,
     width: 72,
     flexShrink: 0,
@@ -1340,7 +1340,7 @@ const styles = StyleSheet.create({
   confirmValue: {
     flex: 1,
     fontSize: 14,
-    fontWeight: '500',
+    fontFamily: Fonts.body,
     color: Colors.warmDark,
   },
   confirmValueMuted: {

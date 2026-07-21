@@ -221,7 +221,7 @@ const styles = StyleSheet.create({
   chevron: {
     fontSize: 24,
     color: 'rgba(255,255,255,0.65)',
-    fontWeight: '300',
+    fontFamily: Fonts.body,
   },
   footer: {
     flexDirection: 'row',

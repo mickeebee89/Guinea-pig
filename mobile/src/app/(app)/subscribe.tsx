@@ -201,7 +201,7 @@ export default function SubscribeScreen() {
             <Ionicons name="information-circle-outline" size={18} color={Colors.roseDark} style={{ marginTop: 1 }} />
             <Text style={styles.nudgeText}>
               You tried to apply for a treatment with{' '}
-              <Text style={{ fontWeight: '700' }}>{providerName || 'this provider'}</Text>.
+              <Text style={{ fontFamily: Fonts.bodyBold }}>{providerName || 'this provider'}</Text>.
               {' '}A subscription lets you apply to any treatment — instantly.
             </Text>
           </View>
@@ -360,12 +360,12 @@ const styles = StyleSheet.create({
 
   priceBadge:   { flexDirection: 'row', alignItems: 'baseline', marginTop: 4 },
   priceAmount:  { fontSize: 38, color: Colors.white, letterSpacing: -1 },
-  pricePeriod:  { fontSize: 16, fontWeight: '600', color: 'rgba(255,255,255,0.75)' },
+  pricePeriod:  { fontSize: 16, fontFamily: Fonts.bodyBold, color: 'rgba(255,255,255,0.75)' },
   cancelNote:   { fontSize: 12, color: 'rgba(255,255,255,0.6)', marginTop: 2 },
 
   // Benefits
   sectionLabel: {
-    fontSize: 11, fontWeight: '700', color: Colors.muted,
+    fontSize: 11, fontFamily: Fonts.bodyBold, color: Colors.muted,
     textTransform: 'uppercase', letterSpacing: 0.8,
     marginBottom: 10, paddingHorizontal: 2,
   },

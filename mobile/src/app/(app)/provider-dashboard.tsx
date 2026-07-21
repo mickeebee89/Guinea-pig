@@ -176,13 +176,13 @@ const statStyles = StyleSheet.create({
   },
   value: {
     fontSize: 24,
-    fontWeight: '800',
+    fontFamily: Fonts.bodyBold,
     color: Colors.warmDark,
     letterSpacing: -0.5,
   },
   label: {
     fontSize: 11,
-    fontWeight: '600',
+    fontFamily: Fonts.bodyBold,
     color: Colors.muted,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
@@ -191,7 +191,7 @@ const statStyles = StyleSheet.create({
   hint: {
     fontSize: 10,
     color: Colors.roseDark,
-    fontWeight: '600',
+    fontFamily: Fonts.bodyBold,
   },
 })
 
@@ -1514,7 +1514,7 @@ const nearbyStyles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarInitials: { fontSize: 20, fontWeight: '700', color: Colors.roseDark },
+  avatarInitials: { fontSize: 20, fontFamily: Fonts.bodyBold, color: Colors.roseDark },
   verifiedBadge: {
     position: 'absolute',
     bottom: 0,
@@ -1528,8 +1528,8 @@ const nearbyStyles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: Colors.white,
   },
-  name: { fontSize: 13, fontWeight: '700', color: Colors.warmDark, textAlign: 'center' },
-  distanceText: { fontSize: 11, color: Colors.muted, fontWeight: '500' },
+  name: { fontSize: 13, fontFamily: Fonts.bodyBold, color: Colors.warmDark, textAlign: 'center' },
+  distanceText: { fontSize: 11, color: Colors.muted, fontFamily: Fonts.body },
   attrChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, justifyContent: 'center' },
   attrChip: {
     backgroundColor: Colors.softPink + '40',
@@ -1538,7 +1538,7 @@ const nearbyStyles = StyleSheet.create({
     paddingVertical: 2,
     maxWidth: 104,
   },
-  attrChipText: { fontSize: 10, fontWeight: '600', color: Colors.roseDark },
+  attrChipText: { fontSize: 10, fontFamily: Fonts.bodyBold, color: Colors.roseDark },
   inviteBtn: {
     paddingHorizontal: 14,
     paddingVertical: 6,
@@ -1548,7 +1548,7 @@ const nearbyStyles = StyleSheet.create({
     borderColor: Colors.rose + '40',
     marginTop: 2,
   },
-  inviteBtnText: { fontSize: 12, fontWeight: '700', color: Colors.roseDark },
+  inviteBtnText: { fontSize: 12, fontFamily: Fonts.bodyBold, color: Colors.roseDark },
 
   // Filter panel
   filterToggle: {
@@ -1567,7 +1567,7 @@ const nearbyStyles = StyleSheet.create({
     backgroundColor: Colors.roseDark,
     borderColor: Colors.roseDark,
   },
-  filterToggleText: { fontSize: 12, fontWeight: '700', color: Colors.roseDark },
+  filterToggleText: { fontSize: 12, fontFamily: Fonts.bodyBold, color: Colors.roseDark },
   filterDot: {
     width: 6,
     height: 6,
@@ -1584,7 +1584,7 @@ const nearbyStyles = StyleSheet.create({
     gap: 12,
   },
   filterGroup: { gap: 6 },
-  filterLabel: { fontSize: 12, fontWeight: '700', color: Colors.muted, textTransform: 'uppercase', letterSpacing: 0.5 },
+  filterLabel: { fontSize: 12, fontFamily: Fonts.bodyBold, color: Colors.muted, textTransform: 'uppercase', letterSpacing: 0.5 },
   filterRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   chip: {
     paddingHorizontal: 10,
@@ -1598,10 +1598,10 @@ const nearbyStyles = StyleSheet.create({
     backgroundColor: Colors.roseDark,
     borderColor: Colors.roseDark,
   },
-  chipText: { fontSize: 12, fontWeight: '600', color: Colors.warmDark },
+  chipText: { fontSize: 12, fontFamily: Fonts.bodyBold, color: Colors.warmDark },
   chipTextActive: { color: Colors.white },
   clearFiltersBtn: { alignSelf: 'center', paddingVertical: 4 },
-  clearFiltersText: { fontSize: 13, fontWeight: '600', color: Colors.rose },
+  clearFiltersText: { fontSize: 13, fontFamily: Fonts.bodyBold, color: Colors.rose },
 })
 
 // ── Styles ────────────────────────────────────────────────────────────────────
@@ -1609,7 +1609,7 @@ const nearbyStyles = StyleSheet.create({
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: 'transparent', overflow: 'hidden' },
   centred:   { alignItems: 'center', justifyContent: 'center', gap: 12 },
-  emptyLabel: { fontSize: 15, color: Colors.muted, fontWeight: '600' },
+  emptyLabel: { fontSize: 15, color: Colors.muted, fontFamily: Fonts.bodyBold },
   goBackBtn: {
     marginTop: 8,
     paddingHorizontal: 24,
@@ -1619,7 +1619,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.border,
   },
-  goBackText: { fontSize: 15, fontWeight: '600', color: Colors.warmDark },
+  goBackText: { fontSize: 15, fontFamily: Fonts.bodyBold, color: Colors.warmDark },
 
   topBar: {
     flexDirection: 'row',
@@ -1657,7 +1657,7 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: Colors.white,
   },
-  headerAvatarInitials: { fontSize: 16, fontWeight: '700', color: Colors.roseDark },
+  headerAvatarInitials: { fontSize: 16, fontFamily: Fonts.bodyBold, color: Colors.roseDark },
   verifiedDot: {
     position: 'absolute',
     bottom: 0,
@@ -1697,10 +1697,10 @@ const styles = StyleSheet.create({
     height: 10,
     borderRadius: 5,
   },
-  shopCardTitle: { fontSize: 14, fontWeight: '700', color: Colors.warmDark },
-  shopCardStatus: { fontSize: 12, fontWeight: '500', marginTop: 2 },
+  shopCardTitle: { fontSize: 14, fontFamily: Fonts.bodyBold, color: Colors.warmDark },
+  shopCardStatus: { fontSize: 12, fontFamily: Fonts.body, marginTop: 2 },
   publishLocked: { alignItems: 'flex-end', maxWidth: 128, gap: 5 },
-  publishHint:   { fontSize: 12, fontWeight: '700', color: Colors.pinkVibrant, textAlign: 'right', lineHeight: 15 },
+  publishHint:   { fontSize: 12, fontFamily: Fonts.bodyBold, color: Colors.pinkVibrant, textAlign: 'right', lineHeight: 15 },
 
   // Get-verified banner (under the shop toggle, until verified)
   verifyBanner: {
@@ -1728,7 +1728,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     flexShrink: 0,
   },
-  verifyBannerTitle: { fontSize: 15, fontWeight: '800', color: Colors.warmDark, marginBottom: 2 },
+  verifyBannerTitle: { fontSize: 15, fontFamily: Fonts.bodyBold, color: Colors.warmDark, marginBottom: 2 },
   verifyBannerSub:   { fontSize: 12, color: Colors.muted, lineHeight: 16 },
 
   // Stats row
@@ -1759,7 +1759,7 @@ const styles = StyleSheet.create({
     minWidth: 22,
     alignItems: 'center',
   },
-  badgeText: { fontSize: 12, fontWeight: '700', color: Colors.white },
+  badgeText: { fontSize: 12, fontFamily: Fonts.bodyBold, color: Colors.white },
 
   // Empty card
   emptyCard: {
@@ -1772,7 +1772,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.border,
   },
-  emptyCardText: { fontSize: 14, color: Colors.muted, fontWeight: '500' },
+  emptyCardText: { fontSize: 14, color: Colors.muted, fontFamily: Fonts.body },
 
   // Treatments to review
   reviewRow: {
@@ -1783,15 +1783,15 @@ const styles = StyleSheet.create({
   },
   reviewAvatar: { width: 44, height: 44, borderRadius: 22 },
   reviewAvatarPlaceholder: { backgroundColor: Colors.softPink, alignItems: 'center', justifyContent: 'center' },
-  reviewAvatarInitial: { fontSize: 18, fontWeight: '700', color: Colors.roseDark },
-  reviewName: { fontSize: 15, fontWeight: '700', color: Colors.warmDark },
+  reviewAvatarInitial: { fontSize: 18, fontFamily: Fonts.bodyBold, color: Colors.roseDark },
+  reviewName: { fontSize: 15, fontFamily: Fonts.bodyBold, color: Colors.warmDark },
   reviewMeta: { fontSize: 13, color: Colors.muted, marginTop: 2 },
   reviewPill: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
     backgroundColor: Colors.rose, borderRadius: 8,
     paddingHorizontal: 10, paddingVertical: 5, flexShrink: 0,
   },
-  reviewPillText: { fontSize: 12, fontWeight: '700', color: Colors.white },
+  reviewPillText: { fontSize: 12, fontFamily: Fonts.bodyBold, color: Colors.white },
 
   // Session cards (shared)
   sessionCard: {
@@ -1859,7 +1859,7 @@ const styles = StyleSheet.create({
   },
   sessionModelName: {
     fontSize: 14,
-    fontWeight: '700',
+    fontFamily: Fonts.bodyBold,
     color: Colors.warmDark,
   },
   sessionAgo: {
@@ -1889,12 +1889,12 @@ const styles = StyleSheet.create({
   },
   treatPillText: {
     fontSize: 11,
-    fontWeight: '700',
+    fontFamily: Fonts.bodyBold,
   },
   sessionDateTime: {
     fontSize: 12,
     color: Colors.muted,
-    fontWeight: '500',
+    fontFamily: Fonts.body,
   },
   sessionNote: {
     fontSize: 12,
@@ -1922,7 +1922,7 @@ const styles = StyleSheet.create({
   },
   declineBtnText: {
     fontSize: 14,
-    fontWeight: '600',
+    fontFamily: Fonts.bodyBold,
     color: Colors.warmDark,
   },
   acceptBtn: {
@@ -1942,7 +1942,7 @@ const styles = StyleSheet.create({
   },
   acceptBtnText: {
     fontSize: 14,
-    fontWeight: '700',
+    fontFamily: Fonts.bodyBold,
     color: Colors.white,
   },
 
@@ -1960,7 +1960,7 @@ const styles = StyleSheet.create({
   },
   chatBtnText: {
     fontSize: 13,
-    fontWeight: '700',
+    fontFamily: Fonts.bodyBold,
     color: Colors.roseDark,
   },
 
@@ -1992,7 +1992,7 @@ const styles = StyleSheet.create({
   quickLinkText: { flex: 1 },
   quickLinkTitle: {
     fontSize: 14,
-    fontWeight: '700',
+    fontFamily: Fonts.bodyBold,
     color: Colors.warmDark,
   },
   quickLinkSub: {

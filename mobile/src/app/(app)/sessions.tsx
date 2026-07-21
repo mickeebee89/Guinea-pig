@@ -505,14 +505,14 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.rose, borderRadius: Radius.pill,
     paddingHorizontal: 7, paddingVertical: 2, minWidth: 22, alignItems: 'center',
   },
-  badgeText: { fontSize: 12, fontWeight: '700', color: Colors.white },
+  badgeText: { fontSize: 12, fontFamily: Fonts.bodyBold, color: Colors.white },
 
   emptyCard: {
     backgroundColor: Colors.white, borderRadius: Radius.lg, padding: 20,
     alignItems: 'center', gap: 8, marginBottom: 12,
     borderWidth: 1, borderColor: Colors.border,
   },
-  emptyText: { fontSize: 13, color: Colors.muted, fontWeight: '500' },
+  emptyText: { fontSize: 13, color: Colors.muted, fontFamily: Fonts.body },
 
   card: {
     backgroundColor: Colors.white, borderRadius: Radius.lg, padding: 14,
@@ -529,13 +529,13 @@ const styles = StyleSheet.create({
     width: 42, height: 42, borderRadius: 21, backgroundColor: Colors.softPink,
     alignItems: 'center', justifyContent: 'center', flexShrink: 0,
   },
-  avatarInitials: { fontSize: 15, fontWeight: '700', color: Colors.roseDark },
-  modelName: { fontSize: 14, fontWeight: '700', color: Colors.warmDark },
+  avatarInitials: { fontSize: 15, fontFamily: Fonts.bodyBold, color: Colors.roseDark },
+  modelName: { fontSize: 14, fontFamily: Fonts.bodyBold, color: Colors.warmDark },
   metaRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6 },
   treatPill: { flexDirection: 'row', alignItems: 'center', gap: 4, borderRadius: Radius.sm, paddingHorizontal: 7, paddingVertical: 3 },
   treatDot: { width: 5, height: 5, borderRadius: 2.5 },
-  treatPillText: { fontSize: 11, fontWeight: '700' },
-  metaText: { fontSize: 12, color: Colors.muted, fontWeight: '500' },
+  treatPillText: { fontSize: 11, fontFamily: Fonts.bodyBold },
+  metaText: { fontSize: 12, color: Colors.muted, fontFamily: Fonts.body },
   note: { fontSize: 12, color: Colors.muted, fontStyle: 'italic' },
 
   pastBanner: {
@@ -543,7 +543,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.softPink, borderRadius: Radius.sm,
     paddingHorizontal: 10, paddingVertical: 6,
   },
-  pastBannerText: { fontSize: 12, fontWeight: '600', color: Colors.roseDark, flex: 1 },
+  pastBannerText: { fontSize: 12, fontFamily: Fonts.bodyBold, color: Colors.roseDark, flex: 1 },
 
   actions: { flexDirection: 'row', gap: 8 },
 
@@ -552,26 +552,26 @@ const styles = StyleSheet.create({
     borderColor: Colors.border, alignItems: 'center', justifyContent: 'center',
     backgroundColor: Colors.white,
   },
-  declineBtnText: { fontSize: 13, fontWeight: '600', color: Colors.warmDark },
+  declineBtnText: { fontSize: 13, fontFamily: Fonts.bodyBold, color: Colors.warmDark },
 
   acceptBtn: {
     flex: 2, height: 40, borderRadius: Radius.md, backgroundColor: Colors.rose,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5,
     ...Shadow.card,
   },
-  acceptBtnText: { fontSize: 13, fontWeight: '700', color: Colors.white },
+  acceptBtnText: { fontSize: 13, fontFamily: Fonts.bodyBold, color: Colors.white },
 
   chatBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 5,
     backgroundColor: Colors.inputBg, borderRadius: Radius.md,
     paddingHorizontal: 14, paddingVertical: 10,
   },
-  chatBtnText: { fontSize: 13, fontWeight: '700', color: Colors.roseDark },
+  chatBtnText: { fontSize: 13, fontFamily: Fonts.bodyBold, color: Colors.roseDark },
 
   completeBtn: {
     flex: 1, height: 40, borderRadius: Radius.md, backgroundColor: Colors.rose,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5,
     ...Shadow.card,
   },
-  completeBtnText: { fontSize: 13, fontWeight: '700', color: Colors.white },
+  completeBtnText: { fontSize: 13, fontFamily: Fonts.bodyBold, color: Colors.white },
 })

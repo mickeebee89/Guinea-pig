@@ -336,7 +336,7 @@ export default function VerifyPaymentScreen() {
             <Text style={styles.heroSub}>
               {feeOnly
                 ? 'You\'re already identity-verified. Pay the one-off £14.99 fee to make your shop live — no selfie needed.'
-                : <>Take a selfie holding a piece of paper with your first name and <Text style={{ fontWeight: '800', color: Colors.warmDark }}>"Guinea Pig"</Text> written on it. Our team reviews within 24 hours.</>}
+                : <>Take a selfie holding a piece of paper with your first name and <Text style={{ fontFamily: Fonts.bodyBold, color: Colors.warmDark }}>"Guinea Pig"</Text> written on it. Our team reviews within 24 hours.</>}
             </Text>
             {isProvider && !hasPaid && (
               <View style={styles.priceTag}>
@@ -608,10 +608,10 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.inputBg, borderRadius: 20,
     paddingHorizontal: 16, paddingVertical: 7,
   },
-  priceTagText: { fontSize: 13, fontWeight: '600', color: Colors.warmDark },
+  priceTagText: { fontSize: 13, fontFamily: Fonts.bodyBold, color: Colors.warmDark },
 
   sectionLabel: {
-    fontSize: 11, fontWeight: '700', color: Colors.muted,
+    fontSize: 11, fontFamily: Fonts.bodyBold, color: Colors.muted,
     textTransform: 'uppercase', letterSpacing: 0.8,
     marginBottom: 10, paddingHorizontal: 2,
   },
@@ -624,7 +624,7 @@ const styles = StyleSheet.create({
     width: 24, height: 24, borderRadius: 12, backgroundColor: Colors.softPink,
     alignItems: 'center', justifyContent: 'center', marginRight: 4, flexShrink: 0,
   },
-  stepNumText: { fontSize: 12, fontWeight: '800', color: Colors.roseDark },
+  stepNumText: { fontSize: 12, fontFamily: Fonts.bodyBold, color: Colors.roseDark },
   stepText:    { flex: 1, fontSize: 13, color: Colors.warmDark, lineHeight: 18 },
 
   selfiePreview: {
@@ -638,9 +638,9 @@ const styles = StyleSheet.create({
     padding: 16, width: '100%', marginBottom: 4,
     borderWidth: 1.5, borderColor: Colors.softPink,
   },
-  payCardTitle: { fontSize: 15, fontWeight: '700', color: Colors.warmDark },
+  payCardTitle: { fontSize: 15, fontFamily: Fonts.bodyBold, color: Colors.warmDark },
   payCardSub:   { fontSize: 12, color: Colors.muted, marginTop: 2 },
-  payCardPrice: { fontSize: 20, fontWeight: '800', color: Colors.rose },
+  payCardPrice: { fontSize: 20, fontFamily: Fonts.bodyBold, color: Colors.rose },
 
   bigIcon: {
     width: 80, height: 80, borderRadius: 40,
@@ -660,7 +660,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.md, borderWidth: 1.5, borderColor: Colors.border,
     backgroundColor: Colors.white,
   },
-  ghostBtnText: { fontSize: 15, fontWeight: '600', color: Colors.warmDark },
+  ghostBtnText: { fontSize: 15, fontFamily: Fonts.bodyBold, color: Colors.warmDark },
   legalNote: {
     fontSize: 11, color: Colors.muted, textAlign: 'center',
     lineHeight: 16, marginTop: 8, paddingHorizontal: 8,

@@ -210,7 +210,7 @@ const styles = StyleSheet.create({
   body: {
     fontSize: 15, color: Colors.muted, textAlign: 'center', lineHeight: 23, marginBottom: 8,
   },
-  emailHighlight: { fontWeight: '700', color: Colors.warmDark },
+  emailHighlight: { fontFamily: Fonts.bodyBold, color: Colors.warmDark },
   hint: {
     fontSize: 13, color: Colors.muted, textAlign: 'center', lineHeight: 19, marginBottom: 28,
   },
@@ -227,7 +227,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.softPink,
     alignItems: 'center', justifyContent: 'center',
   },
-  stepNumText: { fontSize: 12, fontWeight: '800', color: Colors.roseDark },
+  stepNumText: { fontSize: 12, fontFamily: Fonts.bodyBold, color: Colors.roseDark },
   stepText:    { flex: 1, fontSize: 14, color: Colors.warmDark, lineHeight: 19 },
 
   errorBox: {
@@ -242,7 +242,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.softPink, borderRadius: Radius.md, padding: 12,
     width: '100%', marginBottom: 4,
   },
-  successText: { fontSize: 13, color: Colors.roseDark, fontWeight: '500' },
+  successText: { fontSize: 13, color: Colors.roseDark, fontFamily: Fonts.body },
 
   actions: { paddingBottom: 12, gap: 10 },
   primaryBtn: {
@@ -257,7 +257,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.white,
     alignItems: 'center', justifyContent: 'center',
   },
-  ghostBtnText: { fontSize: 15, fontWeight: '600', color: Colors.warmDark },
+  ghostBtnText: { fontSize: 15, fontFamily: Fonts.bodyBold, color: Colors.warmDark },
   backLink:     { alignItems: 'center', paddingVertical: 6 },
   backLinkText: { fontSize: 13, color: Colors.muted, textDecorationLine: 'underline' },
 })

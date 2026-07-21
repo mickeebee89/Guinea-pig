@@ -1218,7 +1218,7 @@ export default function ModelProfileScreen() {
                     }}
                     activeOpacity={0.8}
                   >
-                    <Text style={[styles.attrOptionText, isSelected && { color: Colors.roseDark, fontWeight: '700' }]}>
+                    <Text style={[styles.attrOptionText, isSelected && { color: Colors.roseDark, fontFamily: Fonts.bodyBold }]}>
                       {item}
                     </Text>
                     {isSelected && <Ionicons name="checkmark" size={16} color={Colors.roseDark} />}
@@ -1401,7 +1401,7 @@ const styles = StyleSheet.create({
   },
   avatarInitials: {
     fontSize: 34,
-    fontWeight: '800',
+    fontFamily: Fonts.bodyBold,
     color: Colors.roseDark,
   },
   cameraOverlay: {
@@ -1441,7 +1441,7 @@ const styles = StyleSheet.create({
   },
   subPillText: {
     fontSize: 12,
-    fontWeight: '700',
+    fontFamily: Fonts.bodyBold,
   },
   verifiedPill: {
     flexDirection: 'row',
@@ -1454,7 +1454,7 @@ const styles = StyleSheet.create({
   },
   verifiedPillText: {
     fontSize: 12,
-    fontWeight: '700',
+    fontFamily: Fonts.bodyBold,
     color: Colors.rose,
   },
 
@@ -1499,7 +1499,7 @@ const styles = StyleSheet.create({
   },
   addBtnText: {
     fontSize: 13,
-    fontWeight: '600',
+    fontFamily: Fonts.bodyBold,
     color: Colors.roseDark,
   },
 
@@ -1516,7 +1516,7 @@ const styles = StyleSheet.create({
   },
   saveStatusText: {
     fontSize: 12,
-    fontWeight: '600',
+    fontFamily: Fonts.bodyBold,
   },
 
   // Photo grid
@@ -1553,7 +1553,7 @@ const styles = StyleSheet.create({
   captionBadgeText: {
     fontSize: 10,
     color: Colors.white,
-    fontWeight: '500',
+    fontFamily: Fonts.body,
   },
   photoCellEmpty: {
     width: CELL_SIZE,
@@ -1589,7 +1589,7 @@ const styles = StyleSheet.create({
   },
   catLabel: {
     fontSize: 11,
-    fontWeight: '700',
+    fontFamily: Fonts.bodyBold,
     color: Colors.muted,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
@@ -1632,7 +1632,7 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     elevation: 3,
   },
-  catModalBtnText: { fontSize: 15, fontWeight: '700', color: Colors.white },
+  catModalBtnText: { fontSize: 15, fontFamily: Fonts.bodyBold, color: Colors.white },
 
   // Category picker list
   catPickerList: { maxHeight: 220, marginBottom: 14 },
@@ -1648,7 +1648,7 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
   },
   catPickerItemSelected: { borderColor: Colors.roseDark, backgroundColor: Colors.softPink + '20' },
-  catPickerItemText: { fontSize: 15, fontWeight: '600', color: Colors.warmDark },
+  catPickerItemText: { fontSize: 15, fontFamily: Fonts.bodyBold, color: Colors.warmDark },
   catPickerItemTextSelected: { color: Colors.roseDark },
 
   // Get verified card
@@ -1680,7 +1680,7 @@ const styles = StyleSheet.create({
   verifyText: { flex: 1 },
   verifyTitle: {
     fontSize: 14,
-    fontWeight: '700',
+    fontFamily: Fonts.bodyBold,
     color: Colors.warmDark,
     marginBottom: 3,
   },
@@ -1701,7 +1701,7 @@ const styles = StyleSheet.create({
   },
   verifyBtnText: {
     fontSize: 13,
-    fontWeight: '700',
+    fontFamily: Fonts.bodyBold,
     color: Colors.roseDark,
   },
 
@@ -1716,24 +1716,24 @@ const styles = StyleSheet.create({
   },
   signOutText: {
     fontSize: 15,
-    fontWeight: '600',
+    fontFamily: Fonts.bodyBold,
     color: Colors.error,
   },
 
   // Reviews
   reviewsAvgWrap: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#FEF9C3', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
-  reviewsAvgText: { fontSize: 13, fontWeight: '700', color: '#B45309' },
+  reviewsAvgText: { fontSize: 13, fontFamily: Fonts.bodyBold, color: '#B45309' },
   reviewsEmpty: { fontSize: 14, color: Colors.muted, textAlign: 'center', paddingVertical: 12 },
   reviewItem: { borderTopWidth: 1, borderTopColor: Colors.border, paddingTop: 12, marginTop: 12 },
   reviewItemHeader: { flexDirection: 'row', gap: 10, marginBottom: 8, alignItems: 'center' },
   reviewInitialsBox: { width: 36, height: 36, borderRadius: 18, backgroundColor: Colors.softPink, alignItems: 'center', justifyContent: 'center' },
-  reviewInitialsText: { fontSize: 13, fontWeight: '700', color: Colors.roseDark },
-  reviewerName: { fontSize: 14, fontWeight: '600', color: Colors.warmDark },
+  reviewInitialsText: { fontSize: 13, fontFamily: Fonts.bodyBold, color: Colors.roseDark },
+  reviewerName: { fontSize: 14, fontFamily: Fonts.bodyBold, color: Colors.warmDark },
   reviewDate: { fontSize: 11, color: Colors.muted },
   reviewComment: { fontSize: 14, color: Colors.warmDark, lineHeight: 20, opacity: 0.85, marginBottom: 6 },
   reviewTagsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4 },
   reviewTagChip: { backgroundColor: Colors.inputBg, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },
-  reviewTagChipText: { fontSize: 11, fontWeight: '600', color: Colors.roseDark },
+  reviewTagChipText: { fontSize: 11, fontFamily: Fonts.bodyBold, color: Colors.roseDark },
 
   // Bottom sheets (shared)
   sheetOuter: { flex: 1, justifyContent: 'flex-end' },
@@ -1784,7 +1784,7 @@ const styles = StyleSheet.create({
   sheetItemLabel: {
     flex: 1,
     fontSize: 15,
-    fontWeight: '600',
+    fontFamily: Fonts.bodyBold,
     color: Colors.warmDark,
   },
   sheetCancel: {
@@ -1798,7 +1798,7 @@ const styles = StyleSheet.create({
   },
   sheetCancelText: {
     fontSize: 15,
-    fontWeight: '600',
+    fontFamily: Fonts.bodyBold,
     color: Colors.warmDark,
   },
 
@@ -1831,7 +1831,7 @@ const styles = StyleSheet.create({
   },
   bioSaveBtnText: {
     fontSize: 14,
-    fontWeight: '700',
+    fontFamily: Fonts.bodyBold,
     color: Colors.white,
   },
 
@@ -1863,7 +1863,7 @@ const styles = StyleSheet.create({
   },
   igSaveBtnText: {
     fontSize: 14,
-    fontWeight: '700',
+    fontFamily: Fonts.bodyBold,
     color: Colors.white,
   },
 
@@ -1875,12 +1875,12 @@ const styles = StyleSheet.create({
   attrRowBorder: {
     borderBottomWidth: 1, borderBottomColor: Colors.border,
   },
-  attrLabel: { fontSize: 14, color: Colors.warmDark, fontWeight: '600', flex: 1 },
+  attrLabel: { fontSize: 14, color: Colors.warmDark, fontFamily: Fonts.bodyBold, flex: 1 },
   attrRight: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   attrValuePill: {
     backgroundColor: Colors.softPink + '40', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 4,
   },
-  attrValue: { fontSize: 13, fontWeight: '600', color: Colors.roseDark },
+  attrValue: { fontSize: 13, fontFamily: Fonts.bodyBold, color: Colors.roseDark },
   attrEmpty: { fontSize: 13, color: Colors.muted },
   attrOptionRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
@@ -1931,7 +1931,7 @@ const styles = StyleSheet.create({
   },
   captionCancelText: {
     fontSize: 15,
-    fontWeight: '600',
+    fontFamily: Fonts.bodyBold,
     color: Colors.warmDark,
   },
   captionSaveBtn: {
@@ -1949,7 +1949,7 @@ const styles = StyleSheet.create({
   },
   captionSaveText: {
     fontSize: 15,
-    fontWeight: '700',
+    fontFamily: Fonts.bodyBold,
     color: Colors.white,
   },
 })

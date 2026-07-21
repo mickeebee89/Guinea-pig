@@ -909,12 +909,12 @@ const styles = StyleSheet.create({
   },
   headerAvatarInitials: {
     fontSize: 13,
-    fontWeight: '700',
+    fontFamily: Fonts.bodyBold,
     color: Colors.roseDark,
   },
   headerName: {
     fontSize: 15,
-    fontWeight: '700',
+    fontFamily: Fonts.bodyBold,
     color: Colors.warmDark,
     letterSpacing: -0.2,
   },
@@ -951,7 +951,7 @@ const styles = StyleSheet.create({
   safetyText: {
     flex: 1,
     fontSize: 12,
-    fontWeight: '500',
+    fontFamily: Fonts.body,
     color: Colors.roseDark,
     lineHeight: 16,
   },
@@ -991,7 +991,7 @@ const styles = StyleSheet.create({
   },
   dateLabel: {
     fontSize: 11,
-    fontWeight: '600',
+    fontFamily: Fonts.bodyBold,
     color: Colors.muted,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
@@ -1024,7 +1024,7 @@ const styles = StyleSheet.create({
   },
   miniAvatarInitials: {
     fontSize: 10,
-    fontWeight: '700',
+    fontFamily: Fonts.bodyBold,
     color: Colors.roseDark,
   },
   bubbleGroup: { maxWidth: '72%' },
@@ -1073,7 +1073,7 @@ const styles = StyleSheet.create({
   readReceipt: {
     fontSize: 10,
     color: Colors.roseDark,
-    fontWeight: '600',
+    fontFamily: Fonts.bodyBold,
   },
 
   // System message
@@ -1108,7 +1108,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: Colors.roseDark,
     lineHeight: 17,
-    fontWeight: '500',
+    fontFamily: Fonts.body,
   },
 
   // Input bar
@@ -1133,7 +1133,7 @@ const styles = StyleSheet.create({
     borderTopColor: Colors.border,
     backgroundColor: Colors.cream,
   },
-  blockedBarText: { fontSize: 13, fontWeight: '600', color: Colors.muted },
+  blockedBarText: { fontSize: 13, fontFamily: Fonts.bodyBold, color: Colors.muted },
   input: {
     flex: 1,
     backgroundColor: Colors.white,
@@ -1188,7 +1188,7 @@ const styles = StyleSheet.create({
   },
   completeBannerText: {
     fontSize: 14,
-    fontWeight: '700',
+    fontFamily: Fonts.bodyBold,
     color: Colors.white,
     letterSpacing: -0.2,
   },
@@ -1221,7 +1221,7 @@ const styles = StyleSheet.create({
   },
   reviewBannerText: {
     fontSize: 14,
-    fontWeight: '700',
+    fontFamily: Fonts.bodyBold,
     color: Colors.white,
     letterSpacing: -0.2,
   },
@@ -1281,7 +1281,7 @@ const styles = StyleSheet.create({
   },
   lockedMetaText: {
     fontSize: 13,
-    fontWeight: '500',
+    fontFamily: Fonts.body,
     color: Colors.warmDark,
   },
   lockedStatusPill: {
@@ -1294,7 +1294,7 @@ const styles = StyleSheet.create({
   },
   lockedStatusText: {
     fontSize: 13,
-    fontWeight: '600',
+    fontFamily: Fonts.bodyBold,
     color: Colors.muted,
   },
 
@@ -1355,7 +1355,7 @@ const styles = StyleSheet.create({
   menuItemText: { flex: 1 },
   menuItemLabel: {
     fontSize: 14,
-    fontWeight: '600',
+    fontFamily: Fonts.bodyBold,
     color: Colors.warmDark,
     marginBottom: 2,
   },
@@ -1374,7 +1374,7 @@ const styles = StyleSheet.create({
   },
   menuCancelText: {
     fontSize: 15,
-    fontWeight: '600',
+    fontFamily: Fonts.bodyBold,
     color: Colors.warmDark,
   },
   reportHelp: {
@@ -1407,7 +1407,7 @@ const styles = StyleSheet.create({
   reportSubmitDisabled: { opacity: 0.45 },
   reportSubmitText: {
     fontSize: 15,
-    fontWeight: '700',
+    fontFamily: Fonts.bodyBold,
     color: Colors.white,
   },
 })

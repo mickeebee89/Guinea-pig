@@ -382,7 +382,7 @@ const styles = StyleSheet.create({
   scroll:    { paddingBottom: 40 },
   headerGradient: { paddingHorizontal: Spacing.xxl, backgroundColor: Colors.softPink },
   back: { paddingTop: 12, paddingBottom: 8 },
-  backText: { fontSize: 17, color: Colors.roseDark, fontWeight: '500' },
+  backText: { fontSize: 17, color: Colors.roseDark, fontFamily: Fonts.body },
   header: { paddingTop: 12, paddingBottom: 28 },
   rolePill: {
     alignSelf: 'flex-start',

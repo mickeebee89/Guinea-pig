@@ -328,15 +328,24 @@ export default function ProviderShopScreen() {
       >
         {/* ── Banner ── */}
         <View style={styles.bannerWrapper}>
-          {/* Guinea Pig branding — shown for every provider */}
-          <View style={styles.bannerBrand}>
+          {/* The stylist's own banner is the first thing a model sees — show it when
+             they have one, and fall back to Guinea Pig branding only when they don't. */}
+          {provider.banner_url ? (
             <Image
-              source={require('../../../../assets/images/guinea-pig-logo.png')}
-              style={styles.bannerLogo}
-              resizeMode="contain"
+              source={{ uri: provider.banner_url }}
+              style={styles.bannerImage}
+              resizeMode="cover"
             />
-            <Text style={styles.bannerBrandText}>Guinea Pig</Text>
-          </View>
+          ) : (
+            <View style={styles.bannerBrand}>
+              <Image
+                source={require('../../../../assets/images/guinea-pig-logo.png')}
+                style={styles.bannerLogo}
+                resizeMode="contain"
+              />
+              <Text style={styles.bannerBrandText}>Guinea Pig</Text>
+            </View>
+          )}
           <View style={[styles.bannerControls, { paddingTop: insets.top + 10 }]}>
             <TouchableOpacity style={styles.bannerIconBtn} onPress={goBack} activeOpacity={0.85}>
               <Ionicons name="chevron-back" size={20} color={Colors.white} />
@@ -633,12 +642,13 @@ const styles = StyleSheet.create({
   loadingText: { fontSize: 15, color: Colors.muted },
 
   backBtnFallback: { position: 'absolute', left: 20 },
-  backBtnFallbackText: { fontSize: 17, color: Colors.roseDark, fontWeight: '500' },
+  backBtnFallbackText: { fontSize: 17, color: Colors.roseDark, fontFamily: Fonts.body },
   errorEmoji: { fontSize: 48, marginBottom: 12 },
-  errorTitle: { fontSize: 18, fontWeight: '700', color: Colors.warmDark, marginBottom: 6 },
+  errorTitle: { fontSize: 18, fontFamily: Fonts.bodyBold, color: Colors.warmDark, marginBottom: 6 },
   errorSub:   { fontSize: 14, color: Colors.muted },
 
   bannerWrapper: { height: BANNER_HEIGHT },
+  bannerImage: { width: '100%', height: BANNER_HEIGHT, backgroundColor: Colors.softPink },
   bannerBrand: {
     width: '100%',
     height: BANNER_HEIGHT,
@@ -676,7 +686,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.softPink, alignItems: 'center', justifyContent: 'center',
     borderWidth: 3, borderColor: Colors.cream,
   },
-  avatarInitial: { fontSize: 30, fontWeight: '700', color: Colors.roseDark },
+  avatarInitial: { fontSize: 30, fontFamily: Fonts.bodyBold, color: Colors.roseDark },
   verifiedBadge: {
     position: 'absolute', bottom: 2, right: 2,
     width: 20, height: 20, borderRadius: 10,
@@ -690,7 +700,7 @@ const styles = StyleSheet.create({
   locationRow: { flexDirection: 'row', alignItems: 'center' },
   locationText: { fontSize: 13, color: Colors.muted },
   ratingRow: { flexDirection: 'row', alignItems: 'center' },
-  ratingNum: { fontSize: 13, fontWeight: '700', color: Colors.warmDark },
+  ratingNum: { fontSize: 13, fontFamily: Fonts.bodyBold, color: Colors.warmDark },
   reviewCount: { fontSize: 12, color: Colors.muted },
 
   body: { paddingHorizontal: 20 },
@@ -702,11 +712,11 @@ const styles = StyleSheet.create({
   },
   pulsingDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#F59E0B', flexShrink: 0 },
   statusText: { flex: 1, fontSize: 14, color: '#92400E', lineHeight: 19 },
-  statusExpiry: { fontSize: 11, fontWeight: '600', color: '#D97706', flexShrink: 0 },
+  statusExpiry: { fontSize: 11, fontFamily: Fonts.bodyBold, color: '#D97706', flexShrink: 0 },
 
   badgesRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 20 },
   badge: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20 },
-  badgeText: { fontSize: 13, fontWeight: '600' },
+  badgeText: { fontSize: 13, fontFamily: Fonts.bodyBold },
 
   section: { marginBottom: 24 },
   sectionTitle: { fontFamily: Fonts.heading, fontSize: 18, color: Colors.warmDark, letterSpacing: -0.1, marginBottom: 12 },
@@ -722,18 +732,18 @@ const styles = StyleSheet.create({
   },
   treatmentStripe: { width: 4, alignSelf: 'stretch' },
   treatmentInfo: { flex: 1, padding: 12, gap: 4 },
-  treatmentName: { fontSize: 15, fontWeight: '600', color: Colors.warmDark },
+  treatmentName: { fontSize: 15, fontFamily: Fonts.bodyBold, color: Colors.warmDark },
   treatmentMeta: { flexDirection: 'row', gap: 12, alignItems: 'center' },
   treatmentMetaItem: { flexDirection: 'row', alignItems: 'center' },
   treatmentMetaText: { fontSize: 12, color: Colors.muted },
   treatmentCost: { fontSize: 12, color: Colors.muted },
   treatmentCatPill: { marginRight: 12, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
-  treatmentCatText: { fontSize: 11, fontWeight: '600' },
+  treatmentCatText: { fontSize: 11, fontFamily: Fonts.bodyBold },
 
   // Portfolio
   portfolioCatBlock: { marginBottom: 16 },
   portfolioCatLabel: {
-    fontSize: 13, fontWeight: '700', color: Colors.muted,
+    fontSize: 13, fontFamily: Fonts.bodyBold, color: Colors.muted,
     textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8,
   },
   portfolioRow: { gap: 10 },
@@ -758,14 +768,14 @@ const styles = StyleSheet.create({
     width: 38, height: 38, borderRadius: 19,
     backgroundColor: Colors.softPink, alignItems: 'center', justifyContent: 'center',
   },
-  reviewerInitials: { fontSize: 13, fontWeight: '700', color: Colors.roseDark },
+  reviewerInitials: { fontSize: 13, fontFamily: Fonts.bodyBold, color: Colors.roseDark },
   reviewerMeta: { gap: 3 },
-  reviewerName: { fontSize: 14, fontWeight: '600', color: Colors.warmDark },
+  reviewerName: { fontSize: 14, fontFamily: Fonts.bodyBold, color: Colors.warmDark },
   reviewRatingRow: { flexDirection: 'row', alignItems: 'center' },
   reviewDate: { fontSize: 11, color: Colors.muted },
   reviewTags: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 8 },
   reviewTag: { backgroundColor: Colors.inputBg, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },
-  reviewTagText: { fontSize: 11, fontWeight: '600', color: Colors.muted },
+  reviewTagText: { fontSize: 11, fontFamily: Fonts.bodyBold, color: Colors.muted },
   reviewComment: { fontSize: 14, color: Colors.warmDark, lineHeight: 20, opacity: 0.85 },
 
   stars: { flexDirection: 'row', gap: 2 },
@@ -783,5 +793,5 @@ const styles = StyleSheet.create({
   },
   applyBtnText: { color: Colors.white, fontFamily: Fonts.bodyBold, fontSize: 16, letterSpacing: -0.2 },
   applyBtnDisabled: { backgroundColor: Colors.inputBg, shadowOpacity: 0, elevation: 0 },
-  applyHint: { fontSize: 12, color: Colors.muted, textAlign: 'center', marginTop: 8, fontWeight: '500' },
+  applyHint: { fontSize: 12, color: Colors.muted, textAlign: 'center', marginTop: 8, fontFamily: Fonts.body },
 })

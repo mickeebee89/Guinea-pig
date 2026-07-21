@@ -530,7 +530,7 @@ const styles = StyleSheet.create({
   },
   sectionHeaderText: {
     fontSize: 13,
-    fontWeight: '700',
+    fontFamily: Fonts.bodyBold,
     color: Colors.muted,
     letterSpacing: 0.3,
     textTransform: 'uppercase',
@@ -590,7 +590,7 @@ const styles = StyleSheet.create({
   },
   avatarInitials: {
     fontSize: 18,
-    fontWeight: '700',
+    fontFamily: Fonts.bodyBold,
     color: Colors.roseDark,
   },
   lockBadge: {
@@ -630,16 +630,16 @@ const styles = StyleSheet.create({
   rowName: {
     flex: 1,
     fontSize: 15,
-    fontWeight: '600',
+    fontFamily: Fonts.bodyBold,
     color: Colors.warmDark,
   },
-  rowNameBold: { fontWeight: '800' },
+  rowNameBold: { fontFamily: Fonts.bodyBold },
   rowTime: {
     fontSize: 12,
     color: Colors.muted,
     flexShrink: 0,
   },
-  rowTimeBold: { color: Colors.rose, fontWeight: '700' },
+  rowTimeBold: { color: Colors.rose, fontFamily: Fonts.bodyBold },
   rowBottomLine: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -652,7 +652,7 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   rowPreviewMuted: { fontStyle: 'italic' },
-  rowPreviewBold:  { color: Colors.warmDark, fontWeight: '600' },
+  rowPreviewBold:  { color: Colors.warmDark, fontFamily: Fonts.bodyBold },
   unreadBadge: {
     minWidth: 20,
     height: 20,
@@ -665,7 +665,7 @@ const styles = StyleSheet.create({
   },
   unreadText: {
     fontSize: 11,
-    fontWeight: '700',
+    fontFamily: Fonts.bodyBold,
     color: Colors.white,
   },
   rowMeta: {
@@ -680,7 +680,7 @@ const styles = StyleSheet.create({
   },
   completedTag: {
     fontSize: 11,
-    fontWeight: '700',
+    fontFamily: Fonts.bodyBold,
     color: Colors.roseDark,
   },
   rowMetaDot: {
@@ -694,6 +694,6 @@ const styles = StyleSheet.create({
   },
   rowMetaTreat: {
     fontSize: 11,
-    fontWeight: '600',
+    fontFamily: Fonts.bodyBold,
   },
 })
