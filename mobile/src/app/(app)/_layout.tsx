@@ -2,6 +2,7 @@ import { View, StyleSheet } from 'react-native'
 import { Stack } from 'expo-router'
 import { Colors } from '@/constants/Colors'
 import PatternBackground from '@/components/PatternBackground'
+import SuspensionGate from '@/components/SuspensionGate'
 
 export default function AppLayout() {
   return (
@@ -9,6 +10,9 @@ export default function AppLayout() {
       {/* Backmost layer — faint scattered motif wallpaper behind every screen. */}
       <PatternBackground />
 
+      {/* A suspended/banned user gets an explanation instead of the app. The DB
+         blocks their actions regardless; this stops silent failures. */}
+      <SuspensionGate>
       <Stack
         style={styles.stack}
         screenOptions={{
@@ -29,6 +33,7 @@ export default function AppLayout() {
           },
         }}
       />
+      </SuspensionGate>
     </View>
   )
 }
