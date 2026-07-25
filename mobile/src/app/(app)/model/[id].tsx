@@ -19,6 +19,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Colors, CategoryColors, Fonts, Radius, Shadow } from '@/constants/Colors'
 import { useAuth } from '@/context/auth'
 import { supabase } from '@/lib/supabase'
+import { signModelPhotos } from '@/lib/photoUrls'
 import { isIdentityVerified } from '@/lib/verification'
 import ScreenDecor from '@/components/ScreenDecor'
 
@@ -214,12 +215,15 @@ export default function ModelProfileViewScreen() {
       setProfile(userData as any)
       setAttrs(attrData as any)
       setCategories((catData ?? []) as Category[])
-      setPhotos((photoData as any[] ?? []).map((p: any) => ({
+      const photoRows = (photoData as any[] ?? []).map((p: any) => ({
         id:          p.id,
         photo_url:   p.photo_url,
         caption:     p.caption ?? null,
         category_id: p.category_id ?? null,
-      })))
+      }))
+      // Booking photos are in a private bucket — swap the stored path for a signed URL.
+      const signedMap = await signModelPhotos(photoRows.map(r => r.photo_url))
+      setPhotos(photoRows.map(r => ({ ...r, photo_url: signedMap.get(r.photo_url) ?? r.photo_url })))
       try { setIsVerified(await isIdentityVerified(modelId)) } catch {}
 
       // Fetch reviews about this model

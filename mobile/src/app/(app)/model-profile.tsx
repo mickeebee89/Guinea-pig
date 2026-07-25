@@ -24,6 +24,7 @@ import { Colors, Fonts } from '@/constants/Colors'
 import { useAuth } from '@/context/auth'
 import { supabase } from '@/lib/supabase'
 import { isIdentityVerified } from '@/lib/verification'
+import { signModelPhotos, signModelPhoto } from '@/lib/photoUrls'
 import ScreenDecor from '@/components/ScreenDecor'
 import LoadErrorState from '@/components/LoadErrorState'
 
@@ -244,14 +245,15 @@ export default function ModelProfileScreen() {
       }
       setIsVerified(verified)
       setCategories((catData ?? []) as Category[])
-      setPhotos(
-        (photoData ?? []).map((p: any) => ({
-          id: p.id,
-          photoUrl: p.photo_url,
-          caption: p.caption ?? null,
-          category_id: p.category_id ?? null,
-        }))
-      )
+      const photoRows = (photoData ?? []).map((p: any) => ({
+        id: p.id,
+        photoUrl: p.photo_url,
+        caption: p.caption ?? null,
+        category_id: p.category_id ?? null,
+      }))
+      // Booking photos are in a private bucket — swap the stored path for a signed URL.
+      const signedMap = await signModelPhotos(photoRows.map(r => r.photoUrl))
+      setPhotos(photoRows.map(r => ({ ...r, photoUrl: signedMap.get(r.photoUrl) ?? r.photoUrl })))
       if (attrData) {
         setAttrs(attrData as ModelAttrs)
         setBioText((attrData as any).bio ?? '')
@@ -423,19 +425,20 @@ export default function ModelProfileScreen() {
           continue
         }
         if (up) {
-          const { data: urlData } = supabase.storage.from('model-photos').getPublicUrl(up.path)
+          // Store the object PATH (private bucket); render via a signed URL.
           const { data: inserted, error: insertError } = await supabase
             .from('model_photos')
-            .insert({ user_id: userId, photo_url: urlData.publicUrl, caption: null, category_id: catId })
+            .insert({ user_id: userId, photo_url: up.path, caption: null, category_id: catId })
             .select('id')
             .single()
           if (insertError) {
             anyFailed = true
             Alert.alert('Save failed', insertError.message)
           } else if (inserted) {
+            const signedUrl = await signModelPhoto(up.path)
             setPhotos(prev => [...prev, {
               id: (inserted as any).id,
-              photoUrl: urlData.publicUrl,
+              photoUrl: signedUrl,
               caption: null,
               category_id: catId,
             }])

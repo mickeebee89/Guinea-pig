@@ -20,6 +20,7 @@ import { Colors, CategoryColors, Fonts, Radius, Shadow } from '@/constants/Color
 import { hasActiveSubscription, isIdentityVerified } from '@/lib/verification'
 import { useAuth } from '@/context/auth'
 import { supabase } from '@/lib/supabase'
+import { signModelPhotos } from '@/lib/photoUrls'
 import { ConsentGate } from '@/components/ConsentGate'
 import AvailabilityCalendar, { dateKey } from '@/components/AvailabilityCalendar'
 
@@ -61,7 +62,9 @@ const STEP_SUBS = [
 
 type AvailabilitySlot = { id: string; date: string; start_time: string; end_time: string; treatmentIds: string[] }
 type Treatment        = { id: string; name: string; category: string }
-type ExistingPhoto    = { id: string; photoUrl: string }
+// `path` is the storage object path stored in the DB / attached to the booking;
+// `photoUrl` is a short-lived signed URL used only for rendering the thumbnail.
+type ExistingPhoto    = { id: string; path: string; photoUrl: string }
 type PendingPhoto     = { uri: string }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -222,7 +225,10 @@ export default function ApplySessionScreen() {
           .select('id, photo_url')
           .eq('user_id', userId)
         if (photoData) {
-          setExistingPhotos(photoData.map((p: any) => ({ id: p.id, photoUrl: p.photo_url })))
+          // Store the path; render via a signed URL (private bucket).
+          const rows = photoData.map((p: any) => ({ id: p.id, path: p.photo_url as string }))
+          const signedMap = await signModelPhotos(rows.map(r => r.path))
+          setExistingPhotos(rows.map(r => ({ id: r.id, path: r.path, photoUrl: signedMap.get(r.path) ?? r.path })))
         }
       } catch {}
 
@@ -396,7 +402,7 @@ export default function ApplySessionScreen() {
     try {
       // The selected slot is a real `availability` row; use its id directly.
       const resolvedAvailId = selectedSlot.id
-      // Upload pending photos. Seed with any URLs that already uploaded in a prior
+      // Upload pending photos. Seed with any object paths already uploaded in a prior
       // aborted attempt (carriedPhotoUrls) so they attach without re-uploading. Track
       // the photos that FAIL by reference so a retry can re-upload only those.
       const uploadedUrls: string[] = [...carriedPhotoUrls]
@@ -413,12 +419,11 @@ export default function ApplySessionScreen() {
             failedPhotos.push(photo)
             continue
           }
-          const { data: urlData } = supabase.storage.from('model-photos').getPublicUrl(up.path)
-          uploadedUrls.push(urlData.publicUrl)
-          // Saving to the reusable photo library is best-effort: the URL is already
+          uploadedUrls.push(up.path)
+          // Saving to the reusable photo library is best-effort: the path is already
           // attached to this booking above, so a library-insert failure isn't a lost
           // photo — log it but don't count it as a failed upload.
-          const { error: libErr } = await supabase.from('model_photos').insert({ user_id: userId, photo_url: urlData.publicUrl })
+          const { error: libErr } = await supabase.from('model_photos').insert({ user_id: userId, photo_url: up.path })
           if (libErr) console.error('apply-session: model_photos library insert failed:', libErr)
         } catch (e) {
           console.error('apply-session: photo upload threw:', e)
@@ -453,10 +458,10 @@ export default function ApplySessionScreen() {
         }
       }
 
-      const selectedExistingUrls = existingPhotos
+      const selectedExistingPaths = existingPhotos
         .filter(p => selectedPhotoIds.has(p.id))
-        .map(p => p.photoUrl)
-      const allPhotoUrls = [...selectedExistingUrls, ...uploadedUrls]
+        .map(p => p.path)
+      const allPhotoUrls = [...selectedExistingPaths, ...uploadedUrls]
 
       const payload = {
         provider_id:      providerId,
