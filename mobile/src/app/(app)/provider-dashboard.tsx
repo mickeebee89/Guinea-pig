@@ -966,8 +966,10 @@ export default function ProviderDashboardScreen() {
             activeOpacity={0.8}
             style={{ flex: 1 }}
           >
+            {/* Opens the full applications / confirmed / completed list. Labelled
+               "Treatment history", it read as a stat rather than a place to go. */}
             <StatCard
-              label="Treatment history"
+              label="All bookings"
               value={stats.totalSessions.toString()}
               icon="calendar-outline"
               hint="View all"

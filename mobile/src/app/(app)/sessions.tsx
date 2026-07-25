@@ -308,7 +308,7 @@ export default function SessionsScreen() {
         >
           <Ionicons name="chevron-back" size={20} color={Colors.roseDark} />
         </TouchableOpacity>
-        <Text style={styles.topBarTitle}>Treatments</Text>
+        <Text style={styles.topBarTitle}>All bookings</Text>
         <View style={{ width: 36 }} />
       </View>
 
