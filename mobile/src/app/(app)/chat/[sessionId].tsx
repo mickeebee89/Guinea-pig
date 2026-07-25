@@ -21,7 +21,10 @@ import { Colors, CategoryColors, Fonts, Radius, Shadow } from '@/constants/Color
 import { useAuth } from '@/context/auth'
 import { supabase } from '@/lib/supabase'
 import { getBlockedIds } from '@/lib/blocks'
+import { signModelPhotos } from '@/lib/photoUrls'
 import LoadErrorState from '@/components/LoadErrorState'
+import ApplicationPhotos from '@/components/ApplicationPhotos'
+import PhotoViewerModal from '@/components/PhotoViewerModal'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -34,6 +37,7 @@ type SessionDetail = {
   end_time: string
   treatment_id: string | null
   status: string
+  photo_urls: string[] | null
 }
 
 type OtherParty = {
@@ -107,6 +111,10 @@ export default function ChatScreen() {
   const [treatment,  setTreatment]  = useState<Treatment | null>(null)
   const [otherParty, setOtherParty] = useState<OtherParty | null>(null)
   const [isBlocked,  setIsBlocked]  = useState(false)   // mutual block either direction
+  // Signed urls of the model's application photos (stylist side only), and the one
+  // currently open full-screen.
+  const [applicationPhotos, setApplicationPhotos] = useState<string[]>([])
+  const [enlargedPhoto,     setEnlargedPhoto]     = useState<string | null>(null)
   const [messages,   setMessages]   = useState<Message[]>([])
   const [inputText,  setInputText]  = useState('')
   const [sending,    setSending]    = useState(false)
@@ -128,7 +136,7 @@ export default function ChatScreen() {
       // Session
       const { data: sessionData } = await supabase
         .from('sessions')
-        .select('id, provider_id, model_user_id, date, start_time, end_time, treatment_id, status')
+        .select('id, provider_id, model_user_id, date, start_time, end_time, treatment_id, status, photo_urls')
         .eq('id', sessionId)
         .single()
       if (!sessionData) return
@@ -136,6 +144,21 @@ export default function ChatScreen() {
       const s        = sessionData as SessionDetail
       const isModel  = s.model_user_id === userId
       setChat(s)
+
+      // Photos the model attached when applying. Shown to the STYLIST here because
+      // this is where they come to prepare for an accepted booking. Private bucket,
+      // so the stored paths must be signed before they'll render.
+      const paths = (s.photo_urls ?? []) as string[]
+      if (!isModel && paths.length > 0) {
+        try {
+          const signed = await signModelPhotos(paths)
+          setApplicationPhotos(paths.map(p => signed.get(p) ?? p))
+        } catch (e) {
+          console.warn('chat: signing application photos failed', e)
+        }
+      } else {
+        setApplicationPhotos([])
+      }
 
       // Treatment + other party in parallel
       const [{ data: treatData }, otherData] = await Promise.all([
@@ -576,6 +599,15 @@ export default function ChatScreen() {
         </Text>
       </View>
 
+      {/* ── The model's application photos (stylist only) ── */}
+      {/* They were shared "to help the stylist prepare", and this is where the
+         stylist comes once a booking is accepted — so surface them here too. */}
+      {applicationPhotos.length > 0 && (
+        <View style={styles.applicationPhotos}>
+          <ApplicationPhotos photos={applicationPhotos} onPress={setEnlargedPhoto} />
+        </View>
+      )}
+
       {/* ── Mark complete banner (accepted, stylist only) ── */}
       {isAccepted && !isModel && (
         <TouchableOpacity
@@ -858,6 +890,8 @@ export default function ChatScreen() {
           </View>
         </KeyboardAvoidingView>
       </Modal>
+
+      <PhotoViewerModal uri={enlargedPhoto} onClose={() => setEnlargedPhoto(null)} />
     </KeyboardAvoidingView>
   )
 }
@@ -934,6 +968,10 @@ const styles = StyleSheet.create({
   },
 
   // Safety pill
+  applicationPhotos: {
+    marginHorizontal: 12,
+    marginTop: 2,
+  },
   safetyPill: {
     flexDirection: 'row',
     alignItems: 'center',
