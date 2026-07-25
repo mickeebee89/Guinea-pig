@@ -198,17 +198,41 @@ harmless now the trigger exists, but tidy them in the editor when convenient.
 _Verified in code, no change needed: a model picks exactly ONE treatment when applying
 (`selectedTreatId` is a single value), so multiple treatments on a slot is a menu, not a bug._
 
+## Workstream 5 — Application photos visible to the stylist (DONE, `ecdb909` + `54429fd` + `b5b2d30`)
+
+Models could attach photos when applying ("Share photos to help the stylist prepare") and they uploaded
+fine into `sessions.photo_urls` — but **nothing ever READ that column**, so the stylist never saw them.
+Half-built: the model-facing half existed, the stylist-facing half was never written.
+
+Two shared components, so the surfaces can't drift:
+- `mobile/src/components/ApplicationPhotos.tsx` — thumbnail strip; renders **nothing** when empty
+- `mobile/src/components/PhotoViewerModal.tsx` — full-screen viewer, lifted from the model-profile
+  gallery pattern
+
+Photos are signed via `signModelPhotos` (private bucket — unsigned paths render blank), one batched
+call per load. `photo_urls` holds a mix of bare paths and legacy public URLs; `toObjectPath` handles both.
+
+| Surface | Moment |
+|---|---|
+| `provider-dashboard.tsx` → Applications (`PendingCard`) | Reviewing, before accept/decline |
+| `chat/[sessionId].tsx` (stylist only, under the safety pill) | After accepting — the "prepare" moment |
+| `sessions.tsx` → Pending + Confirmed cards | The full booking list |
+
+NOT on the dashboard's *upcoming* tile — it's `width: 230`, a glance card with no room for thumbnails.
+NOT on completed cards, and not model-side (the model already knows what they sent).
+
+**Discoverability fix (`b5b2d30`):** `sessions.tsx` is reachable from exactly ONE place — a dashboard
+stat tile that said "Treatment history", which reads as a statistic rather than a destination, so the
+screen was effectively unfindable. Renamed to **"All bookings"** on both the tile and the screen's own
+header (which had said "Treatments", also mismatched).
+
+_Verified in code, no change needed: a model picks exactly ONE treatment when applying
+(`selectedTreatId` is a single value), so multiple treatments on a slot is a menu, not a bug._
+
 ## Parked follow-ups (NOT started — tracked in Claude Code TaskList)
 
 - **#52 — POST-LAUNCH: tighten model-photos signing.** Narrow the storage SELECT policy + the
   model_photos TABLE read from any-authenticated to "a stylist in an active booking with that model".
-- **#53 — stylist can't view a model's application photos.** Investigated → build option (a). Intent is
-  explicit: `apply-session.tsx:56` = "Share photos to help the stylist prepare (optional)" — the stylist
-  was always meant to see them. Half-built: model uploads to `sessions.photo_urls`, but
-  `provider-dashboard.tsx:372` pending query omits `photo_urls` and `ApplicationCard` (:1281) shows the
-  note only. BUILD: add `photo_urls` to the pending query + SessionCard type + enrich; render signed
-  thumbnails on the card near the note (sign via `signModelPhotos` — paths in the private bucket);
-  tap-to-enlarge reusing the `model/[id].tsx` viewer pattern + haptic.
 - **DROP legacy tables** `treatments`, `provider_availability`, `verification_attempts` once confirmed
   unused (all currently deny-all under RLS, so they're inert).
 - **Public buckets** `portfolio-photos` + `profile-pics` — decide separately if they should be private.
