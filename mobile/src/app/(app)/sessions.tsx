@@ -18,6 +18,7 @@ import { Colors, Fonts, Radius, Shadow } from '@/constants/Colors'
 import { useAuth } from '@/context/auth'
 import { supabase } from '@/lib/supabase'
 import { signModelPhotos } from '@/lib/photoUrls'
+import { useProfileNav } from '@/lib/profileNav'
 import LoadErrorState from '@/components/LoadErrorState'
 import ApplicationPhotos from '@/components/ApplicationPhotos'
 import PhotoViewerModal from '@/components/PhotoViewerModal'
@@ -398,15 +399,19 @@ function EmptyCard({ icon, text }: { icon: string; text: string }) {
 function SessionBase({ s }: { s: Sess }) {
   const color = cc(s.treatmentCategory)
   const initials = s.modelName.split(' ').slice(0, 2).map(w => w[0] ?? '').join('').toUpperCase()
+  const { openModel } = useProfileNav()
   return (
     <View style={styles.cardRow}>
-      {s.modelPicUrl ? (
-        <Image source={{ uri: s.modelPicUrl }} style={styles.avatar} />
-      ) : (
-        <View style={styles.avatarPlaceholder}>
-          <Text style={styles.avatarInitials}>{initials}</Text>
-        </View>
-      )}
+      {/* Tap the model to see their profile before deciding. */}
+      <TouchableOpacity onPress={() => openModel(s.model_user_id)} activeOpacity={0.8}>
+        {s.modelPicUrl ? (
+          <Image source={{ uri: s.modelPicUrl }} style={styles.avatar} />
+        ) : (
+          <View style={styles.avatarPlaceholder}>
+            <Text style={styles.avatarInitials}>{initials}</Text>
+          </View>
+        )}
+      </TouchableOpacity>
       <View style={{ flex: 1, gap: 3 }}>
         <Text style={styles.modelName}>{s.modelName}</Text>
         <View style={styles.metaRow}>

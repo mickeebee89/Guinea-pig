@@ -15,6 +15,7 @@ import { Colors, CategoryColors, Fonts, Radius, Shadow } from '@/constants/Color
 import { useAuth } from '@/context/auth'
 import { supabase } from '@/lib/supabase'
 import { getBlockedIds } from '@/lib/blocks'
+import { useProfileNav } from '@/lib/profileNav'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import ScreenDecor from '@/components/ScreenDecor'
 import LoadErrorState from '@/components/LoadErrorState'
@@ -29,6 +30,10 @@ type ConvItem = {
   status: string
   otherPartyName: string
   otherPartyPic: string | null
+  // Id for opening the other party's profile from their avatar. Which route it
+  // belongs to depends on `isModel`: when I'm the model the other party is a
+  // stylist (providers.id), otherwise they're a model (auth user_id).
+  otherPartyId: string | null
   lastContent: string | null
   lastTime: string | null
   lastSenderId: string | null
@@ -234,6 +239,11 @@ export default function MessagesScreen() {
         const otherPartyPic = isModel
           ? (prov?.profile_pic_url ?? null)
           : (model?.profile_pic_url ?? null)
+        // providers.id for a stylist (what /provider/[id] wants), the auth user
+        // id for a model — NOT interchangeable.
+        const otherPartyId = isModel
+          ? (s.provider_id ?? null)
+          : (s.model_user_id ?? null)
 
         return {
           sessionId:        s.id,
@@ -243,6 +253,7 @@ export default function MessagesScreen() {
           status:           s.status,
           otherPartyName,
           otherPartyPic,
+          otherPartyId,
           lastContent:      lastMsg?.body ?? null,
           lastTime:         lastMsg?.created_at ?? s.created_at,
           lastSenderId:     lastMsg?.sender_id ?? null,
@@ -287,6 +298,8 @@ export default function MessagesScreen() {
     setRefreshing(true)
     await load()
   }, [load])
+
+  const { openModel, openProvider } = useProfileNav()
 
   const openChat = async (sessionId: string) => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
@@ -336,6 +349,9 @@ export default function MessagesScreen() {
             item={item}
             userId={userId ?? ''}
             onPress={() => openChat(item.sessionId)}
+            onPressAvatar={() =>
+              // isModel = I'm the model, so the other party is a stylist.
+              item.isModel ? openProvider(item.otherPartyId) : openModel(item.otherPartyId)}
           />
         )}
         renderSectionHeader={({ section }) =>
@@ -389,10 +405,12 @@ function ConvRow({
   item,
   userId,
   onPress,
+  onPressAvatar,
 }: {
   item: ConvItem
   userId: string
   onPress: () => void
+  onPressAvatar: () => void
 }) {
   const isCompleted = item.status === 'completed'
   // 'locked' = pending/declined/cancelled (chat not open). Completed is NOT locked — it's
@@ -411,8 +429,9 @@ function ConvRow({
 
   return (
     <TouchableOpacity style={styles.row} onPress={onPress} activeOpacity={0.85}>
-      {/* Avatar */}
-      <View style={styles.avatarWrap}>
+      {/* Avatar opens the other party's profile; the rest of the row opens the
+         chat. The inner touchable becomes the responder, so it doesn't bubble. */}
+      <TouchableOpacity style={styles.avatarWrap} onPress={onPressAvatar} activeOpacity={0.8}>
         {item.otherPartyPic ? (
           <Image source={{ uri: item.otherPartyPic }} style={styles.avatar} />
         ) : (
@@ -430,7 +449,7 @@ function ConvRow({
             <Ionicons name="checkmark" size={10} color={Colors.white} />
           </View>
         )}
-      </View>
+      </TouchableOpacity>
 
       {/* Content */}
       <View style={styles.rowContent}>

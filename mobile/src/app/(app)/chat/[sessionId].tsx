@@ -448,6 +448,20 @@ export default function ChatScreen() {
     router.back()
   }
 
+  // Open the OTHER party's profile. Provider profiles are keyed by providers.id
+  // (= chat.provider_id), model profiles by the model's user id — different
+  // id-spaces, so this lives in one place and every avatar in the screen uses it.
+  const openOtherProfile = async () => {
+    const targetId = isModel ? chat?.provider_id : otherParty?.userId
+    if (!targetId) return // missing id → do nothing rather than push a broken route
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+    router.push(
+      isModel
+        ? { pathname: '/(app)/provider/[id]' as any, params: { id: targetId } }
+        : { pathname: '/(app)/model/[id]' as any, params: { id: targetId } }
+    )
+  }
+
   // ── Derived ────────────────────────────────────────────────────────────────
 
   const isAccepted      = chat?.status === 'accepted'
@@ -551,18 +565,7 @@ export default function ChatScreen() {
         <TouchableOpacity
           style={styles.headerInfo}
           activeOpacity={0.8}
-          onPress={async () => {
-            // Provider profile needs providers.id (= chat.provider_id); model profile
-            // needs the model's user id (= otherParty.userId). Different id-spaces.
-            const targetId = isModel ? chat?.provider_id : otherParty?.userId
-            if (!targetId) return // guard: missing id → do nothing, don't push a broken route
-            await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
-            router.push(
-              isModel
-                ? { pathname: '/(app)/provider/[id]' as any, params: { id: targetId } }
-                : { pathname: '/(app)/model/[id]' as any, params: { id: targetId } }
-            )
-          }}
+          onPress={openOtherProfile}
         >
           {otherParty?.picUrl ? (
             <Image source={{ uri: otherParty.picUrl }} style={styles.headerAvatar} />
@@ -704,7 +707,11 @@ export default function ChatScreen() {
               <View style={[styles.bubbleRow, isMine && styles.bubbleRowMine]}>
                 {/* Received: show avatar placeholder when not grouped */}
                 {!isMine && !isGroupedTop ? (
-                  <View style={styles.bubbleSenderAvatar}>
+                  <TouchableOpacity
+                    style={styles.bubbleSenderAvatar}
+                    onPress={openOtherProfile}
+                    activeOpacity={0.8}
+                  >
                     {otherParty?.picUrl ? (
                       <Image source={{ uri: otherParty.picUrl }} style={styles.miniAvatar} />
                     ) : (
@@ -712,7 +719,7 @@ export default function ChatScreen() {
                         <Text style={styles.miniAvatarInitials}>{initials[0] ?? '?'}</Text>
                       </View>
                     )}
-                  </View>
+                  </TouchableOpacity>
                 ) : !isMine ? (
                   <View style={styles.avatarSpacer} />
                 ) : null}

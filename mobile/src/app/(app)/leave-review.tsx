@@ -19,6 +19,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Colors, CategoryColors, Fonts, Radius, Shadow } from '@/constants/Colors'
 import { useAuth } from '@/context/auth'
 import { supabase } from '@/lib/supabase'
+import { useProfileNav } from '@/lib/profileNav'
 import LoadErrorState from '@/components/LoadErrorState'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -146,6 +147,7 @@ export default function LeaveReviewScreen() {
   const { sessionId, revieweeType = 'provider' } =
     useLocalSearchParams<{ sessionId: string; revieweeType?: string }>()
   const router      = useRouter()
+  const { openModel, openProvider } = useProfileNav()
   const { session } = useAuth()
   const insets      = useSafeAreaInsets()
   const userId      = session?.user?.id
@@ -420,13 +422,21 @@ export default function LeaveReviewScreen() {
           <View style={styles.recapCard}>
             <View style={[styles.recapStrip, { backgroundColor: isReviewingModel ? Colors.rose : catColor }]} />
             <View style={styles.recapBody}>
-              {revieweePicUrl ? (
-                <Image source={{ uri: revieweePicUrl }} style={styles.recapAvatar} />
-              ) : (
-                <View style={styles.recapAvatarPlaceholder}>
-                  <Text style={styles.recapAvatarInitials}>{revieweeInit}</Text>
-                </View>
-              )}
+              {/* Tap through to whoever you're reviewing, to jog the memory. */}
+              <TouchableOpacity
+                onPress={() => isReviewingModel
+                  ? openModel(revieweeUserId)
+                  : openProvider(sessionData?.provider_id)}
+                activeOpacity={0.8}
+              >
+                {revieweePicUrl ? (
+                  <Image source={{ uri: revieweePicUrl }} style={styles.recapAvatar} />
+                ) : (
+                  <View style={styles.recapAvatarPlaceholder}>
+                    <Text style={styles.recapAvatarInitials}>{revieweeInit}</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
               <View style={styles.recapInfo}>
                 <Text style={styles.recapName}>{revieweeName || (isReviewingModel ? 'Model' : 'Provider')}</Text>
                 {!isReviewingModel && treatmentName && (

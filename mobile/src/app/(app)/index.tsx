@@ -112,6 +112,9 @@ type ImpactInfo      = { completed: number; distinctProviders: number }
 
 type ReviewItem = {
   id: string
+  // providers.id — needed to open the shop from the avatar. It was in scope in
+  // the mapper but dropped.
+  provider_id: string
   provider_name: string
   provider_pic: string | null
   date: string
@@ -311,6 +314,7 @@ function ModelHomeContent() {
         .filter(s => !reviewedSet.has(s.id as string))
         .map(s => ({
           id:                 s.id as string,
+          provider_id:        s.provider_id as string,
           provider_name:      provMap[s.provider_id]?.name ?? 'Stylist',
           provider_pic:       provMap[s.provider_id]?.pic ?? null,
           date:               s.date as string,
@@ -454,7 +458,13 @@ function ModelHomeContent() {
                     activeOpacity={0.85}
                   >
                     <View style={styles.upcomingHeader}>
-                      <View style={styles.dashAvatarWrap}>
+                      {/* Avatar opens the stylist's shop; the rest of the card
+                         keeps its own action (chat / leave a review). */}
+                      <TouchableOpacity
+                        style={styles.dashAvatarWrap}
+                        onPress={() => openProvider(s.provider_id)}
+                        activeOpacity={0.8}
+                      >
                         {s.provider_pic ? (
                           <Image source={{ uri: s.provider_pic }} style={styles.dashAvatar} />
                         ) : (
@@ -462,7 +472,7 @@ function ModelHomeContent() {
                             <Text style={styles.dashAvatarInitial}>{s.provider_name[0]?.toUpperCase() ?? '?'}</Text>
                           </View>
                         )}
-                      </View>
+                      </TouchableOpacity>
                       <View style={{ flex: 1 }}>
                         <Text style={styles.dashTitle} numberOfLines={1}>{s.provider_name}</Text>
                         <Text style={styles.dashMeta} numberOfLines={1}>{formatSessDate(s.date, s.start_time)}</Text>
@@ -500,7 +510,13 @@ function ModelHomeContent() {
                       }}
                       activeOpacity={0.85}
                     >
-                      <View style={styles.dashAvatarWrap}>
+                      {/* Avatar opens the stylist's shop; the rest of the card
+                         keeps its own action (chat / leave a review). */}
+                      <TouchableOpacity
+                        style={styles.dashAvatarWrap}
+                        onPress={() => openProvider(s.provider_id)}
+                        activeOpacity={0.8}
+                      >
                         {s.provider_pic ? (
                           <Image source={{ uri: s.provider_pic }} style={styles.dashAvatar} />
                         ) : (
@@ -508,7 +524,7 @@ function ModelHomeContent() {
                             <Text style={styles.dashAvatarInitial}>{s.provider_name[0]?.toUpperCase() ?? '?'}</Text>
                           </View>
                         )}
-                      </View>
+                      </TouchableOpacity>
                       <View style={styles.dashInfo}>
                         <Text style={styles.dashTitle}>{s.provider_name}</Text>
                         <Text style={styles.dashMeta}>{s.treatment_name ? `${s.treatment_name} · ` : ''}How was it?</Text>
@@ -535,7 +551,13 @@ function ModelHomeContent() {
                       }}
                       activeOpacity={0.85}
                     >
-                      <View style={styles.dashAvatarWrap}>
+                      {/* Avatar opens the stylist's shop; the rest of the card
+                         keeps its own action (chat / leave a review). */}
+                      <TouchableOpacity
+                        style={styles.dashAvatarWrap}
+                        onPress={() => openProvider(s.provider_id)}
+                        activeOpacity={0.8}
+                      >
                         {s.provider_pic ? (
                           <Image source={{ uri: s.provider_pic }} style={styles.dashAvatar} />
                         ) : (
@@ -543,7 +565,7 @@ function ModelHomeContent() {
                             <Text style={styles.dashAvatarInitial}>{s.provider_name[0]?.toUpperCase() ?? '?'}</Text>
                           </View>
                         )}
-                      </View>
+                      </TouchableOpacity>
                       <View style={styles.dashInfo}>
                         <Text style={styles.dashTitle}>{s.provider_name}</Text>
                         <Text style={styles.dashMeta}>{formatSessDate(s.date, s.start_time)}</Text>

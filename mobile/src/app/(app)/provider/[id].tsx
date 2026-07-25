@@ -18,6 +18,7 @@ import { Colors, CategoryColors, Fonts, Radius, Shadow } from '@/constants/Color
 import { useAuth } from '@/context/auth'
 import { supabase } from '@/lib/supabase'
 import { getBlockedIds } from '@/lib/blocks'
+import { useProfileNav } from '@/lib/profileNav'
 import AvailabilityCalendar from '@/components/AvailabilityCalendar'
 
 const BANNER_HEIGHT = 165
@@ -122,6 +123,7 @@ function groupPortfolio(items: PortfolioItem[]): { label: string; items: Portfol
 export default function ProviderShopScreen() {
   const { id, ownShop } = useLocalSearchParams<{ id: string; ownShop?: string }>()
   const router = useRouter()
+  const { openModel } = useProfileNav()
   const { session } = useAuth()
   const insets = useSafeAreaInsets()
   const userId = session?.user?.id
@@ -497,7 +499,13 @@ export default function ProviderShopScreen() {
             {reviews.length === 0 ? (
               <Text style={styles.emptyReviews}>No reviews yet — be the first!</Text>
             ) : (
-              reviews.map(r => <ReviewCard key={r.id} review={r} />)
+              reviews.map(r => (
+                <ReviewCard
+                  key={r.id}
+                  review={r}
+                  onPressReviewer={() => openModel(r.reviewer_id)}
+                />
+              ))
             )}
           </View>
         </View>
@@ -601,15 +609,21 @@ function TreatmentRow({ treatment }: { treatment: Treatment }) {
   )
 }
 
-function ReviewCard({ review }: { review: Review }) {
+function ReviewCard({ review, onPressReviewer }: { review: Review; onPressReviewer: () => void }) {
   const name = review.reviewer_name
   const initials = name.split(' ').map(w => w[0] ?? '').join('').slice(0, 2).toUpperCase()
   return (
     <View style={styles.reviewCard}>
       <View style={styles.reviewHeader}>
-        <View style={styles.reviewerAvatarPlaceholder}>
+        {/* Reviewers on a stylist's shop are models, so reviewer_id is already
+           the right id for /model/[id]. */}
+        <TouchableOpacity
+          style={styles.reviewerAvatarPlaceholder}
+          onPress={onPressReviewer}
+          activeOpacity={0.8}
+        >
           <Text style={styles.reviewerInitials}>{initials}</Text>
-        </View>
+        </TouchableOpacity>
         <View style={styles.reviewerMeta}>
           <Text style={styles.reviewerName}>{name}</Text>
           <View style={styles.reviewRatingRow}>

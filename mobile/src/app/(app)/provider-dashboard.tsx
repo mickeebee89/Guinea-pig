@@ -22,6 +22,7 @@ import { useAuth } from '@/context/auth'
 import { supabase } from '@/lib/supabase'
 import { getBlockedIds } from '@/lib/blocks'
 import { signModelPhotos } from '@/lib/photoUrls'
+import { useProfileNav } from '@/lib/profileNav'
 import ScreenDecor from '@/components/ScreenDecor'
 import LoadErrorState from '@/components/LoadErrorState'
 import HeaderIcons from '@/components/HeaderIcons'
@@ -88,6 +89,9 @@ type SessionCard = {
 
 type ReviewCard = {
   id: string
+  // Needed to open the model's profile from their avatar — it was in scope in the
+  // mapper but dropped.
+  model_user_id: string
   modelName: string
   modelPicUrl: string | null
   date: string
@@ -226,6 +230,7 @@ function ProviderNotFound({ onRetry }: { onRetry: () => void }) {
 
 export default function ProviderDashboardScreen() {
   const router   = useRouter()
+  const { openModel } = useProfileNav()
   const { session } = useAuth()
   const insets   = useSafeAreaInsets()
   const userId   = session?.user?.id
@@ -504,6 +509,7 @@ export default function ProviderDashboardScreen() {
           const t = s.treatment_id ? treatMap[s.treatment_id] : null
           return {
             id: s.id as string,
+            model_user_id: s.model_user_id as string,
             modelName: m ? `${m.first_name} ${m.last_initial ? m.last_initial + '.' : ''}`.trim() : 'Model',
             modelPicUrl: m?.profile_pic_url ?? null,
             date: s.date as string,
@@ -1076,13 +1082,18 @@ export default function ProviderDashboardScreen() {
                 }}
                 activeOpacity={0.85}
               >
-                {s.modelPicUrl ? (
-                  <Image source={{ uri: s.modelPicUrl }} style={styles.reviewAvatar} />
-                ) : (
-                  <View style={[styles.reviewAvatar, styles.reviewAvatarPlaceholder]}>
-                    <Text style={styles.reviewAvatarInitial}>{s.modelName[0]?.toUpperCase() ?? '?'}</Text>
-                  </View>
-                )}
+                {/* Avatar opens the profile; the rest of the row still goes to
+                   leave-review. The inner touchable takes the press, so it
+                   doesn't bubble to the row. */}
+                <TouchableOpacity onPress={() => openModel(s.model_user_id)} activeOpacity={0.8}>
+                  {s.modelPicUrl ? (
+                    <Image source={{ uri: s.modelPicUrl }} style={styles.reviewAvatar} />
+                  ) : (
+                    <View style={[styles.reviewAvatar, styles.reviewAvatarPlaceholder]}>
+                      <Text style={styles.reviewAvatarInitial}>{s.modelName[0]?.toUpperCase() ?? '?'}</Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.reviewName} numberOfLines={1}>{s.modelName}</Text>
                   <Text style={styles.reviewMeta} numberOfLines={1}>{s.treatmentName ? `${s.treatmentName} · ` : ''}How was it?</Text>
@@ -1313,17 +1324,21 @@ function PendingCard({
   onPhotoPress: (uri: string) => void
 }) {
   const catColor = categoryColor(s.treatmentCategory)
+  const { openModel } = useProfileNav()
   return (
     <View style={styles.sessionCard}>
       <View style={styles.sessionCardRow}>
-        {/* Avatar */}
-        {s.modelPicUrl ? (
-          <Image source={{ uri: s.modelPicUrl }} style={styles.sessionAvatar} />
-        ) : (
-          <View style={styles.sessionAvatarPlaceholder}>
-            <Ionicons name="person" size={18} color={Colors.muted} />
-          </View>
-        )}
+        {/* Avatar — opens the model's profile, so a stylist can look them over
+           before accepting. */}
+        <TouchableOpacity onPress={() => openModel(s.model_user_id)} activeOpacity={0.8}>
+          {s.modelPicUrl ? (
+            <Image source={{ uri: s.modelPicUrl }} style={styles.sessionAvatar} />
+          ) : (
+            <View style={styles.sessionAvatarPlaceholder}>
+              <Ionicons name="person" size={18} color={Colors.muted} />
+            </View>
+          )}
+        </TouchableOpacity>
         {/* Info */}
         <View style={{ flex: 1 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -1389,17 +1404,20 @@ function UpcomingCard({
   onChat: () => void
 }) {
   const catColor = categoryColor(s.treatmentCategory)
+  const { openModel } = useProfileNav()
   return (
     <View style={[styles.sessionCard, styles.upcomingCardH]}>
       {/* Model + date/time */}
       <View style={styles.upcomingHeader}>
-        {s.modelPicUrl ? (
-          <Image source={{ uri: s.modelPicUrl }} style={styles.sessionAvatar} />
-        ) : (
-          <View style={styles.sessionAvatarPlaceholder}>
-            <Ionicons name="person" size={18} color={Colors.muted} />
-          </View>
-        )}
+        <TouchableOpacity onPress={() => openModel(s.model_user_id)} activeOpacity={0.8}>
+          {s.modelPicUrl ? (
+            <Image source={{ uri: s.modelPicUrl }} style={styles.sessionAvatar} />
+          ) : (
+            <View style={styles.sessionAvatarPlaceholder}>
+              <Ionicons name="person" size={18} color={Colors.muted} />
+            </View>
+          )}
+        </TouchableOpacity>
         <View style={{ flex: 1 }}>
           <Text style={styles.sessionModelName} numberOfLines={1}>{s.modelName}</Text>
           <Text style={styles.sessionDateTime} numberOfLines={1}>
