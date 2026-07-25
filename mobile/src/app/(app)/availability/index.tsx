@@ -10,10 +10,16 @@ import SlotPickerModal from '@/components/SlotPickerModal'
 import {
   DAYS_SHORT, MONTH_NAMES,
   Treatment, TimeSlot,
-  dateKey, calendarRows, formatDayShort, newSlotId, treatmentColour,
+  dateKey, calendarRows, formatDayShort, newSlotId, treatmentColour, findClash,
   loadProviderId, loadTreatments, loadUpcomingDays,
   applySlotsToDates, notifyFavourites,
 } from '@/lib/availability'
+
+// Slots are keyed by time+treatments so "shared across all days" can be computed
+// honestly rather than assumed.
+const slotKey = (s: TimeSlot) =>
+  `${s.startTime}|${s.endTime}|${[...s.treatmentIds].sort().join(',')}`
+const timeKey = (s: { startTime: string; endTime: string }) => `${s.startTime}|${s.endTime}`
 
 // ADD availability. Two steps: pick the dates, then define the time slots ONCE and
 // apply them to every selected date.
@@ -37,7 +43,10 @@ export default function AddAvailabilityScreen() {
   const [viewMonth, setViewMonth] = useState(now.getMonth())
   const [selectedDates, setSelectedDates] = useState<Set<string>>(new Set())
 
-  const [slots, setSlots] = useState<TimeSlot[]>([])
+  // Slots per selected date. `activeDay === null` means "All days" — edits then
+  // apply to every selected date; picking a date edits only that one.
+  const [daySlots,  setDaySlots]  = useState<Record<string, TimeSlot[]>>({})
+  const [activeDay, setActiveDay] = useState<string | null>(null)
   const [treatments, setTreatments] = useState<Treatment[]>([])
   const [providerId, setProviderId] = useState<string | null>(null)
   // Dates that already have availability — dot-marked on the calendar.
@@ -84,6 +93,27 @@ export default function AddAvailabilityScreen() {
 
   const rows = useMemo(() => calendarRows(viewYear, viewMonth), [viewYear, viewMonth])
   const sortedSelected = useMemo(() => [...selectedDates].sort(), [selectedDates])
+
+  // Slots identical across EVERY selected day — what "All days" shows and edits.
+  const sharedSlots = useMemo(() => {
+    if (sortedSelected.length === 0) return []
+    const first = daySlots[sortedSelected[0]] ?? []
+    return first.filter(s =>
+      sortedSelected.every(d => (daySlots[d] ?? []).some(o => slotKey(o) === slotKey(s))))
+  }, [daySlots, sortedSelected])
+
+  // True when at least one day has something the others don't — so "All days"
+  // can say so rather than quietly hiding it.
+  const diverged = useMemo(
+    () => sortedSelected.some(d => (daySlots[d] ?? []).length !== sharedSlots.length),
+    [daySlots, sortedSelected, sharedSlots],
+  )
+
+  const visibleSlots = activeDay === null ? sharedSlots : (daySlots[activeDay] ?? [])
+  const totalSlots   = useMemo(
+    () => sortedSelected.reduce((n, d) => n + (daySlots[d] ?? []).length, 0),
+    [daySlots, sortedSelected],
+  )
 
   // ── Handlers ────────────────────────────────────────────────────────────────
 
@@ -133,23 +163,69 @@ export default function AddAvailabilityScreen() {
   }
 
   const saveSlot = async () => {
-    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
-    const next: TimeSlot = {
-      id:           editingSlotId ?? newSlotId(),
-      dbId:         null,
-      startTime:    modalStart,
-      endTime:      modalEnd,
-      treatmentIds: modalTreatIds,
+    const candidate = { startTime: modalStart, endTime: modalEnd }
+
+    // Overlapping slots would let the stylist be booked twice for the same hour.
+    // Check every day this edit will touch, and name the day that clashes.
+    const targets = activeDay === null ? sortedSelected : [activeDay]
+    for (const d of targets) {
+      const existing = daySlots[d] ?? []
+      const ignoreId = activeDay === null
+        ? (existing.find(s => s.id === editingSlotId) ?? existing.find(s => timeKey(s) === timeKey(candidate)))?.id
+        : editingSlotId
+      const clash = findClash(existing, candidate, ignoreId)
+      if (clash) {
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning)
+        Alert.alert(
+          'Times overlap',
+          `${formatDayShort(d)} already has ${clash.startTime}–${clash.endTime}. Time slots can't overlap — pick a different time.`,
+        )
+        return
+      }
     }
-    setSlots(prev => editingSlotId
-      ? prev.map(s => (s.id === editingSlotId ? next : s))
-      : [...prev, next])
+
+    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
+    const sortSlots = (arr: TimeSlot[]) =>
+      [...arr].sort((a, b) => a.startTime.localeCompare(b.startTime))
+
+    setDaySlots(prev => {
+      const next = { ...prev }
+      for (const d of targets) {
+        const existing = prev[d] ?? []
+        // In All-days mode the same logical slot has a different id on each day,
+        // so match on time rather than id.
+        const replacing = activeDay === null
+          ? existing.find(s => s.id === editingSlotId || (editingSlotId && timeKey(s) === timeKey(candidate)))
+          : existing.find(s => s.id === editingSlotId)
+        const slot: TimeSlot = {
+          id:           replacing?.id ?? newSlotId(),
+          dbId:         replacing?.dbId ?? null,
+          startTime:    modalStart,
+          endTime:      modalEnd,
+          treatmentIds: modalTreatIds,
+        }
+        next[d] = sortSlots(
+          replacing
+            ? existing.map(s => (s.id === replacing.id ? slot : s))
+            : [...existing, slot],
+        )
+      }
+      return next
+    })
     setModalOpen(false)
   }
 
-  const removeSlot = async (id: string) => {
+  const removeSlot = async (slot: TimeSlot) => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
-    setSlots(prev => prev.filter(s => s.id !== id))
+    const targets = activeDay === null ? sortedSelected : [activeDay]
+    setDaySlots(prev => {
+      const next = { ...prev }
+      for (const d of targets) {
+        next[d] = (prev[d] ?? []).filter(s =>
+          activeDay === null ? timeKey(s) !== timeKey(slot) : s.id !== slot.id)
+      }
+      return next
+    })
   }
 
   const goBack = async () => {
@@ -160,6 +236,13 @@ export default function AddAvailabilityScreen() {
 
   const goNext = async () => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
+    // Give every selected day an entry, dropping any dates deselected since last time.
+    setDaySlots(prev => {
+      const next: Record<string, TimeSlot[]> = {}
+      for (const d of sortedSelected) next[d] = prev[d] ?? []
+      return next
+    })
+    setActiveDay(null)
     setStep(2)
   }
 
@@ -168,12 +251,18 @@ export default function AddAvailabilityScreen() {
     setSaving(true)
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
     try {
-      await applySlotsToDates(providerId, sortedSelected, slots)
+      // Each day writes its OWN slots, so days that were fine-tuned keep their
+      // differences. Days left empty are simply skipped.
+      for (const d of sortedSelected) {
+        const s = daySlots[d] ?? []
+        if (s.length > 0) await applySlotsToDates(providerId, [d], s)
+      }
       await notifyFavourites(providerId)
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
+      const dayCount = sortedSelected.filter(d => (daySlots[d] ?? []).length > 0).length
       Alert.alert(
         'Availability added ✓',
-        `${slots.length} time slot${slots.length === 1 ? '' : 's'} added to ${sortedSelected.length} day${sortedSelected.length === 1 ? '' : 's'}. You can fine-tune any single day from the list.`,
+        `${totalSlots} time slot${totalSlots === 1 ? '' : 's'} added across ${dayCount} day${dayCount === 1 ? '' : 's'}. You can fine-tune any single day from the list.`,
         [{ text: 'OK', onPress: () => router.replace('/(app)/availability/days' as any) }],
       )
     } catch (e) {
@@ -184,8 +273,6 @@ export default function AddAvailabilityScreen() {
       setSaving(false)
     }
   }
-
-  const totalSlots = slots.length * sortedSelected.length
 
   // ── Render ──────────────────────────────────────────────────────────────────
 
@@ -301,37 +388,71 @@ export default function AddAvailabilityScreen() {
         {/* ── STEP 2 — define slots once ── */}
         {step === 2 && (
           <>
+            {/* Which day am I editing? "All days" edits every selected date at
+               once; tapping a date narrows to just that one. */}
             <View style={styles.card}>
-              <Text style={styles.cardLabel}>Applying to</Text>
-              <View style={styles.dateChips}>
+              <Text style={styles.cardLabel}>Editing</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.dateChips}>
+                <DayChip
+                  label={`All ${sortedSelected.length} days`}
+                  count={sharedSlots.length}
+                  active={activeDay === null}
+                  onPress={async () => {
+                    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+                    setActiveDay(null)
+                  }}
+                />
                 {sortedSelected.map(d => (
-                  <View key={d} style={styles.dateChip}>
-                    <Text style={styles.dateChipText}>{formatDayShort(d)}</Text>
-                  </View>
+                  <DayChip
+                    key={d}
+                    label={formatDayShort(d)}
+                    count={(daySlots[d] ?? []).length}
+                    active={activeDay === d}
+                    onPress={async () => {
+                      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+                      setActiveDay(d)
+                    }}
+                  />
                 ))}
-              </View>
+              </ScrollView>
             </View>
 
             <View style={styles.card}>
-              <Text style={styles.cardLabel}>Time slots</Text>
-              {slots.length === 0 ? (
+              <Text style={styles.cardLabel}>
+                {activeDay === null ? 'Times for every selected day' : `Times for ${formatDayShort(activeDay)}`}
+              </Text>
+
+              {activeDay === null && diverged && (
+                <View style={styles.noteRow}>
+                  <Ionicons name="information-circle-outline" size={15} color={Colors.roseDark} />
+                  <Text style={styles.noteText}>
+                    Some days have their own times — tap a date above to see them.
+                  </Text>
+                </View>
+              )}
+
+              {visibleSlots.length === 0 ? (
                 <Text style={styles.noSlotsHint}>
-                  No slots yet — add one below. Each slot has its own times and its own treatments.
+                  {activeDay === null && diverged
+                    ? 'No times are shared by every day. Tap a date above to edit it.'
+                    : 'No slots yet — add one below. Each slot has its own times and its own treatments.'}
                 </Text>
               ) : (
-                slots.map(s => (
+                visibleSlots.map(s => (
                   <SlotRow
                     key={s.id}
                     slot={s}
                     treatments={treatments}
                     onPress={() => openEditSlot(s)}
-                    onRemove={() => removeSlot(s.id)}
+                    onRemove={() => removeSlot(s)}
                   />
                 ))
               )}
               <TouchableOpacity style={styles.addSlotBtn} onPress={openAddSlot} activeOpacity={0.7}>
                 <Ionicons name="add-circle-outline" size={18} color={Colors.roseDark} />
-                <Text style={styles.addSlotText}>Add time slot</Text>
+                <Text style={styles.addSlotText}>
+                  {activeDay === null ? 'Add time slot to all days' : `Add time slot to ${formatDayShort(activeDay)}`}
+                </Text>
               </TouchableOpacity>
             </View>
 
@@ -361,17 +482,17 @@ export default function AddAvailabilityScreen() {
           </TouchableOpacity>
         ) : (
           <TouchableOpacity
-            style={[styles.primaryBtn, (slots.length === 0 || saving) && styles.primaryBtnDisabled]}
-            disabled={slots.length === 0 || saving}
+            style={[styles.primaryBtn, (totalSlots === 0 || saving) && styles.primaryBtnDisabled]}
+            disabled={totalSlots === 0 || saving}
             onPress={apply}
             activeOpacity={0.9}
           >
             <Text style={styles.primaryBtnText}>
               {saving
                 ? 'Saving…'
-                : slots.length === 0
+                : totalSlots === 0
                   ? 'Add a time slot'
-                  : `Add ${slots.length} slot${slots.length === 1 ? '' : 's'} to ${sortedSelected.length} day${sortedSelected.length === 1 ? '' : 's'} (${totalSlots})`}
+                  : `Add ${totalSlots} time slot${totalSlots === 1 ? '' : 's'}`}
             </Text>
           </TouchableOpacity>
         )}
@@ -379,7 +500,10 @@ export default function AddAvailabilityScreen() {
 
       <SlotPickerModal
         visible={modalOpen}
-        title={editingSlotId ? 'Edit time slot' : 'New time slot'}
+        title={
+          (editingSlotId ? 'Edit slot · ' : 'New slot · ') +
+          (activeDay === null ? `all ${sortedSelected.length} days` : formatDayShort(activeDay))
+        }
         availableTreatments={treatments}
         startTime={modalStart}
         endTime={modalEnd}
@@ -435,6 +559,30 @@ function SlotRow({
       <TouchableOpacity style={styles.slotRemove} onPress={onRemove} hitSlop={8}>
         <Ionicons name="close-circle" size={20} color={Colors.muted} />
       </TouchableOpacity>
+    </TouchableOpacity>
+  )
+}
+
+function DayChip({
+  label, count, active, onPress,
+}: {
+  label: string
+  count: number
+  active: boolean
+  onPress: () => void
+}) {
+  return (
+    <TouchableOpacity
+      style={[styles.dateChip, active && styles.dateChipActive]}
+      onPress={onPress}
+      activeOpacity={0.8}
+    >
+      <Text style={[styles.dateChipText, active && styles.dateChipTextActive]}>{label}</Text>
+      {count > 0 && (
+        <View style={[styles.chipBadge, active && styles.chipBadgeActive]}>
+          <Text style={[styles.chipBadgeText, active && styles.chipBadgeTextActive]}>{count}</Text>
+        </View>
+      )}
     </TouchableOpacity>
   )
 }
@@ -545,13 +693,31 @@ const styles = StyleSheet.create({
   linkTitle: { fontFamily: Fonts.heading, fontSize: 15, color: Colors.warmDark },
   linkSub:   { fontFamily: Fonts.body, fontSize: 12, color: Colors.muted, marginTop: 2 },
 
-  // Selected-date chips
-  dateChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  // Day selector chips
+  dateChips: { flexDirection: 'row', gap: 8, paddingRight: 4 },
   dateChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
     backgroundColor: Colors.inputBg, borderRadius: 20,
-    paddingHorizontal: 12, paddingVertical: 7,
+    paddingHorizontal: 13, paddingVertical: 8,
+    borderWidth: 1.5, borderColor: 'transparent',
   },
-  dateChipText: { fontFamily: Fonts.bodyBold, fontSize: 13, color: Colors.roseDark },
+  dateChipActive:     { backgroundColor: Colors.roseDark, borderColor: Colors.roseDark },
+  dateChipText:       { fontFamily: Fonts.bodyBold, fontSize: 13, color: Colors.roseDark },
+  dateChipTextActive: { color: Colors.white },
+  chipBadge: {
+    minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 5,
+    backgroundColor: Colors.white, alignItems: 'center', justifyContent: 'center',
+  },
+  chipBadgeActive:     { backgroundColor: 'rgba(255,255,255,0.28)' },
+  chipBadgeText:       { fontFamily: Fonts.bodyBold, fontSize: 11, color: Colors.roseDark },
+  chipBadgeTextActive: { color: Colors.white },
+
+  noteRow: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: 6,
+    backgroundColor: Colors.inputBg, borderRadius: 10,
+    padding: 10, marginBottom: 10,
+  },
+  noteText: { flex: 1, fontFamily: Fonts.body, fontSize: 12, color: Colors.roseDark, lineHeight: 17 },
 
   // Slots
   noSlotsHint: { fontFamily: Fonts.body, fontSize: 13, color: Colors.muted, fontStyle: 'italic', marginBottom: 10 },

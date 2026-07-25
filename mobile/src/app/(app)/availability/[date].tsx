@@ -14,7 +14,7 @@ import LoadErrorState from '@/components/LoadErrorState'
 import SlotPickerModal from '@/components/SlotPickerModal'
 import {
   Treatment, TimeSlot,
-  formatDayLabel, newSlotId, treatmentColour,
+  formatDayLabel, newSlotId, treatmentColour, findClash,
   loadProviderId, loadTreatments, loadDay,
   saveDay, deleteDay, notifyFavourites,
 } from '@/lib/availability'
@@ -90,6 +90,18 @@ export default function EditDayScreen() {
   }
 
   const saveSlot = async () => {
+    // Overlapping slots on one day let the stylist be booked twice for the same
+    // hour — reject rather than quietly create the clash.
+    const clash = findClash(slots, { startTime: modalStart, endTime: modalEnd }, editingSlotId)
+    if (clash) {
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning)
+      Alert.alert(
+        'Times overlap',
+        `This day already has ${clash.startTime}–${clash.endTime}. Time slots can't overlap — pick a different time.`,
+      )
+      return
+    }
+
     await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
     setSlots(prev => {
       const existing = prev.find(s => s.id === editingSlotId)

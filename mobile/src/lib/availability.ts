@@ -102,6 +102,28 @@ let _slotCounter = 0
 export const newSlotId = () => `slot-${++_slotCounter}`
 
 export const hhmm     = (t: string) => t.substring(0, 5)
+
+// ── Overlap ───────────────────────────────────────────────────────────────────
+
+// Two slots clash if they share any minute. Half-open: 09:00–10:00 and
+// 10:00–11:00 are fine, back to back. "HH:MM" compares correctly as a string.
+export function slotsOverlap(
+  a: { startTime: string; endTime: string },
+  b: { startTime: string; endTime: string },
+): boolean {
+  return a.startTime < b.endTime && b.startTime < a.endTime
+}
+
+// The first existing slot a candidate would clash with, ignoring the slot being
+// edited. Overlapping slots let a stylist be booked twice for the same hour, so
+// they're rejected at creation time.
+export function findClash(
+  slots: TimeSlot[],
+  candidate: { startTime: string; endTime: string },
+  ignoreId?: string | null,
+): TimeSlot | null {
+  return slots.find(s => s.id !== ignoreId && slotsOverlap(s, candidate)) ?? null
+}
 // Match the stored format so the unique index (provider_id,date,start_time,end_time)
 // sees the conflict.
 export const toHHMMSS = (t: string) => (t.length === 5 ? `${t}:00` : t)
