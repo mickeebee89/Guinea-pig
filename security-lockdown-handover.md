@@ -229,6 +229,40 @@ header (which had said "Treatments", also mismatched).
 _Verified in code, no change needed: a model picks exactly ONE treatment when applying
 (`selectedTreatId` is a single value), so multiple treatments on a slot is a menu, not a bug._
 
+## Workstream 6 — Branding + profile polish (DONE)
+
+- **Icon/splash (`332a488`; icon itself was `71f6805`).** The icon fix was already correct and
+  committed — it looked stale because **icons and splash are compiled into the native binary**, so
+  they only change on a new EAS build, never on a JS reload. Verified all four pieces incl. that
+  `backgroundImage` overrides `backgroundColor` (a wrong file there would have silently kept the old
+  colour). Separately fixed the splash: `splash-icon.png` was a **blank template leftover**, was
+  configured under `"android"` only (**iOS had no splash image at all**), and `imageWidth: 76` was
+  below the plugin's own default of 100. Now the guinea pig at 68% of canvas (survives Android 12's
+  circular splash mask), top-level config, `imageWidth: 200`.
+- **Auth-screen logo (`d077c1b`).** "Welcome back" showed pre-rebrand artwork because the logo was
+  **fetched from a Cloudinary URL** that still hosts the old image — no repo change could ever have
+  fixed it. LoginScreen + ForgotPasswordScreen now use the bundled icon (no CDN staleness, no network
+  dependency on an auth screen). `guinea-pig-logo.png` (welcome screen + default shop banner) also
+  regenerated. These are JS assets → take effect on reload, unlike the icon/splash.
+- **`model_attributes` read policy (`94f4b80`, `supabase/model-attributes-read.sql`).** A stylist saw
+  NEITHER the model's bio nor their characteristics. Both policies were owner-only, so reading another
+  user's row returned zero rows — and `maybeSingle()` on zero rows gives `{data: null, error: null}`,
+  so it failed **completely silently**. Filters kept working because `nearby_models` is SECURITY
+  DEFINER and bypasses RLS. Same trap as `model_photos`. Added an authenticated SELECT.
+- **Model profile layout (`3067b06`).** Rating (stars + value + count, or "No reviews yet") now on the
+  name tile; bio moved to its own "About" section, left-aligned. The average is computed once and
+  shared with the reviews header, which previously recomputed it inline.
+- **Avatars link to profiles (`b101c30`, `mobile/src/lib/profileNav.ts`).** 11 sites. **The trap:**
+  `/model/[id]` takes the auth `user_id`, `/provider/[id]` takes **`providers.id`** — passing the
+  wrong one lands on an empty profile rather than erroring, so it ships silently. All navigation goes
+  through `useProfileNav()`, whose callers must say which id they hold. Three lists were dropping the
+  id during mapping despite having it in scope (provider-dashboard `ReviewCard`, index `ReviewItem`,
+  messages `ConvItem`) — type+mapper fix, no new queries. Where a row already navigates, the avatar
+  has its own touchable so it takes the press.
+  **NOT done:** reviewer *initials* on `model/[id]`, `model-profile` and `reviews/[userId]` — those
+  reviewers are stylists, so linking needs a `providers.id` lookup per reviewer, and in
+  `reviews/[userId]` the reviewer's role isn't known at all. Deferred rather than ship dead taps.
+
 ## Parked follow-ups (NOT started — tracked in Claude Code TaskList)
 
 - **#52 — POST-LAUNCH: tighten model-photos signing.** Narrow the storage SELECT policy + the
