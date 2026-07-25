@@ -285,7 +285,9 @@ async function cancelSubscription(userId: string) {
 async function confirmSubscription(
   userId:         string,
   subscriptionId: string,
-  customerId:     string,
+  // Deliberately IGNORED: the customer is resolved from the subscription itself and
+  // ownership-checked below. Trusting a body-supplied customer id would defeat that.
+  _customerId?:   string,
 ) {
   if (!subscriptionId) return respond({ error: 'subscriptionId required' }, 400)
 
@@ -293,6 +295,25 @@ async function confirmSubscription(
 
   if (!['active', 'trialing'].includes(sub.status)) {
     return respond({ error: `Subscription not active: ${sub.status}` }, 400)
+  }
+
+  // OWNERSHIP. Without this, any authenticated caller could pass someone ELSE's
+  // active subscription id and be marked subscribed for free — one paid sub could
+  // be replayed by any number of accounts. Same class of check confirmVerification
+  // does on the payment intent. The user_id is stamped on the Stripe CUSTOMER when
+  // the subscription is created, so resolve the customer FROM the subscription
+  // (never trust the customerId in the request body) and compare.
+  const subCustomerId = typeof sub.customer === 'string' ? sub.customer : sub.customer?.id
+  if (!subCustomerId) {
+    return respond({ error: 'Subscription has no customer' }, 400)
+  }
+  const customer = await stripe.customers.retrieve(subCustomerId)
+  const ownerId  = (customer as Stripe.Customer)?.metadata?.user_id
+  if (ownerId !== userId) {
+    console.error('[stripe-payment] confirm_subscription ownership mismatch:', {
+      userId, subscriptionId, ownerId: ownerId ?? null,
+    })
+    return respond({ error: 'Subscription does not belong to this user' }, 403)
   }
 
   const periodStart = new Date(sub.current_period_start * 1000).toISOString()
@@ -318,7 +339,7 @@ async function confirmSubscription(
       .upsert(
         {
           user_id:                userId,
-          stripe_customer_id:     customerId,
+          stripe_customer_id:     subCustomerId,
           stripe_subscription_id: subscriptionId,
           status:                 'active',
           current_period_start:   periodStart,
