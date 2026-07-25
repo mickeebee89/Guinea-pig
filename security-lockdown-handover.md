@@ -13,15 +13,13 @@ alongside `CLAUDE.md` (project context). Both workstreams below are DONE + COMMI
 | **Storage lockdown** (model-photos bucket → private + signed URLs) | ✅ DONE + COMMITTED | `b145a65` |
 | **Session-status guard + review integrity** | ✅ DONE + COMMITTED | `3154b70` |
 | **Suspend/ban enforcement** | ✅ DONE + COMMITTED | `8fa3446` |
-| **Payment ownership check** | ✅ CODE COMMITTED — ⚠️ **NEEDS DEPLOY** | `7a898fb` |
+| **Payment ownership check** | ✅ DONE + DEPLOYED + TESTED | `7a898fb` |
 | **Availability day/slot desync (#46 + #58)** | ✅ DONE + COMMITTED | `71b08bb` |
 
 All verified end-to-end (anon probe / SQL exploit simulation / on-device). Scripts live in
-`supabase/*.sql`.
-
-⚠️ **ONE OUTSTANDING ACTION:** the payment fix is committed but NOT live until someone runs
-`npx supabase functions deploy stripe-payment` from the repo root, then re-tests a real subscribe
-with card 4242 4242 4242 4242 (12/34, 123).
+`supabase/*.sql`. The `stripe-payment` edge function has been deployed and a real subscribe
+re-tested. **Nothing outstanding on any of the six** — remaining items are the PARKED FOLLOW-UPS
+at the bottom.
 
 ---
 
@@ -126,7 +124,7 @@ uses the public path; no NEW anon read succeeds).
   caller-supplied id, checked only that it was active, then marked THE CALLER subscribed — one paid
   `sub_...` could be replayed by any number of accounts for free subscriptions. Now resolves the
   customer FROM the subscription (never the body) and requires `customer.metadata.user_id` to equal
-  the JWT user. Other money paths audited and clean. **STILL NEEDS DEPLOY.**
+  the JWT user. Other money paths audited and clean. Deployed and re-tested with a real subscribe.
 - **Availability day/slot desync (`71b08bb`) — closed BOTH #46 and #58.** Treatments lived in two
   places: `dayTreatments[date]` (the chips the stylist edits) and `daySlots[…].treatmentIds` (what
   the save actually writes). `toggleTreatment` only updated the first, so they drifted — the day
@@ -141,11 +139,64 @@ uses the public path; no NEW anon read succeeds).
 **Data tidy still worth running** — pre-existing slots stored with no treatments (the fix prevents
 NEW ones; these need re-saving in the app, which now works):
 ```sql
-select date, start_time, end_time from availability
+-- NB active_treatments is uuid[] (a Postgres array), NOT jsonb — cardinality()
+-- catches both the NULL and the empty-array case.
+select date, start_time, end_time, active_treatments
+from availability
 where provider_id = '49d40aae-a830-41d1-bca8-0fbdb2695455'
-  and (active_treatments is null or active_treatments = '[]'::jsonb)
-  and date >= current_date order by date, start_time;
+  and coalesce(cardinality(active_treatments), 0) = 0
+  and date >= current_date
+order by date, start_time;
 ```
+
+## Workstream 4 — Availability redesign (DONE, `c963d20` + `302cfeb`)
+
+The calendar did double duty (tapping a date both added a new day and was the only route to an
+existing one), and steps 2/3 stacked every selected date in collapsible cards — so it was never clear
+which day you were editing. Intent is now chosen up front:
+
+| Route | File | Purpose |
+|---|---|---|
+| `/availability` | `(app)/availability/index.tsx` | Calendar = ADD days (multi-select kept) + "Edit existing days" button |
+| `/availability/days` | `(app)/availability/days.tsx` | List: date · treatments · times |
+| `/availability/<date>` | `(app)/availability/[date].tsx` | Edit ONE day, headed "Editing: Wednesday 6 August" |
+
+- **Day-level treatments DELETED.** The DB only ever stored treatments per slot; the UI invented a
+  second day-level copy and the two drifted (that was the `71b08bb` bug). Each slot now owns its own
+  times AND treatments — a day can be Nails at 10am, Hair at 2pm — with no second source of truth.
+- **Add flow is purely ADDITIVE, never deletes.** Removes the old whole-blob reconcile from that path.
+  Deletion exists only in the per-day editor, scoped to a single date.
+- **Step 2 day selector:** `[All N days]` + a chip per date (with slot counts). "All days" edits every
+  selected date; tapping a date narrows to it. Divergence is surfaced, not hidden.
+- Slots carry their DB `id`, so deletes target the primary key, not `(date,start,end)` tuples.
+- Booked-slot protection preserved on save AND delete-day ("X slots are booked and were kept").
+- Shared logic in `mobile/src/lib/availability.ts` + `mobile/src/components/SlotPickerModal.tsx` so the
+  add and edit paths CANNOT drift apart again.
+
+### Booking overlap guard (`supabase/booking-overlap-guard.sql`)
+`booking-guard.sql`'s unique index is on `(provider_id, date, start_time)` — it only caught bookings
+starting at the SAME time. A booking of 10:00–11:00 inside an existing 09:00–12:00 sailed through and
+double-booked the stylist. Fixed at both levels: the client now rejects creating overlapping slots,
+and a BEFORE INSERT/UPDATE trigger on `sessions` rejects any booking overlapping an active one for the
+same provider+date. The trigger raises **errcode 23505 deliberately** so the existing client handler
+("That time was just booked" → back to the time step) works unchanged. Half-open, so 09:00–10:00 and
+10:00–11:00 remain valid back-to-back. Verified on device.
+
+**⚠️ The trigger only guards NEW writes.** Any already-overlapping active bookings persist until
+cancelled. Find them:
+```sql
+select a.id, b.id, a.date, a.start_time, a.end_time, b.start_time, b.end_time
+from public.sessions a
+join public.sessions b
+  on a.provider_id = b.provider_id and a.date = b.date and a.id < b.id
+ and a.start_time < b.end_time and b.start_time < a.end_time
+where a.status in ('pending','accepted') and b.status in ('pending','accepted');
+```
+Pre-existing overlapping *availability slots* also remain (the client guard only blocks new ones) —
+harmless now the trigger exists, but tidy them in the editor when convenient.
+
+_Verified in code, no change needed: a model picks exactly ONE treatment when applying
+(`selectedTreatId` is a single value), so multiple treatments on a slot is a menu, not a bug._
 
 ## Parked follow-ups (NOT started — tracked in Claude Code TaskList)
 
