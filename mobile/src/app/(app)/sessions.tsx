@@ -17,7 +17,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Colors, Fonts, Radius, Shadow } from '@/constants/Colors'
 import { useAuth } from '@/context/auth'
 import { supabase } from '@/lib/supabase'
+import { signModelPhotos } from '@/lib/photoUrls'
 import LoadErrorState from '@/components/LoadErrorState'
+import ApplicationPhotos from '@/components/ApplicationPhotos'
+import PhotoViewerModal from '@/components/PhotoViewerModal'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -31,6 +34,8 @@ type Sess = {
   end_time: string
   treatment_id: string | null
   note: string | null
+  // Signed urls for the photos the model attached when applying (private bucket).
+  photoUrls: string[]
   created_at: string
   status: SessionStatus
   modelName: string
@@ -87,6 +92,8 @@ export default function SessionsScreen() {
   const [loadError,     setLoadError]     = useState(false)
   const [refreshing,    setRefreshing]    = useState(false)
   const [processingIds, setProcessingIds] = useState<Set<string>>(new Set())
+  // Signed url of the application photo being viewed full-screen, if any.
+  const [enlargedPhoto, setEnlargedPhoto] = useState<string | null>(null)
 
   // ── Load ───────────────────────────────────────────────────────────────────
 
@@ -102,7 +109,7 @@ export default function SessionsScreen() {
 
       const { data: rawSessions } = await supabase
         .from('sessions')
-        .select('id, model_user_id, date, start_time, end_time, treatment_id, note, created_at, status')
+        .select('id, model_user_id, date, start_time, end_time, treatment_id, note, photo_urls, created_at, status')
         .eq('provider_id', providerId)
         .in('status', ['pending', 'accepted', 'completed'])
         .order('date', { ascending: false })
@@ -129,6 +136,13 @@ export default function SessionsScreen() {
       ;(modelsData ?? []).forEach((m: any) => { modelMap[m.id] = m })
       ;(treatsData ?? []).forEach((t: any) => { treatMap[t.id] = t })
 
+      // The model's attached photos live in a PRIVATE bucket, so the stored paths
+      // must be swapped for signed urls or they render blank. One batched call.
+      const allPhotoPaths = rows.flatMap((s: any) => (s.photo_urls ?? []) as string[])
+      const signedPhotos = allPhotoPaths.length > 0
+        ? await signModelPhotos(allPhotoPaths)
+        : new Map<string, string>()
+
       const enrich = (s: any): Sess => {
         const m = modelMap[s.model_user_id]
         const t = s.treatment_id ? treatMap[s.treatment_id] : null
@@ -140,6 +154,7 @@ export default function SessionsScreen() {
           end_time:         s.end_time,
           treatment_id:     s.treatment_id ?? null,
           note:             s.note ?? null,
+          photoUrls:        ((s.photo_urls ?? []) as string[]).map(p => signedPhotos.get(p) ?? p),
           created_at:       s.created_at,
           status:           s.status as SessionStatus,
           modelName:        m ? `${m.first_name ?? ''}${m.last_initial ? ' ' + m.last_initial + '.' : ''}`.trim() || 'Model' : 'Model',
@@ -319,6 +334,7 @@ export default function SessionsScreen() {
               processing={processingIds.has(s.id)}
               onAccept={() => acceptSession(s)}
               onDecline={() => declineSession(s)}
+              onPhotoPress={setEnlargedPhoto}
             />
           ))
         )}
@@ -341,6 +357,7 @@ export default function SessionsScreen() {
               processing={processingIds.has(s.id)}
               onChat={() => goChat(s.id)}
               onComplete={() => markComplete(s)}
+              onPhotoPress={setEnlargedPhoto}
             />
           ))
         )}
@@ -361,6 +378,8 @@ export default function SessionsScreen() {
           ))
         )}
       </ScrollView>
+
+      <PhotoViewerModal uri={enlargedPhoto} onClose={() => setEnlargedPhoto(null)} />
     </View>
   )
 }
@@ -406,14 +425,19 @@ function SessionBase({ s }: { s: Sess }) {
 }
 
 function PendingCard({
-  s, processing, onAccept, onDecline,
-}: { s: Sess; processing: boolean; onAccept: () => void; onDecline: () => void }) {
+  s, processing, onAccept, onDecline, onPhotoPress,
+}: {
+  s: Sess; processing: boolean
+  onAccept: () => void; onDecline: () => void; onPhotoPress: (uri: string) => void
+}) {
   return (
     <View style={styles.card}>
       <View style={styles.cardHeaderRow}>
         <SessionBase s={s} />
         <Text style={styles.agoText}>{timeAgo(s.created_at)}</Text>
       </View>
+      {/* What the model shared, so the stylist can judge the job before accepting. */}
+      <ApplicationPhotos photos={s.photoUrls} onPress={onPhotoPress} />
       <View style={styles.actions}>
         <TouchableOpacity style={styles.declineBtn} onPress={onDecline} disabled={processing} activeOpacity={0.85}>
           <Text style={styles.declineBtnText}>Decline</Text>
@@ -433,8 +457,11 @@ function PendingCard({
 }
 
 function ConfirmedCard({
-  s, isPast, processing, onChat, onComplete,
-}: { s: Sess; isPast: boolean; processing: boolean; onChat: () => void; onComplete: () => void }) {
+  s, isPast, processing, onChat, onComplete, onPhotoPress,
+}: {
+  s: Sess; isPast: boolean; processing: boolean
+  onChat: () => void; onComplete: () => void; onPhotoPress: (uri: string) => void
+}) {
   return (
     <View style={styles.card}>
       {isPast && (
@@ -444,6 +471,8 @@ function ConfirmedCard({
         </View>
       )}
       <SessionBase s={s} />
+      {/* Still shown after accepting — the photos were shared to help the stylist prepare. */}
+      <ApplicationPhotos photos={s.photoUrls} onPress={onPhotoPress} />
       <View style={styles.actions}>
         <TouchableOpacity style={styles.chatBtn} onPress={onChat} activeOpacity={0.85}>
           <Ionicons name="chatbubble-outline" size={15} color={Colors.roseDark} />

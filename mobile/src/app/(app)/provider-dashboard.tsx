@@ -21,9 +21,12 @@ import { Colors, CategoryColors, Fonts } from '@/constants/Colors'
 import { useAuth } from '@/context/auth'
 import { supabase } from '@/lib/supabase'
 import { getBlockedIds } from '@/lib/blocks'
+import { signModelPhotos } from '@/lib/photoUrls'
 import ScreenDecor from '@/components/ScreenDecor'
 import LoadErrorState from '@/components/LoadErrorState'
 import HeaderIcons from '@/components/HeaderIcons'
+import ApplicationPhotos from '@/components/ApplicationPhotos'
+import PhotoViewerModal from '@/components/PhotoViewerModal'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -73,6 +76,8 @@ type SessionCard = {
   end_time: string
   treatment_id: string | null
   note: string | null
+  // Signed urls for the photos the model attached when applying (private bucket).
+  photoUrls: string[]
   created_at: string
   status: 'pending' | 'accepted'
   modelName: string
@@ -260,6 +265,8 @@ export default function ProviderDashboardScreen() {
   const [refreshing,        setRefreshing]        = useState(false)
   const [publishLoading,    setPublishLoading]    = useState(false)
   const [processingIds,     setProcessingIds]     = useState<Set<string>>(new Set())
+  // Signed url of the application photo being viewed full-screen, if any.
+  const [enlargedPhoto,     setEnlargedPhoto]     = useState<string | null>(null)
 
   // ── Load ───────────────────────────────────────────────────────────────────
 
@@ -369,7 +376,7 @@ export default function ProviderDashboardScreen() {
       ] = await Promise.all([
         supabase
           .from('sessions')
-          .select('id, model_user_id, date, start_time, end_time, treatment_id, note, created_at')
+          .select('id, model_user_id, date, start_time, end_time, treatment_id, note, photo_urls, created_at')
           .eq('provider_id', providerId)
           .eq('status', 'pending')
           .order('created_at', { ascending: false }),
@@ -453,6 +460,17 @@ export default function ProviderDashboardScreen() {
       ;(modelsData ?? []).forEach((m: any) => { modelMap[m.id] = m })
       ;(treatsData ?? []).forEach((t: any) => { treatMap[t.id] = t })
 
+      // Photos the model attached when applying live in a PRIVATE bucket, so the
+      // stored paths must be swapped for signed urls before they'll render. One
+      // batched call for the whole list. (Only applications need these — the
+      // upcoming card is a 230px-wide glance tile with no room for thumbnails;
+      // accepted bookings show their photos on the sessions screen instead.)
+      const allPhotoPaths = (pendingData ?? [])
+        .flatMap((s: any) => (s.photo_urls ?? []) as string[])
+      const signedPhotos = allPhotoPaths.length > 0
+        ? await signModelPhotos(allPhotoPaths)
+        : new Map<string, string>()
+
       function enrich(s: any): SessionCard {
         const m = modelMap[s.model_user_id]
         const t = s.treatment_id ? treatMap[s.treatment_id] : null
@@ -464,6 +482,7 @@ export default function ProviderDashboardScreen() {
           end_time: s.end_time,
           treatment_id: s.treatment_id ?? null,
           note: s.note ?? null,
+          photoUrls: ((s.photo_urls ?? []) as string[]).map(p => signedPhotos.get(p) ?? p),
           created_at: s.created_at,
           status: s.status,
           modelName: m ? `${m.first_name} ${m.last_initial ? m.last_initial + '.' : ''}`.trim() : 'Model',
@@ -1006,6 +1025,7 @@ export default function ProviderDashboardScreen() {
               processing={processingIds.has(s.id)}
               onAccept={() => acceptSession(s)}
               onDecline={() => declineSession(s)}
+              onPhotoPress={setEnlargedPhoto}
             />
           ))
         )}
@@ -1269,6 +1289,8 @@ export default function ProviderDashboardScreen() {
           )
         })()}
       </ScrollView>
+
+      <PhotoViewerModal uri={enlargedPhoto} onClose={() => setEnlargedPhoto(null)} />
     </View>
   )
 }
@@ -1280,11 +1302,13 @@ function PendingCard({
   processing,
   onAccept,
   onDecline,
+  onPhotoPress,
 }: {
   session: SessionCard
   processing: boolean
   onAccept: () => void
   onDecline: () => void
+  onPhotoPress: (uri: string) => void
 }) {
   const catColor = categoryColor(s.treatmentCategory)
   return (
@@ -1320,6 +1344,9 @@ function PendingCard({
           ) : null}
         </View>
       </View>
+      {/* What the model shared, so the stylist can judge the job before accepting.
+         Full card width rather than inside the avatar column — the thumbs need room. */}
+      <ApplicationPhotos photos={s.photoUrls} onPress={onPhotoPress} />
       {/* Buttons */}
       <View style={styles.sessionActions}>
         <TouchableOpacity
