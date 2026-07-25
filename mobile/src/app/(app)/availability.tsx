@@ -229,11 +229,25 @@ export default function AvailabilityScreen() {
 
   const toggleTreatment = async (dateStr: string, treatId: string) => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
-    setDayTreatments(prev => {
-      const cur = prev[dateStr] ?? []
+    const cur  = dayTreatments[dateStr] ?? []
+    const next = cur.includes(treatId) ? cur.filter(id => id !== treatId) : [...cur, treatId]
+    setDayTreatments(prev => ({ ...prev, [dateStr]: next }))
+
+    // Each SLOT carries its own treatment ids, and the save writes those — not the
+    // day-level list. Without reconciling here the two drift apart: changing a day
+    // from Nails to Hair left every slot still holding Nails, so the screen showed
+    // Hair while the DB was written with Nails.
+    setDaySlots(prev => {
+      const slots = prev[dateStr]
+      if (!slots || slots.length === 0) return prev
       return {
         ...prev,
-        [dateStr]: cur.includes(treatId) ? cur.filter(id => id !== treatId) : [...cur, treatId],
+        [dateStr]: slots.map(s => {
+          const kept = s.treatmentIds.filter(id => next.includes(id))
+          // Never leave a slot empty — the model's booking screen reads an empty list
+          // as "any treatment goes". Fall back to whatever the day still offers.
+          return { ...s, treatmentIds: kept.length > 0 ? kept : next }
+        }),
       }
     })
   }
@@ -259,7 +273,18 @@ export default function AvailabilityScreen() {
   }
 
   const saveSlot = async () => {
-    if (!modalDate || modalTreatIds.length === 0) return
+    if (!modalDate) return
+    // A slot with no treatments is what the model's booking screen reads as "any
+    // treatment goes", so it must never be saved. This used to `return` silently,
+    // which read as a broken Save button — say why instead.
+    if (modalTreatIds.length === 0) {
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning)
+      Alert.alert(
+        'Pick a treatment',
+        'Choose at least one treatment for this time slot, so models know what they can book.',
+      )
+      return
+    }
     await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
     const newSlot: TimeSlot = {
       id:           editingSlotId ?? newSlotId(),
@@ -317,8 +342,16 @@ export default function AvailabilityScreen() {
           slugToUuid[cat.slug as string] = cat.id as string
         }
       }
-      const resolveId = (id: string): string | null =>
-        UUID_RE.test(id) ? id : (slugToUuid[id] ?? null)
+      // A slug with no matching treatment_categories row can't be stored. Dropping it
+      // silently used to leave active_treatments EMPTY, which the model-side booking
+      // screen reads as "this slot offers everything" — so surface it instead.
+      const unresolved: string[] = []
+      const resolveId = (id: string): string | null => {
+        if (UUID_RE.test(id)) return id
+        const uuid = slugToUuid[id]
+        if (!uuid) { unresolved.push(id); return null }
+        return uuid
+      }
 
       // Normalize "HH:MM" → "HH:MM:SS" so the payload matches the stored time
       // format and the unique index (provider_id, date, start_time, end_time)
@@ -333,20 +366,30 @@ export default function AvailabilityScreen() {
           start_time:        toHHMMSS(s.startTime),
           end_time:          toHHMMSS(s.endTime),
           active_treatments: s.treatmentIds.map(resolveId).filter(Boolean) as string[],
-          is_taken:          false,
+          // is_taken deliberately OMITTED: it defaults to false on insert, and leaving
+          // it out of the payload keeps it out of the ON CONFLICT update below, so
+          // re-saving a day can never reset a BOOKED slot back to available.
         }))
       )
 
+      if (unresolved.length > 0) {
+        console.warn('availability: unresolved treatment ids dropped:', unresolved)
+      }
+
       // 1) Upsert the desired slots FIRST. Insert new slots; on conflict
-      //    (provider_id, date, start_time, end_time) do nothing. No blanket
-      //    delete up front, so if this fails the day is never left emptied.
+      //    (provider_id, date, start_time, end_time) UPDATE, so edits to a slot's
+      //    treatments actually persist. (This used to be ignoreDuplicates:true —
+      //    DO NOTHING — which meant changing only the treatments on an existing
+      //    slot silently saved nothing, leaving days stuck with no treatments.)
+      //    is_taken isn't in the payload, so booked slots keep their state.
+      //    No blanket delete up front, so if this fails the day is never left emptied.
       if (rows.length > 0) {
         const onConflict = 'provider_id,date,start_time,end_time'
         const { error: upsertErr } = await supabase
           .from('availability')
           .upsert(rows, {
             onConflict,
-            ignoreDuplicates: true,
+            ignoreDuplicates: false,
           })
         if (upsertErr) throw upsertErr
       }
