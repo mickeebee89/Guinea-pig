@@ -381,6 +381,11 @@ export default function ModelProfileViewScreen() {
   const displayName  = `${profile.first_name}${profile.last_initial ? ' ' + profile.last_initial + '.' : ''}`.trim()
   const initials     = displayName.split(' ').slice(0, 2).map(w => w[0] ?? '').join('').toUpperCase()
   const photoGroups  = groupByCategory(photos, categories)
+  // Averaged once here rather than in the reviews header, so the name tile and
+  // that header can't disagree.
+  const avgRating    = reviews.length > 0
+    ? reviews.reduce((s, r) => s + r.rating, 0) / reviews.length
+    : null
 
   return (
     <View style={styles.container}>
@@ -423,9 +428,19 @@ export default function ModelProfileViewScreen() {
           {isVerified && (
             <Text style={styles.verifiedLabel}>Verified model</Text>
           )}
-          {attrs?.bio ? (
-            <Text style={styles.bioText}>{attrs.bio}</Text>
-          ) : null}
+          {/* Rating at a glance — a stylist shouldn't have to scroll to the
+             reviews section to see whether this model is well rated. */}
+          {avgRating !== null ? (
+            <View style={styles.heroRating}>
+              <StarRow rating={avgRating} />
+              <Text style={styles.heroRatingValue}>{avgRating.toFixed(1)}</Text>
+              <Text style={styles.heroRatingCount}>
+                ({reviews.length} {reviews.length === 1 ? 'review' : 'reviews'})
+              </Text>
+            </View>
+          ) : (
+            <Text style={styles.heroNoRating}>No reviews yet</Text>
+          )}
           {profile.instagram_handle ? (
             <TouchableOpacity
               style={styles.igLink}
@@ -440,6 +455,15 @@ export default function ModelProfileViewScreen() {
             </TouchableOpacity>
           ) : null}
         </View>
+
+        {/* About — the model's own words, its own section rather than buried
+           in the name tile. */}
+        {attrs?.bio ? (
+          <View style={styles.bioSection}>
+            <Text style={styles.sectionTitle}>About</Text>
+            <Text style={styles.bioText}>{attrs.bio}</Text>
+          </View>
+        ) : null}
 
         {/* Attributes — chips grouped by category */}
         {ATTR_GROUPS.map(group => {
@@ -502,15 +526,12 @@ export default function ModelProfileViewScreen() {
             <Text style={styles.sectionTitle}>
               Reviews{reviews.length > 0 ? ` (${reviews.length})` : ''}
             </Text>
-            {reviews.length > 0 && (() => {
-              const avg = reviews.reduce((s, r) => s + r.rating, 0) / reviews.length
-              return (
-                <View style={styles.avgRatingWrap}>
-                  <Ionicons name="star" size={14} color="#F59E0B" />
-                  <Text style={styles.avgRatingText}>{avg.toFixed(1)}</Text>
-                </View>
-              )
-            })()}
+            {avgRating !== null && (
+              <View style={styles.avgRatingWrap}>
+                <Ionicons name="star" size={14} color="#F59E0B" />
+                <Text style={styles.avgRatingText}>{avgRating.toFixed(1)}</Text>
+              </View>
+            )}
           </View>
           {reviews.length === 0 ? (
             <Text style={styles.emptyReviews}>No reviews yet.</Text>
@@ -669,13 +690,18 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.rose, alignItems: 'center', justifyContent: 'center',
   },
   verifiedLabel: { fontSize: 13, color: Colors.rose, fontWeight: '600' },
+  heroRating: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 },
+  heroRatingValue: { fontFamily: Fonts.bodyBold, fontSize: 15, color: Colors.warmDark },
+  heroRatingCount: { fontFamily: Fonts.body, fontSize: 13, color: Colors.muted },
+  heroNoRating:    { fontFamily: Fonts.body, fontSize: 13, color: Colors.muted, marginTop: 2 },
+
+  // Bio is its own section now, so it reads left-aligned like body copy rather
+  // than centred as it did inside the name tile.
+  bioSection: { marginBottom: 20 },
   bioText: {
     fontSize: 14,
     color: Colors.muted,
     lineHeight: 21,
-    textAlign: 'center',
-    paddingHorizontal: 8,
-    marginTop: 4,
   },
   igLink: {
     flexDirection: 'row',
