@@ -16,7 +16,10 @@ import { Button } from '@/components/Button'
 import { Input } from '@/components/Input'
 import { supabase } from '@/lib/supabase'
 
-const LOGO_URI = 'https://res.cloudinary.com/dzbazlq1o/image/upload/c_fill,g_north,ar_1:1/f_auto,q_auto/54340_ia8jsd'
+// The app icon, bundled rather than fetched: it can't go stale against a CDN (this
+// screen was still showing the pre-rebrand artwork), and the first screen a user
+// sees shouldn't wait on the network or break offline.
+const LOGO = require('../../../assets/images/icon.png')
 
 interface Props {
   onBack: () => void
@@ -90,7 +93,7 @@ export default function LoginScreen({ onBack, onGoSignup, onGoForgot }: Props) {
 
             <View style={styles.header}>
               <Image
-                source={{ uri: LOGO_URI }}
+                source={LOGO}
                 style={styles.logo}
                 resizeMode="cover"
               />
