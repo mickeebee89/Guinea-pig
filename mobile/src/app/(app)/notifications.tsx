@@ -113,7 +113,10 @@ export default function NotificationsScreen() {
   const [markingAll,    setMarkingAll]    = useState(false)
   const [fetchError,    setFetchError]    = useState<string | null>(null)
   // The admin-warning notification whose explanation modal is open (null = closed).
-  const [warningNotif,  setWarningNotif]  = useState<Notification | null>(null)
+  // Notifications from the team (warnings AND plain messages) don't deep-link
+  // anywhere — they open in a modal so the full text is readable. The list row
+  // truncates the body, so without this an admin message can't be read at all.
+  const [detailNotif,   setDetailNotif]   = useState<Notification | null>(null)
 
   // ── Load ───────────────────────────────────────────────────────────────────
 
@@ -173,8 +176,10 @@ export default function NotificationsScreen() {
   const handleTap = async (n: Notification) => {
     await Haptics.selectionAsync()
     if (!n.read_at) await markRead(n.id)
-    // Admin warnings don't deep-link anywhere — open an explanation instead.
-    if (n.type === 'admin_warning') { setWarningNotif(n); return }
+    // Anything from the team — a warning or a plain message — opens in full
+    // rather than deep-linking. routeForNotification has no case for these, so
+    // without this branch tapping an admin message did nothing at all.
+    if (n.type === 'admin_warning' || n.type === 'admin_message') { setDetailNotif(n); return }
     // Shared with push-notification taps (lib/notificationRouting).
     routeForNotification({ type: n.type, session_id: n.session_id, provider_id: n.data?.provider_id })
   }
@@ -304,35 +309,50 @@ export default function NotificationsScreen() {
 
       {/* Admin-warning explanation ("what a warning means") */}
       <Modal
-        visible={warningNotif !== null}
+        visible={detailNotif !== null}
         transparent
         animationType="fade"
-        onRequestClose={() => setWarningNotif(null)}
+        onRequestClose={() => setDetailNotif(null)}
       >
         <TouchableOpacity
           style={styles.modalOverlay}
           activeOpacity={1}
-          onPress={() => setWarningNotif(null)}
+          onPress={() => setDetailNotif(null)}
         >
           <TouchableOpacity style={styles.modalCard} activeOpacity={1}>
-            <View style={[styles.iconCircle, { backgroundColor: '#FEF2F2', alignSelf: 'center' }]}>
-              <Ionicons name="warning" size={24} color={Colors.error} />
-            </View>
-            <Text style={styles.modalTitle}>About this warning</Text>
-            <Text style={styles.modalText}>
-              This is a formal notice from the Guinea Pig team. It means your account was flagged
-              for content or behaviour that breached our community guidelines.
-            </Text>
-            {!!warningNotif?.body && (
+            {detailNotif?.type === 'admin_warning' ? (
+              <>
+                <View style={[styles.iconCircle, { backgroundColor: '#FEF2F2', alignSelf: 'center' }]}>
+                  <Ionicons name="warning" size={24} color={Colors.error} />
+                </View>
+                <Text style={styles.modalTitle}>About this warning</Text>
+                <Text style={styles.modalText}>
+                  This is a formal notice from the Guinea Pig team. It means your account was flagged
+                  for content or behaviour that breached our community guidelines.
+                </Text>
+              </>
+            ) : (
+              <>
+                {/* A plain message from the team — no disciplinary framing. */}
+                <View style={[styles.iconCircle, { backgroundColor: Colors.softPink, alignSelf: 'center' }]}>
+                  <Ionicons name="mail-open-outline" size={24} color={Colors.roseDark} />
+                </View>
+                <Text style={styles.modalTitle}>{detailNotif?.title ?? 'Message'}</Text>
+                <Text style={styles.modalText}>A message from the Guinea Pig team.</Text>
+              </>
+            )}
+            {!!detailNotif?.body && (
               <View style={styles.modalReasonBox}>
-                <Text style={styles.modalReasonLabel}>Note from the team</Text>
-                <Text style={styles.modalReasonText}>{warningNotif.body}</Text>
+                <Text style={styles.modalReasonLabel}>
+                  {detailNotif?.type === 'admin_warning' ? 'Note from the team' : 'Message'}
+                </Text>
+                <Text style={styles.modalReasonText}>{detailNotif.body}</Text>
               </View>
             )}
             <TouchableOpacity
               style={styles.modalCloseBtn}
               activeOpacity={0.85}
-              onPress={async () => { await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setWarningNotif(null) }}
+              onPress={async () => { await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setDetailNotif(null) }}
             >
               <Text style={styles.modalCloseText}>Got it</Text>
             </TouchableOpacity>
@@ -442,6 +462,10 @@ function NotifItem({ notif: n, onPress }: { notif: Notification; onPress: () => 
             A formal notice that your account was flagged for breaching our community guidelines. Tap for details.
           </Text>
         )}
+        {/* The body above is clamped to 2 lines, so say that there's more. */}
+        {n.type === 'admin_message' && (
+          <Text style={styles.readMoreHint}>Tap to read the full message</Text>
+        )}
         {n.type === 'session_completed' && n.session_id && (
           <ReviewCTA sessionId={n.session_id} />
         )}
@@ -481,8 +505,15 @@ const styles = StyleSheet.create({
     color: Colors.error,
     fontStyle: 'italic',
   },
+  readMoreHint: {
+    marginTop: 6,
+    fontFamily: Fonts.bodyBold,
+    fontSize: 12,
+    lineHeight: 16,
+    color: Colors.roseDark,
+  },
 
-  // Admin-warning explanation modal
+  // Team message / admin-warning detail modal
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.45)',
