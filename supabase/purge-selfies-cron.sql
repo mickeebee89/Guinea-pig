@@ -29,6 +29,15 @@ select cron.schedule(
     url     := 'https://ptluekkhiopowuyvkgnd.supabase.co/functions/v1/purge-selfies',
     headers := jsonb_build_object(
       'Content-Type',   'application/json',
+      -- TWO auth layers, both required:
+      --   Authorization -> Supabase's gateway verifies a JWT before the function
+      --      runs at all. Without it you get UNAUTHORIZED_NO_AUTH_HEADER and your
+      --      code never executes. The publishable/anon key is enough here; it only
+      --      gets you past the gateway, it grants nothing (the function itself
+      --      uses the service role internally).
+      --   x-cron-secret -> the function's own check, which is what actually
+      --      authorises the purge.
+      'Authorization',  'Bearer sb_publishable_g-YDwagWoZBMvrBoZPQmYQ_VXfWZ40T',
       'x-cron-secret',  (select decrypted_secret from vault.decrypted_secrets
                           where name = 'cron_secret_purge_selfies')
     ),
@@ -40,12 +49,15 @@ select cron.schedule(
 -- ============================================================================
 -- VERIFY / OPERATE
 --
--- Dry run first — shows what WOULD be deleted without touching anything:
---   curl -X POST 'https://ptluekkhiopowuyvkgnd.supabase.co/functions/v1/purge-selfies' \
---     -H 'x-cron-secret: <YOUR-RANDOM-CRON-SECRET>' \
---     -H 'Content-Type: application/json' \
---     -d '{"dryRun":true}'
+-- Dry run first — shows what WOULD be deleted without touching anything.
+-- PowerShell (avoids curl's quote-escaping on Windows):
+--   $anon   = 'sb_publishable_g-YDwagWoZBMvrBoZPQmYQ_VXfWZ40T'
+--   $secret = '<YOUR-RANDOM-CRON-SECRET>'
+--   Invoke-RestMethod -Method Post -Uri 'https://ptluekkhiopowuyvkgnd.supabase.co/functions/v1/purge-selfies' -Headers @{ Authorization = "Bearer $anon"; 'x-cron-secret' = $secret } -ContentType 'application/json' -Body '{"dryRun":true}'
 --   -> { wouldPurge: N, breakdown: { approved, rejected, abandoned } }
+--
+-- BOTH headers are required: Authorization gets past Supabase's JWT gateway,
+-- x-cron-secret is the function's own authorisation.
 --
 -- Is it scheduled?      select * from cron.job;
 -- Did it run?           select * from cron.job_run_details
