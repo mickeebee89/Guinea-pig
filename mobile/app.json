@@ -16,7 +16,8 @@
     "scheme": "mobile",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "bundleIdentifier": "com.guineapig.app"
+      "bundleIdentifier": "com.guineapig.app",
+      "buildNumber": "1"
     },
     "android": {
       "package": "com.guineapig.app",
