@@ -91,17 +91,67 @@ export default function ModerationPage() {
 
   async function toggleImageReview() {
     const next = !imageReview
-    await supabase.from('settings').upsert({ key: 'image_review_enabled', value: String(next), updated_at: new Date().toISOString() })
+
+    // Switching OFF publishes the whole pending queue in one statement. That is a
+    // large, irreversible action hidden behind a toggle, so ask first and say how
+    // many items it will publish. Count from the server, not items.length — the
+    // grid only holds what the last load returned.
+    let pendingCount = 0
+    if (!next) {
+      const { count, error: countErr } = await supabase
+        .from('portfolio_items')
+        .select('id', { count: 'exact', head: true })
+        .eq('moderation_status', 'pending')
+      if (countErr) {
+        alert(`Couldn't check the pending queue: ${countErr.message}\n\nNothing has been changed.`)
+        return
+      }
+      pendingCount = count ?? 0
+      const ok = window.confirm(
+        pendingCount > 0
+          ? `Turn image review OFF?\n\nThis will immediately publish all ${pendingCount} image${pendingCount === 1 ? '' : 's'} waiting in the queue, without review. This cannot be undone.\n\nNew uploads will also go live automatically.`
+          : `Turn image review OFF?\n\nThe queue is empty, so nothing will be published now. New uploads will go live automatically without review.`,
+      )
+      if (!ok) return
+    }
+
+    const { error: setErr } = await supabase
+      .from('settings')
+      .upsert({ key: 'image_review_enabled', value: String(next), updated_at: new Date().toISOString() })
+    if (setErr) {
+      alert(`Couldn't change the setting: ${setErr.message}`)
+      return
+    }
     await logAction('toggle_image_review', { details: { enabled: next } })
     setImageReview(next)
-    if (!next) {
-      await supabase.from('portfolio_items').update({ moderation_status: 'approved' }).eq('moderation_status', 'pending')
+
+    if (!next && pendingCount > 0) {
+      const { error: bulkErr } = await supabase
+        .from('portfolio_items')
+        .update({ moderation_status: 'approved' })
+        .eq('moderation_status', 'pending')
+      if (bulkErr) {
+        alert(`Image review was turned off, but the queue could not be published: ${bulkErr.message}`)
+      } else {
+        // Audit the mass-approval in its own right — the toggle entry alone
+        // doesn't record that N items were published.
+        await logAction('image_bulk_approved', { details: { count: pendingCount, reason: 'image_review_disabled' } })
+      }
       loadItems()
     }
   }
 
   async function decide(item: PortfolioItem, decision: 'approved' | 'rejected') {
-    await supabase.from('portfolio_items').update({ moderation_status: decision }).eq('id', item.id)
+    const { error } = await supabase
+      .from('portfolio_items')
+      .update({ moderation_status: decision })
+      .eq('id', item.id)
+    if (error) {
+      // Previously the card was removed optimistically, so a rejected write left
+      // the item pending in the DB while the admin believed the queue was cleared.
+      alert(`Couldn't ${decision === 'approved' ? 'approve' : 'reject'} this item: ${error.message}`)
+      return
+    }
     await logAction(`image_${decision}`, { targetProviderId: item.provider.id, details: { item_id: item.id } })
     setItems(prev => prev.filter(i => i.id !== item.id))
   }

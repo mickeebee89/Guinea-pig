@@ -20,31 +20,47 @@ export default function ProvidersPage() {
   const [providers, setProviders]   = useState<Provider[]>([])
   const [search, setSearch]         = useState('')
   const [loading, setLoading]       = useState(true)
+  // Distinguish "couldn't load" from "no providers" — an RLS-blocked read used to
+  // render as an empty list, which reads as "you have no providers".
+  const [loadError, setLoadError]   = useState<string | null>(null)
   const [modal, setModal]           = useState<{ provider: Provider; action: string } | null>(null)
   const [reason, setReason]         = useState('')
   const [duration, setDuration]     = useState('7')
 
   async function load() {
     setLoading(true)
-    const { data } = await supabase
-      .from('providers')
-      .select(`id, shop_handle, level, region, location_text,
-        user:users!user_id(id, first_name, last_initial, email, is_verified, fraud_flagged)`)
-      .order('shop_handle')
-    if (!data) { setLoading(false); return }
+    setLoadError(null)
+    // try/finally so a throw anywhere below can never leave the page stuck
+    // showing "Loading…" with no way out.
+    try {
+      const { data, error } = await supabase
+        .from('providers')
+        .select(`id, shop_handle, level, region, location_text,
+          user:users!user_id(id, first_name, last_initial, email, is_verified, fraud_flagged)`)
+        .order('shop_handle')
+      if (error) { setLoadError(error.message); return }
 
-    const enriched = await Promise.all((data as unknown as Provider[]).map(async (p) => {
-      const [{ count: sc }, { data: reviews }, { count: pc }] = await Promise.all([
-        supabase.from('sessions').select('*', { count: 'exact', head: true }).eq('provider_id', p.id),
-        supabase.from('reviews').select('overall_rating').eq('reviewee_id', p.user.id),
-        supabase.from('portfolio_items').select('*', { count: 'exact', head: true }).eq('provider_id', p.id),
-      ])
-      const ratings = (reviews ?? []).map((r: { overall_rating: number }) => r.overall_rating)
-      const avg = ratings.length ? ratings.reduce((a: number, b: number) => a + b, 0) / ratings.length : null
-      return { ...p, session_count: sc ?? 0, avg_rating: avg, portfolio_count: pc ?? 0 }
-    }))
-    setProviders(enriched)
-    setLoading(false)
+      const enriched = await Promise.all((data as unknown as Provider[] ?? []).map(async (p) => {
+        // A joined row hidden by RLS comes back as NULL, not an error — dereferencing
+        // it here used to reject inside Promise.all and hang the page permanently.
+        const revieweeId = p.user?.id
+        const [{ count: sc }, { data: reviews }, { count: pc }] = await Promise.all([
+          supabase.from('sessions').select('*', { count: 'exact', head: true }).eq('provider_id', p.id),
+          revieweeId
+            ? supabase.from('reviews').select('overall_rating').eq('reviewee_id', revieweeId)
+            : Promise.resolve({ data: [] as { overall_rating: number }[] }),
+          supabase.from('portfolio_items').select('*', { count: 'exact', head: true }).eq('provider_id', p.id),
+        ])
+        const ratings = (reviews ?? []).map((r: { overall_rating: number }) => r.overall_rating)
+        const avg = ratings.length ? ratings.reduce((a: number, b: number) => a + b, 0) / ratings.length : null
+        return { ...p, session_count: sc ?? 0, avg_rating: avg, portfolio_count: pc ?? 0 }
+      }))
+      setProviders(enriched)
+    } catch (e) {
+      setLoadError(e instanceof Error ? e.message : 'Something went wrong loading providers.')
+    } finally {
+      setLoading(false)
+    }
   }
 
   useEffect(() => { load() }, [])
@@ -53,7 +69,7 @@ export default function ProvidersPage() {
     !search ||
     p.shop_handle.toLowerCase().includes(search.toLowerCase()) ||
     (p.location_text ?? '').toLowerCase().includes(search.toLowerCase()) ||
-    p.user.email.toLowerCase().includes(search.toLowerCase())
+    (p.user?.email ?? '').toLowerCase().includes(search.toLowerCase())
   )
 
   async function doAction() {
@@ -61,20 +77,35 @@ export default function ProvidersPage() {
     const { provider, action } = modal
     const now = new Date()
 
+    // Every action except remove_portfolio targets the OWNER's user row. If RLS
+    // hid that row the embed is null, and these would previously have thrown.
+    const ownerId = provider.user?.id
+    if (!ownerId && action !== 'remove_portfolio') {
+      alert("Can't act on this provider — their user account isn't visible to you.")
+      return
+    }
+
+    let err: { message: string } | null = null
     if (action === 'suspend') {
       const until = new Date(now.getTime() + parseInt(duration) * 24 * 60 * 60 * 1000)
-      await supabase.from('suspensions').insert({ user_id: provider.user.id, suspended_until: until.toISOString(), banned: false, reason })
+      ;({ error: err } = await supabase.from('suspensions').insert({ user_id: ownerId, suspended_until: until.toISOString(), banned: false, reason }))
     }
     if (action === 'ban') {
-      await supabase.from('suspensions').insert({ user_id: provider.user.id, banned: true, reason })
+      ;({ error: err } = await supabase.from('suspensions').insert({ user_id: ownerId, banned: true, reason }))
     }
     if (action === 'verify') {
-      await supabase.from('users').update({ is_verified: true }).eq('id', provider.user.id)
+      ;({ error: err } = await supabase.from('users').update({ is_verified: true }).eq('id', ownerId))
     }
     if (action === 'remove_portfolio') {
-      await supabase.from('portfolio_items').delete().eq('provider_id', provider.id)
+      ;({ error: err } = await supabase.from('portfolio_items').delete().eq('provider_id', provider.id))
     }
-    await logAction(`provider_${action}`, { targetUserId: provider.user.id, targetProviderId: provider.id, adminNote: reason })
+
+    // Don't write an audit entry claiming an action that didn't happen.
+    if (err) {
+      alert(`Couldn't ${action.replace('_', ' ')}: ${err.message}`)
+      return
+    }
+    await logAction(`provider_${action}`, { targetUserId: ownerId ?? null, targetProviderId: provider.id, adminNote: reason })
     setModal(null)
     setReason('')
     load()
@@ -94,6 +125,14 @@ export default function ProvidersPage() {
 
       {loading ? (
         <div className="text-[#3D2E2E]/40 text-sm">Loading…</div>
+      ) : loadError ? (
+        <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-700">
+          <p className="font-medium mb-1">Couldn’t load providers</p>
+          <p className="mb-3 text-red-600">{loadError}</p>
+          <button onClick={load} className="px-3 py-1.5 rounded-lg bg-red-600 text-white text-xs font-medium">
+            Retry
+          </button>
+        </div>
       ) : (
         <div className="bg-white rounded-xl shadow-sm border border-black/5 overflow-auto">
           <table className="w-full text-sm">
@@ -112,14 +151,18 @@ export default function ProvidersPage() {
             </thead>
             <tbody>
               {filtered.map(p => (
-                <tr key={p.id} className={`border-b border-black/5 last:border-0 hover:bg-black/[0.01] ${p.user.fraud_flagged ? 'bg-red-50' : ''}`}>
+                <tr key={p.id} className={`border-b border-black/5 last:border-0 hover:bg-black/[0.01] ${p.user?.fraud_flagged ? 'bg-red-50' : ''}`}>
                   <td className="px-4 py-3 font-medium">@{p.shop_handle}</td>
-                  <td className="px-4 py-3 text-[#3D2E2E]/60">{p.user.first_name} {p.user.last_initial}.</td>
+                  {/* p.user is null when RLS hides the owner's row — show that
+                     plainly rather than crashing the table. */}
+                  <td className="px-4 py-3 text-[#3D2E2E]/60">
+                    {p.user ? `${p.user.first_name} ${p.user.last_initial ?? ''}.` : <span className="italic text-[#3D2E2E]/30">Not visible</span>}
+                  </td>
                   <td className="px-4 py-3 capitalize">{p.level}</td>
                   <td className="px-4 py-3">{p.region}</td>
                   <td className="px-4 py-3">
-                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${p.user.is_verified ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
-                      {p.user.is_verified ? 'Yes' : 'No'}
+                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${p.user?.is_verified ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                      {p.user ? (p.user.is_verified ? 'Yes' : 'No') : '—'}
                     </span>
                   </td>
                   <td className="px-4 py-3">{p.session_count}</td>
