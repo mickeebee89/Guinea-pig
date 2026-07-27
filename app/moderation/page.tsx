@@ -17,7 +17,9 @@ interface PortfolioItem {
 
 interface FlaggedContent {
   id: string
-  type: 'message' | 'review'
+  // Bios and shop text are PUBLIC profile copy — arguably more important to catch
+  // than a private DM, since anyone browsing sees them.
+  type: 'message' | 'review' | 'bio' | 'shop'
   body: string
   created_at: string
   matched_words: string[]
@@ -33,6 +35,10 @@ export default function ModerationPage() {
   const [tab, setTab]                   = useState<'images' | 'text'>('images')
   const [loading, setLoading]           = useState(true)
   const [settingsLoading, setSettingsLoading] = useState(true)
+  // The text tab had neither a loading nor an error state, so "still scanning"
+  // and "scan failed" both rendered as "No flagged content".
+  const [flaggedLoading, setFlaggedLoading] = useState(true)
+  const [flaggedError, setFlaggedError]     = useState<string | null>(null)
 
   async function loadSettings() {
     const { data } = await supabase.from('settings').select('key, value').in('key', ['image_review_enabled', 'banned_words'])
@@ -57,35 +63,84 @@ export default function ModerationPage() {
   }
 
   async function loadFlagged() {
-    const { data: bannedRow } = await supabase.from('settings').select('value').eq('key', 'banned_words').single()
-    let banned: string[] = []
-    try { banned = JSON.parse(bannedRow?.value ?? '[]') } catch { banned = [] }
-    if (!banned.length) { setFlagged([]); return }
+    setFlaggedLoading(true)
+    setFlaggedError(null)
+    try {
+      // maybeSingle + a real error check. This used to be .single() with the error
+      // discarded, so an unreadable settings row silently disabled the whole tab —
+      // indistinguishable from "nothing matched".
+      const { data: bannedRow, error: bannedErr } = await supabase
+        .from('settings').select('value').eq('key', 'banned_words').maybeSingle()
+      if (bannedErr) { setFlaggedError(`Couldn't read the banned-words list: ${bannedErr.message}`); return }
 
-    const pattern = banned.join('|')
-    const re = new RegExp(`(${pattern})`, 'gi')
+      let banned: string[] = []
+      try { banned = JSON.parse(bannedRow?.value ?? '[]') } catch { banned = [] }
+      banned = banned.map(w => w.trim()).filter(Boolean)
+      if (!banned.length) { setFlagged([]); return }
 
-    const [{ data: msgs }, { data: revs }] = await Promise.all([
-      supabase.from('messages').select('id, body, created_at, sender_id, sender:users!sender_id(first_name, last_name, last_initial, email)').limit(500),
-      supabase.from('reviews').select('id, comment, created_at, reviewer_id, reviewer:users!reviewer_id(first_name, last_name, last_initial, email)').limit(500),
-    ])
+      // Escape regex metacharacters — the list is user-entered, and one stray
+      // "(" used to throw inside an un-awaited call and leave the tab empty forever.
+      const pattern = banned.map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')
+      const re = () => new RegExp(`(${pattern})`, 'gi')  // fresh each use: /g regexes are stateful
 
-    // Admin-only full identity: prefer the private full surname, fall back to the initial.
-    // Tolerates null — an RLS-hidden author comes back as NULL, not an error.
-    const fullName = (u: { first_name: string; last_name: string | null; last_initial: string | null } | null | undefined) =>
-      u ? `${u.first_name} ${u.last_name ?? (u.last_initial ? `${u.last_initial}.` : '')}`.trim() : 'Not visible'
+      const [{ data: msgs }, { data: revs }, { data: bios }, { data: shops }] = await Promise.all([
+        supabase.from('messages').select('id, body, created_at, sender_id, sender:users!sender_id(first_name, last_name, last_initial, email)').limit(500),
+        supabase.from('reviews').select('id, comment, created_at, reviewer_id, reviewer:users!reviewer_id(first_name, last_name, last_initial, email)').limit(500),
+        // Public profile copy — the gap this tab had: a banned word in a model's
+        // bio was never flagged, even though everyone browsing can read it.
+        supabase.from('model_attributes').select('user_id, bio').not('bio', 'is', null).limit(500),
+        supabase.from('providers').select('id, user_id, name, bio, shop_handle').limit(500),
+      ])
 
-    const results: FlaggedContent[] = []
-    for (const m of (msgs ?? []) as unknown as { id: string; body: string; created_at: string; sender_id: string; sender: { first_name: string; last_name: string | null; last_initial: string | null; email: string | null } }[]) {
-      const matches = m.body.match(re)
-      if (matches) results.push({ id: m.id, type: 'message', body: m.body, created_at: m.created_at, matched_words: matches, user_id: m.sender_id, user_name: fullName(m.sender), user_email: m.sender?.email ?? null })
+      // Bios/shops have no users embed (no FK alias to rely on), so resolve the
+      // authors in one extra query, the same way the audit log does.
+      const profileIds = [...new Set([
+        ...((bios ?? []) as { user_id: string }[]).map(b => b.user_id),
+        ...((shops ?? []) as { user_id: string }[]).map(s => s.user_id),
+      ])].filter(Boolean)
+      const userMap: Record<string, { first_name: string; last_name: string | null; last_initial: string | null; email: string | null }> = {}
+      if (profileIds.length) {
+        const { data: us } = await supabase
+          .from('users').select('id, first_name, last_name, last_initial, email').in('id', profileIds)
+        for (const u of (us ?? []) as any[]) userMap[u.id] = u
+      }
+
+      // Admin-only full identity: prefer the private full surname, fall back to the initial.
+      // Tolerates null — an RLS-hidden author comes back as NULL, not an error.
+      const fullName = (u: { first_name: string; last_name: string | null; last_initial: string | null } | null | undefined) =>
+        u ? `${u.first_name} ${u.last_name ?? (u.last_initial ? `${u.last_initial}.` : '')}`.trim() : 'Not visible'
+
+      const results: FlaggedContent[] = []
+      const add = (
+        id: string, type: FlaggedContent['type'], text: string | null,
+        created_at: string, userId: string,
+        u: { first_name: string; last_name: string | null; last_initial: string | null; email: string | null } | null | undefined,
+      ) => {
+        if (!text) return
+        const matches = text.match(re())
+        if (matches) results.push({
+          id, type, body: text, created_at, matched_words: matches,
+          user_id: userId, user_name: fullName(u), user_email: u?.email ?? null,
+        })
+      }
+
+      for (const m of (msgs ?? []) as any[]) add(m.id, 'message', m.body, m.created_at, m.sender_id, m.sender)
+      for (const r of (revs ?? []) as any[]) add(r.id, 'review', r.comment, r.created_at, r.reviewer_id, r.reviewer)
+      for (const b of (bios ?? []) as any[]) {
+        // model_attributes has no created_at we rely on — bios are current state.
+        add(`bio-${b.user_id}`, 'bio', b.bio, new Date().toISOString(), b.user_id, userMap[b.user_id])
+      }
+      for (const s of (shops ?? []) as any[]) {
+        add(`shop-name-${s.id}`, 'shop', s.name, new Date().toISOString(), s.user_id, userMap[s.user_id])
+        add(`shop-bio-${s.id}`,  'shop', s.bio,  new Date().toISOString(), s.user_id, userMap[s.user_id])
+      }
+
+      setFlagged(results)
+    } catch (e) {
+      setFlaggedError(e instanceof Error ? e.message : 'Something went wrong scanning content.')
+    } finally {
+      setFlaggedLoading(false)
     }
-    for (const r of (revs ?? []) as unknown as { id: string; comment: string | null; created_at: string; reviewer_id: string; reviewer: { first_name: string; last_name: string | null; last_initial: string | null; email: string | null } }[]) {
-      if (!r.comment) continue
-      const matches = r.comment.match(re)
-      if (matches) results.push({ id: r.id, type: 'review', body: r.comment, created_at: r.created_at, matched_words: matches, user_id: r.reviewer_id, user_name: fullName(r.reviewer), user_email: r.reviewer?.email ?? null })
-    }
-    setFlagged(results)
   }
 
   useEffect(() => { loadSettings(); loadItems(); loadFlagged() }, [])
@@ -234,16 +289,28 @@ export default function ModerationPage() {
 
       {tab === 'text' && (
         <div className="space-y-3">
-          {flagged.length === 0 ? (
+          {flaggedLoading ? (
+            <div className="text-center py-16 text-[#3D2E2E]/40 text-sm">Scanning…</div>
+          ) : flaggedError ? (
+            <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-700">
+              <p className="font-medium mb-1">Couldn’t scan content</p>
+              <p className="mb-3 text-red-600">{flaggedError}</p>
+              <button onClick={loadFlagged} className="px-3 py-1.5 rounded-lg bg-red-600 text-white text-xs font-medium">Retry</button>
+            </div>
+          ) : flagged.length === 0 ? (
             <div className="text-center py-16 text-[#3D2E2E]/30 text-sm">No flagged content</div>
           ) : flagged.map(f => (
             <div key={f.id} className="bg-white rounded-xl border border-black/5 shadow-sm p-4">
               <div className="flex items-center gap-2 mb-2">
                 <span className={`text-xs px-2 py-0.5 rounded-full font-medium capitalize ${
-                  f.type === 'message' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'
-                }`}>{f.type}</span>
+                  f.type === 'message' ? 'bg-blue-100 text-blue-700'
+                  : f.type === 'review' ? 'bg-purple-100 text-purple-700'
+                  // Public profile copy — flag it more loudly than a private DM.
+                  : 'bg-amber-100 text-amber-800'
+                }`}>{f.type === 'shop' ? 'shop text' : f.type}</span>
                 <span className="text-xs text-[#3D2E2E]/40">
-                  {f.user_name}{f.user_email ? ` (${f.user_email})` : ''} · id {f.user_id.slice(0, 8)} · {new Date(f.created_at).toLocaleDateString('en-GB')}
+                  {f.user_name}{f.user_email ? ` (${f.user_email})` : ''} · id {f.user_id.slice(0, 8)}
+                  {['message', 'review'].includes(f.type) && ` · ${new Date(f.created_at).toLocaleDateString('en-GB')}`}
                 </span>
               </div>
               <p className="text-sm text-[#3D2E2E] mb-2">{f.body}</p>
