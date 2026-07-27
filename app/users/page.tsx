@@ -23,15 +23,47 @@ interface User {
   session_count?: number
   report_count?: number
   fee_paid?: boolean
+  // Current suspension state, derived from the suspensions table. null = active.
+  suspension?: { banned: boolean; until: string | null } | null
 }
 
 const ROLES = ['all', 'model', 'provider', 'both']
+
+// Mirrors is_suspended() in supabase/suspension-enforcement.sql: banned outright,
+// or suspended with an end date still in the future. Expired rows are inert.
+function activeSuspension(rows: { banned: boolean | null; suspended_until: string | null }[]) {
+  const now = Date.now()
+  const banned = rows.find(r => r.banned)
+  if (banned) return { banned: true, until: null }
+  const timed = rows
+    .filter(r => r.suspended_until && new Date(r.suspended_until).getTime() > now)
+    .sort((a, b) => new Date(b.suspended_until!).getTime() - new Date(a.suspended_until!).getTime())[0]
+  return timed ? { banned: false, until: timed.suspended_until } : null
+}
+
+function statusBadge(s: User['suspension']) {
+  if (s?.banned) {
+    return <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-red-600 text-white">Banned</span>
+  }
+  if (s) {
+    return (
+      <span
+        className="text-xs px-2 py-0.5 rounded-full font-medium bg-orange-100 text-orange-700"
+        title={`Suspended until ${new Date(s.until!).toLocaleString('en-GB')}`}
+      >
+        Suspended · {new Date(s.until!).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+      </span>
+    )
+  }
+  return <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-green-100 text-green-700">Active</span>
+}
 
 export default function UsersPage() {
   const [users, setUsers]     = useState<User[]>([])
   const [search, setSearch]   = useState('')
   const [role, setRole]       = useState('all')
   const [verified, setVerified] = useState('all')
+  const [status, setStatus]   = useState('all')
   const [loading, setLoading] = useState(true)
 
   const [modal, setModal] = useState<{ user: User; action: string } | null>(null)
@@ -47,13 +79,30 @@ export default function UsersPage() {
     const { data } = await q
     if (!data) { setLoading(false); return }
 
+    // One batched read for the whole page rather than a per-row check — this page
+    // already fires three queries per user and doesn't need a fourth.
+    const { data: suspRows } = await supabase
+      .from('suspensions')
+      .select('user_id, banned, suspended_until')
+      .in('user_id', data.map(u => u.id))
+    const suspByUser: Record<string, { banned: boolean | null; suspended_until: string | null }[]> = {}
+    for (const r of (suspRows ?? []) as any[]) {
+      ;(suspByUser[r.user_id] ??= []).push(r)
+    }
+
     const enriched = await Promise.all(data.map(async (u) => {
       const [{ count: sc }, { count: rc }, { count: pc }] = await Promise.all([
         supabase.from('sessions').select('*', { count: 'exact', head: true }).or(`model_id.eq.${u.id}`),
         supabase.from('reports').select('*', { count: 'exact', head: true }).eq('reported_id', u.id),
         supabase.from('verification_payments').select('*', { count: 'exact', head: true }).eq('user_id', u.id),
       ])
-      return { ...u, session_count: sc ?? 0, report_count: rc ?? 0, fee_paid: (pc ?? 0) > 0 }
+      return {
+        ...u,
+        session_count: sc ?? 0,
+        report_count: rc ?? 0,
+        fee_paid: (pc ?? 0) > 0,
+        suspension: activeSuspension(suspByUser[u.id] ?? []),
+      }
     }))
     setUsers(enriched)
     setLoading(false)
@@ -61,10 +110,18 @@ export default function UsersPage() {
 
   useEffect(() => { load() }, [role, verified])
 
-  const filtered = users.filter(u =>
-    !search || u.email.toLowerCase().includes(search.toLowerCase()) ||
-    `${u.first_name} ${u.last_name ?? ''} ${u.last_initial ?? ''}`.toLowerCase().includes(search.toLowerCase())
-  )
+  const filtered = users.filter(u => {
+    const matchesSearch = !search || u.email.toLowerCase().includes(search.toLowerCase()) ||
+      `${u.first_name} ${u.last_name ?? ''} ${u.last_initial ?? ''}`.toLowerCase().includes(search.toLowerCase())
+    if (!matchesSearch) return false
+    // Filtered client-side: the suspension state is derived (banned vs a date in
+    // the future), so it isn't a column the query could filter on.
+    if (status === 'active')    return !u.suspension
+    if (status === 'suspended') return !!u.suspension && !u.suspension.banned
+    if (status === 'banned')    return !!u.suspension?.banned
+    if (status === 'restricted')return !!u.suspension
+    return true
+  })
 
   async function doAction() {
     if (!modal) return
@@ -157,6 +214,14 @@ export default function UsersPage() {
           <option value="verified">Verified</option>
           <option value="unverified">Unverified</option>
         </select>
+        <select value={status} onChange={e => setStatus(e.target.value)}
+          className="border border-black/10 rounded-lg px-3 py-2 text-sm bg-white">
+          <option value="all">Any status</option>
+          <option value="active">Active only</option>
+          <option value="restricted">Suspended or banned</option>
+          <option value="suspended">Suspended</option>
+          <option value="banned">Banned</option>
+        </select>
       </div>
 
       {loading ? (
@@ -167,6 +232,7 @@ export default function UsersPage() {
             <thead>
               <tr className="border-b border-black/5 text-[#3D2E2E]/50 text-xs uppercase tracking-wide">
                 <th className="text-left px-4 py-2">Name</th>
+                <th className="text-left px-4 py-2">Status</th>
                 <th className="text-left px-4 py-2">Email</th>
                 <th className="text-left px-4 py-2">Role</th>
                 <th className="text-left px-4 py-2">Age</th>
@@ -180,13 +246,20 @@ export default function UsersPage() {
               </tr>
             </thead>
             <tbody>
+              {/* Banned rows are tinted so they're obvious when scanning; a fraud
+                 flag keeps its existing red tint but a ban outranks it. */}
               {filtered.map(u => (
-                <tr key={u.id} className={`border-b border-black/5 last:border-0 hover:bg-black/[0.01] ${u.fraud_flagged ? 'bg-red-50' : ''}`}>
+                <tr key={u.id} className={`border-b border-black/5 last:border-0 hover:bg-black/[0.01] ${
+                  u.suspension?.banned ? 'bg-red-100'
+                  : u.suspension ? 'bg-orange-50'
+                  : u.fraud_flagged ? 'bg-red-50' : ''
+                }`}>
                   <td className="px-4 py-2 font-medium">
                     {u.first_name} {u.last_name ?? (u.last_initial ? `${u.last_initial}.` : '')}
                     {u.fraud_flagged && <span className="ml-1 text-red-500 text-xs">⚑</span>}
                     {u.is_founding_provider && <span className="ml-1 text-yellow-600 text-xs">★</span>}
                   </td>
+                  <td className="px-4 py-2 whitespace-nowrap">{statusBadge(u.suspension)}</td>
                   <td className="px-4 py-2 text-[#3D2E2E]/60">{u.email}</td>
                   <td className="px-4 py-2 capitalize">{u.role}</td>
                   <td className="px-4 py-2 text-[#3D2E2E]/60" title={u.date_of_birth ? new Date(u.date_of_birth).toLocaleDateString('en-GB') : 'No date of birth on record'}>
