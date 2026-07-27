@@ -17,7 +17,10 @@ interface Report {
 
 // Admin-only full identity: prefer the private full surname, fall back to the
 // initial for legacy accounts that never captured one.
-function fullName(u: { first_name: string; last_name: string | null; last_initial: string | null }) {
+// Tolerates null: a joined users row hidden by RLS comes back as NULL rather than
+// an error, and dereferencing it here used to blank the whole page.
+function fullName(u: { first_name: string; last_name: string | null; last_initial: string | null } | null | undefined) {
+  if (!u) return 'Not visible'
   const last = u.last_name ?? (u.last_initial ? `${u.last_initial}.` : '')
   return `${u.first_name} ${last}`.trim()
 }
@@ -67,7 +70,13 @@ export default function ReportsPage() {
   async function doAction() {
     if (!actionModal) return
     const { report, action } = actionModal
-    const reportedId = report.reported.id
+    // Null when RLS hides the reported user's row. warn/suspend/ban all target
+    // them, so refuse rather than throw; dismiss/resolve only touch the report.
+    const reportedId = report.reported?.id
+    if (!reportedId && ['warn', 'suspend', 'ban'].includes(action)) {
+      alert("Can't act on this user — their account isn't visible to you.")
+      return
+    }
     const now = new Date()
 
     if (action === 'warn') {
@@ -135,10 +144,10 @@ export default function ReportsPage() {
                   </div>
                   <div className="text-sm mb-1">
                     <span className="font-medium text-[#3D2E2E]">{fullName(r.reporter)}</span>
-                    <span className="text-[#3D2E2E]/40"> ({r.reporter.email})</span>
+                    <span className="text-[#3D2E2E]/40"> ({r.reporter?.email ?? '—'})</span>
                     <span className="text-[#3D2E2E]/50"> reported </span>
                     <span className="font-medium text-[#3D2E2E]">{fullName(r.reported)}</span>
-                    <span className="text-[#3D2E2E]/40"> ({r.reported.email})</span>
+                    <span className="text-[#3D2E2E]/40"> ({r.reported?.email ?? '—'})</span>
                   </div>
                   <div className="text-sm font-semibold text-[#8C4A58] mb-1">{r.reason}</div>
                   {r.details && <div className="text-sm text-[#3D2E2E]/60">{r.details}</div>}
@@ -186,7 +195,7 @@ export default function ReportsPage() {
               {chat.messages.map(m => (
                 <div key={m.id} className="bg-[#FAF7F4] rounded-lg p-3">
                   <div className="text-xs text-[#3D2E2E]/50 mb-1">
-                    {m.sender.first_name} {m.sender.last_initial}. · {new Date(m.created_at).toLocaleString('en-GB')}
+                    {m.sender ? `${m.sender.first_name} ${m.sender.last_initial ?? ''}.` : 'Unknown'} · {new Date(m.created_at).toLocaleString('en-GB')}
                   </div>
                   <div className="text-sm text-[#3D2E2E]">{m.body}</div>
                 </div>
@@ -205,7 +214,7 @@ export default function ReportsPage() {
             <p className="text-sm text-[#3D2E2E]/60 mb-4">
               Acting on: <span className="font-medium text-[#3D2E2E]">{fullName(actionModal.report.reported)}</span>
               {' '}— {actionModal.report.reported.email}
-              <span className="block text-xs text-[#3D2E2E]/40 mt-0.5">id {actionModal.report.reported.id}</span>
+              <span className="block text-xs text-[#3D2E2E]/40 mt-0.5">id {actionModal.report.reported?.id ?? '—'}</span>
             </p>
             {actionModal.action === 'suspend' && (
               <div className="mb-4">

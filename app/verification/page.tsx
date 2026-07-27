@@ -63,70 +63,99 @@ export default function VerificationQueuePage() {
   useEffect(() => { load() }, [filter])
 
   async function approve(req: VerificationRequest) {
+    // A joined users row hidden by RLS comes back as NULL, not an error.
+    if (!req.user) {
+      alert("Can't approve — this user's account isn't visible to you.")
+      return
+    }
     setWorking(req.id)
     const note = notes[req.id] ?? ''
-    // Update request status
-    const { error: updateErr } = await supabase
-      .from('verification_requests')
-      .update({ status: 'approved', notes: note, reviewed_at: new Date().toISOString() })
-      .eq('id', req.id)
+    const isModel = req.user.role === 'model'
 
-    if (req.user.role === 'model') {
-      // Models: verify immediately
-      await supabase.from('users').update({ is_verified: true }).eq('id', req.user.id)
+    try {
+      // Do the SUBSTANTIVE change first and abort on failure. Previously the
+      // request status was written first and everything after it ran regardless,
+      // so you could end up "approved + user notified" while is_verified stayed
+      // false, or verified+published with the request stuck pending and no audit
+      // row. Re-running is harmless (all of these are idempotent).
+      const { error: verifyErr } = await supabase
+        .from('users').update({ is_verified: true }).eq('id', req.user.id)
+      if (verifyErr) { alert(`Couldn't verify this user: ${verifyErr.message}\n\nNothing else was changed.`); return }
+
+      if (!isModel) {
+        const { error: pubErr } = await supabase
+          .from('providers').update({ is_published: true }).eq('user_id', req.user.id)
+        if (pubErr) {
+          alert(`The user was verified, but their shop could not be published: ${pubErr.message}\n\nThe request has been left pending — try again.`)
+          return
+        }
+      }
+
+      const { error: updateErr } = await supabase
+        .from('verification_requests')
+        .update({ status: 'approved', notes: note, reviewed_at: new Date().toISOString() })
+        .eq('id', req.id)
+      if (updateErr) {
+        alert(`This user is verified${isModel ? '' : ' and published'}, but the request could not be closed: ${updateErr.message}\n\nIt will still show as pending — approve it again to clear it.`)
+        return
+      }
+
+      // Only tell them once the state change actually stuck.
       await supabase.from('notifications').insert({
         user_id: req.user.id,
         type: 'verification',
-        title: 'You\'re verified! ✅',
-        body: 'Your Guinea Pig profile is now verified. Your badge is live!',
+        title: isModel ? 'You\'re verified! ✅' : 'You\'re verified! 🎉',
+        body: isModel
+          ? 'Your Guinea Pig profile is now verified. Your badge is live!'
+          : 'Your identity check passed — your verified badge and profile are now live.',
       })
-    } else {
-      // Providers: approval is the unlock (payment is now decoupled / pay-first).
-      // Verify the user AND make their profile visible.
-      await supabase.from('users').update({ is_verified: true }).eq('id', req.user.id)
-      await supabase.from('providers').update({ is_published: true }).eq('user_id', req.user.id)
-      await supabase.from('notifications').insert({
-        user_id: req.user.id,
-        type: 'verification',
-        title: 'You\'re verified! 🎉',
-        body: 'Your identity check passed — your verified badge and profile are now live.',
-      })
-    }
-    // Audit only after the status update actually succeeded (admin_id stamped by logAction).
-    if (!updateErr) {
+
       await logAction('verification_approve', {
         targetUserId: req.user.id,
         details: { request_id: req.id, role: req.user.role, outcome: 'approved' },
       })
+    } finally {
+      setWorking(null)
+      load()
     }
-    setWorking(null)
-    load()
   }
 
   async function reject(req: VerificationRequest) {
+    if (!req.user) {
+      alert("Can't reject — this user's account isn't visible to you.")
+      return
+    }
     setWorking(req.id)
     const note = notes[req.id] ?? ''
-    const { error: updateErr } = await supabase
-      .from('verification_requests')
-      .update({ status: 'rejected', notes: note, reviewed_at: new Date().toISOString() })
-      .eq('id', req.id)
-    await supabase.from('notifications').insert({
-      user_id: req.user.id,
-      type: 'verification',
-      title: 'Verification not approved',
-      body: note
-        ? `Your verification was not approved: ${note}`
-        : 'Your verification was not approved. Please resubmit with a clearer photo.',
-    })
-    // Audit only after the status update actually succeeded (admin_id stamped by logAction).
-    if (!updateErr) {
+    try {
+      const { error: updateErr } = await supabase
+        .from('verification_requests')
+        .update({ status: 'rejected', notes: note, reviewed_at: new Date().toISOString() })
+        .eq('id', req.id)
+      // Don't tell someone they were rejected if the rejection didn't save — they'd
+      // get the bad news and then still see the request sitting under review.
+      if (updateErr) {
+        alert(`Couldn't reject this request: ${updateErr.message}\n\nThe user has NOT been notified.`)
+        return
+      }
+
+      await supabase.from('notifications').insert({
+        user_id: req.user.id,
+        type: 'verification',
+        title: 'Verification not approved',
+        body: note
+          ? `Your verification was not approved: ${note}`
+          : 'Your verification was not approved. Please resubmit with a clearer photo.',
+      })
+
       await logAction('verification_reject', {
         targetUserId: req.user.id,
         details: { request_id: req.id, role: req.user.role, outcome: 'rejected', reason: note || null },
       })
+    } finally {
+      setWorking(null)
+      load()
     }
-    setWorking(null)
-    load()
   }
 
   function formatDate(iso: string) {
@@ -182,23 +211,29 @@ export default function VerificationQueuePage() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-start justify-between gap-4 mb-1">
                     <div>
+                      {/* req.user is null when RLS hides the row — show that rather
+                         than crashing the whole queue. */}
                       <span className="font-semibold text-[#3D2E2E]">
-                        {req.user.first_name} {req.user.last_name ?? (req.user.last_initial ? req.user.last_initial + '.' : '')}
+                        {req.user
+                          ? `${req.user.first_name} ${req.user.last_name ?? (req.user.last_initial ? req.user.last_initial + '.' : '')}`
+                          : 'Account not visible'}
                       </span>
-                      <span className="ml-2 text-xs text-[#3D2E2E]/40">{req.user.email}</span>
-                      <span className="ml-2 text-xs px-2 py-0.5 rounded-full font-medium capitalize"
-                        style={{ background: req.user.role === 'model' ? '#E8B5C220' : '#C8788A20', color: req.user.role === 'model' ? '#7B5EA7' : '#8C4A58' }}>
-                        {req.user.role}
-                      </span>
-                      {req.user.is_verified && (
+                      <span className="ml-2 text-xs text-[#3D2E2E]/40">{req.user?.email ?? '—'}</span>
+                      {req.user && (
+                        <span className="ml-2 text-xs px-2 py-0.5 rounded-full font-medium capitalize"
+                          style={{ background: req.user.role === 'model' ? '#E8B5C220' : '#C8788A20', color: req.user.role === 'model' ? '#7B5EA7' : '#8C4A58' }}>
+                          {req.user.role}
+                        </span>
+                      )}
+                      {req.user?.is_verified && (
                         <span className="ml-1 text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700 font-medium">Already verified</span>
                       )}
                     </div>
                     <span className="text-xs text-[#3D2E2E]/40 shrink-0">{formatDate(req.created_at)}</span>
                   </div>
-                  <p className="text-sm text-[#3D2E2E]/50 mb-3">{req.user.email}</p>
+                  <p className="text-sm text-[#3D2E2E]/50 mb-3">{req.user?.email ?? '—'}</p>
 
-                  {req.user.role === 'provider' && filter === 'pending' && (
+                  {req.user?.role === 'provider' && filter === 'pending' && (
                     <p className="text-xs text-amber-600 bg-amber-50 rounded-lg px-3 py-2 mb-3">
                       Provider — approval verifies them and makes their shop live
                     </p>

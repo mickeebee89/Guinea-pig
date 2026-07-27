@@ -71,18 +71,19 @@ export default function ModerationPage() {
     ])
 
     // Admin-only full identity: prefer the private full surname, fall back to the initial.
-    const fullName = (u: { first_name: string; last_name: string | null; last_initial: string | null }) =>
-      `${u.first_name} ${u.last_name ?? (u.last_initial ? `${u.last_initial}.` : '')}`.trim()
+    // Tolerates null — an RLS-hidden author comes back as NULL, not an error.
+    const fullName = (u: { first_name: string; last_name: string | null; last_initial: string | null } | null | undefined) =>
+      u ? `${u.first_name} ${u.last_name ?? (u.last_initial ? `${u.last_initial}.` : '')}`.trim() : 'Not visible'
 
     const results: FlaggedContent[] = []
     for (const m of (msgs ?? []) as unknown as { id: string; body: string; created_at: string; sender_id: string; sender: { first_name: string; last_name: string | null; last_initial: string | null; email: string | null } }[]) {
       const matches = m.body.match(re)
-      if (matches) results.push({ id: m.id, type: 'message', body: m.body, created_at: m.created_at, matched_words: matches, user_id: m.sender_id, user_name: fullName(m.sender), user_email: m.sender.email })
+      if (matches) results.push({ id: m.id, type: 'message', body: m.body, created_at: m.created_at, matched_words: matches, user_id: m.sender_id, user_name: fullName(m.sender), user_email: m.sender?.email ?? null })
     }
     for (const r of (revs ?? []) as unknown as { id: string; comment: string | null; created_at: string; reviewer_id: string; reviewer: { first_name: string; last_name: string | null; last_initial: string | null; email: string | null } }[]) {
       if (!r.comment) continue
       const matches = r.comment.match(re)
-      if (matches) results.push({ id: r.id, type: 'review', body: r.comment, created_at: r.created_at, matched_words: matches, user_id: r.reviewer_id, user_name: fullName(r.reviewer), user_email: r.reviewer.email })
+      if (matches) results.push({ id: r.id, type: 'review', body: r.comment, created_at: r.created_at, matched_words: matches, user_id: r.reviewer_id, user_name: fullName(r.reviewer), user_email: r.reviewer?.email ?? null })
     }
     setFlagged(results)
   }
@@ -152,7 +153,7 @@ export default function ModerationPage() {
       alert(`Couldn't ${decision === 'approved' ? 'approve' : 'reject'} this item: ${error.message}`)
       return
     }
-    await logAction(`image_${decision}`, { targetProviderId: item.provider.id, details: { item_id: item.id } })
+    await logAction(`image_${decision}`, { targetProviderId: item.provider?.id ?? null, details: { item_id: item.id } })
     setItems(prev => prev.filter(i => i.id !== item.id))
   }
 
@@ -211,7 +212,7 @@ export default function ModerationPage() {
                     )}
                   </div>
                   <div className="p-3">
-                    <div className="text-xs text-[#3D2E2E]/60 mb-1">{item.provider.shop_handle} · {item.category.name}</div>
+                    <div className="text-xs text-[#3D2E2E]/60 mb-1">{item.provider?.shop_handle ?? 'Unknown shop'} · {item.category?.name ?? 'Uncategorised'}</div>
                     <div className="text-xs text-[#3D2E2E]/40 mb-3">{new Date(item.created_at).toLocaleDateString('en-GB')}</div>
                     <div className="flex gap-2">
                       <button onClick={() => decide(item, 'approved')}

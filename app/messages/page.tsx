@@ -181,7 +181,10 @@ export default function MessagesPage() {
             <tbody>
               {log.map(m => (
                 <tr key={m.id} className="border-b border-black/5 last:border-0">
-                  <td className="px-4 py-3 font-medium">{m.user.first_name} {m.user.last_initial}.</td>
+                  {/* Null when RLS hides the recipient — don't crash the table. */}
+                  <td className="px-4 py-3 font-medium">
+                    {m.user ? `${m.user.first_name} ${m.user.last_initial ?? ''}.` : <span className="italic text-[#3D2E2E]/30">Not visible</span>}
+                  </td>
                   <td className="px-4 py-3">{m.title}</td>
                   <td className="px-4 py-3 text-[#3D2E2E]/60 max-w-xs truncate">{m.body}</td>
                   <td className="px-4 py-3 text-[#3D2E2E]/40 whitespace-nowrap">{new Date(m.created_at).toLocaleString('en-GB')}</td>
