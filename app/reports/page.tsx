@@ -17,6 +17,17 @@ interface Report {
 
 // Admin-only full identity: prefer the private full surname, fall back to the
 // initial for legacy accounts that never captured one.
+// What each action actually does. Warn/suspend/ban act on the USER and leave the
+// report open; dismiss/resolve only close the REPORT and don't touch the user —
+// so handling someone properly is a two-step job, which the buttons alone don't say.
+const ACTION_HELP: Record<string, string> = {
+  warn:    'Sends this user an official warning in the app. It does NOT close the report — resolve it afterwards.',
+  suspend: 'Blocks this user from applying, messaging and reviewing for the chosen number of days. It does NOT close the report — resolve it afterwards.',
+  ban:     'Permanently blocks this user from using the app. It does NOT close the report — resolve it afterwards.',
+  dismiss: 'Closes this report with NO action against the user. Use when the report wasn’t a genuine breach.',
+  resolve: 'Closes this report as actioned. Use after you’ve warned, suspended or banned the user.',
+}
+
 // Tolerates null: a joined users row hidden by RLS comes back as NULL rather than
 // an error, and dereferencing it here used to blank the whole page.
 function fullName(u: { first_name: string; last_name: string | null; last_initial: string | null } | null | undefined) {
@@ -79,24 +90,32 @@ export default function ReportsPage() {
     }
     const now = new Date()
 
+    let err: { message: string } | null = null
     if (action === 'warn') {
-      await supabase.from('notifications').insert({
+      ;({ error: err } = await supabase.from('notifications').insert({
         user_id: reportedId, type: 'admin_warning',
         title: 'Warning from Guinea Pig', body: reason || 'You have received an official warning.',
-      })
+      }))
     }
     if (action === 'suspend') {
       const until = new Date(now.getTime() + parseInt(duration) * 24 * 60 * 60 * 1000)
-      await supabase.from('suspensions').insert({ user_id: reportedId, suspended_until: until.toISOString(), banned: false, reason })
+      ;({ error: err } = await supabase.from('suspensions').insert({ user_id: reportedId, suspended_until: until.toISOString(), banned: false, reason }))
     }
     if (action === 'ban') {
-      await supabase.from('suspensions').insert({ user_id: reportedId, banned: true, reason })
+      ;({ error: err } = await supabase.from('suspensions').insert({ user_id: reportedId, banned: true, reason }))
     }
     if (action === 'dismiss') {
-      await supabase.from('reports').update({ status: 'dismissed' }).eq('id', report.id)
+      ;({ error: err } = await supabase.from('reports').update({ status: 'dismissed' }).eq('id', report.id))
     }
     if (action === 'resolve') {
-      await supabase.from('reports').update({ status: 'actioned', resolved_at: now.toISOString() }).eq('id', report.id)
+      ;({ error: err } = await supabase.from('reports').update({ status: 'actioned', resolved_at: now.toISOString() }).eq('id', report.id))
+    }
+
+    // The modal tells the admin their note is recorded — so don't write an audit
+    // entry for something that didn't actually happen.
+    if (err) {
+      alert(`Couldn't ${action} this report: ${err.message}\n\nNothing has been recorded.`)
+      return
     }
 
     await logAction(`report_${action}`, {
@@ -211,11 +230,19 @@ export default function ReportsPage() {
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
           <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl">
             <h2 className="text-lg font-bold text-[#3D2E2E] mb-1 capitalize">{actionModal.action}</h2>
-            <p className="text-sm text-[#3D2E2E]/60 mb-4">
+            <p className="text-sm text-[#3D2E2E]/60 mb-3">
               Acting on: <span className="font-medium text-[#3D2E2E]">{fullName(actionModal.report.reported)}</span>
-              {' '}— {actionModal.report.reported.email}
+              {' '}— {actionModal.report.reported?.email ?? '—'}
               <span className="block text-xs text-[#3D2E2E]/40 mt-0.5">id {actionModal.report.reported?.id ?? '—'}</span>
             </p>
+
+            {/* Say what the action actually does. "Resolve" vs "dismiss" is not
+               self-evident, and warn/suspend/ban do NOT close the report — that
+               two-step is the easiest thing to get wrong on this page. */}
+            <p className="text-sm text-[#3D2E2E]/70 bg-[#FAF7F4] border border-black/5 rounded-lg px-3 py-2 mb-4">
+              {ACTION_HELP[actionModal.action]}
+            </p>
+
             {actionModal.action === 'suspend' && (
               <div className="mb-4">
                 <label className="text-xs font-medium text-[#3D2E2E]/60 block mb-1">Duration (days)</label>
@@ -223,13 +250,24 @@ export default function ReportsPage() {
                   className="border border-black/10 rounded-lg px-3 py-2 text-sm w-full" />
               </div>
             )}
-            {['warn','suspend','ban'].includes(actionModal.action) && (
-              <div className="mb-4">
-                <label className="text-xs font-medium text-[#3D2E2E]/60 block mb-1">Reason / note</label>
-                <textarea value={reason} onChange={e => setReason(e.target.value)} rows={3}
-                  className="border border-black/10 rounded-lg px-3 py-2 text-sm w-full resize-none" />
-              </div>
-            )}
+
+            {/* Every action takes a note, including dismiss/resolve — without one
+               there's no record of WHY a report was closed. It's carried into the
+               audit log via logAction's adminNote. */}
+            <div className="mb-4">
+              <label className="text-xs font-medium text-[#3D2E2E]/60 block mb-1">
+                {['dismiss', 'resolve'].includes(actionModal.action)
+                  ? 'Why are you closing this? (recorded in the audit log)'
+                  : 'Reason / note (shown to the user)'}
+              </label>
+              <textarea value={reason} onChange={e => setReason(e.target.value)} rows={3}
+                placeholder={
+                  actionModal.action === 'dismiss' ? 'e.g. not a genuine breach — no action needed'
+                  : actionModal.action === 'resolve' ? 'e.g. warned the user, no further action'
+                  : ''
+                }
+                className="border border-black/10 rounded-lg px-3 py-2 text-sm w-full resize-none" />
+            </div>
             <div className="flex gap-3 justify-end">
               <button onClick={() => setActionModal(null)} className="px-4 py-2 text-sm rounded-lg bg-gray-100 text-gray-600">Cancel</button>
               <button onClick={doAction} className="px-4 py-2 text-sm rounded-lg text-white font-medium" style={{ backgroundColor: '#8C4A58' }}>
