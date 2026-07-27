@@ -42,3 +42,6 @@ next-env.d.ts
 
 # supabase CLI local state
 supabase/.temp/
+
+# Demo seed images — never commit faces or licensed stock
+seed/photos/
