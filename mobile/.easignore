@@ -1,0 +1,60 @@
+# What EAS Build excludes when uploading the project.
+#
+# WHY THIS EXISTS: without a .easignore, EAS falls back to .gitignore — and
+# google-services.json is deliberately gitignored (it holds the Firebase/FCM
+# config and shouldn't be in the repo). That means it would never reach the
+# build, and since app.json sets android.googleServicesFile the build fails on
+# the missing file.
+#
+# So this is a copy of .gitignore with the Firebase config lines REMOVED, which
+# keeps the file out of git while still shipping it to EAS. Keep the two in sync
+# if .gitignore changes.
+
+# Environment
+.env
+.env.local
+
+# dependencies
+node_modules/
+
+# Expo
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+
+# Native
+.kotlin/
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# Metro
+.metro-health-check*
+
+# debug
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# macOS
+.DS_Store
+*.pem
+
+# local env files
+.env*.local
+
+# typescript
+*.tsbuildinfo
+
+example
+
+# generated native folders
+/ios
+/android
+
+# NOTE: google-services.json and GoogleService-Info.plist are intentionally NOT
+# listed here — they must be uploaded to EAS even though git ignores them.
