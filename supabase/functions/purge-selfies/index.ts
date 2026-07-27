@@ -85,7 +85,13 @@ Deno.serve(async (req) => {
 
     const rows = [...(decided ?? []), ...(abandoned ?? [])]
     if (rows.length === 0) {
-      return respond({ ok: true, dryRun, cutoff, purged: 0, message: 'Nothing to purge.' })
+      // Report against the field the caller expects — saying "purged: 0" on a dry
+      // run claims an action that didn't happen, which misreads in logs later.
+      return respond({
+        ok: true, dryRun, cutoff,
+        ...(dryRun ? { wouldPurge: 0 } : { purged: 0 }),
+        message: 'Nothing to purge.',
+      })
     }
 
     const paths = rows.map(r => r.selfie_url as string).filter(Boolean)
