@@ -46,8 +46,16 @@ worse than one that says it plainly.
 >
 > **Identity verification selfies** are treated as sensitive information. They are
 > stored in a private, access-controlled location, are visible only to admins
-> reviewing a verification, and are deleted [X months] after your verification is
-> decided, or when you delete your account.
+> reviewing a verification, and are deleted **90 days** after your verification is
+> decided, or when you delete your account, whichever comes first.
+>
+> Guinea Pig is registered with the UK Information Commissioner's Office (ICO),
+> registration reference **ZC196530**.
+
+⚠️ **DO NOT publish the 90-day sentence until the purge job exists** (task #73).
+The whole point of the number is that it's true. Until the job is live, either omit
+the sentence or delete selfies manually — a stated retention period that isn't
+enforced is worse than saying nothing.
 
 ---
 
@@ -61,15 +69,13 @@ worse than one that says it plainly.
 - **Community guidelines / terms** — worth a line saying moderators may review
   reported content and messages, so the expectation is set in two places.
 
-## Open decisions for you
+## Decisions — settled
 
-1. **Retention period for verification selfies.** The clause has `[X months]` — this
-   needs a real number. Common practice is 3–6 months after the decision. There is
-   currently NO automated deletion in the codebase, so whatever you state must either
-   be implemented or done manually.
-2. **UK ICO registration.** Processing identity documents as a UK data controller
-   generally requires ICO registration (~£40–60/year). Worth confirming.
-3. **Narrower alternative.** The tighter long-term shape is admin read access limited
-   to messages attached to a report, rather than all messages. That would let you make
-   a much stronger privacy statement. Logged as a follow-up — the current policy is the
-   pragmatic launch position, not the end state.
+1. **Retention: 90 days**, then automatic deletion. ✅ decided — **blocked on the purge
+   job (#73)**, which must exist before the sentence goes live. Note the job must cover
+   **rejected and abandoned** verifications too, not only approved ones: those hold a
+   selfie as well, and if they're kept forever the policy is untrue by omission.
+2. **ICO registration: done** — reference **ZC196530**, already live on both privacy
+   pages. ✅ no action.
+3. **Narrower admin reads: deferred to post-launch** (#74). The disclosed position above
+   — admins can read any message — stands for now and is what the policy must say.
