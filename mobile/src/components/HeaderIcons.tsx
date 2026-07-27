@@ -22,29 +22,53 @@ export default function HeaderIcons() {
 
   const refresh = useCallback(async () => {
     if (!userId) { setUnreadNotifs(0); setHasUnreadMsgs(false); return }
-    const [{ count: notifCount }, { count: msgCount }] = await Promise.all([
-      // Unread notifications addressed to me.
-      supabase
-        .from('notifications')
-        .select('id', { count: 'exact', head: true })
-        .eq('user_id', userId)
-        .is('read_at', null),
-      // Unread messages NOT sent by me. messages is participant-scoped by RLS, so this
-      // only counts messages in my own sessions — no manual session join needed. read_at
-      // is set on chat open, so the dot clears once the conversation is viewed.
-      // Only count messages in READABLE sessions (accepted/completed): a cancelled
-      // session's chat is locked and never runs the mark-as-read step, so its unread
-      // messages are unreachable and must not keep the dot lit (e.g. after a block
-      // auto-cancels the booking).
-      supabase
-        .from('messages')
-        .select('id, sessions!inner(status)', { count: 'exact', head: true })
-        .neq('sender_id', userId)
-        .is('read_at', null)
-        .in('sessions.status', ['accepted', 'completed']),
+
+    // Unread notifications addressed to me.
+    const notifQ = supabase
+      .from('notifications')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', userId)
+      .is('read_at', null)
+
+    // Unread messages in MY OWN sessions, scoped EXPLICITLY.
+    //
+    // This used to lean on RLS to mean "only mine" — true until admins were granted
+    // read access to all messages for moderation, at which point an admin's dot
+    // counted every unread message in the app and could never be cleared. RLS is a
+    // security boundary, not a query filter: if a query's correctness depends on a
+    // policy staying narrow, widening that policy silently breaks the query.
+    //
+    // Only READABLE sessions (accepted/completed) count: a cancelled session's chat
+    // is locked and never runs mark-as-read, so its unread messages are unreachable
+    // and must not keep the dot lit (e.g. after a block auto-cancels a booking).
+    const { data: prov } = await supabase
+      .from('providers').select('id').eq('user_id', userId).maybeSingle()
+    const myProviderId = (prov as { id: string } | null)?.id
+
+    const { data: mySessions } = await supabase
+      .from('sessions')
+      .select('id')
+      .in('status', ['accepted', 'completed'])
+      .or(myProviderId
+        ? `model_user_id.eq.${userId},provider_id.eq.${myProviderId}`
+        : `model_user_id.eq.${userId}`)
+
+    const sessionIds = (mySessions ?? []).map(s => (s as { id: string }).id)
+
+    const [{ count: notifCount }, msgRes] = await Promise.all([
+      notifQ,
+      sessionIds.length > 0
+        ? supabase
+            .from('messages')
+            .select('id', { count: 'exact', head: true })
+            .in('session_id', sessionIds)
+            .neq('sender_id', userId)
+            .is('read_at', null)
+        : Promise.resolve({ count: 0 }),
     ])
+
     setUnreadNotifs(notifCount ?? 0)
-    setHasUnreadMsgs((msgCount ?? 0) > 0)
+    setHasUnreadMsgs(((msgRes as { count: number | null }).count ?? 0) > 0)
   }, [userId])
 
   // Refresh both indicators whenever the screen regains focus (after reading msgs/notifs).
