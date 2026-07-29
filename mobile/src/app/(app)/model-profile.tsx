@@ -23,6 +23,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Colors, Fonts } from '@/constants/Colors'
 import { useAuth } from '@/context/auth'
 import { supabase } from '@/lib/supabase'
+import { mustWrite } from '@/lib/db'
 import { isIdentityVerified } from '@/lib/verification'
 import { signModelPhotos, signModelPhoto } from '@/lib/photoUrls'
 import ScreenDecor from '@/components/ScreenDecor'
@@ -325,15 +326,20 @@ export default function ModelProfileScreen() {
       const { data: up, error } = await supabase.storage
         .from('profile-pics')
         .upload(fileName, decode(manipulated.base64!), { contentType: 'image/jpeg', upsert: true })
-      if (!error && up) {
-        // Fixed-filename upload → identical URL → stale image cache. Stamp a
-        // per-save cache-buster into the stored URL once; read sites render as-is.
-        const { data: urlData } = supabase.storage.from('profile-pics').getPublicUrl(up.path)
-        const newUrl = `${urlData.publicUrl}?t=${Date.now()}`
-        await supabase.from('users').update({ profile_pic_url: newUrl }).eq('id', userId)
-        setProfile(p => p ? { ...p, profile_pic_url: newUrl } : p)
-        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
-      }
+      // A failed upload used to fall out of this `if` and do nothing at all —
+      // no photo, no message. Throw so the catch below reports it.
+      if (error || !up) throw new Error(error?.message ?? 'Upload failed')
+
+      // Fixed-filename upload → identical URL → stale image cache. Stamp a
+      // per-save cache-buster into the stored URL once; read sites render as-is.
+      const { data: urlData } = supabase.storage.from('profile-pics').getPublicUrl(up.path)
+      const newUrl = `${urlData.publicUrl}?t=${Date.now()}`
+      await mustWrite(
+        supabase.from('users').update({ profile_pic_url: newUrl }).eq('id', userId),
+        'save profile picture',
+      )
+      setProfile(p => p ? { ...p, profile_pic_url: newUrl } : p)
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
     } catch (e) {
       console.error('model changeProfilePic failed:', e)
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)
@@ -463,7 +469,10 @@ export default function ModelProfileScreen() {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
     setOptionsPhotoId(null)
     try {
-      await supabase.from('model_photos').delete().eq('id', optionsPhotoId)
+      await mustWrite(
+        supabase.from('model_photos').delete().eq('id', optionsPhotoId),
+        'remove photo',
+      )
       setPhotos(prev => prev.filter(p => p.id !== optionsPhotoId))
     } catch {
       Alert.alert('Error', 'Could not remove photo.')
@@ -484,10 +493,13 @@ export default function ModelProfileScreen() {
     clearStatus('caption')
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
     try {
-      await supabase
-        .from('model_photos')
-        .update({ caption: captionText.trim() || null })
-        .eq('id', captionPhotoId)
+      await mustWrite(
+        supabase
+          .from('model_photos')
+          .update({ caption: captionText.trim() || null })
+          .eq('id', captionPhotoId),
+        'save caption',
+      )
       setPhotos(prev =>
         prev.map(p => p.id === captionPhotoId ? { ...p, caption: captionText.trim() || null } : p)
       )
@@ -542,7 +554,10 @@ export default function ModelProfileScreen() {
           onPress: async () => {
             await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
             try {
-              await supabase.from('model_photo_categories').delete().eq('id', cat.id)
+              await mustWrite(
+                supabase.from('model_photo_categories').delete().eq('id', cat.id),
+                'delete photo category',
+              )
               setCategories(prev => prev.filter(c => c.id !== cat.id))
               setPhotos(prev => prev.map(p =>
                 p.category_id === cat.id ? { ...p, category_id: null } : p
@@ -566,8 +581,11 @@ export default function ModelProfileScreen() {
 
   const selectAttr = async (key: keyof ModelAttrs, value: string) => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
-    const updated = { ...attrs, [key]: value }
-    setAttrs(updated)
+    // Shown immediately so the picker feels instant — but remember the old value,
+    // because a rejected save must not leave a characteristic on screen that
+    // isn't in the database. It would silently vanish on the next reload.
+    const previous = attrs[key] ?? null
+    setAttrs(prev => ({ ...prev, [key]: value }))
     setAttrsPicker(null)
     setSavingAttrs(true)
     clearStatus('attrs')
@@ -575,13 +593,22 @@ export default function ModelProfileScreen() {
       const { data: existing } = await supabase
         .from('model_attributes').select('user_id').eq('user_id', userId!).maybeSingle()
       if (existing) {
-        await supabase.from('model_attributes').update({ [key]: value, updated_at: new Date().toISOString() }).eq('user_id', userId!)
+        await mustWrite(
+          supabase.from('model_attributes')
+            .update({ [key]: value, updated_at: new Date().toISOString() })
+            .eq('user_id', userId!),
+          `save ${key}`,
+        )
       } else {
-        await supabase.from('model_attributes').insert({ user_id: userId!, [key]: value })
+        await mustWrite(
+          supabase.from('model_attributes').insert({ user_id: userId!, [key]: value }),
+          `create attributes with ${key}`,
+        )
       }
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
       flashSaved('attrs')
     } catch {
+      setAttrs(prev => ({ ...prev, [key]: previous }))
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)
       flashError('attrs')
     }
@@ -590,13 +617,18 @@ export default function ModelProfileScreen() {
 
   const clearAttr = async (key: keyof ModelAttrs) => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+    const previous = attrs[key] ?? null
     setAttrs(prev => ({ ...prev, [key]: null }))
     clearStatus('attrs')
     try {
-      await supabase.from('model_attributes').update({ [key]: null }).eq('user_id', userId!)
+      await mustWrite(
+        supabase.from('model_attributes').update({ [key]: null }).eq('user_id', userId!),
+        `clear ${key}`,
+      )
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
       flashSaved('attrs')
     } catch {
+      setAttrs(prev => ({ ...prev, [key]: previous }))
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)
       flashError('attrs')
     }
@@ -613,9 +645,17 @@ export default function ModelProfileScreen() {
       const { data: existing } = await supabase
         .from('model_attributes').select('user_id').eq('user_id', userId).maybeSingle()
       if (existing) {
-        await supabase.from('model_attributes').update({ bio: bioText.trim() || null }).eq('user_id', userId)
+        await mustWrite(
+          supabase.from('model_attributes')
+            .update({ bio: bioText.trim() || null }).eq('user_id', userId),
+          'save bio',
+        )
       } else {
-        await supabase.from('model_attributes').insert({ user_id: userId, bio: bioText.trim() || null })
+        await mustWrite(
+          supabase.from('model_attributes')
+            .insert({ user_id: userId, bio: bioText.trim() || null }),
+          'create attributes with bio',
+        )
       }
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
       flashSaved('bio')
