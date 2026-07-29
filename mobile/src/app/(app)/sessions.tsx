@@ -17,6 +17,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Colors, Fonts, Radius, Shadow } from '@/constants/Colors'
 import { useAuth } from '@/context/auth'
 import { supabase } from '@/lib/supabase'
+import { mustWrite, tryWrite } from '@/lib/db'
 import { signModelPhotos } from '@/lib/photoUrls'
 import { useProfileNav } from '@/lib/profileNav'
 import LoadErrorState from '@/components/LoadErrorState'
@@ -192,13 +193,18 @@ export default function SessionsScreen() {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
     setProcessing(s.id, true)
     try {
-      await supabase.from('sessions').update({ status: 'accepted' }).eq('id', s.id)
-      supabase.from('notifications').insert({
+      // Must come first and must throw on refusal: the status guard rejects an
+      // accept on a session that's already cancelled, and without this the model
+      // would be pushed "Treatment accepted! 🎉" for a booking that never moved.
+      await mustWrite(
+        supabase.from('sessions').update({ status: 'accepted' }).eq('id', s.id),
+        'accept session')
+      tryWrite(supabase.from('notifications').insert({
         user_id: s.model_user_id, type: 'session_accepted',
         title: 'Treatment accepted! 🎉',
         body: `Your booking for ${fmtDate(s.date)} has been confirmed.`,
         session_id: s.id,
-      }).then(() => {})
+      }), 'accept notification')
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
       setPending(prev => prev.filter(x => x.id !== s.id))
       setConfirmed(prev => [...prev, { ...s, status: 'accepted' }].sort((a, b) => a.date.localeCompare(b.date)))
@@ -221,13 +227,15 @@ export default function SessionsScreen() {
             await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
             setProcessing(s.id, true)
             try {
-              await supabase.from('sessions').update({ status: 'declined' }).eq('id', s.id)
-              supabase.from('notifications').insert({
+              await mustWrite(
+                supabase.from('sessions').update({ status: 'declined' }).eq('id', s.id),
+                'decline session')
+              tryWrite(supabase.from('notifications').insert({
                 user_id: s.model_user_id, type: 'session_declined',
                 title: 'Treatment update',
                 body: `Your booking for ${fmtDate(s.date)} was not confirmed.`,
                 session_id: s.id,
-              }).then(() => {})
+              }), 'decline notification')
               setPending(prev => prev.filter(x => x.id !== s.id))
             } catch {
               Alert.alert('Error', 'Could not decline treatment.')
@@ -251,13 +259,15 @@ export default function SessionsScreen() {
             await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
             setProcessing(s.id, true)
             try {
-              await supabase.from('sessions').update({ status: 'completed' }).eq('id', s.id)
-              supabase.from('notifications').insert({
+              await mustWrite(
+                supabase.from('sessions').update({ status: 'completed' }).eq('id', s.id),
+                'complete session')
+              tryWrite(supabase.from('notifications').insert({
                 user_id: s.model_user_id, type: 'session_completed',
                 title: 'Treatment completed ✓',
                 body: `Your treatment on ${fmtDate(s.date)} has been marked as completed.`,
                 session_id: s.id,
-              }).then(() => {})
+              }), 'complete notification')
               await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
               setConfirmed(prev => prev.filter(x => x.id !== s.id))
               setCompleted(prev => [{ ...s, status: 'completed' }, ...prev])

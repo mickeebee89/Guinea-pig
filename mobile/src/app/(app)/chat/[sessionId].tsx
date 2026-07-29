@@ -20,6 +20,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Colors, CategoryColors, Fonts, Radius, Shadow } from '@/constants/Colors'
 import { useAuth } from '@/context/auth'
 import { supabase } from '@/lib/supabase'
+import { mustWrite, tryWrite } from '@/lib/db'
 import { getBlockedIds } from '@/lib/blocks'
 import { signModelPhotos } from '@/lib/photoUrls'
 import LoadErrorState from '@/components/LoadErrorState'
@@ -347,7 +348,12 @@ export default function ChatScreen() {
                     .or(orParts.join(','))
                   const ids = (pairSessions ?? []).map((r: any) => r.id as string)
                   if (ids.length > 0) {
-                    await supabase.from('sessions').update({ status: 'cancelled' }).in('id', ids)
+                    // If this is refused the bookings stay live between two people
+                    // who can no longer message each other — the one outcome the
+                    // block is meant to prevent.
+                    await mustWrite(
+                      supabase.from('sessions').update({ status: 'cancelled' }).in('id', ids),
+                      'cancel sessions on block')
                     // Notify the OTHER party per cancelled session — never mention blocking.
                     await supabase.from('notifications').insert(
                       ids.map(sid => ({
@@ -425,15 +431,19 @@ export default function ChatScreen() {
             await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
             setMarkingComplete(true)
             try {
-              await supabase.from('sessions').update({ status: 'completed' }).eq('id', sessionId)
+              // Completing is what unlocks the model's ability to review, so a
+              // silent refusal here leaves them permanently unable to leave one.
+              await mustWrite(
+                supabase.from('sessions').update({ status: 'completed' }).eq('id', sessionId),
+                'mark session complete')
               if (chat?.model_user_id) {
-                supabase.from('notifications').insert({
+                tryWrite(supabase.from('notifications').insert({
                   user_id:    chat.model_user_id,
                   type:       'session_completed',
                   title:      'Treatment completed ✓',
                   body:       'Your stylist has marked the treatment as complete.',
                   session_id: sessionId,
-                }).then(() => {})
+                }), 'complete notification')
               }
               await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
               setChat(prev => prev ? { ...prev, status: 'completed' } : prev)

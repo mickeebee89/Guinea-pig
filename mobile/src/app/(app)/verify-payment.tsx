@@ -21,6 +21,7 @@ import { useStripe } from '@stripe/stripe-react-native'
 import { Colors, Fonts, Radius, Shadow } from '@/constants/Colors'
 import { useAuth } from '@/context/auth'
 import { supabase } from '@/lib/supabase'
+import { mustWrite } from '@/lib/db'
 
 // Full refund policy lives in Terms section 9.
 const TERMS_URL = 'https://guineapigapp.co.uk/terms'
@@ -104,7 +105,11 @@ export default function VerifyPaymentScreen() {
           // Approval is the unlock. Models auto-verify here; providers were already
           // verified by admin approve(). Either way, done.
           if (!isProvider) {
-            await supabase.from('users').update({ is_verified: true }).eq('id', userId)
+            // This IS the unlock. Showing 'success' after a refused write means
+            // someone who has paid is told they're verified while they aren't.
+            await mustWrite(
+              supabase.from('users').update({ is_verified: true }).eq('id', userId),
+              'set is_verified')
           }
           setStep('success')
           return

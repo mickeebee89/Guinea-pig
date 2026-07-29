@@ -20,6 +20,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Colors, CategoryColors, Fonts } from '@/constants/Colors'
 import { useAuth } from '@/context/auth'
 import { supabase } from '@/lib/supabase'
+import { mustWrite } from '@/lib/db'
 import { getBlockedIds } from '@/lib/blocks'
 import { signModelPhotos } from '@/lib/photoUrls'
 import { useProfileNav } from '@/lib/profileNav'
@@ -648,7 +649,13 @@ export default function ProviderDashboardScreen() {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
     setProcessing(s.id, true)
     try {
-      await supabase.from('sessions').update({ status: 'accepted' }).eq('id', s.id)
+      // Throws if the database refuses — e.g. the status guard rejecting an
+      // accept on an already-cancelled session, or suspension policies blocking
+      // a suspended provider. Without this the model gets pushed "accepted!"
+      // for a booking that never changed.
+      await mustWrite(
+        supabase.from('sessions').update({ status: 'accepted' }).eq('id', s.id),
+        'accept session')
       try {
         const { error } = await supabase.from('notifications').insert({
           user_id: s.model_user_id,
@@ -686,7 +693,9 @@ export default function ProviderDashboardScreen() {
             await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
             setProcessing(s.id, true)
             try {
-              await supabase.from('sessions').update({ status: 'declined' }).eq('id', s.id)
+              await mustWrite(
+                supabase.from('sessions').update({ status: 'declined' }).eq('id', s.id),
+                'decline session')
               try {
                 const { error } = await supabase.from('notifications').insert({
                   user_id: s.model_user_id,
