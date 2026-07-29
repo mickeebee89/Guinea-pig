@@ -53,7 +53,7 @@ type Treatment = {
   name: string
   category: string
   duration_mins: number | null
-  materials_cost: number | null
+  // No price field by design — costs are agreed in chat and paid off-platform.
 }
 
 type PortfolioItem = {
@@ -158,11 +158,12 @@ export default function ProviderShopScreen() {
           .single(),
         supabase
           .from('provider_treatments')
-          // The columns are `duration` and `price` — this asked for duration_mins
-          // and materials_cost, which don't exist, so PostgREST rejected the WHOLE
-          // query (42703) and every shop showed "No treatments listed yet". Aliased
-          // rather than renamed so the rest of the screen is untouched.
-          .select('id, name, category, duration_mins:duration, materials_cost:price')
+          // The column is `duration`; this asked for duration_mins, which doesn't
+          // exist, so PostgREST rejected the WHOLE query (42703) and every shop
+          // showed "No treatments listed yet". Aliased rather than renamed so the
+          // rest of the screen is untouched. Price is deliberately not selected —
+          // costs are agreed in chat and paid off-platform.
+          .select('id, name, category, duration_mins:duration')
           .eq('provider_id', id),
         supabase
           .from('portfolio_items')
@@ -462,6 +463,16 @@ export default function ProviderShopScreen() {
                 No treatments listed yet — check back soon.
               </Text>
             )}
+
+            {/* Guinea Pig never takes payment for a treatment, so say so plainly
+               rather than leaving a model to guess what a session will cost. */}
+            <View style={styles.costNotice}>
+              <Ionicons name="chatbubble-ellipses-outline" size={15} color={Colors.roseDark} />
+              <Text style={styles.costNoticeText}>
+                Any cost is agreed directly with your stylist in the chat and paid in person.
+                Guinea Pig doesn't handle payments for treatments.
+              </Text>
+            </View>
           </View>
 
           {/* ── Portfolio (grouped by category) ── */}
@@ -604,9 +615,9 @@ function TreatmentRow({ treatment }: { treatment: Treatment }) {
               <Text style={styles.treatmentMetaText}> {treatment.duration_mins} min</Text>
             </View>
           ) : null}
-          {treatment.materials_cost != null && treatment.materials_cost > 0 ? (
-            <Text style={styles.treatmentCost}>Materials: £{treatment.materials_cost.toFixed(2)}</Text>
-          ) : null}
+          {/* No price shown by design: any cost is agreed directly between the
+             model and the stylist in chat, and paid in person. Guinea Pig never
+             handles money for a treatment. */}
         </View>
       </View>
       <View style={[styles.treatmentCatPill, { backgroundColor: color + '22' }]}>
@@ -757,7 +768,12 @@ const styles = StyleSheet.create({
   treatmentMeta: { flexDirection: 'row', gap: 12, alignItems: 'center' },
   treatmentMetaItem: { flexDirection: 'row', alignItems: 'center' },
   treatmentMetaText: { fontSize: 12, color: Colors.muted },
-  treatmentCost: { fontSize: 12, color: Colors.muted },
+  costNotice: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: 8,
+    marginTop: 10, padding: 12, borderRadius: Radius.md,
+    backgroundColor: Colors.softPink,
+  },
+  costNoticeText: { flex: 1, fontSize: 12, lineHeight: 17, color: Colors.warmDark },
   treatmentCatPill: { marginRight: 12, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
   treatmentCatText: { fontSize: 11, fontFamily: Fonts.bodyBold },
 

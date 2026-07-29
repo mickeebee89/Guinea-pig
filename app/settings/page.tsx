@@ -12,7 +12,6 @@ const KEYS = [
   'founding_provider_limit',
   'founding_provider_offer_enabled',
   'image_review_enabled',
-  'materials_cost_cap_pence',
   'banned_words',
 ] as const
 
@@ -65,7 +64,7 @@ export default function SettingsPage() {
     )
   }
 
-  const PriceField = ({ label, settingKey, unit = 'pence' }: { label: string; settingKey: 'verification_price_pence' | 'subscription_price_pence' | 'materials_cost_cap_pence' | 'founding_provider_limit'; unit?: string }) => {
+  const PriceField = ({ label, settingKey, unit = 'pence' }: { label: string; settingKey: 'verification_price_pence' | 'subscription_price_pence' | 'founding_provider_limit'; unit?: string }) => {
     const [local, setLocal] = useState(settings[settingKey] ?? '')
     return (
       <div className="flex items-center justify-between py-4 border-b border-black/5 last:border-0">
@@ -134,7 +133,6 @@ export default function SettingsPage() {
       <div className="bg-white rounded-xl border border-black/5 shadow-sm px-6">
         <PriceField label="Provider Verification Price" settingKey="verification_price_pence" />
         <PriceField label="Model Subscription Price"    settingKey="subscription_price_pence" />
-        <PriceField label="Materials Cost Cap"          settingKey="materials_cost_cap_pence" />
         <PriceField label="Founding Provider Slot Limit" settingKey="founding_provider_limit" unit="slots" />
 
         <div className="flex items-center justify-between py-4 border-b border-black/5">

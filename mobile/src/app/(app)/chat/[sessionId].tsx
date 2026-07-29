@@ -50,7 +50,6 @@ type Treatment = {
   id: string
   name: string
   category: string
-  materials_cost: number | null
 }
 
 type Message = {
@@ -165,10 +164,11 @@ export default function ChatScreen() {
         s.treatment_id
           ? supabase
               .from('provider_treatments')
-              // `materials_cost` doesn't exist — the column is `price`. Asking for
-              // it failed the whole query, so the treatment name never appeared in
-              // chat and the materials-cost reminder never showed.
-              .select('id, name, category, materials_cost:price')
+              // Price is deliberately not selected: cost is agreed here in the chat
+              // and paid in person, so the app never quotes a figure. (This query
+              // previously asked for a `materials_cost` column that doesn't exist,
+              // which failed the WHOLE query — hence no treatment name in chat.)
+              .select('id, name, category')
               .eq('id', s.treatment_id)
               .maybeSingle()
           // Shape must match the query branch now that `error` is read.
@@ -473,7 +473,6 @@ export default function ChatScreen() {
   const isCompleted     = chat?.status === 'completed'
   const showChat        = isAccepted || isCompleted
   const isModel         = chat?.model_user_id === userId
-  const hasMaterialCost = (treatment?.materials_cost ?? 0) > 0
   const initials       = (otherParty?.name ?? '')
     .split(' ').map(w => w[0] ?? '').join('').slice(0, 2).toUpperCase()
 
@@ -751,11 +750,15 @@ export default function ChatScreen() {
           )
         }}
         ListFooterComponent={
-          hasMaterialCost ? (
-            <View style={styles.materialsNotice}>
+          // The chat is where cost is settled, so the reminder belongs here and
+          // shows for every booking — not only ones with a price on file.
+          showChat ? (
+            <View style={styles.costNotice}>
               <Ionicons name="information-circle-outline" size={16} color={Colors.roseDark} />
-              <Text style={styles.materialsText}>
-                Reminder: {treatment!.name} has a £{treatment!.materials_cost!.toFixed(2)} materials cost, payable to the provider at the treatment.
+              <Text style={styles.costNoticeText}>
+                Agree any cost{treatment ? ` for ${treatment.name}` : ''} here before the appointment
+                and settle it in person. Guinea Pig doesn't take payment for treatments or handle
+                disputes about them.
               </Text>
             </View>
           ) : null
@@ -1140,8 +1143,8 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
   },
 
-  // Materials notice (FlatList footer = visual top of inverted list)
-  materialsNotice: {
+  // Off-platform cost notice (FlatList footer = visual top of inverted list)
+  costNotice: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 8,
@@ -1153,7 +1156,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.softPink,
   },
-  materialsText: {
+  costNoticeText: {
     flex: 1,
     fontSize: 12,
     color: Colors.roseDark,
