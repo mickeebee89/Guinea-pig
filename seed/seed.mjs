@@ -33,6 +33,14 @@ const PASSWORD = 'SeedDemo!2026'   // demo accounts only; all removed by teardow
 const HERE   = path.dirname(fileURLToPath(import.meta.url))
 const PHOTOS = path.join(HERE, 'photos')
 
+// Photos are handed out in CONSECUTIVE blocks, in sorted filename order, so the
+// folder reads the way you'd expect: stylist 1 gets portfolio files 1-4, stylist
+// 2 gets 5-8, model 1 gets gallery 1-3, model 2 gets 4-6, and so on.
+const PORTFOLIO_PER_STYLIST = 4
+const GALLERY_PER_MODEL     = 3
+
+const blockFor = (files, index, size) => files.slice(index * size, index * size + size)
+
 const key = process.env.SUPABASE_SERVICE_ROLE_KEY
 if (!key) {
   console.error('SUPABASE_SERVICE_ROLE_KEY is not set. Set it in this shell only:')
@@ -192,8 +200,11 @@ async function main() {
     }
     await db.from('availability').insert(slots)
 
-    // Portfolio — a few images each, drawn round-robin from the pool.
-    const mine = portfolioPics.filter((_, n) => n % STYLISTS.length === i).slice(0, 4)
+    // Portfolio — a consecutive block per stylist (1-4, 5-8, …).
+    const mine = blockFor(portfolioPics, i, PORTFOLIO_PER_STYLIST)
+    if (portfolioPics.length && !mine.length) {
+      console.warn(`  ! no portfolio photos left for ${s.first} — need ${(i + 1) * PORTFOLIO_PER_STYLIST} files in seed/photos/portfolio`)
+    }
     for (const f of mine) {
       const p = await upload('portfolio-photos', userId, f)
       if (p) await db.from('portfolio_items').insert({
@@ -219,7 +230,10 @@ async function main() {
 
     // Gallery — model-photos is PRIVATE and the app signs paths at render time,
     // so store the object PATH here, not a URL.
-    const mine = galleryPics.filter((_, n) => n % MODELS.length === i).slice(0, 3)
+    const mine = blockFor(galleryPics, i, GALLERY_PER_MODEL)
+    if (galleryPics.length && !mine.length) {
+      console.warn(`  ! no gallery photos left for ${m.first} — need ${(i + 1) * GALLERY_PER_MODEL} files in seed/photos/gallery`)
+    }
     for (const f of mine) {
       const p = await upload('model-photos', userId, f)
       if (p) await db.from('model_photos').insert({ user_id: userId, photo_url: p })
