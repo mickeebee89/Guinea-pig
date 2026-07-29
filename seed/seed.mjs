@@ -94,6 +94,25 @@ const CHAT = [
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
+// Every write goes through one of these. The first version of this script checked
+// no errors at all, so failed inserts printed nothing and the run still ended with
+// "Done" — bios, characteristics, treatments and reviews were all silently missing.
+const problems = []
+
+/** A write that MUST succeed. Throws with context so the run stops at the cause. */
+async function must(label, promise) {
+  const { data, error } = await promise
+  if (error) throw new Error(`${label} failed: ${error.message}${error.hint ? ` (${error.hint})` : ''}`)
+  return data
+}
+
+/** A write that's nice-to-have (images). Records a visible warning, keeps going. */
+async function attempt(label, promise) {
+  const { data, error } = await promise
+  if (error) { problems.push(`${label}: ${error.message}`); console.warn(`  ! ${label}: ${error.message}`); return null }
+  return data
+}
+
 const email = (first, last) => `${first}.${last}${SEED_EMAIL_SUFFIX}`.toLowerCase()
 const iso   = d => d.toISOString().slice(0, 10)
 const slug  = s => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
@@ -140,12 +159,29 @@ async function createAccount({ first, last, role }) {
   if (error) throw new Error(`${addr}: ${error.message}`)
   const id = data.user.id
   // The trigger may race; make the row definitively correct either way.
-  await db.from('users').upsert({
+  // onConflict 'id' is safe here — id is the primary key.
+  await must(`users row for ${addr}`, db.from('users').upsert({
     id, email: addr, role, first_name: first, last_name: last,
     last_initial: last[0], date_of_birth: '1996-05-14', region: 'UK',
     is_verified: true,
-  }, { onConflict: 'id' })
+  }, { onConflict: 'id' }))
   return id
+}
+
+/**
+ * model_attributes has NO unique constraint on user_id, so .upsert({ onConflict:
+ * 'user_id' }) raises 42P10 rather than deduping — the same trap ensureProfile
+ * documents for `providers`. The app itself does select-then-update-or-insert;
+ * mirror that.
+ */
+async function writeModelAttributes(userId, row) {
+  const { data: existing } = await db
+    .from('model_attributes').select('user_id').eq('user_id', userId).maybeSingle()
+  if (existing) {
+    await must('model_attributes update', db.from('model_attributes').update(row).eq('user_id', userId))
+  } else {
+    await must('model_attributes insert', db.from('model_attributes').insert({ user_id: userId, ...row }))
+  }
 }
 
 // ── Seed ─────────────────────────────────────────────────────────────────────
@@ -170,23 +206,27 @@ async function main() {
     let picUrl = null
     if (stylistPics[i]) {
       const p = await upload('profile-pics', userId, stylistPics[i])
-      if (p) { picUrl = publicUrl('profile-pics', p); await db.from('users').update({ profile_pic_url: picUrl }).eq('id', userId) }
+      if (p) {
+        picUrl = publicUrl('profile-pics', p)
+        await attempt('profile pic url', db.from('users').update({ profile_pic_url: picUrl }).eq('id', userId))
+      }
     }
 
     const { data: prov } = await db.from('providers').select('id').eq('user_id', userId).maybeSingle()
     const providerId = prov?.id
     if (!providerId) { console.warn('  ! no providers row — skipping'); continue }
 
-    await db.from('providers').update({
+    await must('providers update', db.from('providers').update({
       name: s.shop, shop_handle: slug(s.shop), bio: s.bio,
       region: s.region, location_text: s.location,
       profile_pic_url: picUrl, is_published: true,
-    }).eq('id', providerId)
+    }).eq('id', providerId))
 
-    // Treatments
-    const { data: treats } = await db.from('provider_treatments')
+    // Treatments — same shape edit-shop.tsx writes.
+    const treats = await must('provider_treatments insert', db.from('provider_treatments')
       .insert(TREATMENTS[s.shop].map(t => ({ provider_id: providerId, ...t })))
-      .select('id, name')
+      .select('id, name'))
+    console.log(`  · ${treats?.length ?? 0} treatments`)
 
     // Availability — the overlap guard rejects clashing bookings, so keep slots
     // tidy: one morning and one afternoon per day, never overlapping.
@@ -198,7 +238,8 @@ async function main() {
         { provider_id: providerId, date: day, start_time: '14:00:00', end_time: '16:30:00', active_treatments: [treats?.[1]?.id ?? treats?.[0]?.id].filter(Boolean) },
       )
     }
-    await db.from('availability').insert(slots)
+    await must('availability insert', db.from('availability').insert(slots))
+    console.log(`  · ${slots.length} availability slots`)
 
     // Portfolio — a consecutive block per stylist (1-4, 5-8, …).
     const mine = blockFor(portfolioPics, i, PORTFOLIO_PER_STYLIST)
@@ -207,10 +248,10 @@ async function main() {
     }
     for (const f of mine) {
       const p = await upload('portfolio-photos', userId, f)
-      if (p) await db.from('portfolio_items').insert({
+      if (p) await attempt('portfolio_items insert', db.from('portfolio_items').insert({
         provider_id: providerId, media_url: publicUrl('portfolio-photos', p),
         media_type: 'photo', moderation_status: 'approved',
-      })
+      }))
     }
 
     madeStylists.push({ userId, providerId, treatments: treats ?? [], ...s })
@@ -223,10 +264,11 @@ async function main() {
 
     if (modelPics[i]) {
       const p = await upload('profile-pics', userId, modelPics[i])
-      if (p) await db.from('users').update({ profile_pic_url: publicUrl('profile-pics', p) }).eq('id', userId)
+      if (p) await attempt('profile pic url', db.from('users').update({ profile_pic_url: publicUrl('profile-pics', p) }).eq('id', userId))
     }
 
-    await db.from('model_attributes').upsert({ user_id: userId, bio: m.bio, ...m.attrs }, { onConflict: 'user_id' })
+    await writeModelAttributes(userId, { bio: m.bio, ...m.attrs })
+    console.log(`  · bio + ${Object.keys(m.attrs).length} characteristics`)
 
     // Gallery — model-photos is PRIVATE and the app signs paths at render time,
     // so store the object PATH here, not a URL.
@@ -236,7 +278,9 @@ async function main() {
     }
     for (const f of mine) {
       const p = await upload('model-photos', userId, f)
-      if (p) await db.from('model_photos').insert({ user_id: userId, photo_url: p })
+      // Stores the object PATH, not a URL — model-photos is private and the app
+      // signs at render time.
+      if (p) await attempt('model_photos insert', db.from('model_photos').insert({ user_id: userId, photo_url: p }))
     }
 
     madeModels.push({ userId, ...m })
@@ -247,19 +291,33 @@ async function main() {
   for (let i = 0; i < Math.min(2, madeStylists.length, madeModels.length); i++) {
     const st = madeStylists[i], mo = madeModels[i]
     const past = iso(new Date(Date.now() - (7 + i * 5) * 864e5))
-    const { data: sess } = await db.from('sessions').insert({
+
+    // A real booking references the availability slot it was made against, so
+    // create one for the past date and point at it. Previously this was omitted
+    // and the session insert failed — which silently skipped the review too.
+    const slot = await must('past availability slot', db.from('availability').insert({
+      provider_id: st.providerId, date: past,
+      start_time: '10:00:00', end_time: '13:00:00',
+      active_treatments: [st.treatments?.[0]?.id].filter(Boolean),
+      is_taken: true,
+    }).select('id').single())
+
+    const sess = await must('completed session', db.from('sessions').insert({
       provider_id: st.providerId, model_user_id: mo.userId, model_id: mo.userId,
+      availability_id: slot.id,
       date: past, start_time: '10:00:00', end_time: '13:00:00',
       scheduled_at: `${past}T10:00:00`, duration_minutes: 180,
       treatment_id: st.treatments?.[0]?.id ?? null,
       location_type: 'either', status: 'completed',
-    }).select('id').single()
-    if (!sess) continue
-    // reviews INSERT requires a completed session — satisfied above.
-    await db.from('reviews').insert({
+    }).select('id').single())
+
+    // reviews INSERT requires a completed session — satisfied above. `tags`
+    // matches what leave-review.tsx sends (an array, never null).
+    await must('review', db.from('reviews').insert({
       session_id: sess.id, reviewer_id: mo.userId, reviewee_id: st.userId,
-      overall_rating: REVIEWS[i].rating, comment: REVIEWS[i].comment,
-    })
+      overall_rating: REVIEWS[i].rating, comment: REVIEWS[i].comment, tags: [],
+    }))
+    console.log(`  · ${mo.first} reviewed ${st.shop} — ${REVIEWS[i].rating}★`)
   }
 
   // ── One accepted booking with a chat ───────────────────────────────────────
@@ -267,31 +325,76 @@ async function main() {
     console.log('Chat thread…')
     const st = madeStylists[0], mo = madeModels[0]
     const soon = iso(new Date(Date.now() + 4 * 864e5))
-    const { data: sess } = await db.from('sessions').insert({
+    // Use one of the slots already seeded for this stylist rather than inventing
+    // a time — a clashing one would be rejected by the booking overlap trigger.
+    const existingSlot = await must('slot for chat booking', db.from('availability')
+      .select('id, date, start_time, end_time')
+      .eq('provider_id', st.providerId).gte('date', soon)
+      .order('date').limit(1).maybeSingle())
+
+    const sess = await must('accepted session', db.from('sessions').insert({
       provider_id: st.providerId, model_user_id: mo.userId, model_id: mo.userId,
-      date: soon, start_time: '10:00:00', end_time: '13:00:00',
-      scheduled_at: `${soon}T10:00:00`, duration_minutes: 180,
+      availability_id: existingSlot?.id ?? null,
+      date: existingSlot?.date ?? soon,
+      start_time: existingSlot?.start_time ?? '10:00:00',
+      end_time: existingSlot?.end_time ?? '13:00:00',
+      scheduled_at: `${existingSlot?.date ?? soon}T${existingSlot?.start_time ?? '10:00:00'}`,
+      duration_minutes: 180,
       treatment_id: st.treatments?.[0]?.id ?? null,
       location_type: 'either', status: 'accepted',
-    }).select('id').single()
-    if (sess) {
-      let t = Date.now() - CHAT.length * 6 * 60_000
-      for (const line of CHAT) {
-        await db.from('messages').insert({
-          session_id: sess.id,
-          sender_id: line.from === 'model' ? mo.userId : st.userId,
-          body: line.body,
-          created_at: new Date(t).toISOString(),
-          read_at: new Date(t).toISOString(),   // read, so no unread dot in shots
-        })
-        t += 6 * 60_000
-      }
+    }).select('id').single())
+
+    let t = Date.now() - CHAT.length * 6 * 60_000
+    for (const line of CHAT) {
+      await must('chat message', db.from('messages').insert({
+        session_id: sess.id,
+        sender_id: line.from === 'model' ? mo.userId : st.userId,
+        body: line.body,
+        created_at: new Date(t).toISOString(),
+        read_at: new Date(t).toISOString(),   // read, so no unread dot in shots
+      }))
+      t += 6 * 60_000
     }
+    console.log(`  · ${CHAT.length} messages between ${mo.first} and ${st.first}`)
   }
 
-  console.log(`\nDone: ${madeStylists.length} stylists, ${madeModels.length} models.`)
-  console.log(`Sign in as any of them with password: ${PASSWORD}`)
-  console.log('\n⚠️  REMEMBER: node seed/teardown.mjs   before launch.')
+  // Verify against the DB rather than trusting that the inserts above ran — the
+  // first version reported "Done" while bios, characteristics, treatments and
+  // reviews were all missing.
+  const ids = [...madeStylists.map(s => s.userId), ...madeModels.map(m => m.userId)]
+  const count = async (table, col, vals) =>
+    (await db.from(table).select('*', { count: 'exact', head: true }).in(col, vals)).count ?? 0
+
+  const providerIds = madeStylists.map(s => s.providerId)
+  const checks = {
+    'model_attributes': await count('model_attributes', 'user_id', madeModels.map(m => m.userId)),
+    'provider_treatments': await count('provider_treatments', 'provider_id', providerIds),
+    'availability':      await count('availability', 'provider_id', providerIds),
+    'portfolio_items':   await count('portfolio_items', 'provider_id', providerIds),
+    'model_photos':      await count('model_photos', 'user_id', madeModels.map(m => m.userId)),
+    'reviews':           await count('reviews', 'reviewee_id', ids),
+  }
+
+  console.log(`\nSeeded ${madeStylists.length} stylists, ${madeModels.length} models.`)
+  console.log('Rows actually in the database:')
+  for (const [k, v] of Object.entries(checks)) {
+    console.log(`  ${v > 0 ? '✓' : '✗'} ${k.padEnd(20)} ${v}`)
+  }
+
+  const empty = Object.entries(checks).filter(([, v]) => v === 0).map(([k]) => k)
+  if (empty.length) console.log(`\n⚠️  NOTHING WAS WRITTEN TO: ${empty.join(', ')}`)
+  if (problems.length) {
+    console.log(`\n⚠️  ${problems.length} non-fatal problem(s):`)
+    for (const p of problems) console.log(`  · ${p}`)
+  }
+
+  console.log(`\nSign in as any of them with password: ${PASSWORD}`)
+  console.log('⚠️  REMEMBER: node seed/teardown.mjs   before launch.')
 }
 
-main().catch(e => { console.error(e); process.exit(1) })
+main().catch(e => {
+  console.error(`\n✗ SEED FAILED: ${e.message}`)
+  console.error('\nNothing further was written. Run `node seed/teardown.mjs` to clear the partial run,')
+  console.error('fix the cause, then seed again.')
+  process.exit(1)
+})
