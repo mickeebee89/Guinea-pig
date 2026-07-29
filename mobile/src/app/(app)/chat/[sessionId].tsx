@@ -765,10 +765,15 @@ export default function ChatScreen() {
           showChat ? (
             <View style={styles.costNotice}>
               <Ionicons name="information-circle-outline" size={16} color={Colors.roseDark} />
+              {/* Both sides read this, so it's worded for either — it doubles as the
+                 reminder to a stylist that portfolio photos need asking for. */}
               <Text style={styles.costNoticeText}>
                 Agree any cost{treatment ? ` for ${treatment.name}` : ''} here before the appointment
                 and settle it in person. Guinea Pig doesn't take payment for treatments or handle
                 disputes about them.
+                {'\n\n'}
+                Portfolio photos are common — often the reason a treatment is free or discounted.
+                Agree here whether photos can be taken and where they'll be shared.
               </Text>
             </View>
           ) : null

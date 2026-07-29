@@ -11,6 +11,14 @@ const CONSENT_ITEMS = [
     body:  'Any photos you attach will be shared with the provider to help them prepare your treatment.',
   },
   {
+    // Framed as what to EXPECT, not as agreeing to be photographed. Consent to
+    // a stylist using your image has to be asked for and freely refusable — a
+    // tickbox buried in an application form wouldn't be worth anything.
+    icon:  'camera-outline'            as const,
+    title: 'Photos of your treatment',
+    body:  'Most stylists are building a portfolio, so expect to be asked for before-and-after photos — that is usually why a treatment is free or discounted. They should ask you first, and you can say no.',
+  },
+  {
     icon:  'person-outline'            as const,
     title: 'Profile visibility',
     body:  'Your name and profile picture will be visible to the provider when you apply.',

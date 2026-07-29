@@ -471,6 +471,10 @@ export default function ProviderShopScreen() {
               <Text style={styles.costNoticeText}>
                 Any cost is agreed directly with your stylist in the chat and paid in person.
                 Guinea Pig doesn't handle payments for treatments.
+                {'\n\n'}
+                Most stylists are building a portfolio and will ask to photograph their work —
+                that's usually why a treatment is free or discounted. It's your choice, and
+                worth agreeing in the chat first.
               </Text>
             </View>
           </View>
