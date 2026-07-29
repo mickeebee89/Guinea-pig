@@ -161,14 +161,18 @@ export default function ChatScreen() {
       }
 
       // Treatment + other party in parallel
-      const [{ data: treatData }, otherData] = await Promise.all([
+      const [{ data: treatData, error: treatErr }, otherData] = await Promise.all([
         s.treatment_id
           ? supabase
               .from('provider_treatments')
-              .select('id, name, category, materials_cost')
+              // `materials_cost` doesn't exist — the column is `price`. Asking for
+              // it failed the whole query, so the treatment name never appeared in
+              // chat and the materials-cost reminder never showed.
+              .select('id, name, category, materials_cost:price')
               .eq('id', s.treatment_id)
               .maybeSingle()
-          : Promise.resolve({ data: null }),
+          // Shape must match the query branch now that `error` is read.
+          : Promise.resolve({ data: null, error: null }),
         isModel
           ? supabase
               .from('providers')
@@ -182,6 +186,7 @@ export default function ChatScreen() {
               .single(),
       ])
 
+      if (treatErr) console.warn('chat treatment →', treatErr.message)
       if (treatData) setTreatment(treatData as Treatment)
 
       const od = (otherData as any).data

@@ -71,12 +71,15 @@ const MODELS = [
     attrs: { hair_colour: 'Red', hair_type: 'Curly', hair_length: 'Long', hair_condition: 'Dry', skin_tone: 'Fair', skin_type: 'Oily', eye_colour: 'Green', eye_shape: 'Hooded', nail_condition: 'Long and natural' } },
 ]
 
+// `duration` is minutes and is a real column — the shop page shows it. `price`
+// exists too but nothing in the app ever writes it, so it's left null rather than
+// guessing whether it means pounds or pence.
 const TREATMENTS = {
-  'Amelia Rowe Hair':   [{ name: 'Balayage',        category: 'Hair' },   { name: 'Cut & blow dry', category: 'Hair' }],
-  'Studio Priya':       [{ name: 'Classic lash set', category: 'Lashes' }, { name: 'Hybrid set',     category: 'Lashes' }],
-  'Chloe B Nails':      [{ name: 'BIAB overlay',    category: 'Nails' },  { name: 'Gel & nail art', category: 'Nails' }],
-  'Nadia Ahmed Beauty': [{ name: 'Occasion makeup', category: 'Makeup' }, { name: 'Bridal trial',   category: 'Makeup' }],
-  'Brow Room by Grace': [{ name: 'Brow lamination', category: 'Brows' },  { name: 'Shape & tint',   category: 'Brows' }],
+  'Amelia Rowe Hair':   [{ name: 'Balayage',         category: 'Hair',   duration: 180 }, { name: 'Cut & blow dry', category: 'Hair',   duration: 60 }],
+  'Studio Priya':       [{ name: 'Classic lash set', category: 'Lashes', duration: 120 }, { name: 'Hybrid set',     category: 'Lashes', duration: 150 }],
+  'Chloe B Nails':      [{ name: 'BIAB overlay',     category: 'Nails',  duration: 90  }, { name: 'Gel & nail art', category: 'Nails',  duration: 120 }],
+  'Nadia Ahmed Beauty': [{ name: 'Occasion makeup',  category: 'Makeup', duration: 75  }, { name: 'Bridal trial',   category: 'Makeup', duration: 120 }],
+  'Brow Room by Grace': [{ name: 'Brow lamination',  category: 'Brows',  duration: 60  }, { name: 'Shape & tint',   category: 'Brows',  duration: 45  }],
 }
 
 const REVIEWS = [

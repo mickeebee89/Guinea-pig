@@ -146,7 +146,7 @@ export default function ProviderShopScreen() {
       const today = todayKey()
       const [
         { data: provData },
-        { data: treatData },
+        { data: treatData, error: treatErr },
         { data: portData },
         { data: avData },
         { data: openData },
@@ -158,7 +158,11 @@ export default function ProviderShopScreen() {
           .single(),
         supabase
           .from('provider_treatments')
-          .select('id, name, category, duration_mins, materials_cost')
+          // The columns are `duration` and `price` — this asked for duration_mins
+          // and materials_cost, which don't exist, so PostgREST rejected the WHOLE
+          // query (42703) and every shop showed "No treatments listed yet". Aliased
+          // rather than renamed so the rest of the screen is untouched.
+          .select('id, name, category, duration_mins:duration, materials_cost:price')
           .eq('provider_id', id),
         supabase
           .from('portfolio_items')
@@ -179,6 +183,9 @@ export default function ProviderShopScreen() {
       ])
 
       if (provData)  setProvider(provData as Provider)
+      // Log the failure. Discarding it is what let a bad column name masquerade
+      // as "this stylist hasn't listed any treatments" for every shop.
+      if (treatErr) console.warn('provider/[id] treatments →', treatErr.message)
       if (treatData) setTreatments(treatData as Treatment[])
       if (portData) {
         const normPort = (portData as any[]).map(item => ({
