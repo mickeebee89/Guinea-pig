@@ -71,9 +71,9 @@ const MODELS = [
     attrs: { hair_colour: 'Red', hair_type: 'Curly', hair_length: 'Long', hair_condition: 'Dry', skin_tone: 'Fair', skin_type: 'Oily', eye_colour: 'Green', eye_shape: 'Hooded', nail_condition: 'Long and natural' } },
 ]
 
-// `duration` is minutes and is a real column — the shop page shows it. `price`
-// exists too but nothing in the app ever writes it, so it's left null rather than
-// guessing whether it means pounds or pence.
+// `duration` is minutes and is a real column — the shop page shows it. `price` is
+// deliberately not written: cost is agreed in the chat and paid in person, so the
+// app never quotes a figure.
 const TREATMENTS = {
   'Amelia Rowe Hair':   [{ name: 'Balayage',         category: 'Hair',   duration: 180 }, { name: 'Cut & blow dry', category: 'Hair',   duration: 60 }],
   'Studio Priya':       [{ name: 'Classic lash set', category: 'Lashes', duration: 120 }, { name: 'Hybrid set',     category: 'Lashes', duration: 150 }],
@@ -82,10 +82,36 @@ const TREATMENTS = {
   'Brow Room by Grace': [{ name: 'Brow lamination',  category: 'Brows',  duration: 60  }, { name: 'Shape & tint',   category: 'Brows',  duration: 45  }],
 }
 
-const REVIEWS = [
-  { rating: 5, comment: 'Genuinely lovely experience. Talked me through every step and I love how it turned out — you would never know it was a practice session.' },
-  { rating: 5, comment: 'So welcoming and clearly knows what she is doing. Took her time and checked I was happy throughout. Would absolutely go back.' },
-]
+// Three per shop so no stylist page looks abandoned, written to suit that
+// stylist's actual craft. Ratings are deliberately not all 5★ — a wall of
+// perfect scores reads as fake, and 4s make the 5s mean something.
+const REVIEWS = {
+  'Amelia Rowe Hair': [
+    { rating: 5, comment: 'Genuinely lovely experience. Talked me through every step and I love how it turned out — you would never know it was a practice session.' },
+    { rating: 5, comment: 'Went lighter than I have ever dared and she checked in constantly. Took about three hours and was worth every minute.' },
+    { rating: 4, comment: 'Really happy with the colour. Ran a little over the time she quoted, but she was upfront about it and the result is lovely.' },
+  ],
+  'Studio Priya': [
+    { rating: 5, comment: 'So welcoming and clearly knows what she is doing. Took her time and checked I was happy throughout. Would absolutely go back.' },
+    { rating: 5, comment: 'I have sensitive eyes and was nervous, but she was incredibly gentle and explained the whole process first. No irritation at all.' },
+    { rating: 4, comment: 'Lovely set and a really relaxing appointment. A couple of lashes came loose after a week but she offered to sort it straight away.' },
+  ],
+  'Chloe B Nails': [
+    { rating: 5, comment: 'Took my inspiration picture and somehow made it better. Two weeks on and not a single chip.' },
+    { rating: 5, comment: 'I am a nail biter and was a bit embarrassed, but she was completely unfazed and talked me through how to grow them out.' },
+    { rating: 4, comment: 'Really neat work and a nice shape. Longer appointment than I expected for a practice session but I did ask for detailed art.' },
+  ],
+  'Nadia Ahmed Beauty': [
+    { rating: 5, comment: 'She actually had shades that matched my skin properly, which is rarer than it should be. Felt like myself, just polished.' },
+    { rating: 5, comment: 'Did a bridal trial for me and listened to every note. Photographed beautifully and lasted the whole day.' },
+    { rating: 5, comment: 'Warm, professional and genuinely interested in what I wanted rather than doing her own thing. Cannot recommend enough.' },
+  ],
+  'Brow Room by Grace': [
+    { rating: 5, comment: 'Best my brows have ever looked. She mapped them out and showed me before starting so there were no surprises.' },
+    { rating: 4, comment: 'Lovely shape and a really careful job. The tint was slightly darker than I wanted at first but it settled within a couple of days.' },
+    { rating: 5, comment: 'Newly qualified but you would not know it. Asked for honest feedback afterwards which I thought was a really good sign.' },
+  ],
+}
 
 const CHAT = [
   { from: 'model',    body: 'Hi! Just applied for the Thursday slot — is that still free?' },
@@ -228,7 +254,7 @@ async function main() {
     // Treatments — same shape edit-shop.tsx writes.
     const treats = await must('provider_treatments insert', db.from('provider_treatments')
       .insert(TREATMENTS[s.shop].map(t => ({ provider_id: providerId, ...t })))
-      .select('id, name'))
+      .select('id, name, duration'))
     console.log(`  · ${treats?.length ?? 0} treatments`)
 
     // Availability — the overlap guard rejects clashing bookings, so keep slots
@@ -291,36 +317,50 @@ async function main() {
 
   // ── Completed bookings + reviews (so ratings show on profiles) ──────────────
   console.log('Bookings and reviews…')
-  for (let i = 0; i < Math.min(2, madeStylists.length, madeModels.length); i++) {
-    const st = madeStylists[i], mo = madeModels[i]
-    const past = iso(new Date(Date.now() - (7 + i * 5) * 864e5))
 
-    // A real booking references the availability slot it was made against, so
-    // create one for the past date and point at it. Previously this was omitted
-    // and the session insert failed — which silently skipped the review too.
-    const slot = await must('past availability slot', db.from('availability').insert({
-      provider_id: st.providerId, date: past,
-      start_time: '10:00:00', end_time: '13:00:00',
-      active_treatments: [st.treatments?.[0]?.id].filter(Boolean),
-      is_taken: true,
-    }).select('id').single())
+  // Every past booking gets its OWN date. Two sessions on the same day for the
+  // same stylist would be rejected by the booking-overlap trigger, and the same
+  // model double-booked would look wrong in their history.
+  let dayBack = 4
 
-    const sess = await must('completed session', db.from('sessions').insert({
-      provider_id: st.providerId, model_user_id: mo.userId, model_id: mo.userId,
-      availability_id: slot.id,
-      date: past, start_time: '10:00:00', end_time: '13:00:00',
-      scheduled_at: `${past}T10:00:00`, duration_minutes: 180,
-      treatment_id: st.treatments?.[0]?.id ?? null,
-      location_type: 'either', status: 'completed',
-    }).select('id').single())
+  for (let si = 0; si < madeStylists.length; si++) {
+    const st = madeStylists[si]
+    for (const [r, review] of (REVIEWS[st.shop] ?? []).entries()) {
+      // Rotate the reviewer so each stylist is reviewed by DIFFERENT models —
+      // the same face three times down one shop page gives the game away.
+      const mo = madeModels[(si + r) % madeModels.length]
+      if (!mo) continue
 
-    // reviews INSERT requires a completed session — satisfied above. `tags`
-    // matches what leave-review.tsx sends (an array, never null).
-    await must('review', db.from('reviews').insert({
-      session_id: sess.id, reviewer_id: mo.userId, reviewee_id: st.userId,
-      overall_rating: REVIEWS[i].rating, comment: REVIEWS[i].comment, tags: [],
-    }))
-    console.log(`  · ${mo.first} reviewed ${st.shop} — ${REVIEWS[i].rating}★`)
+      const treatment = st.treatments?.[r % (st.treatments?.length || 1)]
+      const past = iso(new Date(Date.now() - (dayBack += 3) * 864e5))
+
+      // A real booking references the availability slot it was made against, so
+      // create one for the past date and point at it. Previously this was omitted
+      // and the session insert failed — which silently skipped the review too.
+      const slot = await must('past availability slot', db.from('availability').insert({
+        provider_id: st.providerId, date: past,
+        start_time: '10:00:00', end_time: '13:00:00',
+        active_treatments: [treatment?.id].filter(Boolean),
+        is_taken: true,
+      }).select('id').single())
+
+      const sess = await must('completed session', db.from('sessions').insert({
+        provider_id: st.providerId, model_user_id: mo.userId, model_id: mo.userId,
+        availability_id: slot.id,
+        date: past, start_time: '10:00:00', end_time: '13:00:00',
+        scheduled_at: `${past}T10:00:00`, duration_minutes: treatment?.duration ?? 180,
+        treatment_id: treatment?.id ?? null,
+        location_type: 'either', status: 'completed',
+      }).select('id').single())
+
+      // reviews INSERT requires a completed session — satisfied above. `tags`
+      // matches what leave-review.tsx sends (an array, never null).
+      await must('review', db.from('reviews').insert({
+        session_id: sess.id, reviewer_id: mo.userId, reviewee_id: st.userId,
+        overall_rating: review.rating, comment: review.comment, tags: [],
+      }))
+      console.log(`  · ${mo.first} reviewed ${st.shop} — ${review.rating}★`)
+    }
   }
 
   // ── One accepted booking with a chat ───────────────────────────────────────
