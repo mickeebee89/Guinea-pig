@@ -49,7 +49,6 @@ type OtherParty = {
 
 type Treatment = {
   id: string
-  name: string
   category: string
 }
 
@@ -165,11 +164,11 @@ export default function ChatScreen() {
         s.treatment_id
           ? supabase
               .from('provider_treatments')
-              // Price is deliberately not selected: cost is agreed here in the chat
-              // and paid in person, so the app never quotes a figure. (This query
-              // previously asked for a `materials_cost` column that doesn't exist,
-              // which failed the WHOLE query — hence no treatment name in chat.)
-              .select('id, name, category')
+              // Category is all there is: edit-shop writes the category into `name`
+              // too, and never writes duration or price. (This query previously
+              // asked for a `materials_cost` column that doesn't exist, which
+              // failed the WHOLE query — hence no treatment shown in chat at all.)
+              .select('id, category')
               .eq('id', s.treatment_id)
               .maybeSingle()
           // Shape must match the query branch now that `error` is read.
@@ -551,7 +550,7 @@ export default function ChatScreen() {
                 { backgroundColor: CATEGORY_COLOR[treatment.category] ?? Colors.muted },
               ]} />
               <Text style={styles.lockedMetaText}>
-                {formatSessionDate(chat.date)} · {treatment.name}
+                {formatSessionDate(chat.date)} · {treatment.category}
               </Text>
             </View>
           )}
@@ -768,9 +767,9 @@ export default function ChatScreen() {
               {/* Both sides read this, so it's worded for either — it doubles as the
                  reminder to a stylist that portfolio photos need asking for. */}
               <Text style={styles.costNoticeText}>
-                Agree any cost{treatment ? ` for ${treatment.name}` : ''} here before the appointment
-                and settle it in person. Guinea Pig doesn't take payment for treatments or handle
-                disputes about them.
+                Agree any cost{treatment ? ` for your ${treatment.category.toLowerCase()} appointment` : ''} here
+                beforehand and settle it in person. Guinea Pig doesn't take payment for treatments
+                or handle disputes about them.
                 {'\n\n'}
                 Portfolio photos are common — often the reason a treatment is free or discounted.
                 Agree here whether photos can be taken and where they'll be shared.

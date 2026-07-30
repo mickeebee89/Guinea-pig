@@ -48,13 +48,8 @@ type Provider = {
   status_expires_at: string | null
 }
 
-type Treatment = {
-  id: string
-  name: string
-  category: string
-  duration_mins: number | null
-  // No price field by design — costs are agreed in chat and paid off-platform.
-}
+// No Treatment type: the shop only ever shows the CATEGORIES a stylist ticked in
+// edit-shop, so `treatmentCategories: string[]` is the whole shape.
 
 type PortfolioItem = {
   id: string
@@ -129,7 +124,7 @@ export default function ProviderShopScreen() {
   const userId = session?.user?.id
 
   const [provider,      setProvider]      = useState<Provider | null>(null)
-  const [treatments,    setTreatments]    = useState<Treatment[]>([])
+  const [treatmentCategories, setTreatmentCategories] = useState<string[]>([])
   const [portfolio,     setPortfolio]     = useState<PortfolioItem[]>([])
   const [reviews,       setReviews]       = useState<Review[]>([])
   const [availability,  setAvailability]  = useState<AvailabilitySlot[]>([])
@@ -158,12 +153,9 @@ export default function ProviderShopScreen() {
           .single(),
         supabase
           .from('provider_treatments')
-          // The column is `duration`; this asked for duration_mins, which doesn't
-          // exist, so PostgREST rejected the WHOLE query (42703) and every shop
-          // showed "No treatments listed yet". Aliased rather than renamed so the
-          // rest of the screen is untouched. Price is deliberately not selected —
-          // costs are agreed in chat and paid off-platform.
-          .select('id, name, category, duration_mins:duration')
+          // Category is the only column the app ever fills. `name` holds a copy of
+          // it, and `duration`/`price` are never written at all.
+          .select('category')
           .eq('provider_id', id),
         supabase
           .from('portfolio_items')
@@ -187,7 +179,14 @@ export default function ProviderShopScreen() {
       // Log the failure. Discarding it is what let a bad column name masquerade
       // as "this stylist hasn't listed any treatments" for every shop.
       if (treatErr) console.warn('provider/[id] treatments →', treatErr.message)
-      if (treatData) setTreatments(treatData as Treatment[])
+      if (treatData) {
+        // A stylist can end up with duplicate rows for one category, so dedupe
+        // before rendering — two identical chips looks broken.
+        const cats = (treatData as { category: string | null }[])
+          .map(t => t.category)
+          .filter((c): c is string => !!c)
+        setTreatmentCategories([...new Set(cats)])
+      }
       if (portData) {
         const normPort = (portData as any[]).map(item => ({
           id:            item.id,
@@ -298,7 +297,7 @@ export default function ProviderShopScreen() {
     )
   }
 
-  const shopIsEmpty = !provider?.bio && treatments.length === 0 && portfolio.length === 0
+  const shopIsEmpty = !provider?.bio && treatmentCategories.length === 0 && portfolio.length === 0
   if (!provider || (ownShop === '1' && shopIsEmpty)) {
     return (
       <View style={[styles.container, styles.centred]}>
@@ -453,11 +452,23 @@ export default function ProviderShopScreen() {
           {/* Always render the section: a model needs to know whether this stylist has
              listed anything. Silently omitting it made an empty shop look broken. */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Treatments</Text>
-            {treatments.length > 0 ? (
-              treatments.map(t => (
-                <TreatmentRow key={t.id} treatment={t} />
-              ))
+            <Text style={styles.sectionTitle}>Treatments offered</Text>
+            {/* Categories only. edit-shop lets a stylist tick CATEGORIES and writes
+               the category into both `name` and `category`, so rendering the name
+               as well produced "Nails" with a "Nails" pill beside it. Duration and
+               price are never written by the app either. Deduped because the
+               delete-then-reinsert save can leave repeats behind. */}
+            {treatmentCategories.length > 0 ? (
+              <View style={styles.categoryWrap}>
+                {treatmentCategories.map(cat => {
+                  const color = CATEGORY_COLOR[cat] ?? Colors.muted
+                  return (
+                    <View key={cat} style={[styles.categoryChip, { backgroundColor: color + '22' }]}>
+                      <Text style={[styles.categoryChipText, { color }]}>{cat}</Text>
+                    </View>
+                  )
+                })}
+              </View>
             ) : (
               <Text style={styles.emptyReviews}>
                 No treatments listed yet — check back soon.
@@ -605,32 +616,6 @@ function BadgeChip({ icon, label, color }: { icon: string; label: string; color:
   )
 }
 
-function TreatmentRow({ treatment }: { treatment: Treatment }) {
-  const color = CATEGORY_COLOR[treatment.category] ?? Colors.muted
-  return (
-    <View style={styles.treatmentRow}>
-      <View style={[styles.treatmentStripe, { backgroundColor: color }]} />
-      <View style={styles.treatmentInfo}>
-        <Text style={styles.treatmentName}>{treatment.name}</Text>
-        <View style={styles.treatmentMeta}>
-          {treatment.duration_mins != null ? (
-            <View style={styles.treatmentMetaItem}>
-              <Ionicons name="time-outline" size={12} color={Colors.muted} />
-              <Text style={styles.treatmentMetaText}> {treatment.duration_mins} min</Text>
-            </View>
-          ) : null}
-          {/* No price shown by design: any cost is agreed directly between the
-             model and the stylist in chat, and paid in person. Guinea Pig never
-             handles money for a treatment. */}
-        </View>
-      </View>
-      <View style={[styles.treatmentCatPill, { backgroundColor: color + '22' }]}>
-        <Text style={[styles.treatmentCatText, { color }]}>{treatment.category}</Text>
-      </View>
-    </View>
-  )
-}
-
 function ReviewCard({ review, onPressReviewer }: { review: Review; onPressReviewer: () => void }) {
   const name = review.reviewer_name
   const initials = name.split(' ').map(w => w[0] ?? '').join('').slice(0, 2).toUpperCase()
@@ -760,26 +745,15 @@ const styles = StyleSheet.create({
   bioText: { fontSize: 15, color: Colors.warmDark, lineHeight: 23, opacity: 0.85 },
 
   // Treatments
-  treatmentRow: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: Colors.white, borderRadius: Radius.md, marginBottom: 8,
-    overflow: 'hidden', borderWidth: 1, borderColor: Colors.border,
-    ...Shadow.soft,
-  },
-  treatmentStripe: { width: 4, alignSelf: 'stretch' },
-  treatmentInfo: { flex: 1, padding: 12, gap: 4 },
-  treatmentName: { fontSize: 15, fontFamily: Fonts.bodyBold, color: Colors.warmDark },
-  treatmentMeta: { flexDirection: 'row', gap: 12, alignItems: 'center' },
-  treatmentMetaItem: { flexDirection: 'row', alignItems: 'center' },
-  treatmentMetaText: { fontSize: 12, color: Colors.muted },
+  categoryWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  categoryChip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999 },
+  categoryChipText: { fontSize: 13, fontFamily: Fonts.bodyBold, letterSpacing: -0.1 },
   costNotice: {
     flexDirection: 'row', alignItems: 'flex-start', gap: 8,
     marginTop: 10, padding: 12, borderRadius: Radius.md,
     backgroundColor: Colors.softPink,
   },
   costNoticeText: { flex: 1, fontSize: 12, lineHeight: 17, color: Colors.warmDark },
-  treatmentCatPill: { marginRight: 12, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
-  treatmentCatText: { fontSize: 11, fontFamily: Fonts.bodyBold },
 
   // Portfolio
   portfolioCatBlock: { marginBottom: 16 },

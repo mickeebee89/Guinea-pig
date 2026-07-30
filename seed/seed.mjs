@@ -71,15 +71,19 @@ const MODELS = [
     attrs: { hair_colour: 'Red', hair_type: 'Curly', hair_length: 'Long', hair_condition: 'Dry', skin_tone: 'Fair', skin_type: 'Oily', eye_colour: 'Green', eye_shape: 'Hooded', nail_condition: 'Long and natural' } },
 ]
 
-// `duration` is minutes and is a real column — the shop page shows it. `price` is
-// deliberately not written: cost is agreed in the chat and paid in person, so the
-// app never quotes a figure.
-const TREATMENTS = {
-  'Amelia Rowe Hair':   [{ name: 'Balayage',         category: 'Hair',   duration: 180 }, { name: 'Cut & blow dry', category: 'Hair',   duration: 60 }],
-  'Studio Priya':       [{ name: 'Classic lash set', category: 'Lashes', duration: 120 }, { name: 'Hybrid set',     category: 'Lashes', duration: 150 }],
-  'Chloe B Nails':      [{ name: 'BIAB overlay',     category: 'Nails',  duration: 90  }, { name: 'Gel & nail art', category: 'Nails',  duration: 120 }],
-  'Nadia Ahmed Beauty': [{ name: 'Occasion makeup',  category: 'Makeup', duration: 75  }, { name: 'Bridal trial',   category: 'Makeup', duration: 120 }],
-  'Brow Room by Grace': [{ name: 'Brow lamination',  category: 'Brows',  duration: 60  }, { name: 'Shape & tint',   category: 'Brows',  duration: 45  }],
+// Stylists pick CATEGORIES, not named treatments — edit-shop.tsx offers exactly
+// these six and writes the category into both `name` and `category`. Seeding
+// invented names like "Balayage" produced shop pages the real app can never
+// produce, which is worse than useless in a store screenshot.
+//
+// Two categories each so the chips don't look sparse; both are plausible for
+// that stylist's actual craft.
+const CATEGORIES = {
+  'Amelia Rowe Hair':   ['Hair', 'Makeup'],
+  'Studio Priya':       ['Lashes', 'Brows'],
+  'Chloe B Nails':      ['Nails', 'Spray Tan'],
+  'Nadia Ahmed Beauty': ['Makeup', 'Brows'],
+  'Brow Room by Grace': ['Brows', 'Lashes'],
 }
 
 // Three per shop so no stylist page looks abandoned, written to suit that
@@ -251,10 +255,11 @@ async function main() {
       profile_pic_url: picUrl, is_published: true,
     }).eq('id', providerId))
 
-    // Treatments — same shape edit-shop.tsx writes.
+    // Exactly the shape edit-shop.tsx writes: category duplicated into `name`,
+    // no duration, no price.
     const treats = await must('provider_treatments insert', db.from('provider_treatments')
-      .insert(TREATMENTS[s.shop].map(t => ({ provider_id: providerId, ...t })))
-      .select('id, name, duration'))
+      .insert(CATEGORIES[s.shop].map(cat => ({ provider_id: providerId, name: cat, category: cat })))
+      .select('id, name, category'))
     console.log(`  · ${treats?.length ?? 0} treatments`)
 
     // Availability — the overlap guard rejects clashing bookings, so keep slots
@@ -348,7 +353,8 @@ async function main() {
         provider_id: st.providerId, model_user_id: mo.userId, model_id: mo.userId,
         availability_id: slot.id,
         date: past, start_time: '10:00:00', end_time: '13:00:00',
-        scheduled_at: `${past}T10:00:00`, duration_minutes: treatment?.duration ?? 180,
+        // Slot length, not treatment length — treatments carry no duration.
+        scheduled_at: `${past}T10:00:00`, duration_minutes: 180,
         treatment_id: treatment?.id ?? null,
         location_type: 'either', status: 'completed',
       }).select('id').single())
