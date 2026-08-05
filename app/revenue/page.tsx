@@ -76,7 +76,7 @@ export default function RevenuePage() {
     const csv = rows.map(r => r.join(',')).join('\n')
     const a = document.createElement('a')
     a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }))
-    a.download = `guinea-pig-revenue-${new Date().toISOString().split('T')[0]}.csv`
+    a.download = `cavy-revenue-${new Date().toISOString().split('T')[0]}.csv`
     a.click()
   }
 

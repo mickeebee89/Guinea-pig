@@ -133,7 +133,7 @@ export default function MessagesPage() {
           <div className="mb-4">
             <label className="text-xs font-medium text-[#3D2E2E]/60 block mb-1">Title</label>
             <input value={title} onChange={e => setTitle(e.target.value)}
-              placeholder="Message from Guinea Pig"
+              placeholder="Message from Cavy"
               className="border border-black/10 rounded-lg px-3 py-2 text-sm w-full" />
           </div>
           <div className="mb-4">

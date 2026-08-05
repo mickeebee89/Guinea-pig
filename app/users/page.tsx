@@ -131,7 +131,7 @@ export default function UsersPage() {
     if (action === 'warn') {
       await supabase.from('notifications').insert({
         user_id: user.id, type: 'admin_warning',
-        title: 'Warning from Guinea Pig',
+        title: 'Warning from Cavy',
         body: reason || 'You have received an official warning.',
       })
     }

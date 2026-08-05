@@ -106,7 +106,7 @@ export default function VerificationQueuePage() {
         type: 'verification',
         title: isModel ? 'You\'re verified! ✅' : 'You\'re verified! 🎉',
         body: isModel
-          ? 'Your Guinea Pig profile is now verified. Your badge is live!'
+          ? 'Your Cavy profile is now verified. Your badge is live!'
           : 'Your identity check passed — your verified badge and profile are now live.',
       })
 

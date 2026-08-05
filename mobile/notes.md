@@ -1,6 +1,6 @@
-# Guinea Pig — App State Notes
+# Cavy — App State Notes
 
-Quick current-state snapshot of the mobile app. Durable stack/schema lives in `CLAUDE.md`; blow-by-blow session history lives in `guinea-pig-handover.md`. This is the "where is the app right now" reference.
+Quick current-state snapshot of the mobile app. Durable stack/schema lives in `CLAUDE.md`; blow-by-blow session history lives in `cavy-handover.md`. This is the "where is the app right now" reference.
 
 _Anchored to latest commit `f5eef16`._
 

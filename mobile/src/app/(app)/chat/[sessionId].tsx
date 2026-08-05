@@ -611,7 +611,7 @@ export default function ChatScreen() {
       <View style={styles.safetyPill}>
         <Ionicons name="shield-checkmark-outline" size={14} color={Colors.roseDark} />
         <Text style={styles.safetyText}>
-          Keep chats in Guinea Pig — it protects you both
+          Keep chats in Cavy — it protects you both
         </Text>
       </View>
 
@@ -768,7 +768,7 @@ export default function ChatScreen() {
                  reminder to a stylist that portfolio photos need asking for. */}
               <Text style={styles.costNoticeText}>
                 Agree any cost{treatment ? ` for your ${treatment.category.toLowerCase()} appointment` : ''} here
-                beforehand and settle it in person. Guinea Pig doesn't take payment for treatments
+                beforehand and settle it in person. Cavy doesn't take payment for treatments
                 or handle disputes about them.
                 {'\n\n'}
                 Portfolio photos are common — often the reason a treatment is free or discounted.

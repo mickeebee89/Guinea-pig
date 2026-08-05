@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "Guinea Pig",
-    "slug": "guinea-pig",
+    "name": "Cavy",
+    "slug": "cavy",
     "version": "1.0.0",
     "orientation": "portrait",
     "updates": {
@@ -16,11 +16,11 @@
     "scheme": "mobile",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "bundleIdentifier": "com.guineapig.app",
+      "bundleIdentifier": "com.cavyapp.app",
       "buildNumber": "1"
     },
     "android": {
-      "package": "com.guineapig.app",
+      "package": "com.cavyapp.app",
       "googleServicesFile": "./google-services.json",
       "versionCode": 1,
       "adaptiveIcon": {
@@ -60,7 +60,7 @@
       [
         "@stripe/stripe-react-native",
         {
-          "merchantIdentifier": "merchant.beauty.guineapig",
+          "merchantIdentifier": "merchant.beauty.cavy",
           "enableGooglePay": false
         }
       ],
@@ -70,14 +70,14 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Guinea Pig uses your location to show nearby stylists."
+          "locationWhenInUsePermission": "Cavy uses your location to show nearby stylists."
         }
       ],
       [
         "expo-image-picker",
         {
-          "photosPermission": "Guinea Pig accesses your photos so you can upload a profile picture, portfolio images, and treatment photos.",
-          "cameraPermission": "Guinea Pig uses your camera to take your identity verification selfie and profile photo.",
+          "photosPermission": "Cavy accesses your photos so you can upload a profile picture, portfolio images, and treatment photos.",
+          "cameraPermission": "Cavy uses your camera to take your identity verification selfie and profile photo.",
           "microphonePermission": false
         }
       ],

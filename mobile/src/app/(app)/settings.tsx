@@ -827,7 +827,9 @@ export default function SettingsScreen() {
               await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
               // Fall back to showing the address if the device has no mail app,
               // so this never silently does nothing.
-              Linking.openURL('mailto:support@guineapigapp.co.uk?subject=Guinea%20Pig%20support')
+              // Address stays on the guineapigapp.co.uk mailbox that actually exists;
+              // only the subject line carries the new brand.
+              Linking.openURL('mailto:support@guineapigapp.co.uk?subject=Cavy%20support')
                 .catch(() => Alert.alert('Contact support', 'Email us at support@guineapigapp.co.uk'))
             }}
             rightEl={<Ionicons name="open-outline" size={15} color={Colors.muted} />}
@@ -872,7 +874,7 @@ export default function SettingsScreen() {
         </View>
 
         {/* Version */}
-        <Text style={styles.versionText}>Guinea Pig · v1.0.0</Text>
+        <Text style={styles.versionText}>Cavy · v1.0.0</Text>
       </ScrollView>
 
       {/* ─────────────── EDIT FIELD MODAL ─────────────── */}

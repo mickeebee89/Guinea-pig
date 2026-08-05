@@ -75,7 +75,7 @@ export default function RootLayout() {
   return (
     <StripeProvider
       publishableKey={stripeKey}
-      merchantIdentifier="merchant.beauty.guineapig"
+      merchantIdentifier="merchant.beauty.cavy"
       urlScheme="mobile"
     >
       {inner}

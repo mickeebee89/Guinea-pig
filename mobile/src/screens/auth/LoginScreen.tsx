@@ -98,7 +98,7 @@ export default function LoginScreen({ onBack, onGoSignup, onGoForgot }: Props) {
                 resizeMode="cover"
               />
               <Text style={styles.title}>Welcome back</Text>
-              <Text style={styles.subtitle}>Log in to your Guinea Pig account</Text>
+              <Text style={styles.subtitle}>Log in to your Cavy account</Text>
             </View>
 
             <View style={styles.form}>

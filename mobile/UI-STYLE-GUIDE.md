@@ -1,10 +1,10 @@
-# Guinea Pig — UI / Design System Reference
+# Cavy — UI / Design System Reference
 
 A description of the current mobile app UI (React Native / Expo, Android-first). Aesthetic:
 **soft, playful, feminine "pink" theme** on a near-white pink-tinted background, rounded
 shapes, chunky friendly headings, white cards with soft shadows. Mascot: a dusty-rose
-(mauve) cartoon **guinea pig**. App name "Guinea Pig App", tagline "Someone's gotta be the
-guinea pig."
+(mauve) cartoon **guinea pig** — still correct after the rebrand, since a cavy *is* a
+guinea pig. App name "Cavy", tagline "Be the guinea pig, get the glow."
 
 Source of truth in code: `src/constants/Colors.ts` (tokens), `src/components/` (shared
 components), `src/app/(app)/` + `src/screens/auth/` (screens).
@@ -29,7 +29,7 @@ components), `src/app/(app)/` + `src/screens/auth/` (screens).
 ## Typography
 
 - **Display / big titles / wordmark:** `Fredoka` (SemiBold 600) — chunky, rounded, playful.
-  Used for page titles ("Dashboard"), the "Guinea Pig App" wordmark, hero names — often in
+  Used for page titles ("Dashboard"), the "Cavy" wordmark, hero names — often in
   primary pink.
 - **Section titles / subheads:** `Quicksand` Bold (700), ~18px, in warmDark.
 - **Body / labels:** `Quicksand` Regular (400) / Bold (700), 13–16px.
@@ -75,7 +75,7 @@ components), `src/app/(app)/` + `src/screens/auth/` (screens).
 ## Screen inventory
 
 **Auth**
-- **Welcome:** centered mascot (guinea pig) on a soft-pink circle, "Guinea Pig App" Fredoka
+- **Welcome:** centered mascot (guinea pig) on a soft-pink circle, "Cavy" Fredoka
   wordmark in pink, tagline, "I want to be a…" prompt + two role cards (Stylist / Model) as
   large pink filled cards with emoji, subtitle, chevron; "Already have an account? Log in".
 - **Login / Signup:** name (first + last initial), email, password fields; signup has a
@@ -109,7 +109,7 @@ components), `src/app/(app)/` + `src/screens/auth/` (screens).
 
 **Shared**
 - **Chat:** header (avatar, name, date, ⋮ menu → Block / Report / Mark complete); "Keep chats in
-  Guinea Pig" safety banner; message bubbles (**sent = pink**, **received = white** with sender
+  Cavy" safety banner; message bubbles (**sent = pink**, **received = white** with sender
   avatar), date separators, read receipts; bottom input bar when active, or a "Leave a review"
   button when completed, or a "You can't message this user" bar when blocked.
 - **Messages list:** conversation rows (avatar, name, last-message preview, time, pink unread
@@ -127,7 +127,7 @@ components), `src/app/(app)/` + `src/screens/auth/` (screens).
 
 ## Notes for a redesign tool
 
-- Keep the **mascot** and app name as-is (dusty-rose guinea pig, "Guinea Pig App").
+- Keep the **mascot** and app name as-is (dusty-rose guinea pig, now wordmarked "Cavy").
 - The look is **light-mode only** currently.
 - Everything is **token-driven** — recolouring is a single-file change (`Colors.ts`), so a new
   palette can be applied globally without touching screens.

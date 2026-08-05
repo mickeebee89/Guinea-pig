@@ -327,7 +327,7 @@ export default function NotificationsScreen() {
                 </View>
                 <Text style={styles.modalTitle}>About this warning</Text>
                 <Text style={styles.modalText}>
-                  This is a formal notice from the Guinea Pig team. It means your account was flagged
+                  This is a formal notice from the Cavy team. It means your account was flagged
                   for content or behaviour that breached our community guidelines.
                 </Text>
               </>
@@ -338,7 +338,7 @@ export default function NotificationsScreen() {
                   <Ionicons name="mail-open-outline" size={24} color={Colors.roseDark} />
                 </View>
                 <Text style={styles.modalTitle}>{detailNotif?.title ?? 'Message'}</Text>
-                <Text style={styles.modalText}>A message from the Guinea Pig team.</Text>
+                <Text style={styles.modalText}>A message from the Cavy team.</Text>
               </>
             )}
             {!!detailNotif?.body && (

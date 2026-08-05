@@ -1,4 +1,15 @@
-# Guinea Pig — Project Context
+# Cavy — Project Context
+
+> **Brand:** the app is **Cavy** (App Store subtitle "Hair & Beauty Models", tagline
+> "Be the guinea pig, get the glow."). **The legal entity is unchanged — Guinea Pig
+> App Ltd.** Cavy is a trading name, so Terms, Privacy, the data controller and any
+> company details must still read *"Cavy is a trading name of Guinea Pig App Ltd,
+> registered in England & Wales, company no. [NUMBER]."*
+>
+> The git repo, the local folder path and the `guineapigapp.co.uk` domain all keep
+> the old name on purpose — renaming them buys nothing and breaks links. The tagline
+> keeps the phrase "guinea pig" deliberately, and the mascot is still a guinea pig
+> (a cavy *is* a guinea pig). So never blanket find-and-replace this repo.
 
 _This file is read automatically at the start of every Claude Code session. It holds durable context only — how I work, the stack, identifiers, and schema truths. Session state (what's done, what's next) lives in chat, not here._
 

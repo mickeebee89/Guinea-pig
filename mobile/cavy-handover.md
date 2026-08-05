@@ -1,4 +1,7 @@
-# Guinea Pig — Session Handover
+# Cavy — Session Handover
+
+_Rebranded from "Guinea Pig App" to **Cavy**. Entries below predate the rename and keep
+their original wording — they're a record of what happened, not current copy._
 
 _Use this to start a fresh chat with full context. Hand it to Claude at the start._
 

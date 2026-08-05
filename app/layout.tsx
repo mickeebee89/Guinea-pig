@@ -3,7 +3,7 @@ import './globals.css'
 import Sidebar from '@/components/Sidebar'
 
 export const metadata: Metadata = {
-  title: 'Guinea Pig Admin',
+  title: 'Cavy Admin',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

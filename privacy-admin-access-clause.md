@@ -12,7 +12,22 @@ worse than one that says it plainly.
 
 ---
 
-## Suggested section: "Who at Guinea Pig can see your information"
+## Required first: who the data controller actually is
+
+The app is now branded **Cavy**, but the legal entity has not changed. Every legal
+reference — data controller, Terms, company details — must name the company, not the
+brand. Use this verbatim:
+
+> Cavy is a trading name of Guinea Pig App Ltd, registered in England & Wales,
+> company no. [NUMBER].
+
+⚠️ **[NUMBER] is a placeholder** — substitute the Companies House number before this
+goes live. Also update the ICO registration entry (ZC196530) if the trading name is
+recorded there.
+
+---
+
+## Suggested section: "Who at Cavy can see your information"
 
 > ### Access by our team
 >

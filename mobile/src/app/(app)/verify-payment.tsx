@@ -250,7 +250,7 @@ export default function VerifyPaymentScreen() {
       const paymentIntentId = intentData.paymentIntentId as string
 
       const { error: initErr } = await initPaymentSheet({
-        merchantDisplayName:        'Guinea Pig',
+        merchantDisplayName:        'Cavy',
         paymentIntentClientSecret:  intentData.clientSecret,
         returnURL:                  'mobile://stripe-return',
         defaultBillingDetails:      { email: session?.user?.email },
@@ -341,7 +341,7 @@ export default function VerifyPaymentScreen() {
             <Text style={styles.heroSub}>
               {feeOnly
                 ? 'You\'re already identity-verified. Pay the one-off £14.99 fee to make your shop live — no selfie needed.'
-                : <>Take a selfie holding a piece of paper with your first name and <Text style={{ fontFamily: Fonts.bodyBold, color: Colors.warmDark }}>"Guinea Pig"</Text> written on it. Our team reviews within 24 hours.</>}
+                : <>Take a selfie holding a piece of paper with your first name and <Text style={{ fontFamily: Fonts.bodyBold, color: Colors.warmDark }}>"Cavy"</Text> written on it. Our team reviews within 24 hours.</>}
             </Text>
             {isProvider && !hasPaid && (
               <View style={styles.priceTag}>
@@ -353,7 +353,7 @@ export default function VerifyPaymentScreen() {
           {!feeOnly && <Text style={styles.sectionLabel}>What to do</Text>}
           {!feeOnly && [
             { icon: 'person-circle-outline',    step: '1', text: 'Make sure your profile picture clearly shows your face — we compare it to this selfie' },
-            { icon: 'pencil-outline',          step: '2', text: 'Write your first name and "Guinea Pig" on a piece of paper' },
+            { icon: 'pencil-outline',          step: '2', text: 'Write your first name and "Cavy" on a piece of paper' },
             { icon: 'camera-outline',           step: '3', text: 'Take a clear selfie holding the paper — face and writing both visible' },
             { icon: 'cloud-upload-outline',     step: '4', text: 'Submit — our team reviews within 24 hours' },
             { icon: 'notifications-outline',    step: '5', text: isProvider ? 'Get notified when approved — your verified badge and profile go live' : 'Get notified when approved — badge activates automatically (included in your subscription)' },
@@ -417,7 +417,7 @@ export default function VerifyPaymentScreen() {
           </View>
           <Text style={styles.centredTitle}>Take your selfie</Text>
           <Text style={styles.centredSub}>
-            Hold up the paper with your first name and "Guinea Pig" written on it — face and writing both clearly visible.
+            Hold up the paper with your first name and "Cavy" written on it — face and writing both clearly visible.
           </Text>
           <TouchableOpacity style={styles.primaryBtn} onPress={takeSelfie} activeOpacity={0.9}>
             <Ionicons name="camera" size={20} color={Colors.white} />

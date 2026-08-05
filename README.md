@@ -1,36 +1,66 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Cavy
 
-## Getting Started
+**Hair & Beauty Models** — be the guinea pig, get the glow.
 
-First, run the development server:
+A UK marketplace connecting trainee and portfolio-building beauty stylists with people
+willing to be practice models. Stylists get the experience and the photos; models get
+the treatment free or discounted. Cavy never handles payment for a treatment — cost is
+agreed between the two people in chat and settled in person.
+
+> **Cavy is a trading name of Guinea Pig App Ltd, registered in England & Wales,
+> company no. [NUMBER].** The git repo, the local folder and the `guineapigapp.co.uk`
+> domain keep the original name deliberately.
+
+## What's in here
+
+| Path | What it is |
+|---|---|
+| `mobile/` | The app — React Native / Expo (SDK 56), Expo Router, EAS. Android-first, iOS planned. |
+| `app/`, `components/`, `lib/` | Admin console — Next.js 16 App Router, deployed on Vercel. Access is gated by a row in the `admins` table, enforced server-side by `proxy.ts`. |
+| `supabase/` | Edge functions and the SQL that isn't in a migration — RLS policies, triggers, RPCs. |
+| `seed/` | Demo data for store screenshots, plus teardown. See `seed/README.md`. |
+| `scripts/` | `check-queries.mjs` validates every Supabase `.select()` against the live schema. |
+| `web/` | Static password-reset and email-confirmation pages hosted on the marketing site. |
+
+Backend is Supabase (Postgres, auth, storage, realtime). Payments are Stripe. Images go
+through Cloudinary, transactional email through Resend, push through Expo.
+
+## Running it
+
+**Admin console**
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+npm run dev            # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+**Mobile** — needs a dev client installed on the device, not Expo Go:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+cd mobile
+npx expo start -c --dev-client
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Always pass `-c`. A stale Metro bundle will happily serve you the previous build and
+make a working fix look broken.
 
-## Learn More
+**Deploy an edge function** — from the repo root:
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+npx supabase functions deploy <name>
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+The "Docker not running" warning is harmless.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Before changing anything
 
-## Deploy on Vercel
+`CLAUDE.md` holds the durable context: schema truths that differ from what you'd guess
+(bookings live in `sessions`, there is no `profiles` table, `public.users` has no FK to
+`auth.users`), the RLS conventions, and the payment/verification flows. Read it first —
+several of those have caused real bugs.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Environment
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Neither app reads secrets from the repo. `mobile/.env` and `.env.local` hold the
+Supabase URL, anon key and Stripe publishable key; the service-role key is only ever
+set in a shell for the duration of a script run.

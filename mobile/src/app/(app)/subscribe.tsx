@@ -72,7 +72,7 @@ export default function SubscribeScreen() {
 
       // Init payment sheet
       const { error: initErr } = await initPaymentSheet({
-        merchantDisplayName: 'Guinea Pig',
+        merchantDisplayName: 'Cavy',
         paymentIntentClientSecret: data.clientSecret,
         returnURL: 'mobile://stripe-return',
         defaultBillingDetails: { email: session?.user?.email },
@@ -167,7 +167,7 @@ export default function SubscribeScreen() {
             <View style={styles.heroIconRing}>
               <Ionicons name="sparkles" size={40} color={Colors.white} />
             </View>
-            <Text style={styles.heroTitle}>Guinea Pig Premium</Text>
+            <Text style={styles.heroTitle}>Cavy Premium</Text>
             <Text style={styles.heroSub}>
               Unlock unlimited treatment applications and exclusive features with a monthly subscription.
             </Text>

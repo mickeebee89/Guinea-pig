@@ -1299,7 +1299,7 @@ export default function ProviderDashboardScreen() {
                   <Text style={[styles.emptyCardText, { textAlign: 'center' }]}>
                     {hasActiveFilter
                       ? 'No models match your filters — few have added hair and skin details yet, so try clearing them.'
-                      : 'No models yet — share Guinea Pig to grow your community'}
+                      : 'No models yet — share Cavy to grow your community'}
                   </Text>
                 </View>
               ) : (

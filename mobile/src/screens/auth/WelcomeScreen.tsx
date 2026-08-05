@@ -46,8 +46,9 @@ export default function WelcomeScreen({ onSelectRole, onGoLogin }: Props) {
             resizeMode="contain"
           />
         </View>
-        <Text style={styles.wordmark}>Guinea Pig App</Text>
-        <Text style={styles.tagline}>Someone's gotta be the guinea pig</Text>
+        <Text style={styles.wordmark}>Cavy</Text>
+        {/* The phrase stays on purpose — it's the tagline, not the old brand name. */}
+        <Text style={styles.tagline}>Be the guinea pig, get the glow.</Text>
       </View>
 
       <View style={styles.cards}>

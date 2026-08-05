@@ -128,7 +128,7 @@ export default function ConfirmEmailScreen({ email, role, first, initial, onBack
 
           <View style={styles.steps}>
             {[
-              { n: '1', text: 'Open the email from Guinea Pig' },
+              { n: '1', text: 'Open the email from Cavy' },
               { n: '2', text: 'Tap the "Confirm your email" link' },
               { n: '3', text: 'Return here and tap Continue' },
             ].map(s => (

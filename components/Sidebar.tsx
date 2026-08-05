@@ -34,7 +34,7 @@ export default function Sidebar() {
   return (
     <aside className="w-56 min-h-screen flex flex-col shrink-0" style={{ backgroundColor: '#3D2E2E' }}>
       <div className="px-5 py-6 border-b border-white/10">
-        <div className="text-white font-bold text-lg leading-tight">Guinea Pig</div>
+        <div className="text-white font-bold text-lg leading-tight">Cavy</div>
         <div className="text-xs mt-0.5" style={{ color: '#C8788A' }}>Admin Console</div>
       </div>
       <nav className="flex-1 py-4">

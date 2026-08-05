@@ -103,7 +103,7 @@ async function createVerificationIntent(userId: string) {
   const intent = await stripe.paymentIntents.create({
     amount:   1499,   // £14.99 in pence
     currency: 'gbp',
-    description: 'Guinea Pig identity verification fee',
+    description: 'Cavy identity verification fee',
     metadata: { user_id: userId, type: 'verification' },
     automatic_payment_methods: { enabled: true },
   })

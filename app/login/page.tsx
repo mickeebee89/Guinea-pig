@@ -45,7 +45,7 @@ export default function LoginPage() {
         className="w-full max-w-sm bg-white rounded-2xl shadow-sm border border-black/5 p-8"
       >
         <div className="mb-6">
-          <div className="text-lg font-bold" style={{ color: '#3D2E2E' }}>Guinea Pig</div>
+          <div className="text-lg font-bold" style={{ color: '#3D2E2E' }}>Cavy</div>
           <div className="text-sm" style={{ color: '#C8788A' }}>Admin Console — sign in</div>
         </div>
 

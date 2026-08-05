@@ -57,7 +57,7 @@ export default function WaitlistPage() {
     const csv = table.map(row => row.map(esc).join(',')).join('\n')
     const a = document.createElement('a')
     a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }))
-    a.download = `guinea-pig-waitlist-${new Date().toISOString().split('T')[0]}.csv`
+    a.download = `cavy-waitlist-${new Date().toISOString().split('T')[0]}.csv`
     a.click()
   }
 

@@ -338,7 +338,8 @@ export default function ProviderShopScreen() {
         {/* ── Banner ── */}
         <View style={styles.bannerWrapper}>
           {/* The stylist's own banner is the first thing a model sees — show it when
-             they have one, and fall back to Guinea Pig branding only when they don't. */}
+             they have one, and fall back to Cavy branding only when they don't.
+             The logo FILE keeps its old name until the new artwork lands. */}
           {provider.banner_url ? (
             <Image
               source={{ uri: provider.banner_url }}
@@ -352,7 +353,7 @@ export default function ProviderShopScreen() {
                 style={styles.bannerLogo}
                 resizeMode="contain"
               />
-              <Text style={styles.bannerBrandText}>Guinea Pig</Text>
+              <Text style={styles.bannerBrandText}>Cavy</Text>
             </View>
           )}
           <View style={[styles.bannerControls, { paddingTop: insets.top + 10 }]}>
@@ -475,13 +476,13 @@ export default function ProviderShopScreen() {
               </Text>
             )}
 
-            {/* Guinea Pig never takes payment for a treatment, so say so plainly
+            {/* Cavy never takes payment for a treatment, so say so plainly
                rather than leaving a model to guess what a session will cost. */}
             <View style={styles.costNotice}>
               <Ionicons name="chatbubble-ellipses-outline" size={15} color={Colors.roseDark} />
               <Text style={styles.costNoticeText}>
                 Any cost is agreed directly with your stylist in the chat and paid in person.
-                Guinea Pig doesn't handle payments for treatments.
+                Cavy doesn't handle payments for treatments.
                 {'\n\n'}
                 Most stylists are building a portfolio and will ask to photograph their work —
                 that's usually why a treatment is free or discounted. It's your choice, and

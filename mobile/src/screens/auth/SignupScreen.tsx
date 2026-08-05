@@ -109,7 +109,7 @@ export default function SignupScreen({ role, onBack, onGoLogin, onNeedConfirmati
       if (!dob)                    e.dob = 'Enter a valid date of birth'
       else if (dob > new Date())   e.dob = 'Date of birth cannot be in the future'
       else if (ageOn(dob) > 120)   e.dob = 'Enter a valid date of birth'
-      else if (ageOn(dob) < 18)    e.dob = 'You must be 18 or over to use Guinea Pig'
+      else if (ageOn(dob) < 18)    e.dob = 'You must be 18 or over to use Cavy'
     }
 
     if (!ageConfirmed)           e.age         = 'You must confirm you are 18 or over'
@@ -226,7 +226,7 @@ export default function SignupScreen({ role, onBack, onGoLogin, onNeedConfirmati
                 </View>
                 <Text style={styles.title}>Create account</Text>
                 <Text style={styles.subtitle}>
-                  Join Guinea Pig as a {roleLabel.toLowerCase()} and start connecting.
+                  Join Cavy as a {roleLabel.toLowerCase()} and start connecting.
                 </Text>
               </View>
             </View>
