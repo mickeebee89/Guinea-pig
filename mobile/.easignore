@@ -50,6 +50,9 @@ yarn-error.*
 # typescript
 *.tsbuildinfo
 
+# EAS build artifacts downloaded locally — no reason to upload them back
+artifacts-*.zip
+
 example
 
 # generated native folders
