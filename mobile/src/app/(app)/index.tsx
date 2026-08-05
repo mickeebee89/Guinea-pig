@@ -372,7 +372,9 @@ function ModelHomeContent() {
 
   const hasActiveFilter = selectedCategory !== 'All' || distanceFilter !== 'Any' || verifiedOnly
 
-  const distanceMiles = distanceFilter === 'Any' ? null : parseInt(distanceFilter)
+  // Distance is only meaningful once we know where the user is.
+  const knowsLocation = userLat != null && userLng != null
+  const distanceMiles = distanceFilter === 'Any' || !knowsLocation ? null : parseInt(distanceFilter)
 
   const filtered = providersWithDist
     .filter(p => {
@@ -384,8 +386,13 @@ function ModelHomeContent() {
         !q ||
         p.name.toLowerCase().includes(q) ||
         (p.location ?? '').toLowerCase().includes(q)
+      // No `p.distance == null` escape hatch: that made a chosen radius match
+      // EVERY provider whenever we had no location, so the chip lit up and
+      // filtered nothing. If we can't place a stylist, a radius can't include
+      // them. The chips are disabled outright when location is unknown, so this
+      // only bites for a stylist who hasn't set their own coordinates.
       const matchesDistance =
-        distanceMiles == null || p.distance == null || p.distance <= distanceMiles
+        distanceMiles == null || (p.distance != null && p.distance <= distanceMiles)
       const matchesVerified = !verifiedOnly || p.is_verified
       return matchesCategory && matchesSearch && matchesDistance && matchesVerified
     })
@@ -644,7 +651,12 @@ function ModelHomeContent() {
           <View style={styles.section}>
             {/* Header: title left + Filter pill right */}
             <View style={styles.nearbyHeader}>
-              <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>Nearby stylists</Text>
+              {/* "Nearby" only when we can actually measure it. Someone browsing
+                 from abroad, or with location off, is shown the whole list — so
+                 promising proximity would be a plain untruth. */}
+              <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>
+                {knowsLocation ? 'Nearby stylists' : 'Stylists'}
+              </Text>
               <TouchableOpacity
                 style={[styles.filterBtn, (showFilters || hasActiveFilter) && styles.filterBtnActive]}
                 onPress={async () => {
@@ -706,11 +718,23 @@ function ModelHomeContent() {
                   })}
                 </ScrollView>
                 <Text style={styles.filterPanelLabel}>Distance</Text>
+                {/* Disabled without location rather than left tappable — a radius we
+                   can't apply is a control that lies about what it did. */}
+                {!knowsLocation && (
+                  <Text style={styles.filterPanelNote}>
+                    Turn on location to filter by distance. Showing all stylists.
+                  </Text>
+                )}
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, paddingBottom: 2 }}>
                   {DISTANCE_OPTIONS.map(opt => (
                     <TouchableOpacity
                       key={opt}
-                      style={[styles.distChip, distanceFilter === opt && styles.distChipActive]}
+                      style={[
+                        styles.distChip,
+                        distanceFilter === opt && styles.distChipActive,
+                        !knowsLocation && opt !== 'Any' && styles.distChipDisabled,
+                      ]}
+                      disabled={!knowsLocation && opt !== 'Any'}
                       onPress={async () => {
                         await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
                         setDistanceFilter(opt)
@@ -738,7 +762,7 @@ function ModelHomeContent() {
             )}
             {loading ? (
               <View style={styles.emptyState}>
-                <Text style={styles.emptyStateText}>Finding stylists near you…</Text>
+                <Text style={styles.emptyStateText}>Finding stylists…</Text>
               </View>
             ) : loadError ? (
               <LoadErrorState onRetry={() => fetchData()} fill={false} />
@@ -1026,6 +1050,8 @@ const styles = StyleSheet.create({
     borderWidth: 1.5, borderColor: Colors.border, backgroundColor: Colors.inputBg,
   },
   distChipActive: { backgroundColor: Colors.roseDark, borderColor: Colors.roseDark },
+  distChipDisabled: { opacity: 0.35 },
+  filterPanelNote: { fontSize: 11, color: Colors.muted, lineHeight: 15, marginTop: 2 },
   distChipText: { fontSize: 13, fontFamily: Fonts.bodyBold, color: Colors.muted },
   distChipTextActive: { color: Colors.white },
   verifiedToggleRow: {

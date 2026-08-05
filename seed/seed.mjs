@@ -71,6 +71,30 @@ const MODELS = [
     attrs: { hair_colour: 'Red', hair_type: 'Curly', hair_length: 'Long', hair_condition: 'Dry', skin_tone: 'Fair', skin_type: 'Oily', eye_colour: 'Green', eye_shape: 'Hooded', nail_condition: 'Long and natural' } },
 ]
 
+// Coordinates matter more than they look. `nearby_models` sorts by distance and,
+// with a radius set, excludes anyone it can't place — so an account with no
+// lat/lng shows no distance label and sorts last everywhere.
+//
+// Stylists sit in the city their profile actually claims; a Manchester bio with
+// Kent coordinates would render as "Manchester · 2 mi" to a Kent user.
+const STYLIST_COORDS = {
+  Manchester: { lat: 53.4808, lng: -2.2426 },
+  Birmingham: { lat: 52.4862, lng: -1.8904 },
+  Leeds:      { lat: 53.8008, lng: -1.5491 },
+  London:     { lat: 51.5072, lng: -0.1276 },
+  Bristol:    { lat: 51.4545, lng: -2.5879 },
+}
+
+// Models spread across Kent / SE London (same patch as the real providers), a few
+// miles apart so the stylist dashboard shows a realistic range rather than a
+// column of identical distances. Index-matched to MODELS above.
+const MODEL_COORDS = [
+  { lat: 51.4060, lng: 0.0150 },   // Bromley
+  { lat: 51.4462, lng: 0.2190 },   // Dartford
+  { lat: 51.2720, lng: 0.1900 },   // Sevenoaks
+  { lat: 51.2787, lng: 0.5217 },   // Maidstone
+]
+
 // Stylists pick CATEGORIES, not named treatments — edit-shop.tsx offers exactly
 // these six and writes the category into both `name` and `category`. Seeding
 // invented names like "Balayage" produced shop pages the real app can never
@@ -249,9 +273,19 @@ async function main() {
     const providerId = prov?.id
     if (!providerId) { console.warn('  ! no providers row — skipping'); continue }
 
+    // The app stores coordinates on BOTH rows (provider-dashboard writes users
+    // and providers together), so seed both or distance behaves differently
+    // depending on which side is asking.
+    const c = STYLIST_COORDS[s.location] ?? null
+    if (c) {
+      await must('stylist coords (users)', db.from('users')
+        .update({ latitude: c.lat, longitude: c.lng }).eq('id', userId))
+    }
+
     await must('providers update', db.from('providers').update({
       name: s.shop, shop_handle: slug(s.shop), bio: s.bio,
       region: s.region, location_text: s.location,
+      latitude: c?.lat ?? null, longitude: c?.lng ?? null,
       profile_pic_url: picUrl, is_published: true,
     }).eq('id', providerId))
 
@@ -299,6 +333,14 @@ async function main() {
     if (modelPics[i]) {
       const p = await upload('profile-pics', userId, modelPics[i])
       if (p) await attempt('profile pic url', db.from('users').update({ profile_pic_url: publicUrl('profile-pics', p) }).eq('id', userId))
+    }
+
+    // Without coordinates a model gets no distance label and sorts last for every
+    // stylist — and under a radius filter is excluded outright.
+    const mc = MODEL_COORDS[i]
+    if (mc) {
+      await must('model coords', db.from('users')
+        .update({ latitude: mc.lat, longitude: mc.lng }).eq('id', userId))
     }
 
     await writeModelAttributes(userId, { bio: m.bio, ...m.attrs })

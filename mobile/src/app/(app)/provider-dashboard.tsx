@@ -596,10 +596,12 @@ export default function ProviderDashboardScreen() {
   // filterDistanceMi], separate from load()'s [userId]. Cold-load waits for GPS
   // (coords start null); a distance-filter change refetches.
   useEffect(() => {
-    // Guard: no coords yet (GPS still resolving) → skip RPC, stay in loading state.
-    // If location was denied/failed the coords will never arrive, so don't spin.
-    if (providerLat == null || providerLng == null) {
-      setNearbyLoading(!locationDenied)
+    // Still waiting on GPS that might yet arrive → hold the loading state.
+    // Once location is DENIED the coords will never come, so fetch anyway with
+    // nulls: nearby_models treats a null radius as "everyone", so a stylist who
+    // declines the permission still gets a full list instead of an empty screen.
+    if ((providerLat == null || providerLng == null) && !locationDenied) {
+      setNearbyLoading(true)
       return
     }
     let cancelled = false
@@ -607,9 +609,14 @@ export default function ProviderDashboardScreen() {
       const { data, error } = await supabase.rpc('nearby_models', {
         p_lat: providerLat,
         p_lng: providerLng,
-        p_radius_mi: filterDistanceMi,
+        // Without coordinates a radius is meaningless — asking for models within
+        // 10 miles of nowhere would return none. Fall back to unlimited.
+        p_radius_mi: (providerLat == null || providerLng == null) ? null : filterDistanceMi,
       })
       if (cancelled) return // a newer fetch (coords/filter changed) superseded this one
+      // Don't let a failed RPC render as "no models nearby" — that reads as an
+      // empty marketplace rather than a fault.
+      if (error) console.warn('nearby_models →', error.message)
       if (data) {
         setNearbyModels((data as any[]).map(m => ({
           id:              m.id,
@@ -1250,23 +1257,12 @@ export default function ProviderDashboardScreen() {
         )}
 
         {(() => {
-          // Location off → coords never arrive, so explain rather than spin forever.
-          if (locationDenied) {
-            return (
-              <View style={styles.emptyCard}>
-                <Ionicons name="location-outline" size={32} color={Colors.muted} />
-                <Text style={[styles.emptyCardText, { textAlign: 'center' }]}>
-                  Turn on location to see models near you. You can enable it in your device settings.
-                </Text>
-              </View>
-            )
-          }
           // Waiting on GPS (coords null) or the first RPC fetch → show finding state.
           if (nearbyLoading) {
             return (
               <View style={styles.emptyCard}>
                 <ActivityIndicator color={Colors.roseDark} />
-                <Text style={styles.emptyCardText}>Finding models near you…</Text>
+                <Text style={styles.emptyCardText}>Finding models…</Text>
               </View>
             )
           }
@@ -1284,30 +1280,45 @@ export default function ProviderDashboardScreen() {
             return true
           })
           const hasActiveFilter = !!(q || filterHairColour || filterHairType || filterHairLength || filterSkinTone || filterVerified || filterDistanceMi != null)
-          return filtered.length === 0 ? (
-            <View style={styles.emptyCard}>
-              <Ionicons name="people-outline" size={32} color={Colors.muted} />
-              <Text style={[styles.emptyCardText, { textAlign: 'center' }]}>
-                {hasActiveFilter
-                  ? 'No models match your filters — few have added hair and skin details yet, so try clearing them.'
-                  : 'No models nearby yet — share Guinea Pig to grow your community'}
-              </Text>
-            </View>
-          ) : (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.modelsStrip}
-            >
-              {filtered.map(m => (
-                <NearbyModelCard
-                  key={m.id}
-                  model={m}
-                  onInvite={() => handleInvite(m)}
-                  onViewProfile={() => goModelProfile(m.id)}
-                />
-              ))}
-            </ScrollView>
+          return (
+            <>
+              {/* Without location we still show every model — this explains why they
+                 aren't sorted by distance, instead of replacing the list with a
+                 dead end telling you to change your device settings. */}
+              {locationDenied && (
+                <View style={styles.locationNote}>
+                  <Ionicons name="location-outline" size={15} color={Colors.roseDark} />
+                  <Text style={styles.locationNoteText}>
+                    Showing all models. Turn on location to sort by distance and filter by radius.
+                  </Text>
+                </View>
+              )}
+              {filtered.length === 0 ? (
+                <View style={styles.emptyCard}>
+                  <Ionicons name="people-outline" size={32} color={Colors.muted} />
+                  <Text style={[styles.emptyCardText, { textAlign: 'center' }]}>
+                    {hasActiveFilter
+                      ? 'No models match your filters — few have added hair and skin details yet, so try clearing them.'
+                      : 'No models yet — share Guinea Pig to grow your community'}
+                  </Text>
+                </View>
+              ) : (
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.modelsStrip}
+                >
+                  {filtered.map(m => (
+                    <NearbyModelCard
+                      key={m.id}
+                      model={m}
+                      onInvite={() => handleInvite(m)}
+                      onViewProfile={() => goModelProfile(m.id)}
+                    />
+                  ))}
+                </ScrollView>
+              )}
+            </>
           )
         })()}
       </ScrollView>
@@ -1829,6 +1840,14 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
   },
   emptyCardText: { fontSize: 14, color: Colors.muted, fontFamily: Fonts.body },
+
+  // Shown above the model strip when location is off — a note, not a dead end.
+  locationNote: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: 8,
+    backgroundColor: Colors.softPink,
+    borderRadius: 12, padding: 10, marginBottom: 10,
+  },
+  locationNoteText: { flex: 1, fontSize: 12, lineHeight: 17, color: Colors.warmDark },
 
   // Treatments to review
   reviewRow: {
