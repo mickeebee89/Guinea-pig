@@ -49,3 +49,6 @@ example
 # Firebase (FCM) config — do not commit
 google-services.json
 GoogleService-Info.plist
+
+# EAS build artifacts downloaded locally
+artifacts-*.zip
