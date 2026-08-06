@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "324896988106",
+    "project_id": "guinea-pig-app-a9e73",
+    "storage_bucket": "guinea-pig-app-a9e73.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:324896988106:android:d9ddf877a3a842bbd68d33",
+        "android_client_info": {
+          "package_name": "com.cavyapp.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCbPfKgOROLQJPVOQp0dAHkF6IxzFe2plU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:324896988106:android:6281be2e172ca522d68d33",
+        "android_client_info": {
+          "package_name": "com.guineapig.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCbPfKgOROLQJPVOQp0dAHkF6IxzFe2plU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
