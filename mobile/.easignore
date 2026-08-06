@@ -1,14 +1,14 @@
 # What EAS Build excludes when uploading the project.
 #
-# WHY THIS EXISTS: without a .easignore, EAS falls back to .gitignore — and
-# google-services.json is deliberately gitignored (it holds the Firebase/FCM
-# config and shouldn't be in the repo). That means it would never reach the
-# build, and since app.json sets android.googleServicesFile the build fails on
-# the missing file.
+# WHY THIS EXISTS: without a .easignore, EAS falls back to .gitignore. This is a
+# copy of it, so keep the two in sync when .gitignore changes.
 #
-# So this is a copy of .gitignore with the Firebase config lines REMOVED, which
-# keeps the file out of git while still shipping it to EAS. Keep the two in sync
-# if .gitignore changes.
+# Originally this existed because google-services.json was gitignored and so
+# never reached the builder — which fails the build outright, since app.json
+# sets android.googleServicesFile. That file is now committed (0106733), so the
+# workaround is no longer load-bearing. Kept because .easignore still governs
+# the whole upload set, and it's the right place to exclude things worth
+# committing but not worth uploading.
 
 # Environment
 .env
