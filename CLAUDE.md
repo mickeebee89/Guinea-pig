@@ -32,7 +32,12 @@ _This file is read automatically at the start of every Claude Code session. It h
 - **Admin:** Next.js 16.2.7 / Vercel (App Router, Turbopack).
 - **Payments:** Stripe (currently TEST mode). **Media:** Cloudinary. **Email:** Resend.
 - **Repo:** github.com/mickeebee89/Guinea-pig — commit direct to `main`.
-- **Repo root (Windows):** `C:\Users\micky\Documents\Guinea-pig` (admin app). Mobile lives in `mobile\`.
+- **Repo root (Windows):** `C:\Users\micky\Documents\Guinea-pig` — **no app lives at the root.**
+  Three sibling apps: `admin\` (Next.js console), `site\` (public website), `mobile\` (Expo).
+  Each has its own `package.json` and `node_modules`; there is no workspace linkage.
+  The admin app moved out of the root on 7 Aug 2026 — while it sat there, its `proxy.ts`
+  auth gate was being compiled into the site's build and nearly shipped a login wall on
+  the public website.
 - **Run mobile:** `cd C:\Users\micky\Documents\Guinea-pig\mobile` then `npx expo start -c --dev-client`.
 - **Deploy an edge function:** from repo ROOT, `npx supabase functions deploy <name>` (the "Docker not running" warning is harmless).
 

@@ -16,7 +16,8 @@ agreed between the two people in chat and settled in person.
 | Path | What it is |
 |---|---|
 | `mobile/` | The app — React Native / Expo (SDK 56), Expo Router, EAS. Android-first, iOS planned. |
-| `app/`, `components/`, `lib/` | Admin console — Next.js 16 App Router, deployed on Vercel. Access is gated by a row in the `admins` table, enforced server-side by `proxy.ts`. |
+| `admin/` | Admin console — Next.js 16 App Router. Runs locally (`npm run dev --prefix admin`); not deployed. Access is gated by a row in the `admins` table, enforced server-side by `proxy.ts`. |
+| `site/` | Public website — Next.js 16, deployed on Vercel, its own project with Root Directory `site`. See `site/README.md`. |
 | `supabase/` | Edge functions and the SQL that isn't in a migration — RLS policies, triggers, RPCs. |
 | `seed/` | Demo data for store screenshots, plus teardown. See `seed/README.md`. |
 | `scripts/` | `check-queries.mjs` validates every Supabase `.select()` against the live schema. |

@@ -1,10 +1,10 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
 # dependencies
-/node_modules
-# Nested apps: the leading slash above anchors to the repo root, so each sibling
-# app needs its own entry or its build output lands in git.
-site/node_modules
+# Unanchored on purpose. No app lives at the repo root — admin/, site/ and
+# mobile/ are all siblings — so a leading slash would only match a directory
+# that no longer exists and would silently miss every real one.
+node_modules/
 /.pnp
 .pnp.*
 .yarn/*
@@ -16,11 +16,9 @@ site/node_modules
 # testing
 /coverage
 
-# next.js
-/.next/
-/out/
-site/.next/
-site/out/
+# next.js — unanchored, same reasoning as node_modules above
+.next/
+out/
 
 # production
 /build

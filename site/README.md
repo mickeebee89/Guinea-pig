@@ -3,11 +3,19 @@
 Public, unauthenticated marketing and SEO site. Separate Next 16 app, separate
 Vercel project, same Supabase backend as the app and the admin console.
 
-This is **not** part of the admin app at the repo root. It cannot be: `proxy.ts`
-there matches every path with no allowlist and redirects anyone without an
-`is_admin()` session to `/login`, so marketing routes in that tree would bounce
-visitors and Googlebot alike. Route groups do not help — they do not appear in
-the URL.
+This is **not** part of the admin console, and must never become part of it:
+`admin/proxy.ts` matches every path with no allowlist and redirects anyone
+without an `is_admin()` session to `/login`, so marketing routes in that tree
+would bounce visitors and Googlebot alike. Route groups do not help — they do
+not appear in the URL.
+
+That is not hypothetical. The admin app used to live at the repo root, and the
+first two Vercel deploys of this site failed compiling `proxy.ts` into it —
+Turbopack resolved the repo root as the build root and found the file. The
+build only failed because `@supabase/ssr` is not a dependency here. Had it
+resolved, this site would have shipped with an auth wall in front of every
+page. The admin app moved to `admin/` on 7 Aug 2026 so there is no longer an
+app above this one to reach.
 
 ## Local
 

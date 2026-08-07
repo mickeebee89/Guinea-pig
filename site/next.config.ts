@@ -2,30 +2,19 @@ import type { NextConfig } from 'next'
 
 const nextConfig: NextConfig = {
   /**
-   * Pin BOTH roots to this directory. They must hold the same value — if they
-   * disagree Next warns and silently uses outputFileTracingRoot.
+   * Local only, and only because of a stray C:\Users\micky\package-lock.json:
+   * without this Next walks up looking for a lockfile, finds that one, and
+   * infers the home directory as the workspace root.
    *
-   * This is load-bearing, not tidiness. The repo root is the admin console, and
-   * it has a `proxy.ts` there: Next 16's renamed middleware convention, whose
-   * matcher catches every path and redirects anyone without an is_admin()
-   * session to /login. When the root resolves to the repo root instead of
-   * site/, Turbopack finds that file and compiles it into THIS app. The first
-   * Vercel deploy failed exactly that way ("Can't resolve '@supabase/ssr'",
-   * which lives in the root package.json, not this one).
-   *
-   * The failure was lucky. Had the import resolved, the public marketing site
-   * would have shipped with the admin auth gate attached, bouncing every
-   * visitor and every crawler to a login page.
-   *
-   * NEVER "fix" that error by adding @supabase/ssr to this package.json.
-   * The correct fix is to keep the build scoped to site/ — here, and via
-   * "Include files outside of the Root Directory" being OFF on Vercel.
-   *
-   * Locally this also stops Next inferring a workspace root from the stray
-   * C:\Users\micky\package-lock.json.
+   * Deliberately NOT set on Vercel, and `outputFileTracingRoot` is deliberately
+   * not set at all. Both existed to stop Turbopack reaching the repo root and
+   * compiling the admin console's proxy.ts into this app — which is what broke
+   * the first two deploys. The admin app now lives in admin/, so there is no
+   * app above this one to reach, and pinning the tracing root on Vercel only
+   * fights the value Vercel injects and reintroduces the "must have the same
+   * value" warning.
    */
-  outputFileTracingRoot: __dirname,
-  turbopack: { root: __dirname },
+  ...(process.env.VERCEL ? {} : { turbopack: { root: __dirname } }),
 
   images: {
     // Stylist avatars and banners live in the public `profile-pics` bucket.
