@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { clientIp, rateLimit } from '@/lib/rateLimit'
 
 /**
  * Server-side proxy to the waitlist-signup edge function.
@@ -42,6 +43,18 @@ function required(v: unknown, max: number): { value: string } | { error: 'missin
 }
 
 export async function POST(request: Request) {
+  // Before anything else, including parsing the body. A flood should cost us a
+  // Map lookup, not a JSON parse and a round trip to the edge function.
+  // Failed validation and honeypot hits count too — otherwise an attacker can
+  // probe the endpoint for free by sending deliberately invalid payloads.
+  const limit = rateLimit(clientIp(request))
+  if (!limit.allowed) {
+    return NextResponse.json(
+      { ok: false, error: 'Too many attempts. Please try again in a few minutes.' },
+      { status: 429, headers: { 'Retry-After': String(limit.retryAfter) } },
+    )
+  }
+
   let payload: Record<string, unknown>
   try {
     payload = await request.json()
