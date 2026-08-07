@@ -1,9 +1,30 @@
 import type { NextConfig } from 'next'
 
 const nextConfig: NextConfig = {
-  // Pin the workspace root. Without this Next walks up looking for a lockfile
-  // and picks C:\Users\micky\package-lock.json (a stray file in the home dir),
-  // which misplaces output file tracing and breaks the Vercel build.
+  /**
+   * Pin BOTH roots to this directory. They must hold the same value — if they
+   * disagree Next warns and silently uses outputFileTracingRoot.
+   *
+   * This is load-bearing, not tidiness. The repo root is the admin console, and
+   * it has a `proxy.ts` there: Next 16's renamed middleware convention, whose
+   * matcher catches every path and redirects anyone without an is_admin()
+   * session to /login. When the root resolves to the repo root instead of
+   * site/, Turbopack finds that file and compiles it into THIS app. The first
+   * Vercel deploy failed exactly that way ("Can't resolve '@supabase/ssr'",
+   * which lives in the root package.json, not this one).
+   *
+   * The failure was lucky. Had the import resolved, the public marketing site
+   * would have shipped with the admin auth gate attached, bouncing every
+   * visitor and every crawler to a login page.
+   *
+   * NEVER "fix" that error by adding @supabase/ssr to this package.json.
+   * The correct fix is to keep the build scoped to site/ — here, and via
+   * "Include files outside of the Root Directory" being OFF on Vercel.
+   *
+   * Locally this also stops Next inferring a workspace root from the stray
+   * C:\Users\micky\package-lock.json.
+   */
+  outputFileTracingRoot: __dirname,
   turbopack: { root: __dirname },
 
   images: {
