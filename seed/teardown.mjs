@@ -205,16 +205,33 @@ async function main() {
   console.log(`\nDone. Removed ${users.length} account(s) and ${files} file(s).`)
 
   // Prove it, rather than assuming.
+  // Re-query rather than trusting the loop above. This is the only statement
+  // that actually knows whether teardown worked.
   const left = await findSeededUsers()
   if (left.length === 0) {
     console.log('Verified: no seeded accounts remain.')
     return
   }
-  console.log(
-    `WARNING: ${left.length} seeded auth user(s) could not be deleted — see the blockers above.\n` +
-    'They have been banned, so they cannot sign in, and all their app data and files are gone.\n' +
+
+  // EXIT NON-ZERO. A partial teardown is a failure and must be one to the
+  // shell, not just to a human reading scrollback.
+  //
+  // This used to print the warning and exit 0, which is how the 7 Aug 2026
+  // teardown "succeeded" while leaving two sign-in-able accounts behind — with
+  // a password that was, at that moment, committed to a public repository. Any
+  // `teardown && deploy` chain would have carried straight on.
+  //
+  // Same lesson as the comment that caused that incident: a claim nobody
+  // verifies is not a safeguard. The exit code is the verification.
+  process.exitCode = 1
+  console.error(
+    `\nFAILED: ${left.length} seeded auth user(s) could not be deleted — see the blockers above.\n` +
+    `  ${left.map(u => u.email).join('\n  ')}\n\n` +
+    'Their app data and files ARE gone, and they have been banned so they cannot sign in.\n' +
+    'But the accounts still exist, so this run did NOT fully tear down. Exiting 1.\n\n' +
     'If the blocker is an immutable consent or moderation record, banned-and-orphaned is the\n' +
-    'correct end state; do not disable the trigger to force a delete.',
+    'correct end state — do not disable the trigger to force a delete. Acknowledge it and move\n' +
+    'on; do not make this exit 0 to quieten it.',
   )
 }
 
