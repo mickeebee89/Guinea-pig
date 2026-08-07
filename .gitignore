@@ -2,6 +2,9 @@
 
 # dependencies
 /node_modules
+# Nested apps: the leading slash above anchors to the repo root, so each sibling
+# app needs its own entry or its build output lands in git.
+site/node_modules
 /.pnp
 .pnp.*
 .yarn/*
@@ -16,6 +19,8 @@
 # next.js
 /.next/
 /out/
+site/.next/
+site/out/
 
 # production
 /build
@@ -35,6 +40,9 @@ yarn-error.log*
 
 # vercel
 .vercel
+
+# Claude Code: launch.json is shared, local settings are not
+.claude/settings.local.json
 
 # typescript
 *.tsbuildinfo
