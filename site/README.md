@@ -61,7 +61,25 @@ correct answer.
 Not yet done. Steps, in order:
 
 1. **New Vercel project** pointed at `github.com/mickeebee89/Guinea-pig`, with
-   **Root Directory = `site`**. Do not reuse the admin project.
+   **Root Directory = `site`**, and **"Include files outside of the Root
+   Directory in the Build Step" turned OFF.**
+
+   > **Leave that toggle off. It is not a workaround.**
+   >
+   > It was first turned off to fix a real failure: while the admin console
+   > lived at the repo root, Turbopack resolved the repo root as this app's
+   > build root, found `proxy.ts` there, and compiled the admin auth gate into
+   > this site. Two deploys failed on it, and they only failed because
+   > `@supabase/ssr` is not a dependency here — had it resolved, every page of
+   > this site would have shipped behind a login wall.
+   >
+   > The admin app moved to `admin/` on 7 Aug 2026, so that specific hazard is
+   > gone and the toggle *could* technically go back to its default. Do not.
+   > Off is simply the correct setting for an app in a subdirectory: the build
+   > context is only `site/`, so uploads are smaller, builds are faster, and
+   > the build cannot reach a sibling app's files by accident. Turning it on
+   > gains nothing and points Vercel's tracing root at a repo root that has no
+   > `package.json` at all.
 
 2. Set the three environment variables above. **`PUBLIC_SITE_MODE=preview`** —
    see step 5 for when that changes.
