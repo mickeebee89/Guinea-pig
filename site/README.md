@@ -54,27 +54,63 @@ Not yet done. Steps, in order:
 
 1. **New Vercel project** pointed at `github.com/mickeebee89/Guinea-pig`, with
    **Root Directory = `site`**. Do not reuse the admin project.
-2. Set the three environment variables above. `PUBLIC_SITE_MODE=preview` until
-   step 6.
-3. Set **Ignored Build Step** on *both* projects so a push touching only
-   `site/` does not rebuild the admin app, and vice versa. Today every push to
-   `main` rebuilds everything.
+
+2. Set the three environment variables above. **`PUBLIC_SITE_MODE=preview`** —
+   see step 5 for when that changes.
+
+3. **Ignored Build Step** on *both* projects. Today every push to `main`
+   rebuilds everything.
+
+   Site project:
+   ```
+   [ -n "$VERCEL_GIT_PREVIOUS_SHA" ] && git diff --quiet "$VERCEL_GIT_PREVIOUS_SHA" HEAD -- ':(top)site'
+   ```
+   Admin project:
+   ```
+   [ -n "$VERCEL_GIT_PREVIOUS_SHA" ] && git diff --quiet "$VERCEL_GIT_PREVIOUS_SHA" HEAD -- ':(top)' ':(exclude,top)site' ':(exclude,top)mobile'
+   ```
+
+   Exit 0 skips the build, non-zero builds. Notes on why it is written this way:
+   - **`VERCEL_GIT_PREVIOUS_SHA`, never `HEAD^`.** `HEAD^` is the previous
+     *commit*, which is wrong after a squash-merge or a force-push and would
+     silently skip a build that should have run. This variable is the last
+     successfully deployed commit, which is the real question being asked.
+   - **`:(top)` makes the pathspec repo-root-relative**, so it behaves the same
+     whether Vercel runs the command from the repo root or from the Root
+     Directory.
+   - **The `-n` guard fails toward building.** Empty on a first deploy → exit 1
+     → build. A SHA missing from Vercel's shallow clone → git exits 128 → build.
+     It can never fail into skipping.
+
 4. **Domain**: add `cavybeauty.com` and `www.cavybeauty.com`. Set the **apex as
    primary**; `www` 301s to it. DNS is at Cloudflare Registrar, whose CNAME
    flattening removes the usual technical objection to an apex primary.
-5. **Run the seed teardown** — `node seed/teardown.mjs` from the repo root.
-   Demo stylists must not be indexed. The view already excludes them via the
-   reserved `.invalid` TLD, so this is belt and braces, but do it anyway.
-6. Flip `PUBLIC_SITE_MODE=live` and redeploy. Submit `/sitemap.xml` in Search
-   Console.
-7. **Legal 301s** on `guineapigapp.co.uk`, path-scoped to exactly three paths:
-   `/terms`, `/privacy`, `/community` → the same path on `cavybeauty.com`.
-   The shipped mobile app hardcodes those URLs, so following the redirect means
-   no app release is needed.
+
+5. **Legal 301s** on `guineapigapp.co.uk` as soon as the domain resolves.
+   Path-scoped to exactly three paths: `/terms`, `/privacy`, `/community` → the
+   same path on `cavybeauty.com`. The shipped mobile app hardcodes those URLs,
+   so following the redirect means no app release is needed.
+
+   These are a **store-submission dependency**, so they ship before indexing.
 
    **Do not touch `/auth/reset` or `/auth/confirmed`.** They are registered in
    Supabase Auth → URL Configuration and are a separately sequenced migration.
    Redirecting them breaks password reset in the live app.
+
+6. **`PUBLIC_SITE_MODE=live` — LAST, and gated on inventory, not on the domain
+   resolving.**
+
+   The seed teardown (done 7 Aug 2026) means no demo stylist can ever be
+   indexed. That is a *necessary* condition, not a sufficient one. Today
+   `public_stylists` returns **zero rows**, so flipping now would submit a
+   sitemap of empty pages from a brand-new domain — a thin-content signal that
+   is slow and awkward to undo, and it would be spent on the one asset whose
+   value comes from being trusted early.
+
+   Flip it when there are real published stylists clearing the content bar in
+   `public_stylists` (published, 40+ character bio, at least one category).
+   Then redeploy and submit `/sitemap.xml` in Search Console. Index the six
+   national treatment pages first; city pages in tranches after that.
 
 ### After deploy
 
