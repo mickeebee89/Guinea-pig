@@ -58,17 +58,16 @@ Not yet done. Steps, in order:
 2. Set the three environment variables above. **`PUBLIC_SITE_MODE=preview`** —
    see step 5 for when that changes.
 
-3. **Ignored Build Step** on *both* projects. Today every push to `main`
-   rebuilds everything.
+3. **Ignored Build Step** — on this project only. The admin console at the repo
+   root has never been deployed anywhere; it runs locally via `npm run dev`.
+   There is no second Vercel project to configure.
 
-   Site project:
    ```
    [ -n "$VERCEL_GIT_PREVIOUS_SHA" ] && git diff --quiet "$VERCEL_GIT_PREVIOUS_SHA" HEAD -- ':(top)site'
    ```
-   Admin project:
-   ```
-   [ -n "$VERCEL_GIT_PREVIOUS_SHA" ] && git diff --quiet "$VERCEL_GIT_PREVIOUS_SHA" HEAD -- ':(top)' ':(exclude,top)site' ':(exclude,top)mobile'
-   ```
+
+   Still worth setting even as the only project: without it, every push
+   touching `mobile/`, `seed/`, `supabase/` or the admin app burns a build.
 
    Exit 0 skips the build, non-zero builds. Notes on why it is written this way:
    - **`VERCEL_GIT_PREVIOUS_SHA`, never `HEAD^`.** `HEAD^` is the previous
@@ -112,10 +111,23 @@ Not yet done. Steps, in order:
    Then redeploy and submit `/sitemap.xml` in Search Console. Index the six
    national treatment pages first; city pages in tranches after that.
 
-### After deploy
+### Two things to know about the Hobby plan
 
-- Rate limiting in `lib/rateLimit.ts` is per-instance memory and resets on cold
-  start. Add a **Vercel Firewall** rule on `/api/waitlist` as the real control.
+- **The Vercel Firewall / WAF is not on Hobby.** So the per-instance limiter in
+  `lib/rateLimit.ts` is the *only* control on `/api/waitlist`, not the second
+  layer it was meant to be. It resets on cold start and an attacker spread
+  across warm instances gets a multiple of the limit. If abuse shows up, the
+  options are a Pro plan for the Firewall, a shared counter in Upstash/Vercel
+  KV, or putting Cloudflare in front (the DNS is already there, and Cloudflare
+  rate-limiting rules work on its free tier).
+
+- **Hobby is licensed for non-commercial use.** Cavy charges for a model
+  subscription and a stylist verification fee, so a marketing site for it is
+  arguably commercial even though the site itself sells nothing. Vercel does
+  enforce this, and enforcement means the site goes down. Worth resolving
+  before pointing the real domain at it rather than after.
+
+### After deploy
 - The waitlist edge function's CORS allowlist still contains only the
   `guineapigapp.co.uk` origins. That is fine — `/api/waitlist` proxies
   server-side, so no `Origin` header is sent and CORS never applies. Do not
