@@ -23,12 +23,29 @@
 import { createClient } from '@supabase/supabase-js'
 import { readFile, readdir } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
+import { randomBytes } from 'node:crypto'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const SUPABASE_URL = 'https://ptluekkhiopowuyvkgnd.supabase.co'
 const SEED_EMAIL_SUFFIX = '@seed.guineapig.invalid'
-const PASSWORD = 'SeedDemo!2026'   // demo accounts only; all removed by teardown
+
+/**
+ * Generated per run, never committed.
+ *
+ * This used to be a hardcoded literal, on the reasoning that teardown removes
+ * every demo account anyway. On 7 Aug 2026 teardown failed on 2 of 9 accounts
+ * (a foreign key from a table it did not know about blocked the auth-user
+ * delete), and this repository is public — so for a while anyone could read the
+ * password here and sign in as a leftover demo account. An `authenticated`
+ * session is exactly what RLS grants everything to: other users' attributes,
+ * Instagram handles, provider coordinates, and EXECUTE on nearby_models.
+ *
+ * A credential that is only safe while a cleanup script succeeds is not safe.
+ * Set SEED_PASSWORD if you need a known value for a demo; otherwise the run
+ * prints the generated one at the end.
+ */
+const PASSWORD = process.env.SEED_PASSWORD || `Seed-${randomBytes(12).toString('base64url')}!aA1`
 
 const HERE   = path.dirname(fileURLToPath(import.meta.url))
 const PHOTOS = path.join(HERE, 'photos')

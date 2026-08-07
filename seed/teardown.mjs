@@ -47,6 +47,43 @@ if (!key) {
 
 const db = createClient(SUPABASE_URL, key, { auth: { persistSession: false } })
 
+/**
+ * Every FK that points at auth.users with ON DELETE NO ACTION, as of 7 Aug 2026.
+ * One of these holds the row when auth.admin.deleteUser fails — GoTrue only ever
+ * says "Database error deleting user", which is a dead end on its own.
+ *
+ * `session_consents` and `moderation_actions` carry prevent_mutation triggers on
+ * BEFORE DELETE: their rows are immutable by design and CANNOT be removed here.
+ * If one of them is the blocker, the right outcome is usually to ban the auth
+ * user (`banned_until = 'infinity'`) and leave the row, not to disable a safety
+ * mechanism someone added deliberately.
+ */
+const BLOCKING_REFS = [
+  ['sessions', 'model_user_id'],
+  ['reports', 'reviewed_by'],
+  ['session_consents', 'user_id'],
+  ['patch_tests', 'logged_by'],
+  ['patch_tests', 'model_id'],
+  ['patch_tests', 'provider_id'],
+  ['moderation_actions', 'admin_id'],
+  ['moderation_actions', 'target_user_id'],
+  ['admin_audit_log', 'admin_id'],
+]
+
+/** Name whatever is still referencing a user we failed to delete. */
+async function diagnose(userId) {
+  const hits = []
+  for (const [table, col] of BLOCKING_REFS) {
+    const { count, error } = await db
+      .from(table)
+      .select('*', { count: 'exact', head: true })
+      .eq(col, userId)
+    if (error) continue // table may not exist in this environment
+    if ((count ?? 0) > 0) hits.push(`${table}.${col} (${count})`)
+  }
+  return hits
+}
+
 /** Every seeded auth user, paging through the admin list. */
 async function findSeededUsers() {
   const found = []
@@ -134,6 +171,14 @@ async function main() {
     await db.from('verification_requests').delete().eq('user_id', u.id)
     await db.from('verification_payments').delete().eq('user_id', u.id)
     await db.from('subscriptions').delete().eq('user_id', u.id)
+
+    // patch_tests postdates this script and blocks the auth delete. NB its
+    // provider_id references auth.users, NOT providers.id — unlike every other
+    // provider_id in this schema.
+    await db.from('patch_tests').delete().eq('model_id', u.id)
+    await db.from('patch_tests').delete().eq('provider_id', u.id)
+    await db.from('patch_tests').delete().eq('logged_by', u.id)
+
     await db.from('providers').delete().eq('user_id', u.id)
 
     // 3. public.users has NO FK to auth.users, so deleting the auth user does NOT
@@ -142,16 +187,35 @@ async function main() {
 
     // 4. Finally the auth user.
     const { error: authErr } = await db.auth.admin.deleteUser(u.id)
-    if (authErr) console.warn(`  ! auth user: ${authErr.message}`)
+    if (authErr) {
+      console.warn(`  ! auth user: ${authErr.message}`)
+      const blockers = await diagnose(u.id)
+      console.warn(
+        blockers.length
+          ? `    still referenced by: ${blockers.join(', ')}`
+          : '    no known FK holds it — check pg_constraint for tables added since this script',
+      )
+      // A leftover auth user is not inert while a password is guessable, and
+      // signing in grants the `authenticated` role that RLS opens up. Ban it.
+      const { error: banErr } = await db.auth.admin.updateUserById(u.id, { ban_duration: '876000h' })
+      console.warn(banErr ? `    ! could not ban: ${banErr.message}` : '    banned so it cannot sign in')
+    }
   }
 
   console.log(`\nDone. Removed ${users.length} account(s) and ${files} file(s).`)
 
   // Prove it, rather than assuming.
   const left = await findSeededUsers()
-  console.log(left.length === 0
-    ? 'Verified: no seeded accounts remain.'
-    : `WARNING: ${left.length} seeded account(s) still present — re-run.`)
+  if (left.length === 0) {
+    console.log('Verified: no seeded accounts remain.')
+    return
+  }
+  console.log(
+    `WARNING: ${left.length} seeded auth user(s) could not be deleted — see the blockers above.\n` +
+    'They have been banned, so they cannot sign in, and all their app data and files are gone.\n' +
+    'If the blocker is an immutable consent or moderation record, banned-and-orphaned is the\n' +
+    'correct end state; do not disable the trigger to force a delete.',
+  )
 }
 
 main().catch(e => { console.error(e); process.exit(1) })
