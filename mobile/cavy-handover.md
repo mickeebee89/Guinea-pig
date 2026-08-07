@@ -7,6 +7,82 @@ _Use this to start a fresh chat with full context. Hand it to Claude at the star
 
 ---
 
+# ⏸️ PARKED — 6 Aug 2026
+
+**Mobile and admin are paused mid-launch while the web app is built.** Nothing is
+broken; the work below is simply unfinished. Read this section before resuming.
+
+## Where the code is
+
+All committed on `main`, both typechecks at their baseline (mobile 6 known errors,
+admin 0). Latest: `3ad2e56`. Today's substantive commits:
+
+| Commit | What |
+|---|---|
+| `194ef1e` | Treatments never showed on ANY shop page — query named columns that don't exist |
+| `e7d125d` | Prices removed; cost agreed in chat, paid off-platform |
+| `5015975` | `mustWrite`/`tryWrite` — failed DB writes were reporting success |
+| `be6fb89` | Same fix across 9 model-profile writes (bio, characteristics, photos) |
+| `b84fcb0` | Shop page shows treatment CATEGORIES only (that's all edit-shop ever writes) |
+| `ba7a8f3` | `nearby_models` "Any" = everyone; seed coords; `review-mode.mjs` |
+| `c107f65` | Rebrand to Cavy |
+
+**Applied to the live DB:** `supabase/nearby-models-any.sql` — verified, 32 models
+returned with no location vs 32 total.
+
+**Builds:** both Android APKs built green off the rebrand (dev client + preview),
+package `com.cavyapp.app`, new keystore `JnbgqzbhMX`.
+
+## Outstanding — roughly in order
+
+**Demo data (blocks screenshots)**
+1. Re-seed: `node seed/teardown.mjs; node seed/seed.mjs`. Current seeded rows predate
+   both the coordinates change and the categories-only treatment shape.
+2. `node seed/review-mode.mjs` — strips availability from every seeded stylist so none
+   is bookable. Review-time bookable availability goes on Micky's own provider account
+   (`providers.id 49d40aae…`), which is a real person who can actually respond.
+
+**Store submission**
+3. Screenshots. Also still missing: Play feature graphic (1024×500) and 512×512 icon.
+4. New store records — `com.cavyapp.app` is a new app to both stores.
+5. Icon/splash artwork is still the old branding; `guinea-pig-logo.png` keeps its
+   filename deliberately until new artwork exists.
+6. Two demo accounts on **real** emails (never `@seed.guineapig.invalid`, or teardown
+   deletes the reviewer's login): model with `subscription_waived`, stylist with fee
+   waived + verified.
+7. **Apple IAP question still unresolved** — the £4.99 sub and £14.99 fee unlock
+   in-app features via Stripe. Treatment payments being off-platform helps but doesn't
+   settle it.
+
+**Verify on the new build**
+8. Push notifications actually arrive. The build compiling only proves
+   `google-services.json` parses and matches the package, not that FCM works.
+
+**Legal / privacy**
+9. Company number — `[NUMBER]` placeholder in `privacy-admin-access-clause.md`.
+10. #66 publish the admin-DM-access clause; update Apple privacy labels + Play Data
+    Safety to match.
+11. #73 confirm the selfie purge cron's first real run.
+
+**Known, deliberate, decide later**
+12. `stripe-payment/index.ts:138` recreates a product named "Guinea Pig Monthly" if the
+    lookup key ever misses — would undo the dashboard rename. One string to change.
+13. #69/#70 admin console write-error checking and correctness pass.
+14. #52/#74 post-launch: narrow photo signing and admin message reads.
+15. 🔴 **#75 LAUNCH BLOCKER** — `node seed/teardown.mjs` before going live. Seeded
+    stylists are published and genuinely bookable.
+
+## Method that kept working
+
+Verify against the database, not against symptoms or success returns. Three separate
+bugs this session were invisible because an error was discarded: a wrong column name
+blanked every shop page, rejected writes rendered as "Saved ✓", and an RLS policy that
+widened silently broke a query that depended on it staying narrow. `node
+scripts/check-queries.mjs` validates every `.select()` against the live schema — run it
+after schema changes.
+
+---
+
 ## HOW I WORK (read first)
 - **Persona:** methodical, root-cause-first coder. Fix the first cause in a chain, not symptoms. Pivot instead of tinkering. Elegant code.
 - **Format I want:** terse, numbered, **copy-paste-ready** commands/SQL blocks. One task at a time. Minimal forward-planning. Use the decision-button tool for choices.
