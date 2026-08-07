@@ -1,0 +1,67 @@
+@import "tailwindcss";
+
+/* ---------------------------------------------------------------------------
+   Design tokens, mirrored from mobile/src/constants/Colors.ts, which is the
+   canonical palette for the product.
+
+   Two OTHER palettes exist in this repo and are both stale — do not use them:
+     * CLAUDE.md prose (#F45D9E / #A8862E)
+     * the admin app's inline hexes (#C8788A / #8C4A58)
+
+   Mirrored rather than imported because mobile/ is a separate app with its own
+   node_modules and no workspace linkage. If Colors.ts changes, change this too.
+   The look is light-mode only, matching the app (UI-STYLE-GUIDE.md).
+--------------------------------------------------------------------------- */
+@theme {
+  --color-rose:        #DB4B86;  /* primary — CTAs, links, wordmark */
+  --color-rose-dark:   #C23A71;  /* pressed / dark CTA */
+  --color-soft-pink:   #FFE3EF;  /* accent fills, inactive chips, gradient top */
+  --color-cream:       #FFF7FA;  /* page background */
+  --color-warm-dark:   #2B2531;  /* near-black plum — headings, primary text */
+  --color-muted:       #6E6675;  /* secondary text */
+  --color-hairline:    #F6E1EA;  /* soft pink borders */
+  --color-input-bg:    #FFF0F6;  /* input / chip / badge background */
+  --color-accent:      #F5388F;  /* category accent, shadow tint */
+  --color-danger:      #DC2626;
+
+  --radius-sm:  0.625rem; /* 10px */
+  --radius-md:  0.875rem; /* 14px */
+  --radius-lg:  1.25rem;  /* 20px — cards */
+  --radius-xl:  1.75rem;  /* 28px */
+
+  --font-display: var(--font-fredoka), ui-rounded, system-ui, sans-serif;
+  --font-sans:    var(--font-quicksand), ui-rounded, system-ui, sans-serif;
+
+  /* Pink-tinted card lift, matching Shadow.card in Colors.ts. */
+  --shadow-card: 0 6px 16px rgb(245 56 143 / 0.10);
+  --shadow-soft: 0 2px 8px rgb(43 37 49 / 0.06);
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background-color: var(--color-cream);
+  color: var(--color-warm-dark);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Wide content must scroll inside its own container — the page body never
+   scrolls horizontally. */
+.scroll-x {
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
