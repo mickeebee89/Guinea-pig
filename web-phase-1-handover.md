@@ -628,11 +628,31 @@ Everything still open is a business decision, not a build task.
 
 **Deferred to a later phase** — recorded so the sequencing stays explicit:
 
-- **Status posts** (§6a) — resumes with the phone apps. Server-side link-strip trigger +
-  banned-word auto-screen; migrate `status_text` → `status_posts`; repoint
-  `provider/[id].tsx`; drop the old columns; `drop`/`create` `public_stylists` without
-  `status_text` and **reissue the grant**; add the unfiltered `last_post_at` term; create and
-  grant `public_stylist_status`; extend the admin queue; surface the latest 3.
+- **Status posts** (§6a) — resumes with the phone apps.
+
+  **Step one is adopting `supabase/migrations/`** — decided 8 Aug 2026, deliberately *not* done
+  as a standalone task. The status-posts work brings real new schema (a table, a trigger, a
+  view, a grant, a column migration), so the workflow gets exercised on live work rather than
+  established in the abstract and then quietly abandoned.
+
+  Two constraints on that design, both from Micky, both non-negotiable:
+
+  1. **It must fit write-file-then-paste-into-the-SQL-editor.** A CLI-only flow will not be
+     adopted. The migration file is written and committed *first*, then pasted. A process that
+     fights how the work actually happens will be bypassed, and a bypassed process is worse
+     than no process — it produces a record that looks authoritative and is wrong.
+  2. **"Did this run?" must have an answer that is not memory.** Recorded state that can be
+     queried, not a convention someone is trusted to follow. This is the constraint that rules
+     most designs out: a naming convention or a checklist is exactly what already failed and
+     produced 89 undocumented policies.
+
+  Propose the setup at the start of that work, not before.
+
+  Then the status-posts work itself: server-side link-strip trigger + banned-word auto-screen;
+  migrate `status_text` → `status_posts`; repoint `provider/[id].tsx`; drop the old columns;
+  `drop`/`create` `public_stylists` without `status_text` and **reissue the grant**; add the
+  unfiltered `last_post_at` term; create and grant `public_stylist_status`; extend the admin
+  queue; surface the latest 3.
 - **Portfolio display + video** (§6b) — a `grant` once the §8 consent basis exists. The grid
   and view are already built for it.
 
