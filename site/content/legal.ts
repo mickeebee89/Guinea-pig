@@ -557,6 +557,37 @@ export const COMMUNITY: LegalDoc = {
  * with the two immutable records named explicitly as the exception. The
  * 90-day selfie retention is not mentioned because selfies are deleted with
  * the account, immediately, along with the other three buckets.
+ *
+ * ── REPORTS, ADDED 8 Aug 2026 WITH MIGRATION 0004 ─────────────────────────
+ * Until 0004, delete_account_data deleted every report where the departing
+ * user was EITHER party — so deleting your account destroyed other people's
+ * complaints about you. This page could not have described that honestly. Now
+ * reports survive with reporter_id / reported_id nulled and the denormalised
+ * name and email hash retained, so the clause states what actually happens.
+ *
+ *   * "your first name and the same scrambled version of your email" —
+ *     reported_name / reported_email_hash (and the reporter_* pair), populated
+ *     by set_report_subjects() at insert and untouched by the deletion.
+ *   * "if that same address ever signs up again, it matches" — the ban-evasion
+ *     purpose, stated outright rather than left as an unexplained retention.
+ *     It is the actual reason the hash exists (see
+ *     moderation_actions.target_email_hash) and a policy that omits the real
+ *     purpose is the kind of thing that reads badly later.
+ *
+ * NO NUMBER IS GIVEN FOR REPORTS, DELIBERATELY. The 6 years above is safe to
+ * state because a trigger enforces it. reports has no such guard and no purge
+ * job exists — see the retention note in supabase/account-deletion-fix.sql.
+ * Stating "6 years" here would be exactly what
+ * privacy-admin-access-clause.md:70 warns against: a retention period nothing
+ * keeps. WHEN THE PURGE JOB LANDS AND COVERS reports, tighten "for as long as
+ * it could still matter" to the specific period — that sentence is written to
+ * be replaced.
+ *
+ * STILL OUTSTANDING: the app-scope privacy policy. PRIVACY (line ~297) says
+ * plainly that it covers the waitlist and "does not yet cover the app", so the
+ * retained-reports clause could not be added there — it belongs in the app
+ * policy when that is written, and this page is currently the only place a
+ * user can read it.
  */
 export const DELETE_ACCOUNT: LegalDoc = {
   slug: 'delete-account',
@@ -564,7 +595,9 @@ export const DELETE_ACCOUNT: LegalDoc = {
   metaTitle: 'Request account & data deletion',
   metaDescription:
     'How to delete your Cavy account and the data we hold about you.',
-  updated: '11 July 2026',
+  // Bumped with the retained-reports clause. A legal page whose substance
+  // changed under an unchanged revision date is its own small misstatement.
+  updated: '8 August 2026',
   intro:
     'You’re always in control of your data. Here’s how to remove your Cavy account and everything we hold about you.',
   sections: [
@@ -597,6 +630,18 @@ export const DELETE_ACCOUNT: LegalDoc = {
           type: 'p',
           text: 'They hold your first name, a scrambled version of your email address that we can’t read back, what you agreed to, and when. Not your photos, messages, or contact details. We keep them for up to 6 years, then delete them.',
         },
+        {
+          type: 'p',
+          text: 'Reports also stay — both any report someone has made about you, and any report you made about someone else. A report is a record of something that happened between two people, so it isn’t only yours to remove. If reports disappeared whenever the person they were about left, reporting someone would stop being worth doing.',
+        },
+        {
+          type: 'p',
+          text: 'What stays on a report is your first name and the same scrambled version of your email address. Your account, contact details, photos and messages are all gone. We keep the scrambled email deliberately, and it’s fair that you know why: if that same address ever signs up again, it matches. It means a serious report can’t be cleared by deleting the account and starting over. We can’t turn it back into an email address, and we don’t use it for anything else.',
+        },
+        {
+          type: 'p',
+          text: 'We keep a report for as long as it could still matter to a safety decision or a legal claim, and no longer.',
+        },
       ],
     },
     {
@@ -604,7 +649,7 @@ export const DELETE_ACCOUNT: LegalDoc = {
       blocks: [
         {
           type: 'p',
-          text: 'Deletion is immediate, and anything remaining is cleared within 30 days. The two records above are the only exception, and they are deleted after 6 years.',
+          text: 'Deletion is immediate, and anything remaining is cleared within 30 days. The records described above are the only exception: the agreement and moderation records are deleted after 6 years, and reports are kept while they could still matter.',
         },
       ],
     },

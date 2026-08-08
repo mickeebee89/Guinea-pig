@@ -4,6 +4,14 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { logAction } from '@/lib/audit'
 
+interface Party {
+  id: string
+  first_name: string
+  last_name: string | null
+  last_initial: string | null
+  email: string
+}
+
 interface Report {
   id: string
   reason: string
@@ -11,8 +19,14 @@ interface Report {
   status: string
   created_at: string
   session_id: string | null
-  reporter: { id: string; first_name: string; last_name: string | null; last_initial: string | null; email: string }
-  reported: { id: string; first_name: string; last_name: string | null; last_initial: string | null; email: string }
+  // Null when the account was deleted (migration 0004 nulls the FK) or when RLS
+  // hides the row. The *_name / *_email_hash columns tell those two apart.
+  reporter: Party | null
+  reported: Party | null
+  reporter_name: string | null
+  reporter_email_hash: string | null
+  reported_name: string | null
+  reported_email_hash: string | null
 }
 
 // Admin-only full identity: prefer the private full surname, fall back to the
@@ -30,10 +44,32 @@ const ACTION_HELP: Record<string, string> = {
 
 // Tolerates null: a joined users row hidden by RLS comes back as NULL rather than
 // an error, and dereferencing it here used to blank the whole page.
-function fullName(u: { first_name: string; last_name: string | null; last_initial: string | null } | null | undefined) {
-  if (!u) return 'Not visible'
+//
+// `stored` is the name captured on the report itself at the time it was filed
+// (migration 0004). A null join WITH a stored name means the account was
+// deleted; a null join WITHOUT one means RLS is hiding it. Those need different
+// words — "Not visible" told an admin to go looking for an account that no
+// longer exists.
+function fullName(u: Party | null | undefined, stored?: string | null) {
+  if (!u) return stored ? `${stored} — deleted account` : 'Not visible'
   const last = u.last_name ?? (u.last_initial ? `${u.last_initial}.` : '')
   return `${u.first_name} ${last}`.trim()
+}
+
+// The email, or — once the account is gone — the first bytes of the SHA-256 of
+// it. That hash is the whole reason it is stored: two reports about the same
+// deleted person show the same prefix, so deleting and re-registering does not
+// break the trail. Without surfacing it here it would be invisible to the only
+// people who would ever act on it.
+function identity(u: Party | null | undefined, hash?: string | null) {
+  if (u) return u.email
+  if (hash) return `hash ${hash.slice(0, 8)}…`
+  return '—'
+}
+
+/** True when the party is gone rather than merely hidden from this admin. */
+function wasDeleted(u: Party | null | undefined, stored?: string | null) {
+  return !u && !!stored
 }
 
 interface Message {
@@ -57,6 +93,7 @@ export default function ReportsPage() {
     let q = supabase
       .from('reports')
       .select(`id, reason, details, status, created_at, session_id,
+        reporter_name, reporter_email_hash, reported_name, reported_email_hash,
         reporter:users!reporter_id(id, first_name, last_name, last_initial, email),
         reported:users!reported_id(id, first_name, last_name, last_initial, email)`)
       .order('created_at', { ascending: false })
@@ -81,11 +118,18 @@ export default function ReportsPage() {
   async function doAction() {
     if (!actionModal) return
     const { report, action } = actionModal
-    // Null when RLS hides the reported user's row. warn/suspend/ban all target
-    // them, so refuse rather than throw; dismiss/resolve only touch the report.
+    // Null when the account was deleted, or when RLS hides the row.
+    // warn/suspend/ban all target the user, so refuse rather than throw;
+    // dismiss/resolve only touch the report and stay available either way.
     const reportedId = report.reported?.id
     if (!reportedId && ['warn', 'suspend', 'ban'].includes(action)) {
-      alert("Can't act on this user — their account isn't visible to you.")
+      alert(
+        wasDeleted(report.reported, report.reported_name)
+          ? `${report.reported_name} has deleted their account, so there's nothing left to ${action}.\n\n` +
+            'The report stays in the queue as a record, and their email fingerprint is kept — ' +
+            'if they sign up again with the same address it will match. Resolve or dismiss it instead.'
+          : "Can't act on this user — their account isn't visible to you.",
+      )
       return
     }
     const now = new Date()
@@ -162,11 +206,11 @@ export default function ReportsPage() {
                     <span className="text-xs text-[#3D2E2E]/40">{new Date(r.created_at).toLocaleDateString('en-GB')}</span>
                   </div>
                   <div className="text-sm mb-1">
-                    <span className="font-medium text-[#3D2E2E]">{fullName(r.reporter)}</span>
-                    <span className="text-[#3D2E2E]/40"> ({r.reporter?.email ?? '—'})</span>
+                    <span className="font-medium text-[#3D2E2E]">{fullName(r.reporter, r.reporter_name)}</span>
+                    <span className="text-[#3D2E2E]/40"> ({identity(r.reporter, r.reporter_email_hash)})</span>
                     <span className="text-[#3D2E2E]/50"> reported </span>
-                    <span className="font-medium text-[#3D2E2E]">{fullName(r.reported)}</span>
-                    <span className="text-[#3D2E2E]/40"> ({r.reported?.email ?? '—'})</span>
+                    <span className="font-medium text-[#3D2E2E]">{fullName(r.reported, r.reported_name)}</span>
+                    <span className="text-[#3D2E2E]/40"> ({identity(r.reported, r.reported_email_hash)})</span>
                   </div>
                   <div className="text-sm font-semibold text-[#8C4A58] mb-1">{r.reason}</div>
                   {r.details && <div className="text-sm text-[#3D2E2E]/60">{r.details}</div>}
@@ -231,10 +275,24 @@ export default function ReportsPage() {
           <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl">
             <h2 className="text-lg font-bold text-[#3D2E2E] mb-1 capitalize">{actionModal.action}</h2>
             <p className="text-sm text-[#3D2E2E]/60 mb-3">
-              Acting on: <span className="font-medium text-[#3D2E2E]">{fullName(actionModal.report.reported)}</span>
-              {' '}— {actionModal.report.reported?.email ?? '—'}
-              <span className="block text-xs text-[#3D2E2E]/40 mt-0.5">id {actionModal.report.reported?.id ?? '—'}</span>
+              Acting on: <span className="font-medium text-[#3D2E2E]">
+                {fullName(actionModal.report.reported, actionModal.report.reported_name)}
+              </span>
+              {' '}— {identity(actionModal.report.reported, actionModal.report.reported_email_hash)}
+              <span className="block text-xs text-[#3D2E2E]/40 mt-0.5">
+                id {actionModal.report.reported?.id ?? '—'}
+              </span>
             </p>
+
+            {/* The account is gone, so warn/suspend/ban have no target. Say so
+                before they pick one, rather than only when they confirm. */}
+            {wasDeleted(actionModal.report.reported, actionModal.report.reported_name) && (
+              <p className="text-sm text-[#3D2E2E]/70 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-3">
+                This account has been deleted. The report is kept as a record and their email
+                fingerprint still matches if they sign up again — but warn, suspend and ban have
+                nothing to act on. Resolve or dismiss.
+              </p>
+            )}
 
             {/* Say what the action actually does. "Resolve" vs "dismiss" is not
                self-evident, and warn/suspend/ban do NOT close the report — that

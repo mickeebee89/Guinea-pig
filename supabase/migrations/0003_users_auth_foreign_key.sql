@@ -263,14 +263,31 @@ notify pgrst, 'reload schema';
 --     v_profiles int;
 --   begin
 --     -- 1. An orphaned profile must be impossible.
+--     --
+--     --    The row is filled in far enough to get PAST the NOT NULL columns,
+--     --    and the SQLSTATE is checked, because the first version of this
+--     --    check did neither: it inserted only (id, email, role), was rejected
+--     --    by first_name NOT NULL before the foreign key was ever evaluated,
+--     --    and reported a pass. A check that can pass without exercising the
+--     --    thing it names is worse than no check — it reads as evidence.
+--     --
+--     --    23503 is foreign_key_violation. Anything else is INCONCLUSIVE, not
+--     --    a pass: it means the row was rejected earlier for some other
+--     --    reason, and the FK still has not been tested.
 --     begin
---       insert into public.users (id, email, role)
---       values (gen_random_uuid(), 'orphan-test@example.invalid', 'model');
+--       insert into public.users (id, email, role, first_name)
+--       values (gen_random_uuid(), 'orphan-test@example.invalid', 'model', 'Orphan');
 --       v_orphan := 'PROBLEM: the insert was accepted';
 --       raise exception 'ROLLBACK_ME';
 --     exception when others then
---       if sqlerrm <> 'ROLLBACK_ME' then
---         v_orphan := 'rejected as expected — ' || left(sqlerrm, 90);
+--       if sqlerrm = 'ROLLBACK_ME' then
+--         null;
+--       elsif sqlstate = '23503' then
+--         v_orphan := 'rejected by the foreign key — correct (' || left(sqlerrm, 70) || ')';
+--       else
+--         v_orphan := 'INCONCLUSIVE — rejected by ' || sqlstate || ', not the foreign key: '
+--                  || left(sqlerrm, 70)
+--                  || '. Supply the missing column and re-run; this did not test 0003.';
 --       end if;
 --     end;
 --
