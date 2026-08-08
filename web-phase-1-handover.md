@@ -773,19 +773,43 @@ drafting placeholders remain phase-2 blockers.
 - **Pre-existing bug, not fixed here:** `mobile/src/app/(app)/provider/[id].tsx:151` selects the
   dead `location` column instead of `location_text`, blanking the location on every mobile shop
   page. One-word fix, worth its own change.
-- **Rating trigger — the repo was misleading; `recompute_provider_rating()` exists live**
-  (found in `pg_proc`, 2026-08-07, absent from `supabase/*.sql`). If it is actually attached to
-  `reviews` then `providers.rating` **is** maintained and `public_stylists` can read the
-  denormalised column instead of aggregating. Confirm with:
-  `select tgname, tgrelid::regclass, pg_get_triggerdef(oid) from pg_trigger where not tgisinternal;`
-  Until confirmed, computing stays correct — it is right either way, just marginally more work.
+- **~~Missing rating trigger~~ — CORRECTED. `providers.rating` IS maintained.**
+  The original claim here ("nothing maintains `providers.rating`") was drawn from the repo and
+  was wrong. `trg_recompute_provider_rating` is attached to `public.reviews`
+  (`AFTER INSERT OR DELETE OR UPDATE`, calling `recompute_provider_rating()`) — confirmed from
+  `pg_trigger` on 2026-08-07. `public_stylists` reads the denormalised columns accordingly.
+  Neither the function nor the trigger appears in any repo file; see the schema-drift item below,
+  of which this was the first symptom.
 - **`providers.created_at` does not exist** (nor `updated_at`) — confirmed by probe. So
   `last_modified` has no base timestamp and **`lastModified` is omitted from the sitemap
   entirely** this phase. An always-`now()` lastmod trains Google to ignore the field.
-- **The live schema has drifted well past `supabase/*.sql`.** A whole patch-test subsystem
-  (`confirm_patch_test`, `has_valid_patch_test`, `set_patch_test_expiry`) plus `taken_slots`
-  and `recompute_provider_rating` exist live and are in no repo file. Treat `supabase/` as
-  partial documentation, never as truth; `pg_proc` / `pg_policies` / `pg_views` are truth.
+- **🔴 SCHEMA DRIFT — `supabase/` documents roughly a third of the live schema, and reads like
+  it documents all of it.** Measured 2026-08-07:
+
+  | | In `supabase/*.sql` | Live | Missing |
+  |---|---|---|---|
+  | Functions | 7 | 18 | **11** |
+  | Triggers | 4 | 11 | **7** |
+  | Views | 4 (all written for the website) | 5 | `public_profiles` |
+  | RLS policies | some | all | the live `providers` "published-or-own" policy exists in no file |
+  | Tables | — | — | `consent_documents`, `session_consents`, `patch_tests`, `moderation_actions` appear nowhere |
+
+  Missing functions: `confirm_patch_test`, `enforce_publish_requires_verified`,
+  `handle_new_auth_user`, `has_open_availability`, `has_valid_patch_test`, `is_admin`,
+  `prevent_mutation`, `recompute_provider_rating`, `set_consent_hash`, `set_patch_test_expiry`,
+  `taken_slots`.
+  Missing triggers: `on_auth_user_created`, `trg_consent_hash`, `trg_lock_moderation`,
+  `trg_patch_test_expiry`, `trg_publish_requires_verified`, `trg_recompute_provider_rating`,
+  `trg_lock_consents`.
+
+  This has already cost real time three times in one session: the rating trigger above
+  (designed an aggregate that was unnecessary), `patch_tests` (blocked the seed teardown from a
+  table `teardown.mjs` had never heard of), and `spray_tan` vs `spray-tan` (a slug guessed from
+  the repo that would have matched zero stylists silently).
+
+  **Treat `supabase/` as partial notes, never as truth.** `pg_proc`, `pg_policies`, `pg_views`
+  and `pg_trigger` are truth. Closing this is a phase-2 task — dump the live DDL and commit it,
+  ideally adopting `supabase/migrations/` so it cannot drift again.
 - `next.config.ts` `images.remotePatterns` must whitelist `ptluekkhiopowuyvkgnd.supabase.co`
   or every avatar and banner 400s at runtime.
 - **Company number resolved: `17272796`.** Registered address 75 Aintree Road, Chatham, Kent,
@@ -817,16 +841,48 @@ drafting placeholders remain phase-2 blockers.
 
 ### 🔴 TOP OF PHASE 2 — the only content blocker left on a store-submission surface
 
-Both live on **`cavybeauty.com/delete-account`**, the page Apple checks for Guideline
+All of this concerns **`cavybeauty.com/delete-account`**, the page Apple checks for Guideline
 5.1.1(v). The placeholders are no longer *displayed* — the old copy carrying them now 301s to
-the new page, which states only what is known — but the questions behind them are unanswered,
-and the page is currently thinner than it should be as a result.
+the new page, which states only what is known — but the questions behind them are unanswered.
 
 Full context recorded here so it does not have to be rediscovered.
 
 ---
 
-**① Clause "What gets deleted"**
+**① THE 30-DAY / 90-DAY CONTRADICTION — answer this first, it constrains ② and ③**
+
+Two published commitments cannot both be true as written.
+
+| Where | Exact current wording |
+|---|---|
+| **`site/content/legal.ts`** → `DELETE_ACCOUNT`, clause **"How long it takes"** — live at `cavybeauty.com/delete-account` | "We aim to complete deletion within 30 days. Some records may be retained where the law requires." |
+| **`privacy-admin-access-clause.md`** (repo root, drafted, **not yet published**) | A **90-day retention** commitment for identity-verification selfies. |
+
+A user reading the deletion page is told everything is gone within 30 days. The privacy draft
+says one category of their data — a **photograph of their face**, which is special-category
+biometric data under UK GDPR — is kept for 90. "Some records may be retained where the law
+requires" does not cover it, because a 90-day selfie retention is *our* operational choice, not
+a legal requirement.
+
+**Three ways out, pick one:**
+1. Name the exception explicitly on the deletion page — "everything within 30 days, except
+   identity-verification photographs which are held for up to 90 days and then automatically
+   deleted." Most honest, and it makes the retention a feature rather than a discrepancy.
+2. Shorten selfie retention to fit inside 30 days and drop the 90-day sentence entirely.
+3. Lengthen the stated deletion window to 90 days. Worst of the three — it makes the whole
+   promise weaker to fix one exception.
+
+**Prerequisite before publishing *any* 90-day figure:** `privacy-admin-access-clause.md:70`
+carries `⚠️ DO NOT publish the 90-day sentence until the purge job exists (task #73)`. The job
+now exists — `supabase/functions/purge-selfies/index.ts` and `supabase/purge-selfies-cron.sql` —
+**but the cron SQL still contains the literal placeholder `<YOUR-RANDOM-CRON-SECRET>`**, so it
+may never have been run with a real value. Confirm with `select jobname, schedule, active from
+cron.job;` before relying on it. A stated retention period that nothing enforces is worse than
+saying nothing, which is exactly what that warning was about.
+
+---
+
+**② Clause "What gets deleted"**
 
 Live text on the old page was:
 > Your profile, messages, bookings and personal details. **[Confirm the full list before launch.]**
@@ -853,7 +909,7 @@ actually removes. Three complications make this harder than reading the function
 
 ---
 
-**② Clause "How long it takes"**
+**③ Clause "How long it takes"**
 
 Live text on the old page was:
 > We aim to complete deletion within 30 days. **[Confirm your timeframe.]** Some records may be
@@ -861,21 +917,11 @@ Live text on the old page was:
 
 Current text on the new page: the same, placeholder removed.
 
-**What has to be decided:** the real timeframe, and which records are retained and on what basis.
-
-> ⚠️ **There is a contradiction to resolve first.** The page promises deletion "within 30 days",
-> while `privacy-admin-access-clause.md` commits to **90-day retention of verification selfies**.
-> Both cannot be true as written. Either the selfie retention is an explicitly named exception on
-> the deletion page, or the 30 days is wrong.
-
-Related and unresolved: that same draft carries
-`⚠️ DO NOT publish the 90-day sentence until the purge job exists (task #73)`
-(line 70). The job now **does** exist — `supabase/functions/purge-selfies/index.ts` and
-`supabase/purge-selfies-cron.sql` — but the cron SQL still contains the literal placeholder
-`<YOUR-RANDOM-CRON-SECRET>`, so **confirm it was actually run with a real secret and is
-scheduled** (`select * from cron.job`) before relying on the 90-day promise. A stated retention
-period that nothing enforces is worse than saying nothing, which is exactly what that warning
-was about.
+**What has to be decided:** whether 30 days is the real figure, and — once ① is settled — which
+records are named as exceptions and on what basis. The "where the law requires" clause currently
+does no work, because nothing has been identified as legally mandated retention; the selfie case
+is an operational choice and the immutable consent/moderation records in ② are a design choice.
+Both need naming rather than hiding behind that phrase.
 
 ---
 
