@@ -269,6 +269,21 @@ create trigger trg_lock_moderation
   for each row execute function public.guard_moderation_actions();
 
 -- ---------------------------------------------------------------------------
+-- ⚠ SECTION 6 IS SUPERSEDED BY MIGRATION 0004. DO NOT RE-RUN THIS FILE.
+--
+--    The delete_account_data below deletes reports where the departing user was
+--    either party — which destroyed other people's complaints ABOUT them. That
+--    was the hole 0004 closed. Re-running this file would reinstate it.
+--
+--    Migration 0006 now refuses to delete a report inside its 6-year retention,
+--    so the reinstated version would fail loudly at the first deletion rather
+--    than quietly destroying evidence. That is a backstop, not permission.
+--
+--    The live definition is in supabase/migrations/0004_*.sql. This is kept as
+--    the record of what was done on 8 Aug 2026, not as something to run.
+-- ---------------------------------------------------------------------------
+
+-- ---------------------------------------------------------------------------
 -- 6. The atomic deletion routine.
 --
 --    Every DB row for one account, in one transaction. Either all of it goes

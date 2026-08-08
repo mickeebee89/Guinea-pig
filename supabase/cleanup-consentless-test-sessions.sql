@@ -87,7 +87,12 @@ update public.admin_audit_log set target_session_id = null
  where target_session_id in (select id from _doomed);
 
 delete from public.notifications where session_id in (select id from _doomed);
-delete from public.reports       where session_id in (select id from _doomed);
+-- ⚠ THE reports DELETE THAT WAS HERE IS GONE, AND MUST NOT COME BACK.
+--    Migration 0006 refuses to delete a report inside its 6-year retention, so
+--    this line would now abort the whole transaction. It is also no longer
+--    needed: migration 0004 made reports.session_id ON DELETE SET NULL, so the
+--    sessions delete below detaches them by itself and the complaint survives
+--    the test data it happened to be attached to.
 delete from public.messages      where session_id in (select id from _doomed);
 delete from public.reviews       where session_id in (select id from _doomed);
 delete from public.sessions      where id         in (select id from _doomed);

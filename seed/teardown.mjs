@@ -181,7 +181,9 @@ async function main() {
     await step('messages(session)',      db.from('messages').delete().in('session_id', sessionIds))
     await step('reviews(session)',       db.from('reviews').delete().in('session_id', sessionIds))
     await step('notifications(session)', db.from('notifications').delete().in('session_id', sessionIds))
-    await step('reports(session)',       db.from('reports').delete().in('session_id', sessionIds))
+    // reports are NOT deleted here any more. Migration 0006 refuses to delete a
+    // report before 6 years, and migration 0004 made reports.session_id
+    // ON DELETE SET NULL — so the session delete below detaches them by itself.
     await step('audit(session)',         db.from('admin_audit_log').update({ target_session_id: null }).in('target_session_id', sessionIds))
     await step('sessions',               db.from('sessions').delete().in('id', sessionIds))
   }
@@ -199,7 +201,22 @@ async function main() {
   // admin_audit_log.target_user_id is NO ACTION and blocks the auth delete.
   // Null the pointer, keep the audit row — the record of what admins did stays.
   await step('audit(user)',   db.from('admin_audit_log').update({ target_user_id: null }).in('target_user_id', userIds))
-  await step('reports(user)', db.from('reports').delete().in('reporter_id', userIds))
+
+  // Reports SURVIVE a teardown, de-identified. This is deliberate, not an
+  // oversight, and it is the one place teardown does not fully clean up.
+  //
+  // seed.mjs creates no reports, so this only ever affected reports filed BY
+  // HAND while testing — which is exactly the deletion migration 0006 refuses.
+  // Deleting a complaint because it is inconvenient to a dev script is the
+  // behaviour 0004 exists to prevent, and teardown is not an exception to it.
+  //
+  // Nothing is left dangling: deleting the user below nulls reporter_id and
+  // reported_id via ON DELETE SET NULL (0004), so what remains is a record that
+  // something was reported with nobody's data attached. It shows as "deleted
+  // account" in the admin queue; dismiss it and it leaves the open filter.
+  //
+  // reviewed_by still has to be nulled — it points at auth.users, so it is not
+  // covered by that cascade and would block the auth delete.
   await step('reports(revd)', db.from('reports').update({ reviewed_by: null }).in('reviewed_by', userIds))
   console.log()
 
