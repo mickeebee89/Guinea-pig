@@ -1,4 +1,4 @@
-import { supabase, type PublicStylist } from './supabase'
+import { supabase, type PublicStylist } from './supabase-public'
 
 const CARD_COLUMNS =
   'id, slug, name, location, categories, rating, review_count, is_verified, profile_pic_url'

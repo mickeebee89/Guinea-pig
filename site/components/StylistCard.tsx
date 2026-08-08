@@ -1,5 +1,5 @@
 import Image from 'next/image'
-import type { PublicStylist } from '@/lib/supabase'
+import type { PublicStylist } from '@/lib/supabase-public'
 
 export function StylistCard({ stylist }: { stylist: PublicStylist }) {
   return (

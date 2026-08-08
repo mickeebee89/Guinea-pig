@@ -1,5 +1,5 @@
 import Image from 'next/image'
-import { supabase, type PublicStylist } from '@/lib/supabase'
+import { supabase, type PublicStylist } from '@/lib/supabase-public'
 
 /**
  * Renders nothing at all when there is nothing to show.
