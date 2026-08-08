@@ -272,6 +272,30 @@ The migration:
    through PostgREST — so "did this user accept the terms?" currently has no answer from the app
    side.
 
+**APPLIED 8 Aug 2026.** Both gates verified by test, not assertion — a missing role raises
+`role must be model or provider (got null)`, and a 2015 date of birth raises
+`must be 18 or over`.
+
+> ⚠️ **KNOWN GAP, not a clean result. 51 of 58 existing accounts have no date of birth at all.**
+>
+> The audit found **0 under-18s**, so there is nobody to act on. But that is not the same as
+> "everyone is verified": for 51 accounts there is **no age evidence of any kind** — only a
+> client-side tick that was never persisted anywhere. The absence of a failure is not a pass.
+>
+> `ensureProfile.ts:64-75` backfills `date_of_birth` from auth metadata on login, so the number
+> should fall as dormant accounts are used. **Re-run the audit before launch to see whether it
+> actually does.** If it stays near 51, most of those accounts predate metadata persistence and
+> the evidence does not exist to recover — which is a decision to make deliberately, not a
+> number to discover during a store review.
+>
+> ```sql
+> select count(*) as accounts,
+>        count(*) filter (where date_of_birth is null) as no_dob,
+>        count(*) filter (where date_of_birth is not null
+>                           and extract(year from age(current_date, date_of_birth)) < 18) as under_18
+> from public.users;
+> ```
+
 > ⚠️ **`role` defaults to `'model'`.** `handle_new_auth_user` does
 > `coalesce(raw_user_meta_data->>'role', 'model')`. A web provider signup that omits `role`
 > silently creates a **model** account with no `providers` row, and nothing errors. Design

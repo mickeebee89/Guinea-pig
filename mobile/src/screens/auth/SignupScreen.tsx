@@ -101,6 +101,23 @@ export default function SignupScreen({ role, onBack, onGoLogin, onNeedConfirmati
     if (password.length < 8)     e.password    = 'At least 8 characters'
     if (password !== confirmPassword) e.confirmPassword = 'Passwords do not match'
 
+    // ⚠️ DO NOT REMOVE THESE CHECKS BECAUSE THE DATABASE NOW VALIDATES TOO.
+    //
+    // Migration 0002 added a server-side 18+ and role check in
+    // handle_new_auth_user. That is a BACKSTOP, not a replacement. It exists
+    // for a modified or future client — it is not the user-facing gate.
+    //
+    // GoTrue wraps ANY exception from that trigger as the generic
+    // "Database error saving new user". So if these client checks are stripped,
+    // an under-18 signup fails with a message that names no field, explains
+    // nothing, and cannot be fixed by the person reading it. The validation
+    // below is what produces "You must be 18 or over to use Cavy" against the
+    // right input.
+    //
+    // Keep both. ageOn() and the trigger both use full years, so they agree on
+    // a birthday boundary; changing one without the other reintroduces the
+    // divergence the migration removed.
+
     // Date of birth — the real 18+ gate.
     if (!dobDay.trim() || !dobMonth.trim() || !dobYear.trim()) {
       e.dob = 'Enter your date of birth'
