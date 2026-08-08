@@ -205,6 +205,7 @@ async function main() {
 
   // ── Phase 3: per-user leftovers, storage, then the account itself ──────────
   let files = 0
+  const failures = []   // accounts whose public.users row could not be removed
   for (const u of users) {
     console.log(`Deleting ${u.email} …`)
 
@@ -233,9 +234,27 @@ async function main() {
 
     await db.from('providers').delete().eq('user_id', u.id)
 
-    // 3. public.users has NO FK to auth.users, so deleting the auth user does NOT
-    //    remove it. Delete it explicitly, before the auth user.
-    await db.from('users').delete().eq('id', u.id)
+    // 3. public.users has NO FK to auth.users, so deleting the auth user does
+    //    NOT remove it. Delete it explicitly, BEFORE the auth user.
+    //
+    //    REQUIRED, not best-effort. This used to be an unchecked await: when it
+    //    failed, the script carried on and deleted the auth user anyway, leaving
+    //    a public.users row with no auth user behind it. That orphan then
+    //    permanently blocks re-registration of its email address, because
+    //    handle_new_auth_user's insert hits users_email_key and GoTrue reports
+    //    only "Database error saving new user".
+    //
+    //    Three such orphans from the 30 July run were found on 8 Aug 2026,
+    //    exactly this way. Failing loudly here and NOT deleting the auth user
+    //    leaves a recoverable state instead of an unrecoverable one.
+    const { error: usersErr } = await db.from('users').delete().eq('id', u.id)
+    if (usersErr) {
+      console.error(`  ! public.users delete FAILED: ${usersErr.message}`)
+      console.error('    Skipping the auth delete for this account — removing the auth user now')
+      console.error('    would strand the public.users row and block this email forever.')
+      failures.push(u.email)
+      continue
+    }
 
     // 4. Finally the auth user.
     const { error: authErr } = await db.auth.admin.deleteUser(u.id)
@@ -259,11 +278,41 @@ async function main() {
   // Prove it, rather than assuming.
   // Re-query rather than trusting the loop above. This is the only statement
   // that actually knows whether teardown worked.
+  // Orphans are a failure too, and an invisible one: an auth user is gone but
+  // its public.users row survives, silently blocking that email from ever being
+  // registered again. Checking for seeded auth users alone would report success
+  // while leaving them behind — which is exactly what happened on 30 July.
+  const { data: orphanRows } = await db
+    .from('users')
+    .select('id, email')
+    .like('email', `%${SEED_EMAIL_SUFFIX}`)
+  const orphans = orphanRows ?? []
+
   const left = await findSeededUsers()
-  if (left.length === 0) {
-    console.log('Verified: no seeded accounts remain.')
+
+  if (left.length === 0 && orphans.length === 0 && failures.length === 0) {
+    console.log('Verified: no seeded accounts and no orphaned public.users rows remain.')
     return
   }
+
+  if (orphans.length > 0) {
+    process.exitCode = 1
+    console.error(
+      `\nORPHANED public.users ROWS (${orphans.length}) — auth user gone, profile row left behind.\n` +
+      'Each one permanently blocks its email from being registered again:\n  ' +
+      orphans.map(o => o.email).join('\n  '),
+    )
+  }
+
+  if (failures.length > 0) {
+    process.exitCode = 1
+    console.error(
+      `\nSKIPPED (${failures.length}) — public.users could not be deleted, so the auth user was\n` +
+      'left in place deliberately rather than creating an orphan:\n  ' + failures.join('\n  '),
+    )
+  }
+
+  if (left.length === 0) return
 
   // EXIT NON-ZERO. A partial teardown is a failure and must be one to the
   // shell, not just to a human reading scrollback.
