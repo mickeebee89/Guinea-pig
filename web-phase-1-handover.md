@@ -775,7 +775,19 @@ Each of these was learned the expensive way here, not imported from a style guid
    blank location on every profile. The stale root `app.json`/`eas.json` were the same shape
    and were deleted before they cost anything.
 
-7. **A build failure can be the last line of defence.** The site's first two deploys failed
+7. **When half a claim cannot be tested, say which half.**
+   This is the shortest and most reusable line in the list, and it was learned three separate
+   ways in one project: an Ignored Build Step whose git behaviour was tested and whose Vercel
+   behaviour was assumed; a bug reported as live before checking whether the table had any rows;
+   four hypotheses read off the FK catalogue instead of reproducing the failure.
+
+   Each time the tested part was real and the untested part was presented with the same
+   confidence. The fix is not more testing — sometimes the other half genuinely is out of reach.
+   The fix is **naming the boundary**: "verified locally, unverified in CI", "the code says X, I
+   have not run it", "this holds for git, I cannot see how Vercel reads it." A reader can act on
+   a stated gap. They cannot act on one that is silently folded into a confident sentence.
+
+8. **A build failure can be the last line of defence.** The site's first two deploys failed
    compiling the admin auth gate into the public site, and only because `@supabase/ssr` was not
    a site dependency. The obvious "fix" — adding it — would have shipped a login wall in front
    of every public page. When a build breaks in a way you did not expect, understand it before
