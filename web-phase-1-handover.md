@@ -102,9 +102,9 @@ login page. A separate app directory with its own build is the only clean isolat
   console has never been deployed — it has only ever run locally via `npm run dev`. An earlier
   note here inferred "dashboard-configured with Root Directory `/`" from the absence of
   `vercel.json`; that inference was wrong. Consequences: only **one** Vercel project is created
-  (the site, Root Directory `site`), and the Ignored Build Step is needed on that project alone.
-  It is still worth setting, so pushes touching only `mobile/`, `seed/` or `supabase/` do not
-  burn a build.
+  (the site, Root Directory `site`).
+  **An Ignored Build Step was tried here and must not be reinstated** — it froze production
+  silently for several commits. Build behaviour is Automatic. See principle 2.
 - **Hobby plan caveats** (signing up 7 Aug 2026): the Vercel Firewall/WAF is Pro-only, so
   `site/lib/rateLimit.ts` is the *only* control on `/api/waitlist` rather than a second layer —
   Cloudflare rate-limiting is the free alternative, and the DNS is already there. Separately,
@@ -726,26 +726,56 @@ Each of these was learned the expensive way here, not imported from a style guid
    better comment or a checklist; it is **removing the need for the claim**. A password
    generated per run cannot outlive the cleanup that was supposed to remove it.
 
-2. **A partial success must exit non-zero.** `teardown.mjs` printed a WARNING and exited 0, so
+2. **An optimisation that can fail is worse than no optimisation, when its failure mode is
+   silence.** The Vercel Ignored Build Step froze production from `a3a5798` onward. Vercel's
+   contract is exit 0 = skip, exit 1 = build — and *anything else is an error*. Vercel's shallow
+   clone did not contain `VERCEL_GIT_PREVIOUS_SHA`, so git exited **128**, and Vercel read that
+   as a failed build rather than "do not skip". The site quietly served stale content while every
+   commit looked pushed and green.
+
+   Same shape as `teardown.mjs` exiting 0 on a partial teardown: **the failure looked like
+   success.** Both were optimisations around a step that was already fast enough. Now set to
+   Automatic. **Do not reintroduce it.**
+
+   The instructive part is not the bug, it is how it survived review. It was suggested **twice**
+   — and the second time was a *correction* after `HEAD^` was rightly flagged as fragile. The
+   replacement looked more rigorous, with four test cases proving the exit codes. Every one of
+   those tests exercised **git's** behaviour. None tested **Vercel's interpretation of it**,
+   which was the half that mattered and the half that could not be reached from here. The claim
+   "it can never fail into skipping" was true of git and false of the system it ran in.
+
+   **Verifying the reachable half and presenting the whole as verified is the failure mode this
+   document keeps recording.** It is the same error as reporting a latent bug as live, and as
+   four hypotheses read off the FK catalogue instead of reproducing the error. When half a claim
+   cannot be tested, say which half.
+
+3. **A partial success must exit non-zero.** `teardown.mjs` printed a WARNING and exited 0, so
    the 7 Aug run reported success to the shell while leaving two accounts behind. Now
    `process.exitCode = 1` on any account it could not fully delete. Verified for real: missing
    key → 1, non-reserved suffix guard → 1, partial teardown → 1, clean teardown → 0.
 
-3. **Verify from outside, not from the value you just wrote.** `banned_until = 'infinity'` in a
+4. **Verify from outside, not from the value you just wrote.** `banned_until = 'infinity'` in a
    `select` is not proof; attempting the sign-in with the leaked password is. Same for the RLS
    work — `400 42703` proves a column is *absent from the object*, which an empty result never
    would.
 
-4. **Fail toward the safe direction.** The Ignored Build Step exits non-zero (build) when the
-   previous SHA is empty or missing, never skipping on uncertainty. `PUBLIC_SITE_MODE` treats
-   any value other than exactly `live` as noindex, so a typo cannot accidentally publish.
+5. **Fail toward the safe direction — but only where you control the interpreter.**
+   `PUBLIC_SITE_MODE` treats any value other than exactly `live` as noindex, so a typo cannot
+   accidentally publish. That works because *this repo* decides what the value means.
 
-5. **Two copies of one config is a bug with a delay on it.** `providers.location` vs
+   > This principle originally cited the Ignored Build Step as its second example — "exits
+   > non-zero when the previous SHA is missing, never skipping on uncertainty". **That was
+   > wrong**, and it stayed in this document while being wrong, which is the hazard the whole
+   > principle list exists to guard against. Non-zero was not "build"; to Vercel, 128 was
+   > "errored", and production silently froze. Failing safe requires knowing how the *other*
+   > system reads your signal. See principle 2.
+
+6. **Two copies of one config is a bug with a delay on it.** `providers.location` vs
    `location_text` — one written by everything, one still read by the mobile shop page, and a
    blank location on every profile. The stale root `app.json`/`eas.json` were the same shape
    and were deleted before they cost anything.
 
-6. **A build failure can be the last line of defence.** The site's first two deploys failed
+7. **A build failure can be the last line of defence.** The site's first two deploys failed
    compiling the admin auth gate into the public site, and only because `@supabase/ssr` was not
    a site dependency. The obvious "fix" — adding it — would have shipped a login wall in front
    of every public page. When a build breaks in a way you did not expect, understand it before

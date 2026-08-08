@@ -84,28 +84,30 @@ Not yet done. Steps, in order:
 2. Set the three environment variables above. **`PUBLIC_SITE_MODE=preview`** —
    see step 5 for when that changes.
 
-3. **Ignored Build Step** — on this project only. The admin console at the repo
-   root has never been deployed anywhere; it runs locally via `npm run dev`.
-   There is no second Vercel project to configure.
+3. **Build behaviour: leave it on Automatic.**
 
-   ```
-   [ -n "$VERCEL_GIT_PREVIOUS_SHA" ] && git diff --quiet "$VERCEL_GIT_PREVIOUS_SHA" HEAD -- ':(top)site'
-   ```
-
-   Still worth setting even as the only project: without it, every push
-   touching `mobile/`, `seed/`, `supabase/` or the admin app burns a build.
-
-   Exit 0 skips the build, non-zero builds. Notes on why it is written this way:
-   - **`VERCEL_GIT_PREVIOUS_SHA`, never `HEAD^`.** `HEAD^` is the previous
-     *commit*, which is wrong after a squash-merge or a force-push and would
-     silently skip a build that should have run. This variable is the last
-     successfully deployed commit, which is the real question being asked.
-   - **`:(top)` makes the pathspec repo-root-relative**, so it behaves the same
-     whether Vercel runs the command from the repo root or from the Root
-     Directory.
-   - **The `-n` guard fails toward building.** Empty on a first deploy → exit 1
-     → build. A SHA missing from Vercel's shallow clone → git exits 128 → build.
-     It can never fail into skipping.
+   > ⛔ **Do not set an Ignored Build Step. One was tried here and it silently
+   > froze production.**
+   >
+   > The command was
+   > `[ -n "$VERCEL_GIT_PREVIOUS_SHA" ] && git diff --quiet "$VERCEL_GIT_PREVIOUS_SHA" HEAD -- ':(top)site'`,
+   > reasoned to "fail toward building" because a missing SHA makes git exit
+   > 128. It does — but **Vercel's contract is exit 0 = skip, exit 1 = build,
+   > and anything else is an ERROR.** Vercel's shallow clone did not contain
+   > the previous SHA, git exited 128 with `fatal: bad object`, and Vercel
+   > recorded a failed build rather than proceeding. `cavybeauty.com` served
+   > stale content for several commits while everything looked pushed and green.
+   >
+   > The reasoning was tested — four cases, all confirming git's exit codes.
+   > None of them tested Vercel's *interpretation* of those codes, which was
+   > the half that mattered and the half not reachable from a laptop.
+   >
+   > It also survived one round of review: `HEAD^` was correctly flagged as
+   > fragile, and the "corrected" version was fragile in a different way while
+   > looking more rigorous.
+   >
+   > There is only one Vercel project and builds are fast. The optimisation was
+   > never worth its failure mode.
 
 4. **Domain**: add `cavybeauty.com` and `www.cavybeauty.com`. Set the **apex as
    primary**; `www` 301s to it. DNS is at Cloudflare Registrar, whose CNAME
