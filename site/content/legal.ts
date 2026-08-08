@@ -532,12 +532,31 @@ export const COMMUNITY: LegalDoc = {
 }
 
 /**
- * NOTE: the live version of this page carries two unfilled drafting
- * placeholders — "[Confirm the full list before launch.]" and "[Confirm your
- * timeframe.]" — publicly visible on the page Apple checks for Guideline
- * 5.1.1(v). They are NOT reproduced here. The two affected sentences are
- * reduced to what is actually known and true; the specifics still need
- * confirming before launch. Tracked as a pre-launch blocker.
+ * The two drafting placeholders this page used to carry — "[Confirm the full
+ * list before launch.]" and "[Confirm your timeframe.]" — are now ANSWERED,
+ * not just removed. 8 Aug 2026.
+ *
+ * Every claim below was checked against what the code actually does before it
+ * was written, in this order:
+ *
+ *   * "removed straight away" — delete_account_data() deletes the user row,
+ *     sessions, messages, reviews, notifications, providers and their children
+ *     in ONE transaction, then storage across all four buckets.
+ *   * "a record that you agreed to a treatment" — session_consents. This was
+ *     only true from 8 Aug: until then ConsentGate displayed terms and
+ *     persisted nothing, so there was no such record to keep.
+ *   * "any moderation action" — moderation_actions.
+ *   * "your first name, a scrambled version of your email" — subject_name and
+ *     subject_email_hash (SHA-256, one-way). Deliberately precise: an earlier
+ *     draft said these records hold no profile data, which was wrong.
+ *   * "6 years" — enforced by guard_session_consents and
+ *     guard_moderation_actions, which refuse deletion before then and permit
+ *     it after. Not a promise a scheduled job has to remember to keep.
+ *
+ * The 30-day / 90-day contradiction that started this is resolved: 30 days,
+ * with the two immutable records named explicitly as the exception. The
+ * 90-day selfie retention is not mentioned because selfies are deleted with
+ * the account, immediately, along with the other three buckets.
  */
 export const DELETE_ACCOUNT: LegalDoc = {
   slug: 'delete-account',
@@ -563,7 +582,20 @@ export const DELETE_ACCOUNT: LegalDoc = {
       blocks: [
         {
           type: 'p',
-          text: 'Your profile, messages, bookings and personal details.',
+          text: 'Your profile, photos, messages and booking history are removed straight away. Anything left in our systems, including backups, is gone within 30 days.',
+        },
+      ],
+    },
+    {
+      heading: 'What we keep, and why',
+      blocks: [
+        {
+          type: 'p',
+          text: 'Two things stay: a record that you agreed to a treatment, and any moderation action taken on your account. We keep these so we can respond to a safety concern or a legal claim.',
+        },
+        {
+          type: 'p',
+          text: 'They hold your first name, a scrambled version of your email address that we can’t read back, what you agreed to, and when. Not your photos, messages, or contact details. We keep them for up to 6 years, then delete them.',
         },
       ],
     },
@@ -572,7 +604,7 @@ export const DELETE_ACCOUNT: LegalDoc = {
       blocks: [
         {
           type: 'p',
-          text: 'We aim to complete deletion within 30 days. Some records may be retained where the law requires.',
+          text: 'Deletion is immediate, and anything remaining is cleared within 30 days. The two records above are the only exception, and they are deleted after 6 years.',
         },
       ],
     },

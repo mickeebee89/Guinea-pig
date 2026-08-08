@@ -656,6 +656,45 @@ Everything still open is a business decision, not a build task.
 - **Portfolio display + video** (§6b) — a `grant` once the §8 consent basis exists. The grid
   and view are already built for it.
 
+### The chain — 8 Aug 2026, and the most reusable thing in this document
+
+The task was **website copy**: resolve a contradiction between "deletion within 30 days" and a
+90-day selfie retention. One paragraph. Verifying it before writing produced four layers:
+
+1. **The 30/90 contradiction** — the stated task. Two published commitments that could not both
+   be true.
+2. **Verifying what deletion actually did found `delete-account` broken.** It attempted to
+   DELETE from two append-only tables, swallowed the failure, and then failed on the auth
+   delete — *after* wiping messages, reviews, notifications and all four storage buckets. A user
+   who had ever booked could not delete their account, and each attempt stripped more of it.
+3. **Fixing that found consent was never recorded.** `session_consents` was empty and nothing in
+   the app wrote it. `ConsentGate` displayed terms, called `onAccept()` and persisted nothing —
+   so the carve-out about "keeping a record that you consented" described something that did not
+   exist.
+4. **Wiring that up found the risk disclosure had never been shown to anyone.** An active
+   `consent_documents` v1 had existed since 9 June carrying the disclosure that providers are
+   learners who may not be qualified, that treatments carry risks, and a medical-suitability
+   tick. Nothing ever rendered it. The screen showed softer house rules instead. **Nobody
+   booking a treatment had ever been told, at the point of consent, that the person performing
+   it might be unqualified.**
+
+Every layer came from the same refusal: **do not publish a claim without checking it is true.**
+The copy could have been written in five minutes at step 1. It would have been a false statement
+in a privacy notice, sitting on top of a broken deletion flow, describing a consent record that
+did not exist, while the document that mattered stayed invisible.
+
+The individual fixes matter less than that. A claim you have not verified is not a claim, it is
+a guess with a confident tone — and each of these was one honest check away from being found.
+
+Two counterweights worth keeping with it, because the same session produced both:
+
+- **Four wrong hypotheses about the teardown failure**, each reached by reading the FK catalogue
+  and reasoning about what *could* block a delete. Running the delete and reading the error
+  named it in one step. Reproduce the failure; do not theorise about it.
+- **The deletion bug was latent, not active** — `session_consents` was empty, so nothing had hit
+  it. It was reported as live before that was checked. The same discipline applies to the
+  severity of a finding as to the finding itself.
+
 ### Principles carried out of this phase
 
 Each of these was learned the expensive way here, not imported from a style guide.
