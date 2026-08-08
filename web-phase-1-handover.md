@@ -859,7 +859,41 @@ drafting placeholders remain phase-2 blockers.
 1. Seed teardown — `node seed/teardown.mjs` (existing blocker #75). Must run before
    `PUBLIC_SITE_MODE=live`, or Google indexes fake stylists.
 
-### 🔴 TOP OF PHASE 2 — the only content blocker left on a store-submission surface
+### ✅ ACCOUNT DELETION — FIXED AND DEPLOYED, 8 Aug 2026
+
+`account-deletion-fix.sql` applied and `delete-account` redeployed. Verified live: FKs severed
+(0 remaining), 4 identity columns present, both retention guards and both insert-time identity
+triggers in place, and `delete_account_data` exists and correctly refuses `anon`.
+
+The bug was latent rather than active — `session_consents` is empty, so nothing had triggered
+it yet. It is fixed before the first consent row exists rather than after.
+
+Seed teardown is also now genuinely complete: 0 seeded accounts remain. The cause of the 7 Aug
+partial failure was `sessions.model_user_id`, confirmed by running the delete and reading the
+error. Four prior hypotheses — session_consents, patch_tests, malformed auth rows,
+`admin_audit_log.admin_id` — were all wrong, each reached by reading the FK catalogue instead
+of reproducing the failure. `teardown.mjs` now clears the cohort's shared rows before deleting
+any account, which was the actual defect.
+
+### 🔴 TOP OF PHASE 2 — CONSENT IS NOT BEING RECORDED
+
+**`ConsentGate.tsx` persists nothing.** 226 lines, exports `ConsentGate({ onAccept })`, and
+contains no reference to `supabase`, `insert`, `from(` or `consent`. Nothing anywhere in
+`mobile/src`, `admin/` or `supabase/functions` writes `session_consents`. The table is empty.
+
+So the app shows a consent screen before a treatment and keeps no evidence that anyone agreed.
+`CLAUDE.md` lists a consent/EULA as a store requirement with a per-application `ConsentGate`;
+the gate exists as UI only.
+
+The database side is complete and working — table, immutability guard, content hashing,
+insert-time identity, retention rules. What is missing is one insert on accept.
+
+**This gates the deletion wording.** The agreed carve-out says "we keep a record that you
+consented to a treatment"; today that describes something that does not exist. Either the gate
+is wired up, or the consent sentence comes out of the deletion page. Nothing gets published
+until that is decided.
+
+### The delete-account clauses — now answerable
 
 All of this concerns **`cavybeauty.com/delete-account`**, the page Apple checks for Guideline
 5.1.1(v). The placeholders are no longer *displayed* — the old copy carrying them now 301s to
