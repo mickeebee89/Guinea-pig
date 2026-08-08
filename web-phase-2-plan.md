@@ -233,15 +233,57 @@ four slices of member area built on top of it.
 
 ---
 
-## Open questions before slice 1
+## Slice 1 — resolved scope
 
-1. **Does web signup need the same gates as mobile?** Age confirmation and terms acceptance are
-   recorded in `auth.users` metadata by `SignupScreen`. Web must record them identically or the
-   two paths produce different accounts.
-2. **Onboarding parity.** `(onboarding)/profile-pic.tsx` runs after mobile signup. Does a
-   web signup land in the same place, or defer it?
-3. **Does a cohort sign-up need anything beyond normal signup** — an invite link, a shared code,
-   a bulk path? "A course leader signs a cohort up" may imply a feature, not just a form.
+All three open questions are answered. Slice 1 is: **sign up, sign in, reset, confirm, sign
+out**, plus the two items below.
+
+### Cohort sign-up is a referral parameter, not an invite system
+
+**Decided 8 Aug 2026.** A course leader gets a shareable link that makes their cohort's signups
+*attributable* — so a tranche can be identified and Founding Provider status honoured for the
+group. Nothing creates an account on anyone else's behalf.
+
+The reasoning matters more than the mechanism: bulk-creating accounts would mean the college
+owns them, students inherit accounts they never signed up for, and **both consent and the 18+
+gate break** — you cannot confirm someone else is over 18, and you cannot agree to terms for
+them. A referral parameter captured at signup gets the attribution without any of that.
+
+Scope: normal signup form, plus source attribution recorded at signup. Where the attribution
+lands (`raw_user_meta_data`, a `public.users` column, or its own table) is a slice-1 design
+question, but it must survive account deletion no better than any other profile data — it is
+marketing attribution, not evidence.
+
+### The 18+ gate moves server-side — MIGRATION, before web signup exists
+
+**Decided 8 Aug 2026.** Today the check is entirely client-side: `SignupScreen.tsx:112` computes
+the age in JavaScript, then sends `age_confirmed: true` as a hardcoded boolean.
+`handle_new_auth_user` never validates it. That is one client you control; web makes it two, and
+the referral links above mean cohort signups arriving from a shared URL — precisely where an
+under-18 turns up.
+
+The migration:
+
+1. **Validate in `handle_new_auth_user`** — reject the signup when `date_of_birth` is missing or
+   under 18, rather than trusting `age_confirmed`. One rule, inherited by every client that
+   exists or ever will.
+2. **Copy `date_of_birth` and `terms_accepted` into `public.users`** so they are queryable. Today
+   they exist only in `auth.users.raw_user_meta_data`, which the admin console cannot read
+   through PostgREST — so "did this user accept the terms?" currently has no answer from the app
+   side.
+
+> ⚠️ **`role` defaults to `'model'`.** `handle_new_auth_user` does
+> `coalesce(raw_user_meta_data->>'role', 'model')`. A web provider signup that omits `role`
+> silently creates a **model** account with no `providers` row, and nothing errors. Design
+> against it — the metadata payload is a typed object built in one place, not assembled
+> per-form.
+
+### Onboarding is not reproduced
+
+`(onboarding)/profile-pic.tsx` is skippable — it offers "Skip — I'll add one later", and both
+paths do the same `router.replace('/(app)')`. Nothing forces it and nothing downstream needs a
+profile picture. Web signup lands in the member area, same as mobile, and the profile picture is
+ordinary profile editing rather than a step to reproduce.
 
 ---
 
