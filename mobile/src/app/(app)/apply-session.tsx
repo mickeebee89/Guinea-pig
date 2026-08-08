@@ -21,7 +21,7 @@ import { hasActiveSubscription, isIdentityVerified } from '@/lib/verification'
 import { useAuth } from '@/context/auth'
 import { supabase } from '@/lib/supabase'
 import { signModelPhotos } from '@/lib/photoUrls'
-import { ConsentGate } from '@/components/ConsentGate'
+import { ConsentGate, type AcceptedConsent } from '@/components/ConsentGate'
 import AvailabilityCalendar, { dateKey } from '@/components/AvailabilityCalendar'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -143,6 +143,10 @@ export default function ApplySessionScreen() {
 
   // ── Wizard state ───────────────────────────────────────────────────────────
 
+  // What the consent gate actually rendered and the model actually ticked.
+  // Carried to submit unchanged — never re-derived from the active document,
+  // or the record could claim they agreed to a version they never saw.
+  const [consent,       setConsent]      = useState<AcceptedConsent | null>(null)
   const [step,          setStep]         = useState<1|2|3|4|5|6|7>(preDate ? 2 : 1)
   const [selectedDate,  setSelectedDate] = useState<string | null>(preDate || null)
   const [selectedSlot,  setSelectedSlot] = useState<AvailabilitySlot | null>(null)
@@ -336,7 +340,8 @@ export default function ApplySessionScreen() {
     scrollRef.current?.scrollTo({ y: 0, animated: false })
   }
 
-  const handleConsentAccept = () => {
+  const handleConsentAccept = (accepted: AcceptedConsent) => {
+    setConsent(accepted)
     setStep(7)
     scrollRef.current?.scrollTo({ y: 0, animated: false })
   }
@@ -484,13 +489,46 @@ export default function ApplySessionScreen() {
         status:           'pending',
       }
 
-      const { data, error } = await supabase
-        .from('sessions')
-        .insert(payload)
-        .select('id')
-        .single()
+      // FAIL CLOSED. No consent in hand means no booking — never fall through
+      // to an insert that would create a confirmed treatment with no record of
+      // what the model agreed to.
+      if (!consent) {
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)
+        Alert.alert('Consent missing', 'Please review and confirm the terms before applying.')
+        setStep(6)
+        scrollRef.current?.scrollTo({ y: 0, animated: false })
+        return
+      }
 
-      const sessionData = data
+      // ONE transaction: the booking and its consent row, or neither.
+      // session_consents.session_id is NOT NULL, so consent can only be written
+      // after the booking exists — two round trips would leave a window where
+      // the booking is confirmed and the consent insert fails.
+      //
+      // The consent fields are the ones the gate RENDERED, carried through
+      // unchanged. A 23505 from sessions_active_slot_uniq still surfaces as
+      // itself: the function does not catch it, so the slot-race branch below
+      // behaves exactly as before.
+      const { data, error } = await supabase.rpc('create_session_with_consent', {
+        p_provider_id:         payload.provider_id,
+        p_availability_id:     payload.availability_id,
+        p_date:                payload.date,
+        p_start_time:          payload.start_time,
+        p_end_time:            payload.end_time,
+        p_scheduled_at:        payload.scheduled_at,
+        p_duration_minutes:    payload.duration_minutes,
+        p_treatment_id:        payload.treatment_id,
+        p_location_type:       payload.location_type,
+        p_note:                payload.note,
+        p_photo_urls:          payload.photo_urls,
+        p_consent_document_id: consent.consent_document_id,
+        p_consent_version:     consent.consent_version,
+        p_content_hash:        consent.content_hash,
+        p_acknowledgements:    consent.acknowledgements,
+      })
+
+      // The RPC returns the new session id; downstream code reads .id.
+      const sessionData = data ? { id: data as string } : null
       const sessionErr  = error
 
       // Lost the race for this slot: the partial unique index (sessions_active_slot_uniq)

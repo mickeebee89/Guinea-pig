@@ -4,15 +4,21 @@
 -- Makes per-treatment consent an actual record instead of a screen.
 --
 -- WHAT IS BROKEN TODAY
---   ConsentGate.tsx shows five items and a tickbox, then calls onAccept() and
---   persists nothing. session_consents is empty, and nothing anywhere in the
---   app writes it. So the app asks people to agree to a treatment and keeps no
---   evidence that they did — the obligation without the protection.
+--   ConsentGate.tsx shows five hardcoded items and a single tickbox, calls
+--   onAccept() and persists nothing. session_consents is empty and nothing in
+--   the app writes it — the obligation without the protection.
+--
+--   Worse: an ACTIVE consent_documents v1 has existed since 9 June 2026
+--   carrying a risk disclosure (providers are learners, may not be qualified,
+--   treatments carry risks, plus a medical-suitability tick), and nothing has
+--   ever rendered it. The document that mattered was the one nobody saw.
 --
 -- WHAT THIS ADDS
---   1. A consent_documents row carrying the five items VERBATIM from the
---      component, so nothing users see changes in this work. Inserted only if
---      the table is empty.
+--   1. consent_documents v2, combining v1's risk disclosure with the two real
+--      commitments from the screen. Five ticks, three informational notices.
+--      v1 is deactivated. This deliberately changes what users see — they gain
+--      the risk disclosure — and is the one place the "nothing users see
+--      changes" rule was relaxed on purpose.
 --   2. create_session_with_consent(): the booking and its consent row in ONE
 --      transaction. Either both exist or neither does.
 --
@@ -48,67 +54,103 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------------
--- 1. Seed the consent document — VERBATIM from ConsentGate.tsx.
+-- 1. consent_documents v2 — the two halves, combined.
 --
---    Only if the table is empty. If a document already exists, this is skipped
---    and a notice says so; adding a competing version silently is how two
---    copies of one thing start diverging.
+--    WHAT THIS FOUND. An active v1 has existed since 9 June 2026 carrying a
+--    RISK DISCLOSURE: providers are learners, may not be qualified, treatments
+--    carry risks, plus a medical-suitability tick that pairs with patch_tests.
+--    Nothing ever rendered it. Meanwhile ConsentGate.tsx showed five hardcoded
+--    HOUSE RULES — photos, visibility, attendance, respect.
 --
---    acknowledgements is the tickable list. Each item gets its own tick in the
---    UI and its own entry in session_consents.acknowledgements — never
---    pre-ticked, per the original design.
+--    They are not two versions of one document. They are two documents, and
+--    the one that was never shown is the one that matters: nobody booking a
+--    treatment has ever been told, at the point of consent, that the person
+--    performing it may be unqualified.
 --
---    content_hash is computed by the existing trg_consent_hash trigger over
---    title + body + acknowledgements, so it covers exactly what is rendered.
+--    v2 keeps v1's disclosure verbatim as the body, promotes the two genuine
+--    commitments from the screen to ticks, and keeps the three purely
+--    informational items as untickable cards so the screen still says what it
+--    said. That deliberately CHANGES what users see — they gain the risk
+--    disclosure. It is the one place the "nothing users see changes" rule was
+--    relaxed on purpose.
+--
+--    "Guinea Pig" becomes "Cavy" in the body, matching the rebrand already
+--    applied to Terms, Privacy and Community Guidelines. Substance untouched.
+--
+--    SHAPE. Every item carries requires_tick. true items render as tick rows
+--    and are recorded individually in session_consents.acknowledgements; false
+--    items render as the informational cards. Both live in acknowledgements so
+--    that content_hash — computed by trg_consent_hash over title + body +
+--    acknowledgements — covers everything actually on screen, not just the
+--    tickable part.
+--
+--    Never pre-ticked, per the original design.
 -- ---------------------------------------------------------------------------
 do $$
-declare v_existing int;
 begin
-  select count(*) into v_existing from public.consent_documents;
-
-  if v_existing > 0 then
-    raise notice 'consent_documents already has % row(s) — seed skipped', v_existing;
+  if exists (select 1 from public.consent_documents where version = 2) then
+    raise notice 'consent_documents v2 already exists — skipped';
   else
+    -- Exactly one active document at a time. v1 stays for the record; nothing
+    -- references it (session_consents is empty), it was simply never used.
+    update public.consent_documents set is_active = false where is_active;
+
     insert into public.consent_documents (version, title, body, acknowledgements, is_active)
     values (
-      1,
+      2,
       'Before you apply',
-      'Please read and agree to the following before sending your application.',
+      'Cavy connects you with people who are practising their skills. Providers on this platform are learners and may not be professionally qualified. Treatments carry normal risks, including reactions, irritation or unsatisfactory results. Cavy is a platform that introduces members to each other and does not provide treatments itself.',
       '[
         {
+          "key": "unqualified",
+          "requires_tick": true,
+          "text": "I understand the provider is practising and may not be qualified"
+        },
+        {
+          "key": "voluntary_risk",
+          "requires_tick": true,
+          "text": "I am booking voluntarily and accept the normal risks of a practice treatment"
+        },
+        {
+          "key": "age_and_health",
+          "requires_tick": true,
+          "text": "I am 18 or over and have no condition that makes this treatment unsafe for me"
+        },
+        {
+          "key": "attendance",
+          "requires_tick": true,
+          "text": "I will attend, or cancel at least 24 hours in advance"
+        },
+        {
+          "key": "community_standards",
+          "requires_tick": true,
+          "text": "I will treat providers with respect and follow the community guidelines"
+        },
+        {
           "key": "photo_sharing",
+          "requires_tick": false,
           "icon": "images-outline",
           "title": "Photo sharing",
           "body": "Any photos you attach will be shared with the provider to help them prepare your treatment."
         },
         {
           "key": "treatment_photos",
+          "requires_tick": false,
           "icon": "camera-outline",
           "title": "Photos of your treatment",
           "body": "Most stylists are building a portfolio, so expect to be asked for before-and-after photos — that is usually why a treatment is free or discounted. They should ask you first, and you can say no."
         },
         {
           "key": "profile_visibility",
+          "requires_tick": false,
           "icon": "person-outline",
           "title": "Profile visibility",
           "body": "Your name and profile picture will be visible to the provider when you apply."
-        },
-        {
-          "key": "attendance",
-          "icon": "calendar-outline",
-          "title": "Attendance commitment",
-          "body": "By applying you agree to attend or cancel at least 24 hours in advance."
-        },
-        {
-          "key": "community_standards",
-          "icon": "heart-outline",
-          "title": "Community standards",
-          "body": "You agree to treat providers with respect and follow our community guidelines."
         }
       ]'::jsonb,
       true
     );
-    raise notice 'seeded consent_documents v1 with 5 acknowledgements';
+    raise notice 'inserted consent_documents v2 (5 ticks, 3 notices); v1 deactivated';
   end if;
 end $$;
 
@@ -198,7 +240,7 @@ grant execute on function public.create_session_with_consent(
 
 -- MIGRATION FOOTER
 insert into public.schema_migrations (version, name, checksum)
-values ('0001', 'consent_capture', 'b0b5ba42b4193733ceca1cbde83bc5761f7a8a73c4f36191e1ea4cba39a87109');
+values ('0001', 'consent_capture', 'dc1789d78cceb479d317c535d2d9199ec4172bc1923d89dee372c7b3059b6180');
 
 commit;
 
