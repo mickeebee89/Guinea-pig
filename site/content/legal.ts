@@ -30,11 +30,55 @@
  * No "last updated" date was changed, and no provenance note is published to
  * users — an internal audit trail belongs here, in the source, not on the page.
  *
- * KNOWN GAP, NOT FIXED HERE: this privacy notice covers the WAITLIST ONLY and
- * says so. It does not cover the app — identity selfies, messages, photos,
- * location and payment records are all absent — yet the shipped app links to it
- * as its privacy policy. Tracked as a pre-launch blocker.
+ * ── APP-SCOPE PRIVACY POLICY, 8 Aug 2026 ─────────────────────────────────
+ * The waitlist-only gap is now closed. PRIVACY previously said in its own text
+ * that it "does not yet cover the app", while the shipped app linked to it and
+ * gated signup on agreeing to it. It now covers the website, the waitlist and
+ * the app together.
+ *
+ * ONE DOCUMENT, NOT TWO, AND THAT WAS FORCED: mobile/src/app/(app)/settings.tsx
+ * and screens/auth/SignupScreen.tsx hardcode /privacy, so the app's policy has
+ * to live at that URL or it needs an app release to move.
+ *
+ * EVERY CATEGORY IN SECTION 5 WAS TAKEN FROM information_schema, not from
+ * memory. Two things that would otherwise have been wrong:
+ *   * Cloudinary is named as the media provider in CLAUDE.md and README.md and
+ *     is called by NO code — every image goes through Supabase Storage. It is
+ *     deliberately absent from section 8.
+ *   * model_attributes holds far more than hair and skin tone — eye colour and
+ *     shape, nail and skin condition, and a free-text box beside every one.
+ *
+ * ⚠ SECTION 7 NEEDS A SOLICITOR BEFORE LAUNCH. Three Article 9 questions, in
+ * descending order of how arguable they are:
+ *
+ *   1. PATCH TEST RESULTS ARE HEALTH DATA. Not arguable. patch_tests.result
+ *      records whether someone's skin reacted to a product. Needs an Article 9
+ *      condition; the drafted text leans on consent plus safety necessity, and
+ *      that choice needs confirming, not assuming.
+ *   2. HAIR TYPE AND SKIN TONE may reveal racial or ethnic origin. Genuinely
+ *      arguable — they are also the core search mechanic of the product.
+ *   3. THE VERIFICATION SELFIE. Section 7 states plainly that no facial
+ *      recognition and no face template is involved, which is true: a human
+ *      compares a photo of someone holding a handwritten note. Whether that is
+ *      "specific technical processing" and so biometric data under Article 9 is
+ *      the question, and it needs someone who will sign their name to it.
+ *
+ * ⚠ SECTION 10 CLAIMS SOMETHING THE CODE MAY NOT HONOUR. It says you can delete
+ * your account at any time. The delete-account edge function's preflight
+ * (supabase/functions/delete-account/index.ts:89-101) ABORTS on any row in
+ * patch_tests referencing the user — model_id, provider_id or logged_by — and
+ * returns 409 without deleting anything. So a user who has had a patch test
+ * logged currently CANNOT delete their account, which is both a false statement
+ * here and an Apple Guideline 5.1.1(v) failure.
+ *
+ * LATENT OR LIVE DEPENDS ON WHETHER patch_tests HAS ROWS — unverified at the
+ * time of writing. `select count(*) from public.patch_tests;` settles it. This
+ * is flagged rather than fixed because the fix is a decision about what happens
+ * to a safety record when its subject leaves, which is the same question 0004
+ * answered for reports and deserves the same care.
  */
+
+import { SUPPORT_EMAIL } from '@/lib/site'
 
 export type LegalBlock =
   | { type: 'p'; text: string }
@@ -75,7 +119,7 @@ export const TERMS: LegalDoc = {
       blocks: [
         {
           type: 'p',
-          text: `${TRADING_NAME} In these terms, “we”, “us”, “our” and “Cavy” mean Guinea Pig App Ltd. You can contact us at support@guineapigapp.co.uk.`,
+          text: `${TRADING_NAME} In these terms, “we”, “us”, “our” and “Cavy” mean Guinea Pig App Ltd. You can contact us at ${SUPPORT_EMAIL}.`,
         },
       ],
     },
@@ -179,7 +223,7 @@ export const TERMS: LegalDoc = {
         },
         {
           type: 'p',
-          text: 'Your cancellation rights. Where you are a consumer, you may have a legal right to cancel a purchase within 14 days. Because our paid features are digital services that you ask us to provide immediately, this right may end once the service has been provided. Nothing here affects your statutory rights as a consumer. If you think you’re entitled to a refund, or something has gone wrong with a payment, email us at support@guineapigapp.co.uk and we’ll deal with it in line with your rights and these terms.',
+          text: `Your cancellation rights. Where you are a consumer, you may have a legal right to cancel a purchase within 14 days. Because our paid features are digital services that you ask us to provide immediately, this right may end once the service has been provided. Nothing here affects your statutory rights as a consumer. If you think you’re entitled to a refund, or something has gone wrong with a payment, email us at ${SUPPORT_EMAIL} and we’ll deal with it in line with your rights and these terms.`,
         },
       ],
     },
@@ -213,7 +257,7 @@ export const TERMS: LegalDoc = {
       blocks: [
         {
           type: 'p',
-          text: 'Cavy is strictly for adults (18+) and has zero tolerance for child sexual abuse and exploitation (CSAE). Child sexual abuse material (CSAM) and any content or conduct that sexualises, grooms, endangers, exploits, or attempts to arrange contact with a person under 18 is absolutely prohibited. We remove such content and permanently remove the accounts involved, and we report CSAM and related conduct to the relevant authorities in line with UK law. You can report any concern in the app or to our child-safety point of contact at support@guineapigapp.co.uk. Our full child-safety standards are set out in our Community Guidelines.',
+          text: `Cavy is strictly for adults (18+) and has zero tolerance for child sexual abuse and exploitation (CSAE). Child sexual abuse material (CSAM) and any content or conduct that sexualises, grooms, endangers, exploits, or attempts to arrange contact with a person under 18 is absolutely prohibited. We remove such content and permanently remove the accounts involved, and we report CSAM and related conduct to the relevant authorities in line with UK law. You can report any concern in the app or to our child-safety point of contact at ${SUPPORT_EMAIL}. Our full child-safety standards are set out in our Community Guidelines.`,
         },
       ],
     },
@@ -263,7 +307,7 @@ export const TERMS: LegalDoc = {
       blocks: [
         {
           type: 'p',
-          text: 'Questions about these terms? Email us any time at support@guineapigapp.co.uk.',
+          text: `Questions about these terms? Email us any time at ${SUPPORT_EMAIL}.`,
         },
       ],
     },
@@ -275,8 +319,8 @@ export const PRIVACY: LegalDoc = {
   title: 'Privacy Policy',
   metaTitle: 'Privacy Policy',
   metaDescription:
-    'What Cavy does with the details you enter when you join the waitlist, and your rights over them.',
-  updated: '11 July 2026',
+    'What Cavy does with your information across the website, the waitlist and the app, and your rights over it.',
+  updated: '8 August 2026',
   sections: [
     {
       n: '1',
@@ -284,7 +328,7 @@ export const PRIVACY: LegalDoc = {
       blocks: [
         {
           type: 'p',
-          text: `${TRADING_NAME} We are the “data controller” for the information you give us here. You can reach us any time at support@guineapigapp.co.uk.`,
+          text: `${TRADING_NAME} We are the “data controller” for the information you give us here. You can reach us any time at ${SUPPORT_EMAIL}.`,
         },
       ],
     },
@@ -294,13 +338,27 @@ export const PRIVACY: LegalDoc = {
       blocks: [
         {
           type: 'p',
-          text: 'This notice explains what we do with the details you enter when you join our waitlist. It does not yet cover the app, because the app hasn’t launched — that policy is coming.',
+          text: 'This notice covers everything: the Cavy website, the waitlist, and the Cavy app. Where something applies to only one of them, we say so.',
         },
       ],
     },
     {
       n: '3',
-      heading: 'What we collect',
+      heading: 'The short version',
+      blocks: [
+        {
+          type: 'p',
+          text: 'We collect what we need to run a booking service between stylists and models, and nothing for advertising. We don’t sell your data, we don’t share it with advertisers, and there is no analytics or tracking software in the app or on this site.',
+        },
+        {
+          type: 'p',
+          text: 'Some of what we hold is sensitive — allergy patch test results, photos of you, and details about your hair and skin. Those get extra protection, and section 7 explains them separately.',
+        },
+      ],
+    },
+    {
+      n: '4',
+      heading: 'What we collect — website and waitlist',
       blocks: [
         { type: 'p', text: 'When you join the waitlist, we collect only what you enter in the form:' },
         {
@@ -316,52 +374,166 @@ export const PRIVACY: LegalDoc = {
         },
         {
           type: 'p',
-          text: 'That’s everything. We don’t collect anything else, and we don’t track you around the web.',
-        },
-      ],
-    },
-    {
-      n: '4',
-      heading: 'Why we use it',
-      blocks: [
-        {
-          type: 'p',
-          text: 'We use your details for one purpose: to email you when Cavy launches, and — if you signed up as a stylist — to tell you about the free early-stylist account. We won’t send you anything unrelated.',
+          text: 'That’s everything for the waitlist. We don’t track you around the web.',
         },
       ],
     },
     {
       n: '5',
-      heading: 'Our legal basis',
+      heading: 'What we collect — the app',
       blocks: [
         {
           type: 'p',
-          text: 'We rely on your consent (the box you ticked when you signed up). You can withdraw that consent at any time by unsubscribing or emailing us, and we’ll stop and remove your details.',
+          text: 'Your account: your first name and surname, email address, date of birth, whether you’re a stylist or a model, and your general region. Your password is stored by our login provider in a scrambled form that nobody at Cavy can read.',
+        },
+        {
+          type: 'p',
+          text: 'Your profile: your profile photo, a short bio, your Instagram handle if you add one, and any photos you upload. Stylists also have a banner image and a portfolio of their work.',
+        },
+        {
+          type: 'p',
+          text: 'Your look, if you’re a model: hair colour, type, length and condition; skin tone and skin type; eye colour and shape; nail condition. Each has a free-text box if the set options don’t fit. You choose what to fill in — none of it is required, and stylists search on it to find models for particular treatments.',
+        },
+        {
+          type: 'p',
+          text: 'Your location: your approximate location, so we can show you people nearby and sort results by distance. Stylists also have a location for their shop or working area. We ask your device for this and you can refuse; if you do, you can still browse.',
+        },
+        {
+          type: 'p',
+          text: 'Identity verification: a selfie you take holding a handwritten note, which a member of our team compares to your profile. We keep the result of that check, and any note the reviewer makes.',
+        },
+        {
+          type: 'p',
+          text: 'Bookings and messages: the appointments you make, when and where, which treatment, any notes or photos attached, what it cost, and the messages you exchange with the other person, including when they were read.',
+        },
+        {
+          type: 'p',
+          text: 'Reviews: the ratings and comments you leave, and those left about you.',
+        },
+        {
+          type: 'p',
+          text: 'Safety records: reports you make or that are made about you, anyone you block, any warning, suspension or ban, and a record of what our team did and why.',
+        },
+        {
+          type: 'p',
+          text: 'Allergy patch tests: where a treatment needs a skin test first, we record that it was done, when, whether it passed, when it expires, and any notes.',
+        },
+        {
+          type: 'p',
+          text: 'Agreements: when you agree to a treatment’s terms before a booking, we record exactly what you agreed to, when, and the IP address and device you agreed from — so the agreement can be proved later.',
+        },
+        {
+          type: 'p',
+          text: 'Payments: we use Stripe. Your card details go straight to Stripe and never reach us. We keep a reference to your Stripe account, what you paid, when, and whether a subscription is active.',
+        },
+        {
+          type: 'p',
+          text: 'Your device: if you turn on notifications, a token identifying your device so we can send them, and your notification preferences.',
         },
       ],
     },
     {
       n: '6',
-      heading: 'Who can see it',
+      heading: 'Why we use it, and our legal basis',
       blocks: [
         {
           type: 'p',
-          text: 'We do not sell your details, and we do not share them with other companies for their own marketing. To run the waitlist we use a small number of trusted service providers who process your details only on our instructions: our database provider (which stores the list) and our email provider (which sends the launch email). We don’t give your details to anyone else.',
+          text: 'To provide the service — your account, bookings, messages, reviews and payments. Our basis is that we need it to perform our contract with you. Without it there is no service to give you.',
+        },
+        {
+          type: 'p',
+          text: 'To keep people safe — identity checks, reports, blocking, moderation, and preventing someone banned from simply signing up again. Our basis is our legitimate interest in running a service where people meet in person, which we consider outweighs the limited intrusion involved. This is the reason some safety records outlive your account (section 9).',
+        },
+        {
+          type: 'p',
+          text: 'To take payment and keep proper records. Our basis is performance of our contract, and for financial records, our legal obligations.',
+        },
+        {
+          type: 'p',
+          text: 'Where we ask your permission — notifications, your device location, marketing emails, and the sensitive information in section 7 — our basis is your consent, and you can withdraw it at any time without affecting anything done beforehand.',
+        },
+        {
+          type: 'p',
+          text: 'We do not make any decision about you by purely automated means that has a legal or similarly significant effect. Decisions to warn, suspend or ban an account are made by a person.',
         },
       ],
     },
     {
       n: '7',
-      heading: 'How long we keep it',
+      heading: 'Sensitive information',
       blocks: [
         {
           type: 'p',
-          text: 'We keep your waitlist details until Cavy launches and we’ve told you about it, or until you unsubscribe or ask us to delete them — whichever comes first. If we decide not to go ahead with the app, we’ll delete the waitlist.',
+          text: 'UK data protection law gives extra protection to certain information, including anything about your health or racial or ethnic origin. Three things we handle may fall into that category, and we want to be straightforward about them.',
+        },
+        {
+          type: 'p',
+          text: 'Allergy patch test results. A patch test checks whether your skin reacts to a product before a treatment such as hair dye. The result is information about your health. We record it because carrying out the treatment without it would be unsafe, and because a stylist needs to know a valid test exists before proceeding.',
+        },
+        {
+          type: 'p',
+          text: 'Details about your hair and skin. Hair type and skin tone are how stylists find models suited to a particular treatment, which is the core of what the app does. Depending on how they are described, they can also indicate someone’s ethnic origin. You choose whether to provide them and you can remove them at any time.',
+        },
+        {
+          type: 'p',
+          text: 'Your verification selfie. We use it so a member of our team can confirm you are who you say you are, by eye. We do not run facial recognition on it, we do not create a face template from it, and we do not use it to identify you anywhere else.',
+        },
+        {
+          type: 'p',
+          text: 'Where we rely on your consent for any of the above, you can withdraw it at any time by emailing us or by removing the information in the app. Withdrawing consent for a patch test record may mean we cannot let a booking go ahead, because the safety check would no longer exist.',
         },
       ],
     },
     {
       n: '8',
+      heading: 'Who we share it with, and where it’s kept',
+      blocks: [
+        {
+          type: 'p',
+          text: 'We do not sell your information and we do not share it with advertisers. There is no advertising or analytics software in our app or on this website.',
+        },
+        {
+          type: 'p',
+          text: 'Other people using Cavy see only part of your profile. Publicly, members see your first name and the first letter of your surname — for example, “Sarah B.” Your surname, email address, date of birth and exact location are never shown to other users. When you book with someone, they see what they need to carry out the appointment.',
+        },
+        {
+          type: 'p',
+          text: 'We use a small number of service providers who handle information only on our instructions: our database, login and file storage provider; our payment provider (Stripe); our email provider; our notification provider; and our website host.',
+        },
+        {
+          type: 'p',
+          text: 'Your information is stored in the United Kingdom (London). Some of our providers are based outside the UK and their staff may access it to provide support, in which case the transfer is covered by the safeguards UK law requires for international transfers.',
+        },
+        {
+          type: 'p',
+          text: 'We will also share information where the law requires it, or to protect someone from harm — including reporting child sexual abuse material to the authorities, as set out in our Terms and Community Guidelines.',
+        },
+      ],
+    },
+    {
+      n: '9',
+      heading: 'How long we keep it',
+      blocks: [
+        {
+          type: 'p',
+          text: 'Your account and everything in it: until you delete your account. Deletion removes your profile, photos, messages and booking history straight away, and anything remaining in our systems is gone within 30 days.',
+        },
+        {
+          type: 'p',
+          text: 'Verification selfies: up to 90 days after the check, or until you delete your account — whichever comes first.',
+        },
+        {
+          type: 'p',
+          text: 'Safety and agreement records: up to 6 years, then deleted automatically. This covers records that you agreed to a treatment, any moderation action taken, and reports made by or about you. These survive account deletion — a report about someone shouldn’t disappear because they left. What stays is your first name and a scrambled version of your email address that we cannot turn back into an address, not your photos, messages or contact details. Our Request account & data deletion page explains this in full.',
+        },
+        {
+          type: 'p',
+          text: 'Waitlist details: until Cavy launches and we’ve told you, or until you unsubscribe or ask us to delete them — whichever comes first.',
+        },
+      ],
+    },
+    {
+      n: '10',
       heading: 'Your rights',
       blocks: [
         { type: 'p', text: 'Under UK data protection law you can, at any time:' },
@@ -371,43 +543,54 @@ export const PRIVACY: LegalDoc = {
             'Ask what we hold about you, and get a copy',
             'Correct anything that’s wrong',
             'Have your details deleted',
-            'Unsubscribe or withdraw your consent',
-            'Ask us to send your details to you in a portable format',
+            'Ask us to restrict how we use your information, or object to us using it',
+            'Withdraw any consent you’ve given, including for notifications or location',
+            'Ask us to send your details to you, or to another service, in a portable format',
           ],
         },
         {
           type: 'p',
-          text: 'To do any of these, email support@guineapigapp.co.uk and we’ll sort it out.',
-        },
-      ],
-    },
-    {
-      n: '9',
-      heading: 'Cookies',
-      blocks: [
-        {
-          type: 'p',
-          text: 'This website doesn’t use tracking or advertising cookies. Our fonts are served from this site rather than a third party, so loading a page doesn’t share your IP address with anyone else.',
-        },
-      ],
-    },
-    {
-      n: '10',
-      heading: 'Your name in the app (when it launches)',
-      blocks: [
-        {
-          type: 'p',
-          text: 'The waitlist above only asks for your first name. When the Cavy app itself launches, signing up will ask for your full name. We collect your surname for account security, identity verification and safety — for example, to keep members accountable and to help us act on reports. Your surname is kept private and is never shown to other users. Publicly, other members only ever see your first name and the first letter of your surname (for example, “Sarah B.”). This paragraph is a heads-up for waitlist members; the full app privacy policy will set this out in detail before launch.',
+          text: `To do any of these, email ${SUPPORT_EMAIL} and we’ll sort it out. You can delete your account yourself at any time in the app: Settings → Delete account.`,
         },
       ],
     },
     {
       n: '11',
+      heading: 'Cookies',
+      blocks: [
+        {
+          type: 'p',
+          text: 'This website doesn’t use tracking or advertising cookies. Our fonts are served from this site rather than a third party, so loading a page doesn’t share your IP address with anyone else. The app uses a login token to keep you signed in, which is not used for tracking.',
+        },
+      ],
+    },
+    {
+      n: '12',
+      heading: 'Age',
+      blocks: [
+        {
+          type: 'p',
+          text: 'Cavy is strictly for adults. You must be 18 or over to join the waitlist or use the app, and we ask for your date of birth at sign-up to check. We don’t knowingly collect information about anyone under 18; if we find that we have, we delete the account.',
+        },
+      ],
+    },
+    {
+      n: '13',
+      heading: 'Changes to this notice',
+      blocks: [
+        {
+          type: 'p',
+          text: 'If we change how we handle your information, we’ll update this page and change the date at the top. If the change is significant, we’ll tell you in the app or by email rather than relying on you to notice.',
+        },
+      ],
+    },
+    {
+      n: '14',
       heading: 'Contact & complaints',
       blocks: [
         {
           type: 'p',
-          text: 'Questions or requests: support@guineapigapp.co.uk. If you’re unhappy with how we’ve handled your data, you can complain to the UK’s Information Commissioner’s Office (ICO) at ico.org.uk. We are registered with the ICO under reference ZC196530.',
+          text: `Questions or requests: ${SUPPORT_EMAIL}. If you’re unhappy with how we’ve handled your data, you can complain to the UK’s Information Commissioner’s Office (ICO) at ico.org.uk. We are registered with the ICO under reference ZC196530.`,
         },
       ],
     },
@@ -497,7 +680,7 @@ export const COMMUNITY: LegalDoc = {
         },
         {
           type: 'p',
-          text: 'How to report: you can report any account or message in one tap inside the app, or email our child-safety point of contact directly at support@guineapigapp.co.uk. We treat these reports as our highest priority. If a child is in immediate danger, contact the police on 999 (in the UK) first.',
+          text: `How to report: you can report any account or message in one tap inside the app, or email our child-safety point of contact directly at ${SUPPORT_EMAIL}. We treat these reports as our highest priority. If a child is in immediate danger, contact the police on 999 (in the UK) first.`,
         },
       ],
     },
@@ -524,7 +707,7 @@ export const COMMUNITY: LegalDoc = {
       blocks: [
         {
           type: 'p',
-          text: 'Report it in the app, or email us any time at support@guineapigapp.co.uk — we take every report seriously. If you’re ever in immediate danger, contact the police on 999 (in the UK) first.',
+          text: `Report it in the app, or email us any time at ${SUPPORT_EMAIL} — we take every report seriously. If you’re ever in immediate danger, contact the police on 999 (in the UK) first.`,
         },
       ],
     },
@@ -614,7 +797,7 @@ export const DELETE_ACCOUNT: LegalDoc = {
       blocks: [
         {
           type: 'p',
-          text: 'In the app: Settings → Delete account. Or email us any time at support@guineapigapp.co.uk and we’ll handle it for you.',
+          text: `In the app: Settings → Delete account. Or email us any time at ${SUPPORT_EMAIL} and we’ll handle it for you.`,
         },
       ],
     },
@@ -666,7 +849,7 @@ export const DELETE_ACCOUNT: LegalDoc = {
       blocks: [
         {
           type: 'p',
-          text: 'See our Privacy Policy for more on how we handle your data, or email support@guineapigapp.co.uk.',
+          text: `See our Privacy Policy for more on how we handle your data, or email ${SUPPORT_EMAIL}.`,
         },
       ],
     },
