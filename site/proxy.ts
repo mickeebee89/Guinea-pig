@@ -67,11 +67,14 @@ export const config = {
     // Authenticated area. Add new (app) routes here.
     '/dashboard/:path*',
     '/account/:path*',
-    // Auth screens need the cookie writer for sign-in, sign-out and the
-    // callback that exchanges a code for a session.
+    // Auth screens need the cookie writer for sign-in and for the callbacks
+    // that exchange a code for a session.
+    //
+    // No '/sign-out' entry: signing out is a Server Action, not a route, so it
+    // POSTs to whichever (app) page hosts the button — already covered above.
+    // A GET /sign-out would be fireable by an <img src> on any other site.
     '/sign-in',
     '/sign-up',
-    '/sign-out',
     '/forgot-password',
     '/auth/:path*',
   ],
