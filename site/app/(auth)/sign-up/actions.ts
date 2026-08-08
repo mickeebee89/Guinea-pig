@@ -81,16 +81,28 @@ export async function signUp(_prev: SignUpState | null, formData: FormData): Pro
   })
 
   if (error) {
-    // GoTrue wraps ANY exception from handle_new_auth_user as this generic
-    // string — including migration 0002's age and role rejections. The client
-    // checks above should make it unreachable, so if it appears something is
-    // genuinely wrong rather than merely invalid. Say so, rather than showing
-    // a database error to someone trying to sign up.
+    // GoTrue wraps ANY failure while creating the user as this generic string —
+    // migration 0002's role and age rejections, but also anything else that can
+    // go wrong inside handle_new_auth_user, such as a constraint on the rows it
+    // writes. The wrapper discards the underlying RAISE, so the only place the
+    // real exception exists is the Supabase Auth logs.
     if (/database error saving new user/i.test(error.message)) {
-      console.error('[sign-up] trigger rejected the signup', { role, dobRaw, email })
+      // Log the WHOLE error, not just the inputs. An earlier version recorded
+      // the payload and dropped error.message, which meant a real failure was
+      // diagnosable only by guessing at which rule fired.
+      console.error('[sign-up] account creation failed inside the auth trigger', {
+        inputs: { role, dobRaw, email },
+        supabaseError: { message: error.message, status: error.status, code: error.code },
+        hint: 'The underlying RAISE is in Supabase → Logs → Auth. GoTrue does not forward it.',
+      })
       return {
         errors: {
-          form: 'We couldn’t create your account. Please check your date of birth and try again, or contact support if it keeps happening.',
+          // Deliberately names NO field. The app cannot know which rule fired —
+          // GoTrue gives it one opaque string — so pointing at the date of
+          // birth was a guess presented to the user as a diagnosis. If their
+          // date was fine, that message sends them to correct something that
+          // was never wrong.
+          form: 'We couldn’t create your account. This is a problem at our end, not something you’ve done — please try again, or contact support if it keeps happening.',
         },
       }
     }
