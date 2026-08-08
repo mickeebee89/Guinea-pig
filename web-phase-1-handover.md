@@ -775,7 +775,28 @@ Each of these was learned the expensive way here, not imported from a style guid
    blank location on every profile. The stale root `app.json`/`eas.json` were the same shape
    and were deleted before they cost anything.
 
-7. **When half a claim cannot be tested, say which half.**
+7. **A test environment that consumes the thing under test proves nothing — and its
+   failure is indistinguishable from a real one.**
+
+   Password-reset links appeared broken on web. Two rounds of diagnosis went into the
+   callback, the token exchange and the redirect allowlist. The cause was the **disposable-mail
+   site**: it renders a preview by fetching links server-side, which consumed the single-use
+   recovery token before any human clicked it. The same address had been the right tool for
+   testing signup, so it carried over without question.
+
+   Hotmail worked first time. That also cleared the Outlook Safe Links concern, since
+   link-prescanning is the same failure and would have shown up in exactly that inbox.
+
+   **Never test single-use auth links from a disposable inbox.** Magic links, recovery links and
+   confirmation links are all one-shot; anything that pre-fetches them — disposable-mail
+   previews, corporate link scanners, some chat clients' link unfurling — burns the token and
+   leaves a failure that looks precisely like a broken callback.
+
+   Same family as the stale Metro bundle in `CLAUDE.md`: the environment, not the code, and the
+   symptom points squarely at the code. Before diagnosing a failure, ask what the *test setup*
+   could be doing to produce it.
+
+8. **When half a claim cannot be tested, say which half.**
    This is the shortest and most reusable line in the list, and it was learned three separate
    ways in one project: an Ignored Build Step whose git behaviour was tested and whose Vercel
    behaviour was assumed; a bug reported as live before checking whether the table had any rows;
