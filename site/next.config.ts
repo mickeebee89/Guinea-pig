@@ -42,9 +42,16 @@ const nextConfig: NextConfig = {
    * stay this tight.
    */
   async headers() {
+    // React's DEV build uses eval() for debugging features — reconstructing
+    // callstacks across environments, mainly. Without 'unsafe-eval' the dev
+    // overlay reports an error on every page load. React never uses eval() in
+    // production, so this is added in development ONLY and the shipped policy
+    // is unchanged.
+    const devEval = process.env.NODE_ENV === 'production' ? '' : " 'unsafe-eval'"
+
     const csp = [
       "default-src 'self'",
-      "script-src 'self' 'unsafe-inline'",
+      `script-src 'self' 'unsafe-inline'${devEval}`,
       "style-src 'self' 'unsafe-inline'",
       // next/image proxies remote images through /_next/image, so they are
       // same-origin by the time a browser sees them; the Supabase host is
