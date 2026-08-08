@@ -381,4 +381,15 @@ notify pgrst, 'reload schema';
 --   * monthly: delete where agreed_at < now() - 6 years
 --   The triggers above already refuse both operations early, so a job that
 --   over-reaches fails safely rather than deleting something it should not.
+--
+--   ⚠ IT MUST ALSO COVER public.reports — added by migration 0004, which stops
+--   account deletion from destroying reports and so gives them the same
+--   indefinite-retention problem this section exists to solve. Delete where
+--   created_at < now() - 6 years, same basis (Limitation Act 1980).
+--
+--   reports has NO append-only guard, unlike the two tables above, so nothing
+--   will refuse an over-reaching job on that table. It was left off deliberately
+--   because seed/teardown.mjs:184 and :202 delete reports on purpose and a guard
+--   would break the seed tool — a conflict that needs settling when the job is
+--   written, not worked around inside it.
 -- ===========================================================================
