@@ -356,6 +356,92 @@ notify pgrst, 'reload schema';
 --   one in — which is itself the point.
 --
 --
+-- ── BLOCK F — prove it actually deletes something ──────────────────────────
+-- RUN THIS AFTER 0006. Block A's dry run returned zero for every operation,
+-- which confirms the function executes and the predicates parse — and nothing
+-- else. No row was old enough to be selected, so none of the delete logic ran.
+-- A check that cannot fail is not evidence.
+--
+-- This back-dates real data inside a rollback so the purge has something to
+-- take. Paste as ONE run. Passed 8 Aug 2026.
+--
+--   create or replace function pg_temp.verify_purge_actually_deletes()
+--   returns table(check_name text, outcome text)
+--   language plpgsql as $f$
+--   declare
+--     v_report uuid; v_consent uuid; v_doc uuid;
+--     v_res jsonb; v_gone boolean; v_scrubbed boolean;
+--     v_delete text := 'not reached';
+--     v_scrub  text := 'not reached';
+--   begin
+--     begin
+--       -- Back-date a real report past 6 years. UPDATE is allowed:
+--       -- guard_reports governs DELETE only, which is the distinction 0006
+--       -- makes so the moderation queue keeps working.
+--       select id into v_report from public.reports order by created_at desc limit 1;
+--       if v_report is null then
+--         v_delete := 'skipped — no reports to back-date';
+--       else
+--         update public.reports set created_at = now() - interval '7 years' where id = v_report;
+--       end if;
+--
+--       -- A synthetic consent old enough to scrub. A real one cannot be
+--       -- back-dated: guard_session_consents refuses any update inside 12
+--       -- months. session_id and user_id carry no FK (account-deletion-fix
+--       -- severed them), so random ids are valid and avoid colliding with the
+--       -- unique constraint on a real row.
+--       select id into v_doc from public.consent_documents limit 1;
+--       if v_doc is not null then
+--         insert into public.session_consents
+--           (session_id, user_id, consent_document_id, consent_version, content_hash,
+--            acknowledgements, agreed_at, ip_address, device_info)
+--         values (gen_random_uuid(), gen_random_uuid(), v_doc, 1, 'purge-test',
+--                 '[]'::jsonb, now() - interval '13 months',
+--                 '203.0.113.1'::inet, '{"t":"purge-test"}'::jsonb)
+--         returning id into v_consent;
+--       end if;
+--
+--       v_res := public.run_retention_purge(false);
+--
+--       if v_report is not null then
+--         select not exists(select 1 from public.reports where id = v_report) into v_gone;
+--         v_delete := case when v_gone
+--           then 'deleted — purge and guard agree on the boundary'
+--           else 'PROBLEM: a 7-year-old report survived the purge' end;
+--       end if;
+--
+--       if v_consent is not null then
+--         select (ip_address is null and device_info is null) into v_scrubbed
+--           from public.session_consents where id = v_consent;
+--         v_scrub := case when v_scrubbed
+--           then 'ip and device nulled on a 13-month-old consent — correct'
+--           else 'PROBLEM: the scrub left them populated' end;
+--       else
+--         v_scrub := 'skipped — no consent_documents row';
+--       end if;
+--
+--       raise exception 'ROLLBACK_ME';
+--     exception when others then
+--       if sqlerrm <> 'ROLLBACK_ME' then
+--         v_delete := 'could not test — ' || left(sqlerrm, 100);
+--       end if;
+--     end;
+--
+--     check_name := 'purge deletes an over-age report'; outcome := v_delete; return next;
+--     check_name := '12-month ip/device scrub';         outcome := v_scrub;  return next;
+--   end $f$;
+--
+--   select * from pg_temp.verify_purge_actually_deletes();
+--
+-- Everything rolls back, including the retention_runs row the purge writes.
+--
+-- The first check is the valuable one: it exercises 0005 and 0006 against each
+-- other at the only boundary they share, which is the one place they could
+-- disagree. moderation_actions is not tested separately because it goes through
+-- the identical loop as reports — same format() path, only the table name
+-- differs.
+--
+--
 -- ── STILL TO DO, AND THE JOB IS ONLY HALF-USEFUL WITHOUT IT ────────────────
 --   * Admin dashboard tile: last successful run from public.retention_runs,
 --     red past 40 days. Until it exists, a job that stops is invisible.

@@ -574,14 +574,22 @@ export const COMMUNITY: LegalDoc = {
  *     moderation_actions.target_email_hash) and a policy that omits the real
  *     purpose is the kind of thing that reads badly later.
  *
- * NO NUMBER IS GIVEN FOR REPORTS, DELIBERATELY. The 6 years above is safe to
- * state because a trigger enforces it. reports has no such guard and no purge
- * job exists — see the retention note in supabase/account-deletion-fix.sql.
- * Stating "6 years" here would be exactly what
- * privacy-admin-access-clause.md:70 warns against: a retention period nothing
- * keeps. WHEN THE PURGE JOB LANDS AND COVERS reports, tighten "for as long as
- * it could still matter" to the specific period — that sentence is written to
- * be replaced.
+ * THE 6 YEARS FOR REPORTS IS NOW STATED, AND EARNED. An earlier draft of this
+ * page deliberately gave no number, because privacy-admin-access-clause.md:70
+ * records the rule the hard way: a retention period nothing enforces is worse
+ * than saying nothing. Both halves now exist —
+ *
+ *   * upper bound — run_retention_purge (migration 0005), scheduled monthly as
+ *     the pg_cron job `retention-purge`, which deletes reports past 6 years.
+ *     Proven against a back-dated row, not inferred from a dry run that
+ *     returned zeros.
+ *   * lower bound — guard_reports (migration 0006), which refuses deletion
+ *     inside the 6 years, so nothing can remove a report early either.
+ *
+ * IF EITHER IS EVER REMOVED, THIS SENTENCE HAS TO GO BACK TO BEING VAGUE.
+ * The admin dashboard's Retention Purge tile is what makes a silently stopped
+ * job visible; without it, this page could go on claiming a deletion that had
+ * quietly stopped happening.
  *
  * STILL OUTSTANDING: the app-scope privacy policy. PRIVACY (line ~297) says
  * plainly that it covers the waitlist and "does not yet cover the app", so the
@@ -640,7 +648,7 @@ export const DELETE_ACCOUNT: LegalDoc = {
         },
         {
           type: 'p',
-          text: 'We keep a report for as long as it could still matter to a safety decision or a legal claim, and no longer.',
+          text: 'We keep reports for up to 6 years, the same as the records above, and then delete them.',
         },
       ],
     },
@@ -649,7 +657,7 @@ export const DELETE_ACCOUNT: LegalDoc = {
       blocks: [
         {
           type: 'p',
-          text: 'Deletion is immediate, and anything remaining is cleared within 30 days. The records described above are the only exception: the agreement and moderation records are deleted after 6 years, and reports are kept while they could still matter.',
+          text: 'Deletion is immediate, and anything remaining is cleared within 30 days. The records described above are the only exception, and all of them are deleted after 6 years.',
         },
       ],
     },
