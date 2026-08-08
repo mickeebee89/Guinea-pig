@@ -1,28 +1,44 @@
 // Supabase Edge Function — delete-account
-// Permanently deletes the AUTHENTICATED caller's own account: their DB rows,
-// their storage objects, and their auth user. Never trusts a passed id — the
-// target id is always derived from the verified JWT.
+// Permanently deletes the AUTHENTICATED caller's own account. Never trusts a
+// passed id — the target is always derived from the verified JWT.
 // Deploy: supabase functions deploy delete-account
+//
+// ── WHY THIS WAS REWRITTEN (8 Aug 2026) ──────────────────────────────────────
+// The previous version attempted to DELETE from session_consents and
+// moderation_actions. Both are append-only by trigger, so those deletes always
+// failed. A best-effort helper swallowed the failure and carried on, the
+// surviving rows then blocked the sessions delete and the auth delete, and the
+// request returned 500 — AFTER messages, reviews, notifications, provider rows
+// and all four storage buckets had already been destroyed.
+//
+// A user who had ever applied for a booking could not delete their account, and
+// each attempt stripped more of it. That is the Apple 5.1.1(v) surface.
+//
+// Three rules now, in order of importance:
+//   1. NOTHING IS DESTROYED until we know the deletion can finish. The preflight
+//      is read-only and aborts on a blocker, leaving the account whole.
+//   2. THE DATABASE WORK IS ONE TRANSACTION (delete_account_data RPC). All rows
+//      go or none do. No more partial wipes.
+//   3. ANYTHING REQUIRED FAILS LOUDLY. `optional()` is only for work whose
+//      failure genuinely does not compromise the outcome, and every use says
+//      why. Nothing that must succeed continues past an error.
+//
+// session_consents and moderation_actions SURVIVE DELIBERATELY. They carry
+// their own subject identity and are purged by retention (6 years; ip/device
+// scrubbed at 12 months). See supabase/account-deletion-fix.sql.
 
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import Stripe from 'npm:stripe@14'
 
-// ── Clients ───────────────────────────────────────────────────────────────────
-
-// Service-role client — bypasses RLS for the authoritative cascade of deletes.
 const db = createClient(
   Deno.env.get('SUPABASE_URL')!,
   Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
 )
 
-// Stripe — to cancel the subscription before the DB row (and its id) is deleted.
-// The secret is project-wide (already set for the stripe-payment function).
 const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY')!, { apiVersion: '2024-06-20' })
 
-// ── CORS ──────────────────────────────────────────────────────────────────────
-
 const CORS = {
-  'Access-Control-Allow-Origin':  '*',
+  'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 }
@@ -34,8 +50,6 @@ function respond(body: unknown, status = 200) {
   })
 }
 
-// Resolve the caller from the JWT. The id we delete is ALWAYS this user's id —
-// the request body is ignored entirely, so a caller can never target someone else.
 async function getVerifiedUser(req: Request) {
   const auth = req.headers.get('Authorization')
   if (!auth) return null
@@ -48,164 +62,153 @@ async function getVerifiedUser(req: Request) {
   return user
 }
 
-// ── Deletion ──────────────────────────────────────────────────────────────────
-
-// Clear every object a user owns in a bucket. All app buckets key by `${userId}/…`,
-// so listing that folder and removing its files covers them.
-async function clearBucketFolder(bucket: string, userId: string, errors: Record<string, string>) {
-  try {
-    const { data: files, error } = await db.storage.from(bucket).list(userId, { limit: 1000 })
-    if (error) { errors[`storage_${bucket}`] = error.message; return }
-    if (files && files.length > 0) {
-      const paths = files.map(f => `${userId}/${f.name}`)
-      const { error: rmErr } = await db.storage.from(bucket).remove(paths)
-      if (rmErr) errors[`storage_${bucket}`] = rmErr.message
-    }
-  } catch (e) {
-    errors[`storage_${bucket}`] = e instanceof Error ? e.message : String(e)
-  }
+/** Non-fatal work. Every call site must justify why failing here is acceptable. */
+async function optional(label: string, q: PromiseLike<{ error: unknown }>, warnings: string[]) {
+  const { error } = await q
+  if (error) warnings.push(`${label}: ${(error as { message?: string })?.message ?? String(error)}`)
 }
 
-async function deleteAccount(me: string) {
-  const errors: Record<string, string> = {}
+// ── Step 1: preflight ────────────────────────────────────────────────────────
+// Read-only. Confirms the auth delete will not be blocked by a reference this
+// function does not clear. Runs BEFORE anything is destroyed, so a blocker
+// leaves the account exactly as it was.
+//
+// The immutable tables are absent on purpose: their FKs to auth.users were
+// severed, so their rows no longer block anything.
+async function preflight(me: string): Promise<string[]> {
+  const blockers: string[] = []
 
-  // Best-effort: record the error but keep going, so one missing table can't strand
-  // a half-deleted user. Works for both .delete() and .update() (both return {error}).
-  const run = async (label: string, q: any) => {
-    const { error } = await q
-    if (error) errors[label] = error.message
+  // Every NO ACTION FK to auth.users that this function does NOT clear.
+  //   sessions.model_user_id  -> deleted by the RPC
+  //   reports.reviewed_by     -> nulled by the RPC
+  //   session_consents.*      -> FK severed, rows survive by design
+  //   moderation_actions.*    -> FK severed, rows survive by design
+  // What remains are two genuine open cases. Blocking here is deliberate: it
+  // reports the problem with the account intact, instead of the old behaviour
+  // of stripping the account and then failing on the auth delete.
+  const stillReferencing: [string, string][] = [
+    // Allergy patch tests. Needs its own decision — the model's own records
+    // should probably go with them, but patch_tests.provider_id and .logged_by
+    // also point at auth.users, and their nullability is unconfirmed. Not
+    // guessed at here.
+    ['patch_tests', 'model_id'],
+    ['patch_tests', 'provider_id'],
+    ['patch_tests', 'logged_by'],
+    // An admin deleting their own account. admin_id records WHO acted, so
+    // nulling it silently would gut the audit trail. Rare and deliberate
+    // enough to want a human in the loop.
+    ['admin_audit_log', 'admin_id'],
+  ]
+
+  for (const [table, column] of stillReferencing) {
+    const { count, error } = await db
+      .from(table).select('id', { count: 'exact', head: true }).eq(column, me)
+    // A table we cannot read is itself a blocker — we cannot prove it is clear.
+    if (error) { blockers.push(`${table}.${column}: unreadable (${error.message})`); continue }
+    if ((count ?? 0) > 0) blockers.push(`${table}.${column}: ${count} row(s)`)
   }
 
-  // ── Precompute the id sets the blocking-FK deletes below key on ──────────────
-  // Everything the auth.admin.deleteUser() cascade CANNOT reach (NO ACTION / RESTRICT
-  // FKs) must be cleared/nulled first, or the final users/auth delete FAILS.
-
-  const { data: provRows } = await db.from('providers').select('id').eq('user_id', me)
-  const providerIds: string[] = (provRows ?? []).map((r: any) => r.id)
-
-  // ── Stop billing on Stripe BEFORE the DB cascade discards the subscription id ──
-  // Cancel the subscription immediately (the account is being erased). KEEP the Stripe
-  // customer + invoices (legal/tax retention). Erasure must not be blocked by a Stripe
-  // failure (GDPR) — but a real failure is flagged, never silently swallowed.
-  const { data: subRow } = await db.from('subscriptions')
-    .select('stripe_subscription_id, stripe_customer_id').eq('user_id', me).maybeSingle()
-  if (subRow?.stripe_subscription_id) {
-    try {
-      await stripe.subscriptions.cancel(subRow.stripe_subscription_id)
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e)
-      // Already gone on Stripe's side = success. Any other error → flag the orphan so
-      // billing can be stopped manually, then continue erasing.
-      if (!/no such subscription|already canceled|resource_missing/i.test(msg)) {
-        errors['stripe_cancel'] = msg
-        await db.from('admin_audit_log').insert({
-          action: 'billing_orphan_on_delete',
-          admin_id: null,
-          target_user_id: null,   // NULL — avoids re-adding the NO-ACTION FK cleared below; id lives in details
-          details: { user_id: me, stripe_subscription_id: subRow.stripe_subscription_id, stripe_customer_id: subRow.stripe_customer_id, error: msg },
-        })
-      }
-    }
-  }
-
-  // sessions has BOTH model_id and model_user_id (both hold the model's user id) —
-  // resolve via both plus provider_id so no session is missed.
-  const sessionSet = new Set<string>()
-  const addSessions = (rows: any[] | null) => { for (const r of rows ?? []) sessionSet.add(r.id) }
-  addSessions((await db.from('sessions').select('id').eq('model_id', me)).data)
-  addSessions((await db.from('sessions').select('id').eq('model_user_id', me)).data)
-  if (providerIds.length > 0) addSessions((await db.from('sessions').select('id').in('provider_id', providerIds)).data)
-  const sessionIds = [...sessionSet]
-
-  const reportSet = new Set<string>()
-  const addReports = (rows: any[] | null) => { for (const r of rows ?? []) reportSet.add(r.id) }
-  addReports((await db.from('reports').select('id').eq('reporter_id', me)).data)
-  addReports((await db.from('reports').select('id').eq('reported_id', me)).data)
-  if (sessionIds.length > 0) addReports((await db.from('reports').select('id').in('session_id', sessionIds)).data)
-  const reportIds = [...reportSet]
-
-  // ── Ordered clear of the blocking (NO ACTION / RESTRICT) references ──────────
-
-  // 1) moderation_actions → reports (NO ACTION): clear before deleting reports.
-  if (reportIds.length > 0) await run('moderation_actions', db.from('moderation_actions').delete().in('related_report_id', reportIds))
-
-  // 2) session_consents → sessions (RESTRICT): the critical one — blocks sessions.
-  if (sessionIds.length > 0) await run('session_consents', db.from('session_consents').delete().in('session_id', sessionIds))
-
-  // 3) reports (NO ACTION → users/sessions): delete by the ids gathered above.
-  if (reportIds.length > 0) await run('reports', db.from('reports').delete().in('id', reportIds))
-
-  // 4) reviews (NO ACTION → users/sessions): by the user, about the user, or in their sessions.
-  await run('reviews_reviewer', db.from('reviews').delete().eq('reviewer_id', me))
-  await run('reviews_reviewee', db.from('reviews').delete().eq('reviewee_id', me))
-  if (sessionIds.length > 0) await run('reviews_session', db.from('reviews').delete().in('session_id', sessionIds))
-
-  // 5) messages (sender_id NO ACTION → users; session_id → sessions).
-  await run('messages_sender', db.from('messages').delete().eq('sender_id', me))
-  if (sessionIds.length > 0) await run('messages_session', db.from('messages').delete().in('session_id', sessionIds))
-
-  // 6) notifications (session_id NO ACTION → sessions; plus the user's own).
-  await run('notifications_user', db.from('notifications').delete().eq('user_id', me))
-  if (sessionIds.length > 0) await run('notifications_session', db.from('notifications').delete().in('session_id', sessionIds))
-
-  // 7) admin_audit_log (NO ACTION): NULL the pointers rather than delete — preserve the audit trail.
-  await run('audit_user', db.from('admin_audit_log').update({ target_user_id: null }).eq('target_user_id', me))
-  if (providerIds.length > 0) await run('audit_provider', db.from('admin_audit_log').update({ target_provider_id: null }).in('target_provider_id', providerIds))
-  if (sessionIds.length > 0)  await run('audit_session',  db.from('admin_audit_log').update({ target_session_id: null }).in('target_session_id', sessionIds))
-
-  // 8) verification_requests.reviewed_by (NO ACTION): NULL where this user reviewed
-  //    OTHERS as an admin (their OWN requests cascade from users).
-  await run('verification_reviewed_by', db.from('verification_requests').update({ reviewed_by: null }).eq('reviewed_by', me))
-
-  // 9) sessions — now unblocked.
-  if (sessionIds.length > 0) await run('sessions', db.from('sessions').delete().in('id', sessionIds))
-
-  // 10) providers — cascades its children (availability, provider_treatments,
-  //     portfolio_items, treatments, favourites(provider_id)).
-  if (providerIds.length > 0) await run('providers', db.from('providers').delete().eq('user_id', me))
-
-  // 11) storage objects (all buckets key by `${userId}/…`).
-  for (const bucket of ['verification-selfies', 'profile-pics', 'model-photos', 'portfolio-photos']) {
-    await clearBucketFolder(bucket, me, errors)
-  }
-
-  // 12) public users row — public.users has NO FK to auth.users, so the auth delete
-  //     does NOT cascade it. Delete it explicitly here; this row's own cascades then
-  //     clear the CASCADE-from-users children (blocks, favourites(user_id),
-  //     model_attributes, model_photos, notifications(user_id), subscriptions,
-  //     verification_payments/requests, etc.).
-  await run('users', db.from('users').delete().eq('id', me))
-
-  // 13) auth user LAST — the source of truth for "account gone"; fatal on failure.
-  const { error: authErr } = await db.auth.admin.deleteUser(me)
-  if (authErr) errors['auth'] = authErr.message
-
-  return errors
+  return blockers
 }
-
-// ── Handler ───────────────────────────────────────────────────────────────────
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
 
   const user = await getVerifiedUser(req)
   if (!user) return respond({ error: 'Unauthorized' }, 401)
+  const me = user.id
+  const warnings: string[] = []
 
   try {
-    const errors = await deleteAccount(user.id)
-    // The auth-user delete is the source of truth for "account gone". Anything else
-    // is non-fatal cleanup (logged for follow-up); auth failure is the real failure.
-    if (errors['auth']) {
-      console.error('[delete-account] auth delete failed', user.id, errors)
-      return respond({ error: 'Could not delete account', details: errors }, 500)
+    // ── 1. Preflight — abort while the account is still intact ───────────────
+    const blockers = await preflight(me)
+    if (blockers.length > 0) {
+      console.error('[delete-account] preflight blocked, nothing deleted', me, blockers)
+      return respond({
+        error: 'Could not delete account. Nothing has been removed — please contact support.',
+        blockers,
+      }, 409)
     }
-    if (Object.keys(errors).length > 0) {
-      console.warn('[delete-account] completed with non-fatal cleanup errors', user.id, errors)
+
+    // ── 2. Stop billing before the subscription row is discarded ─────────────
+    // Optional by design: GDPR erasure must not be blocked by a payment
+    // provider being unreachable. A real failure is recorded as a billing
+    // orphan so it can be cancelled by hand.
+    const { data: subRow } = await db.from('subscriptions')
+      .select('stripe_subscription_id, stripe_customer_id').eq('user_id', me).maybeSingle()
+    if (subRow?.stripe_subscription_id) {
+      try {
+        await stripe.subscriptions.cancel(subRow.stripe_subscription_id)
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e)
+        if (!/no such subscription|already canceled|resource_missing/i.test(msg)) {
+          warnings.push(`stripe_cancel: ${msg}`)
+          await optional('audit_billing_orphan', db.from('admin_audit_log').insert({
+            action: 'billing_orphan_on_delete',
+            admin_id: null,
+            target_user_id: null,
+            details: {
+              user_id: me,
+              stripe_subscription_id: subRow.stripe_subscription_id,
+              stripe_customer_id: subRow.stripe_customer_id,
+              error: msg,
+            },
+          }), warnings)
+        }
+      }
+    }
+
+    // ── 3. Database — one transaction, all or nothing ────────────────────────
+    // REQUIRED. A failure here aborts with the account untouched, because the
+    // RPC rolls back in full.
+    const { data: counts, error: dbErr } = await db.rpc('delete_account_data', { p_user: me })
+    if (dbErr) {
+      console.error('[delete-account] db transaction failed, rolled back', me, dbErr)
+      return respond({
+        error: 'Could not delete account. Nothing has been removed — please contact support.',
+        details: dbErr.message,
+      }, 500)
+    }
+
+    // ── 4. Storage — after the commit, deliberately ──────────────────────────
+    // Not transactional, so it runs once the rows are definitely gone. A
+    // failure leaves unreachable objects under a deleted user's folder, which
+    // is sweepable; running it earlier risked destroying files for an account
+    // that then failed to delete. Buckets key by `${userId}/…`.
+    for (const bucket of ['verification-selfies', 'profile-pics', 'model-photos', 'portfolio-photos']) {
+      try {
+        const { data: files, error } = await db.storage.from(bucket).list(me, { limit: 1000 })
+        if (error) { warnings.push(`storage_${bucket}: ${error.message}`); continue }
+        if (files && files.length > 0) {
+          const { error: rmErr } = await db.storage.from(bucket)
+            .remove(files.map(f => `${me}/${f.name}`))
+          if (rmErr) warnings.push(`storage_${bucket}: ${rmErr.message}`)
+        }
+      } catch (e) {
+        warnings.push(`storage_${bucket}: ${e instanceof Error ? e.message : String(e)}`)
+      }
+    }
+
+    // ── 5. The auth user — the source of truth for "account gone" ────────────
+    // REQUIRED. If this fails the account still exists, so the caller must be
+    // told plainly rather than shown a success.
+    const { error: authErr } = await db.auth.admin.deleteUser(me)
+    if (authErr) {
+      console.error('[delete-account] auth delete failed after db+storage', me, authErr, warnings)
+      return respond({
+        error: 'Your data was removed but the account could not be closed. Please contact support.',
+        details: authErr.message,
+      }, 500)
+    }
+
+    if (warnings.length > 0) {
+      // Surfaced, never silent: these need a human to sweep them.
+      console.warn('[delete-account] completed with warnings', me, { counts, warnings })
     }
     return respond({ success: true })
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Internal server error'
-    console.error('[delete-account]', user.id, err)
+    console.error('[delete-account] unhandled', me, err)
     return respond({ error: message }, 500)
   }
 })
