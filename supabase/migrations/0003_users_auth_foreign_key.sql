@@ -216,44 +216,117 @@ notify pgrst, 'reload schema';
 -- ===========================================================================
 -- VERIFY AFTER APPLYING
 --
---   -- 1. The constraint exists with the right delete rule.
---   --    Expect one row, confdeltype = 'a' (NO ACTION).
---   select conname, confdeltype
+-- WRITTEN FOR THE SUPABASE SQL EDITOR, which is the tool these actually get
+-- pasted into. Two things about it shape every block below:
+--   * only the LAST result set of a run is returned, so each block ends in
+--     exactly one select;
+--   * temp objects do not survive between separate runs, so a block that
+--     creates a pg_temp function must be pasted together with the select that
+--     calls it, as ONE run.
+--
+-- No block needs an outer begin/rollback. Every check that writes does so
+-- inside a plpgsql subtransaction forced to roll back by raising, so there is
+-- no cleanup step to forget and no way to leave test rows behind. plpgsql
+-- variables are NOT transactional, so what a check observed survives its own
+-- rollback and is still returned to you.
+--
+-- ── BLOCK A — the constraint exists with the right delete rule ─────────────
+--
+--   select conname,
+--          confdeltype,
+--          case confdeltype
+--            when 'a' then 'NO ACTION — correct'
+--            when 'c' then 'CASCADE — WRONG, the shape 0003 rejected'
+--            else confdeltype::text
+--          end as verdict
 --   from pg_constraint
---   where conrelid = 'public.users'::regclass
+--   where conrelid  = 'public.users'::regclass
 --     and confrelid = 'auth.users'::regclass;
 --
---   -- 2. An orphan is now impossible. Expect an exception, not a row.
---   begin;
---     insert into public.users (id, email, role)
---     values (gen_random_uuid(), 'orphan-test@example.invalid', 'model');
---   rollback;   -- expect: violates foreign key constraint "users_id_auth_users_fkey"
+--   Expect exactly one row, confdeltype 'a'.
 --
---   -- 3. Signup still works. handle_new_auth_user inserts into public.users
---   --    from an AFTER INSERT trigger, so this proves the FK is satisfied
---   --    mid-transaction rather than only at commit.
---   begin;
---     insert into auth.users (id, email, raw_user_meta_data)
---     values ('00000000-0000-0000-0000-0000000000ff', 'fk-test@example.invalid',
---             '{"role":"model","date_of_birth":"1990-01-01","terms_accepted":true}'::jsonb);
---     select count(*) as profile_created from public.users
---      where id = '00000000-0000-0000-0000-0000000000ff';          -- expect 1
 --
---   -- 4. …and deleting the auth user while the profile survives is REFUSED.
---   --    This is the new behaviour, and the whole point. Run inside the same
---   --    transaction as step 3.
---     delete from auth.users where id = '00000000-0000-0000-0000-0000000000ff';
---                                 -- expect: violates foreign key constraint
---   rollback;
+-- ── BLOCK B — behaviour: four checks, one result set ───────────────────────
+-- Paste from `create or replace` to the final select as ONE run.
 --
---   -- 5. The correct order still works: profile first, then the auth user.
---   --    This is what delete_account_data and teardown.mjs both do.
---   begin;
---     insert into auth.users (id, email, raw_user_meta_data)
---     values ('00000000-0000-0000-0000-0000000000fe', 'fk-test2@example.invalid',
---             '{"role":"model","date_of_birth":"1990-01-01","terms_accepted":true}'::jsonb);
---     delete from public.users where id = '00000000-0000-0000-0000-0000000000fe';
---     delete from auth.users  where id = '00000000-0000-0000-0000-0000000000fe';
---                                 -- expect: both succeed
---   rollback;
+--   create or replace function pg_temp.verify_0003()
+--   returns table(check_name text, outcome text)
+--   language plpgsql as $f$
+--   declare
+--     v_a    uuid  := '00000000-0000-0000-0000-0000000000fa';
+--     v_b    uuid  := '00000000-0000-0000-0000-0000000000fb';
+--     v_meta jsonb := '{"role":"model","date_of_birth":"1990-01-01","terms_accepted":true}'::jsonb;
+--     v_orphan   text := 'not reached';
+--     v_signup   text := 'not reached';
+--     v_refused  text := 'not reached';
+--     v_ordered  text := 'not reached';
+--     v_profiles int;
+--   begin
+--     -- 1. An orphaned profile must be impossible.
+--     begin
+--       insert into public.users (id, email, role)
+--       values (gen_random_uuid(), 'orphan-test@example.invalid', 'model');
+--       v_orphan := 'PROBLEM: the insert was accepted';
+--       raise exception 'ROLLBACK_ME';
+--     exception when others then
+--       if sqlerrm <> 'ROLLBACK_ME' then
+--         v_orphan := 'rejected as expected — ' || left(sqlerrm, 90);
+--       end if;
+--     end;
+--
+--     -- 2 and 3. Signup still works, and the auth delete is then refused.
+--     --    One subtransaction, because 3 depends on 2 having happened.
+--     begin
+--       insert into auth.users (id, email, raw_user_meta_data)
+--       values (v_a, 'fk-test-a@example.invalid', v_meta);
+--
+--       select count(*) into v_profiles from public.users where id = v_a;
+--       v_signup := case when v_profiles = 1
+--                        then 'profile created by the trigger — correct'
+--                        else 'PROBLEM: trigger produced ' || v_profiles || ' profile row(s)' end;
+--
+--       begin
+--         delete from auth.users where id = v_a;
+--         v_refused := 'PROBLEM: the auth delete succeeded and orphaned the profile';
+--       exception when others then
+--         v_refused := 'refused as expected — ' || left(sqlerrm, 90);
+--       end;
+--
+--       raise exception 'ROLLBACK_ME';
+--     exception when others then
+--       if sqlerrm <> 'ROLLBACK_ME' then
+--         v_signup := 'could not test — ' || left(sqlerrm, 90);
+--       end if;
+--     end;
+--
+--     -- 4. The correct order still works: profile first, then the auth user.
+--     --    This is what delete_account_data and teardown.mjs both do.
+--     begin
+--       insert into auth.users (id, email, raw_user_meta_data)
+--       values (v_b, 'fk-test-b@example.invalid', v_meta);
+--       delete from public.users where id = v_b;
+--       delete from auth.users  where id = v_b;
+--       v_ordered := 'both deletes succeeded — correct';
+--       raise exception 'ROLLBACK_ME';
+--     exception when others then
+--       if sqlerrm <> 'ROLLBACK_ME' then
+--         v_ordered := 'PROBLEM: ' || left(sqlerrm, 90);
+--       end if;
+--     end;
+--
+--     check_name := '1. orphan profile insert';                   outcome := v_orphan;  return next;
+--     check_name := '2. signup creates the profile';              outcome := v_signup;  return next;
+--     check_name := '3. auth delete refused while profile lives'; outcome := v_refused; return next;
+--     check_name := '4. profile-then-auth delete still works';    outcome := v_ordered; return next;
+--   end $f$;
+--
+--   select * from pg_temp.verify_0003();
+--
+-- Expect four rows, none containing the word PROBLEM. Row 3 is the behaviour
+-- this migration introduces; row 4 is the proof it did not break the path
+-- account deletion actually uses.
+--
+-- If row 2 reads "could not test", the hand-written insert into auth.users was
+-- rejected — a limitation of poking GoTrue's own table directly, not a failure
+-- of the constraint. Rows 1 and 4 still stand on their own.
 -- ===========================================================================

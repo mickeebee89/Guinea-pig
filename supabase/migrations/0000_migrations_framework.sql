@@ -45,6 +45,49 @@
 -- CHECKING STATUS
 --   select * from public.schema_migrations order by version;
 --   node scripts/migration-status.mjs      -- compares files against the table
+--
+-- WRITING THE VERIFY BLOCK
+--   Verification goes BELOW the footer, which means the checksum does not cover
+--   it — so a verify block can be corrected after the migration has been
+--   applied without the file showing as DRIFTED. Use that.
+--
+--   Write it for the Supabase SQL editor, because that is where it gets pasted.
+--   Two properties of that tool decide the shape, and ignoring them made every
+--   verify block in 0003 and 0004 unrunnable as first written:
+--
+--     * Only the LAST result set of a run is returned. So a check is ONE paste
+--       ending in exactly ONE select — not a sequence of selects, of which you
+--       would only ever see the final one.
+--     * Temp objects do not survive between separate runs. So `create temp
+--       table` in one statement and reading it in the next does not work unless
+--       both are pasted together, and carrying state that way is fragile
+--       regardless.
+--
+--   The shape that works: a pg_temp function returning
+--   `table(check_name text, outcome text)`, pasted together with the select
+--   that calls it. Anything the check needs to carry lives in a plpgsql
+--   variable.
+--
+--   For checks that WRITE, do not ask for an outer begin/rollback — a cleanup
+--   step someone has to remember is a cleanup step that eventually gets
+--   forgotten against production. Wrap the write in a plpgsql subtransaction
+--   and force it to roll back:
+--
+--     begin
+--       ...the thing being tested...
+--       v_outcome := 'PROBLEM: it was accepted';
+--       raise exception 'ROLLBACK_ME';
+--     exception when others then
+--       if sqlerrm <> 'ROLLBACK_ME' then
+--         v_outcome := 'rejected as expected — ' || left(sqlerrm, 90);
+--       end if;
+--     end;
+--
+--   That works because plpgsql variables are NOT transactional: the database
+--   changes roll back, and what the check observed survives to be returned.
+--
+--   Phrase outcomes so a failure is readable without knowing what was expected
+--   — 'refused as expected — …' and 'PROBLEM: …' rather than true/false.
 -- ===========================================================================
 
 begin;

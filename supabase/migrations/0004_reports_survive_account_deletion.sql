@@ -410,55 +410,142 @@ notify pgrst, 'reload schema';
 -- ===========================================================================
 -- VERIFY AFTER APPLYING
 --
--- Step 3 is the one that matters. The others check the schema; step 3 checks
--- the behaviour this file exists to change, against real rows.
+-- WRITTEN FOR THE SUPABASE SQL EDITOR: only the LAST result set of a run is
+-- returned, and temp objects do not survive between runs. So each block below
+-- is ONE paste ending in exactly one select, and anything a check must carry
+-- across statements lives in a plpgsql variable rather than a temp table.
 --
---   -- 1. Shape: three FKs, all SET NULL ('n'); uuids nullable; hashes not.
---   select att.attname, att.attnotnull as not_null,
---          case con.confdeltype when 'n' then 'SET NULL' when 'a' then 'NO ACTION'
---               when 'c' then 'CASCADE' else con.confdeltype::text end as on_delete
+-- No block needs an outer begin/rollback. Every check that writes does so
+-- inside a subtransaction forced to roll back by raising, so no test row can
+-- survive and there is no cleanup to forget. plpgsql variables are not
+-- transactional, so what a check observed survives its own rollback.
+--
+-- ── BLOCK A — shape ────────────────────────────────────────────────────────
+--
+--   select att.attname,
+--          att.attnotnull as not_null,
+--          case con.confdeltype
+--            when 'n' then 'SET NULL'
+--            when 'a' then 'NO ACTION'
+--            when 'c' then 'CASCADE'
+--            else coalesce(con.confdeltype::text, '—')
+--          end as on_delete
 --   from pg_attribute att
 --   left join pg_constraint con
---     on con.conrelid = att.attrelid and con.contype = 'f'
---    and att.attnum = any(con.conkey)
+--          on con.conrelid = att.attrelid
+--         and con.contype  = 'f'
+--         and att.attnum   = any(con.conkey)
 --   where att.attrelid = 'public.reports'::regclass
 --     and att.attname in ('reporter_id','reported_id','session_id',
 --                         'reporter_email_hash','reported_email_hash')
 --   order by att.attname;
 --
---   -- 2. Every report has identity on both sides (expect 0).
---   select count(*) from public.reports
---    where reporter_email_hash is null or reported_email_hash is null;
+--   Expect the three id columns SET NULL and nullable, both hash columns
+--   NOT NULL.
 --
---   -- 3. END TO END. Delete a real user who is party to a report and confirm
---   --    the report survives de-identified. Everything rolls back.
---   begin;
---     -- Pin the report by id, not by the column the delete is about to null.
---     create temp table _subject as
---       select r.id as report_id, r.reported_id as uid,
---              (select count(*) from public.reports) as reports_before
---         from public.reports r
---        where r.reported_id is not null limit 1;
 --
---     select id, reported_id, reported_name, reported_email_hash, session_id, status
---       from public.reports where id = (select report_id from _subject);
---        -- BEFORE: reported_id populated
+-- ── BLOCK B — every report has identity on both sides ──────────────────────
 --
---     select public.delete_account_data((select uid from _subject));
---        -- expect reports_retained >= 1
+--   select count(*) filter (where reporter_email_hash is null
+--                              or reported_email_hash is null) as missing_identity,
+--          count(*) as total
+--   from public.reports;
 --
---     select id, reported_id, reported_name, reported_email_hash, session_id, status
---       from public.reports where id = (select report_id from _subject);
---        -- AFTER: SAME ROW still present, reported_id NULL, name and hash
---        --        intact, session_id NULL if the session was deleted
+--   Expect missing_identity = 0. It cannot be otherwise while the NOT NULL
+--   constraints hold — this checks they are still there.
 --
---     select (select reports_before from _subject) as before,
---            (select count(*) from public.reports) as after;
---        -- must be equal: nothing was deleted, only de-identified
---   rollback;
 --
---   -- 4. The whole deletion path still completes for EVERY account, not just
---   --    the one above. Same harness used to verify the premise for 0003.
+-- ── BLOCK C — the behaviour this migration exists for ──────────────────────
+-- Deletes a real user who is party to a real report, then rolls it all back.
+-- Paste from `create or replace` to the final select as ONE run.
+--
+--   create or replace function pg_temp.verify_0004()
+--   returns table(check_name text, outcome text)
+--   language plpgsql as $f$
+--   declare
+--     v_report uuid; v_uid uuid;
+--     v_before int;  v_after int;
+--     v_reported uuid; v_name text; v_hash text; v_session uuid; v_status text;
+--     v_rpc jsonb;
+--     v_survived text := 'not reached';
+--     v_counts   text := 'not reached';
+--     v_nullrep  text := 'not reached';
+--   begin
+--     select r.id, r.reported_id into v_report, v_uid
+--       from public.reports r
+--      where r.reported_id is not null
+--      limit 1;
+--
+--     if v_report is null then
+--       v_survived := 'skipped — no report with a live reported_id to test with';
+--       v_counts   := 'skipped';
+--     else
+--       select count(*) into v_before from public.reports;
+--
+--       begin
+--         v_rpc := public.delete_account_data(v_uid);
+--
+--         -- Read the report back BY ID. Reading it back by reported_id would
+--         -- find nothing and look exactly like the row having been deleted,
+--         -- which is the confusion this check exists to resolve.
+--         select r.reported_id, r.reported_name, r.reported_email_hash,
+--                r.session_id, r.status
+--           into v_reported, v_name, v_hash, v_session, v_status
+--           from public.reports r where r.id = v_report;
+--
+--         select count(*) into v_after from public.reports;
+--         raise exception 'ROLLBACK_ME';
+--       exception when others then
+--         if sqlerrm <> 'ROLLBACK_ME' then
+--           v_survived := 'could not test — ' || left(sqlerrm, 90);
+--         end if;
+--       end;
+--
+--       if v_survived = 'not reached' then
+--         v_survived := case
+--           when v_hash is null or v_name is null
+--             then 'PROBLEM: the report lost its subject identity'
+--           when v_reported is not null
+--             then 'PROBLEM: reported_id was not nulled'
+--           else 'survived — reported_id NULL, name ' || v_name
+--                || ', hash ' || left(v_hash, 8) || '…, status ' || v_status
+--                || ', session_id ' || coalesce(v_session::text, 'NULL')
+--           end;
+--         v_counts := case when v_before = v_after
+--           then 'unchanged at ' || v_after || ' — nothing was deleted'
+--           else 'PROBLEM: ' || v_before || ' before, ' || v_after || ' after' end;
+--       end if;
+--     end if;
+--
+--     -- The replacement invariant: a report naming nobody must be impossible.
+--     begin
+--       insert into public.reports (reporter_id, reported_id, reason, status)
+--       values (null, null, 'invariant-test', 'open');
+--       v_nullrep := 'PROBLEM: accepted a report with no subject';
+--       raise exception 'ROLLBACK_ME';
+--     exception when others then
+--       if sqlerrm <> 'ROLLBACK_ME' then
+--         v_nullrep := 'rejected as expected — ' || left(sqlerrm, 90);
+--       end if;
+--     end;
+--
+--     check_name := 'report survives its subject being deleted'; outcome := v_survived; return next;
+--     check_name := 'total report count';                       outcome := v_counts;   return next;
+--     check_name := 'report with no subject is rejected';       outcome := v_nullrep;  return next;
+--     check_name := 'delete_account_data returned';             outcome := coalesce(v_rpc::text, '—'); return next;
+--   end $f$;
+--
+--   select * from pg_temp.verify_0004();
+--
+-- Expect no row containing PROBLEM, and the last row to show
+-- reports_retained >= 1.
+--
+--
+-- ── BLOCK D — the whole deletion path still completes, for EVERY account ───
+-- This migration changes delete_account_data, so the all-accounts pass proved
+-- BEFORE it was applied says nothing about the code now running. Re-run it.
+-- Paste as ONE run.
+--
 --   create or replace function pg_temp.dryrun_delete_all()
 --   returns table(email text, result text, code text)
 --   language plpgsql as $f$
@@ -468,24 +555,18 @@ notify pgrst, 'reload schema';
 --       begin
 --         perform public.delete_account_data(u.id);
 --         raise exception 'DRYRUN_OK';
---       exception
---         when others then
---           email := u.email;
---           if sqlerrm = 'DRYRUN_OK' then result := 'ok'; code := '';
---           else result := sqlerrm; code := sqlstate; end if;
---           return next;
+--       exception when others then
+--         email := u.email;
+--         if sqlerrm = 'DRYRUN_OK' then result := 'ok'; code := '';
+--         else result := sqlerrm; code := sqlstate; end if;
+--         return next;
 --       end;
 --     end loop;
 --   end $f$;
 --
---   begin;
 --   select * from pg_temp.dryrun_delete_all() order by (result = 'ok'), email;
---   rollback;
---        -- expect every row 'ok', as it was before this migration
 --
---   -- 5. A report naming nobody is still impossible (expect an exception).
---   begin;
---     insert into public.reports (reporter_id, reported_id, reason, status)
---     values (null, null, 'invariant-test', 'open');
---   rollback;   -- expect: null value in column "reporter_email_hash"
+-- Every row must read 'ok'; failures sort to the top. Each account is tested in
+-- its own subtransaction, so one account's deletes cannot mask the next one's
+-- blocker, and nothing persists.
 -- ===========================================================================
