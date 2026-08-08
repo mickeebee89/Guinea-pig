@@ -112,19 +112,29 @@ begin
   where not exists (select 1 from auth.users a where a.id = u.id);
 
   if n > 0 then
+    -- ONE literal with real newlines in it. Not E-strings, and not adjacent
+    -- literals relying on implicit concatenation: that rule resumes with a bare
+    -- quote, so E'…' E'…' is a syntax error, and it is the mistake that stopped
+    -- this file applying the first time. A literal with nothing to remember
+    -- cannot be got wrong.
     raise exception
-      E'Cannot add the constraint: % orphaned public.users row(s) have no auth user.\n'
-      E'Each one blocks re-registration of its address:\n  %\n\n'
-      E'To clear them, run these two statements together (both, in one go — the\n'
-      E'update must land before the delete or the delete fails on the audit FK):\n\n'
-      E'  update public.admin_audit_log set target_user_id = null\n'
-      E'   where target_user_id in (select u.id from public.users u\n'
-      E'         where not exists (select 1 from auth.users a where a.id = u.id));\n\n'
-      E'  delete from public.users u\n'
-      E'   where not exists (select 1 from auth.users a where a.id = u.id);\n\n'
-      E'Then re-run this migration. If the delete fails on a DIFFERENT foreign\n'
-      E'key, that table needs the same treatment — null the pointer, keep the\n'
-      E'row — and section 3 of this file will name it.', n, sample;
+'Cannot add the constraint: % orphaned public.users row(s) have no auth user.
+Each one blocks re-registration of its address:
+  %
+
+To clear them, run BOTH of these together. The update has to land before the
+delete, or the delete fails on the audit foreign key:
+
+  update public.admin_audit_log set target_user_id = null
+   where target_user_id in (select u.id from public.users u
+         where not exists (select 1 from auth.users a where a.id = u.id));
+
+  delete from public.users u
+   where not exists (select 1 from auth.users a where a.id = u.id);
+
+Then re-run this migration. If the delete fails on a DIFFERENT foreign key,
+that table needs the same treatment — null the pointer, keep the row — and
+section 3 of this file names every one of them.', n, sample;
   end if;
 end $$;
 
@@ -199,14 +209,14 @@ begin
     and con.confdeltype not in ('c', 'n');   -- CASCADE and SET NULL are fine
 
   if blockers is not null then
-    -- Every literal below carries the E prefix. Postgres concatenates adjacent
-    -- literals but does NOT propagate the prefix, so an unprefixed continuation
-    -- would print a backslash-n instead of a newline.
+    -- Single literal, real newlines — see the note in section 1.
     raise exception
-      E'Refusing to add the cascade. These FKs into public.users would abort an '
-      E'auth-user delete:\n  %\n'
-      E'Each needs a deliberate decision (SET NULL, CASCADE, or sever). '
-      E'Nothing has been changed.', blockers;
+'Refusing to add the cascade. These foreign keys into public.users would abort
+an auth-user delete:
+  %
+
+Each needs a deliberate decision: SET NULL, CASCADE, or sever the constraint.
+Nothing has been changed.', blockers;
   end if;
 end $$;
 
@@ -241,7 +251,7 @@ comment on constraint users_id_auth_users_fkey on public.users is
 
 -- MIGRATION FOOTER
 insert into public.schema_migrations (version, name, checksum)
-values ('0003', 'users_auth_foreign_key', '5c794b99b8c158f29f6b0bdefa24052471160edd10e3c4477e151c0213e099ba');
+values ('0003', 'users_auth_foreign_key', '4bf62fa029e6d5bb5c6f107cbe6bf5ad875dbf4e0b1746e7bfc30df37fa2973c');
 
 commit;
 
