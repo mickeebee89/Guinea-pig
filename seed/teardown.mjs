@@ -58,9 +58,22 @@ const db = createClient(SUPABASE_URL, key, { auth: { persistSession: false } })
  * user (`banned_until = 'infinity'`) and leave the row, not to disable a safety
  * mechanism someone added deliberately.
  */
+// Kept in sync by hand, which is exactly why it has been wrong before: the
+// 7 Aug 2026 chase missed sessions.model_user_id, then patch_tests, then
+// admin_audit_log.target_user_id, one round-trip at a time. If this list is
+// ever unhelpful again, stop extending it and ask the database instead:
+//
+//   select con.conrelid::regclass, att.attname
+//   from pg_constraint con
+//   join unnest(con.conkey) k(attnum) on true
+//   join pg_attribute att on att.attrelid = con.conrelid and att.attnum = k.attnum
+//   where con.contype = 'f' and con.confrelid = 'auth.users'::regclass
+//     and con.confdeltype <> 'c';   -- CASCADE takes care of itself
 const BLOCKING_REFS = [
   ['sessions', 'model_user_id'],
+  ['sessions', 'model_id'],
   ['reports', 'reviewed_by'],
+  ['reports', 'reporter_id'],
   ['session_consents', 'user_id'],
   ['patch_tests', 'logged_by'],
   ['patch_tests', 'model_id'],
@@ -68,6 +81,7 @@ const BLOCKING_REFS = [
   ['moderation_actions', 'admin_id'],
   ['moderation_actions', 'target_user_id'],
   ['admin_audit_log', 'admin_id'],
+  ['admin_audit_log', 'target_user_id'],
 ]
 
 /** Name whatever is still referencing a user we failed to delete. */
@@ -125,38 +139,76 @@ async function main() {
     return
   }
 
+  // ── Phase 1: gather the WHOLE cohort's ids before deleting anything ────────
+  //
+  // THE BUG THIS FIXES (7 Aug 2026): this script used to delete one user at a
+  // time, but the rows that block a delete are shared BETWEEN users — user A's
+  // notification points at user B's session. Processing A first failed to
+  // delete B-referenced rows, the failure was not checked, and the auth delete
+  // then failed for real. By the time B was processed, B's rows were gone and
+  // the session sat orphaned. Two of nine accounts survived exactly that way,
+  // and the script reported success.
+  //
+  // Gathering the whole cohort first means cross-references between seeded
+  // users are cleared together, in dependency order, once.
+  const userIds = users.map(u => u.id)
+
+  const { data: provRows } = await db.from('providers').select('id').in('user_id', userIds)
+  const providerIds = (provRows ?? []).map(p => p.id)
+
+  const sessionSet = new Set()
+  const addSessions = (rows) => { for (const r of rows ?? []) sessionSet.add(r.id) }
+  // sessions carries BOTH model_id and model_user_id; check both or miss rows.
+  addSessions((await db.from('sessions').select('id').in('model_user_id', userIds)).data)
+  addSessions((await db.from('sessions').select('id').in('model_id', userIds)).data)
+  if (providerIds.length) {
+    addSessions((await db.from('sessions').select('id').in('provider_id', providerIds)).data)
+  }
+  const sessionIds = [...sessionSet]
+
+  console.log(`Cohort: ${userIds.length} user(s), ${providerIds.length} provider(s), ${sessionIds.length} session(s)\n`)
+
+  // ── Phase 2: cohort-wide dependents, in dependency order, once ─────────────
+  // Errors are REPORTED, not swallowed — an unreported failure here is what
+  // turned a bug into a script that lied about succeeding.
+  const step = async (label, q) => {
+    const { error } = await q
+    if (error) console.warn(`  ! ${label}: ${error.message}`)
+  }
+
+  if (sessionIds.length) {
+    console.log('Clearing shared references …')
+    await step('messages(session)',      db.from('messages').delete().in('session_id', sessionIds))
+    await step('reviews(session)',       db.from('reviews').delete().in('session_id', sessionIds))
+    await step('notifications(session)', db.from('notifications').delete().in('session_id', sessionIds))
+    await step('reports(session)',       db.from('reports').delete().in('session_id', sessionIds))
+    await step('audit(session)',         db.from('admin_audit_log').update({ target_session_id: null }).in('target_session_id', sessionIds))
+    await step('sessions',               db.from('sessions').delete().in('id', sessionIds))
+  }
+
+  for (const pid of providerIds) {
+    await step('availability',         db.from('availability').delete().eq('provider_id', pid))
+    await step('portfolio_items',      db.from('portfolio_items').delete().eq('provider_id', pid))
+    await step('portfolio_categories', db.from('portfolio_categories').delete().eq('provider_id', pid))
+    await step('provider_treatments',  db.from('provider_treatments').delete().eq('provider_id', pid))
+  }
+  if (providerIds.length) {
+    await step('audit(provider)', db.from('admin_audit_log').update({ target_provider_id: null }).in('target_provider_id', providerIds))
+  }
+
+  // admin_audit_log.target_user_id is NO ACTION and blocks the auth delete.
+  // Null the pointer, keep the audit row — the record of what admins did stays.
+  await step('audit(user)',   db.from('admin_audit_log').update({ target_user_id: null }).in('target_user_id', userIds))
+  await step('reports(user)', db.from('reports').delete().in('reporter_id', userIds))
+  await step('reports(revd)', db.from('reports').update({ reviewed_by: null }).in('reviewed_by', userIds))
+  console.log()
+
+  // ── Phase 3: per-user leftovers, storage, then the account itself ──────────
   let files = 0
   for (const u of users) {
     console.log(`Deleting ${u.email} …`)
 
-    // 1. Storage first — the DB rows hold the paths we need to find these.
     for (const b of BUCKETS) files += await clearBucket(b, u.id)
-
-    // 2. Rows that do NOT cascade from public.users. Sessions reference providers,
-    //    and messages/reviews reference sessions, so clear them in dependency order.
-    const { data: provs } = await db.from('providers').select('id').eq('user_id', u.id)
-    for (const p of provs ?? []) {
-      const { data: sess } = await db.from('sessions').select('id').eq('provider_id', p.id)
-      const ids = (sess ?? []).map(s => s.id)
-      if (ids.length) {
-        await db.from('messages').delete().in('session_id', ids)
-        await db.from('reviews').delete().in('session_id', ids)
-        await db.from('sessions').delete().in('id', ids)
-      }
-      await db.from('availability').delete().eq('provider_id', p.id)
-      await db.from('portfolio_items').delete().eq('provider_id', p.id)
-      await db.from('portfolio_categories').delete().eq('provider_id', p.id)
-      await db.from('provider_treatments').delete().eq('provider_id', p.id)
-    }
-
-    // Sessions where this user was the MODEL (a different provider's booking).
-    const { data: asModel } = await db.from('sessions').select('id').eq('model_user_id', u.id)
-    const modelIds = (asModel ?? []).map(s => s.id)
-    if (modelIds.length) {
-      await db.from('messages').delete().in('session_id', modelIds)
-      await db.from('reviews').delete().in('session_id', modelIds)
-      await db.from('sessions').delete().in('id', modelIds)
-    }
 
     // Anything else keyed directly to the user.
     await db.from('reviews').delete().eq('reviewer_id', u.id)

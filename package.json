@@ -1,0 +1,29 @@
+{
+  "name": "guinea-pig-repo-tooling",
+  "version": "0.0.0",
+  "private": true,
+  "//": [
+    "NOT AN APPLICATION. No app lives at the repo root — admin/, site/ and",
+    "mobile/ are siblings, each with its own package.json and node_modules.",
+    "This manifest exists only so repo-level scripts resolve their imports:",
+    "  * seed/*.mjs and scripts/*.mjs import @supabase/supabase-js",
+    "  * `npx supabase functions deploy <name>` uses the local CLI",
+    "Both broke on 8 Aug 2026 when the admin console moved out of the root and",
+    "took node_modules with it.",
+    "Do NOT add a framework, a build script, or source files here. The reason",
+    "the admin app was moved out is that Next resolves its convention files",
+    "relative to the build root, and a proxy.ts at the root was being compiled",
+    "into the public site's build."
+  ],
+  "scripts": {
+    "seed": "node seed/seed.mjs",
+    "teardown": "node seed/teardown.mjs",
+    "check-queries": "node scripts/check-queries.mjs"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.108.1"
+  },
+  "devDependencies": {
+    "supabase": "^2.109.1"
+  }
+}
