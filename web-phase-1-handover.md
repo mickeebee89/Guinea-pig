@@ -656,6 +656,25 @@ Everything still open is a business decision, not a build task.
 - **Portfolio display + video** (§6b) — a `grant` once the §8 consent basis exists. The grid
   and view are already built for it.
 
+### ✅ CONSENT CAPTURE — LIVE AND VERIFIED, 8 Aug 2026
+
+Migrations 0000 and 0001 applied. First real `session_consents` row written:
+**v2, hash `e3173ccd…`, bound to session `19c47ffa…`** — the first evidence in this project's
+history that anyone agreed to anything before a treatment.
+
+**Slot-race behaviour tested, not asserted** (constraint 4). Booking a slot already held by an
+active session, through `create_session_with_consent`:
+
+| | |
+|---|---|
+| `SQLSTATE` | **23505** — `apply-session.tsx`'s "That time was just booked" branch fires unchanged |
+| sessions added | **0** |
+| consents added | **0** |
+
+The last row is the one that matters: the failed booking left **no orphaned consent record**.
+That is the atomicity guarantee demonstrated rather than claimed — if it had returned 1, the RPC
+would be recording consent for bookings that never happened.
+
 ### The chain — 8 Aug 2026, and the most reusable thing in this document
 
 The task was **website copy**: resolve a contradiction between "deletion within 30 days" and a
