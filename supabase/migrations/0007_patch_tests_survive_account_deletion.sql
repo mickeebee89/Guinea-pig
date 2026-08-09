@@ -308,15 +308,21 @@ notify pgrst, 'reload schema';
 --     v_survived text := 'not reached';
 --     v_nullrow  text := 'not reached';
 --   begin
---     select id into v_model from public.users order by created_at limit 1;
---     select id into v_prov  from public.users order by created_at desc limit 1;
---     select id into v_cat   from public.treatment_categories limit 1;
+--     -- Pick a model who is NOT an admin: admin_audit_log.admin_id is NO ACTION
+--     -- to auth.users and would block the auth delete for a reason that has
+--     -- nothing to do with patch tests.
+--     select u.id into v_model from public.users u
+--      where not exists (select 1 from public.admins a where a.user_id = u.id)
+--        and not exists (select 1 from public.admin_audit_log l where l.admin_id = u.id)
+--      order by u.created_at limit 1;
+--     select id into v_prov from public.users where id <> v_model order by created_at desc limit 1;
+--     select id into v_cat  from public.treatment_categories limit 1;
 --     select atttypid::regtype::text into v_type
 --       from pg_attribute
 --      where attrelid = 'public.patch_tests'::regclass and attname = 'result';
 --
 --     if v_model is null or v_prov is null or v_cat is null then
---       check_name := 'setup'; outcome := 'skipped — need two users and a category';
+--       check_name := 'setup'; outcome := 'skipped — need two non-admin users and a category';
 --       return next; return;
 --     end if;
 --
@@ -326,9 +332,14 @@ notify pgrst, 'reload schema';
 --         'values ($1, $2, $3, (enum_range(null::%s))[1]) returning id', v_type)
 --       into v_id using v_model, v_prov, v_cat;
 --
---       -- Deleting the profile first is what the real path does (0003).
---       delete from public.users     where id = v_model;
---       delete from auth.users       where id = v_model;
+--       -- THE REAL DELETION PATH. A bare `delete from public.users` fails on
+--       -- messages_sender_id_fkey and the other NO ACTION references 0003
+--       -- enumerated; clearing them first is what delete_account_data is for.
+--       -- An earlier version of this check deleted the row directly and
+--       -- reported "could not test" for a reason that had nothing to do with
+--       -- this migration.
+--       perform public.delete_account_data(v_model);
+--       delete from auth.users where id = v_model;
 --
 --       select pt.model_id, pt.model_name, pt.model_email_hash
 --         into v_model_after, v_name, v_hash
