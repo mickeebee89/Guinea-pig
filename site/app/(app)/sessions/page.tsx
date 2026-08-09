@@ -97,6 +97,8 @@ export default async function SessionsPage() {
   const user = await requireUser()
   const supabase = await createSupabaseServerClient()
 
+  const today = new Date().toISOString().slice(0, 10)
+
   let rows: SessionRow[] | null = null
   try {
     rows = await getSessions(supabase, user.id)
@@ -119,8 +121,19 @@ export default async function SessionsPage() {
           ) : (
             <>
               <Group title="Awaiting acceptance" rows={rows.filter(r => r.status === 'pending')} />
-              <Group title="Confirmed"           rows={rows.filter(r => r.status === 'accepted')} />
-              <Group title="Past" collapsible rows={rows.filter(r => r.status === 'completed')} />
+              <Group title="Upcoming" rows={rows.filter(r => r.status === 'accepted' && r.date >= today)} />
+              {/* Past is by DATE, not just by status. An accepted booking whose
+                  day has gone is over whether or not anyone remembered to mark
+                  it complete — leaving it under Upcoming makes the list lie
+                  about what is still to come. The stylist's "Mark complete"
+                  button follows it down here, which is where they will be
+                  looking for it. */}
+              <Group
+                title="Past"
+                collapsible
+                rows={rows.filter(r =>
+                  r.status === 'completed' || (r.status === 'accepted' && r.date < today))}
+              />
             </>
           )}
         </div>
@@ -132,7 +145,7 @@ export default async function SessionsPage() {
           <aside className="order-first lg:order-none lg:sticky lg:top-6 lg:self-start">
             <MonthCalendar
               marks={rows
-                .filter(r => r.status === 'accepted' || r.status === 'pending')
+                .filter(r => (r.status === 'accepted' || r.status === 'pending') && r.date >= today)
                 .map((r): CalendarMark => ({
                   date: r.date,
                   kind: r.status === 'accepted' ? 'booked' : 'open',

@@ -74,6 +74,7 @@ export const config = {
     '/notifications/:path*',
     '/stylist/:path*',
     '/availability/:path*',
+    '/portfolio/:path*',
     // Auth screens need the cookie writer for sign-in and for the callbacks
     // that exchange a code for a session.
     //

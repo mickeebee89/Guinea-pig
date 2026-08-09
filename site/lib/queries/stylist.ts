@@ -41,6 +41,10 @@ export interface StylistProfile {
   bannerUrl: string | null
   categories: string[]
   portfolio: { id: string; mediaUrl: string; mediaType: string | null }[]
+  /** Own uploads still awaiting moderation. Only ever populated for the owner. */
+  pendingPortfolio: { id: string; mediaUrl: string; mediaType: string | null }[]
+  /** The viewer is this stylist. Changes wording and reveals pending uploads. */
+  isOwner: boolean
   reviews: {
     id: string
     rating: number | null
@@ -85,10 +89,11 @@ export async function getStylistProfile(
     // Category is the only column edit-shop reliably fills; `name` holds a copy
     // and duration/price are never written. Same note as mobile.
     supabase.from('provider_treatments').select('category').eq('provider_id', providerId),
+    // No moderation filter here: the split happens below, so the OWNER can see
+    // their own pending uploads. RLS still decides what is readable at all.
     supabase.from('portfolio_items')
       .select('id, media_url, media_type, moderation_status')
       .eq('provider_id', providerId)
-      .eq('moderation_status', 'approved')
       .order('created_at', { ascending: false }),
     supabase.from('reviews')
       .select('id, overall_rating, comment, tags, created_at, reviewer_id')
@@ -100,6 +105,11 @@ export async function getStylistProfile(
       .select('date, is_taken').eq('provider_id', providerId)
       .gte('date', today).lte('date', in60),
   ])
+
+  const isOwner = !!prov.user_id && prov.user_id === viewerId
+  const portRows = (portRes.data ?? []) as {
+    id: string; media_url: string; media_type: string | null; moderation_status: string | null
+  }[]
 
   const reviewRows = (revRes.data ?? []) as {
     id: string; overall_rating: number | null; comment: string | null
@@ -132,8 +142,15 @@ export async function getStylistProfile(
       ((treatRes.data ?? []) as { category: string | null }[])
         .map(t => t.category).filter(Boolean) as string[],
     )],
-    portfolio: ((portRes.data ?? []) as { id: string; media_url: string; media_type: string | null }[])
+    portfolio: portRows.filter(i => i.moderation_status === 'approved')
       .map(i => ({ id: i.id, mediaUrl: i.media_url, mediaType: i.media_type })),
+    // Shown to the owner only. Everyone else must not learn that an item is
+    // sitting in a queue, let alone see it.
+    pendingPortfolio: isOwner
+      ? portRows.filter(i => i.moderation_status !== 'approved')
+          .map(i => ({ id: i.id, mediaUrl: i.media_url, mediaType: i.media_type }))
+      : [],
+    isOwner,
     reviews: reviewRows.map(r => ({
       id: r.id,
       rating: r.overall_rating,

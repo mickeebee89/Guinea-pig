@@ -4,6 +4,7 @@ import { createSupabaseServerClient, requireUser } from '@/lib/supabase-server'
 import { getStylistProfile } from '@/lib/queries/stylist'
 import { Avatar, EmptyState } from '@/components/ui'
 import { MonthCalendar, type CalendarMark } from '@/components/MonthCalendar'
+import { PortfolioGallery } from '@/components/PortfolioGallery'
 
 export const metadata = { title: 'Stylist' }
 
@@ -85,7 +86,12 @@ export default async function StylistPage({
 
       {p.categories.length > 0 && (
         <section className="mt-6">
-          <h2 className="mb-2 text-xs font-bold uppercase tracking-widest text-muted">Offers</h2>
+          {/* Written from the stylist's side, so it has to change person when
+              someone else is reading it — "Treatments I do" on a stranger's
+              profile would read as the viewer's own. */}
+          <h2 className="mb-2 text-xs font-bold uppercase tracking-widest text-muted">
+            {p.isOwner ? 'Treatments I do' : 'Treatments they do'}
+          </h2>
           <ul className="flex flex-wrap gap-2">
             {p.categories.map(c => (
               <li key={c} className="rounded-[999px] bg-soft-pink px-3 py-1 text-sm font-bold text-rose">
@@ -112,25 +118,31 @@ export default async function StylistPage({
         )}
       </section>
 
-      {p.portfolio.length > 0 && (
+      {(p.portfolio.length > 0 || p.pendingPortfolio.length > 0) && (
         <section className="mt-6">
-          <h2 className="mb-2 text-xs font-bold uppercase tracking-widest text-muted">Work</h2>
+          <div className="mb-2 flex items-baseline justify-between gap-3">
+            <h2 className="text-xs font-bold uppercase tracking-widest text-muted">Work</h2>
+            {p.isOwner && (
+              <Link href="/portfolio" className="text-sm font-bold text-rose hover:underline">
+                Manage portfolio
+              </Link>
+            )}
+          </div>
           {/* Fixed aspect ratio so an image and a video tile occupy identical
               space — no layout shift if video is ever enabled. */}
-          <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-            {p.portfolio.map(item => (
-              <li key={item.id} className="overflow-hidden rounded-md border border-hairline bg-white">
-                <div className="aspect-square">
-                  {item.mediaType === 'video' ? (
-                    <video src={item.mediaUrl} preload="none" playsInline controls className="h-full w-full object-cover" />
-                  ) : (
-                    // eslint-disable-next-line @next/next/no-img-element -- see above
-                    <img src={item.mediaUrl} alt="" loading="lazy" className="h-full w-full object-cover" />
-                  )}
-                </div>
-              </li>
-            ))}
-          </ul>
+          {p.portfolio.length > 0 && <PortfolioGallery items={p.portfolio} stylistName={p.name} />}
+
+          {p.pendingPortfolio.length > 0 && (
+            <div className="mt-4">
+              <p className="mb-2 text-xs text-muted">
+                Waiting to be reviewed — only you can see these. They appear on your profile once
+                approved.
+              </p>
+              <div className="opacity-60">
+                <PortfolioGallery items={p.pendingPortfolio} stylistName={p.name} />
+              </div>
+            </div>
+          )}
         </section>
       )}
 

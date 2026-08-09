@@ -13,6 +13,7 @@ import { SignOutButton } from '@/components/SignOutButton'
 const LINKS = [
   { href: '/sessions',      label: 'Bookings' },
   { href: '/availability',  label: 'Availability', providerOnly: true },
+  { href: '/portfolio',     label: 'Portfolio',    providerOnly: true },
   { href: '/messages',      label: 'Messages', badgeKey: 'unread' as const },
   { href: '/notifications', label: 'Notifications' },
 ]
