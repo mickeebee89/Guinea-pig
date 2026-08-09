@@ -2,6 +2,7 @@ import { createSupabaseServerClient, requireUser } from '@/lib/supabase-server'
 import { getSessions, type SessionRow } from '@/lib/queries/sessions'
 import Link from 'next/link'
 import { StatusPill, EmptyState, LoadError, Avatar } from '@/components/ui'
+import { SessionActions } from './SessionActions'
 
 export const metadata = { title: 'Bookings' }
 
@@ -53,6 +54,15 @@ function Group({
                   {s.treatmentName && ` · ${s.treatmentName}`}
                 </p>
                 {s.note && <p className="mt-2 text-sm text-warm-dark/80">{s.note}</p>}
+                {/* Only the stylist decides. A model seeing Accept on their own
+                    application would be nonsense, and RLS would refuse it. */}
+                {s.role === 'provider' && (
+                  <SessionActions
+                    sessionId={s.id}
+                    status={s.status}
+                    isPast={s.date < new Date().toISOString().slice(0, 10)}
+                  />
+                )}
               </div>
             </div>
           </li>

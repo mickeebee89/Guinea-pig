@@ -12,11 +12,12 @@ import { SignOutButton } from '@/components/SignOutButton'
 // on a phone.
 const LINKS = [
   { href: '/sessions',      label: 'Bookings' },
+  { href: '/availability',  label: 'Availability', providerOnly: true },
   { href: '/messages',      label: 'Messages', badgeKey: 'unread' as const },
   { href: '/notifications', label: 'Notifications' },
 ]
 
-export function AppNav({ unread = 0 }: { unread?: number }) {
+export function AppNav({ unread = 0, isProvider = false }: { unread?: number; isProvider?: boolean }) {
   return (
     <header className="border-b border-hairline bg-white">
       <nav className="mx-auto flex max-w-4xl flex-wrap items-center gap-1 px-4 py-3 sm:px-6">
@@ -28,7 +29,7 @@ export function AppNav({ unread = 0 }: { unread?: number }) {
         </Link>
 
         <ul className="flex flex-1 flex-wrap items-center gap-1">
-          {LINKS.map(({ href, label, badgeKey }) => (
+          {LINKS.filter(l => !l.providerOnly || isProvider).map(({ href, label, badgeKey }) => (
             <li key={href}>
               <Link
                 href={href}

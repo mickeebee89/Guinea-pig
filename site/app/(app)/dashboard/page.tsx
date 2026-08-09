@@ -265,7 +265,11 @@ export default async function DashboardPage() {
                 {data.applications.length > 0 && (
                   <>
                     <ul>{data.applications.map(b => <BookingRow key={b.id} b={b} />)}</ul>
-                    <InApp what="Accepting or declining" />
+                    <p className="mt-3">
+                      <Link href="/sessions" className="text-sm font-bold text-rose hover:underline">
+                        Accept or decline on the bookings page →
+                      </Link>
+                    </p>
                   </>
                 )}
               </Panel>
@@ -290,7 +294,11 @@ export default async function DashboardPage() {
                     caption="Pink is a booking. Pale pink is a day with slots open."
                   />
                 )}
-                <InApp what="Setting your availability" />
+                <p className="mt-3">
+                  <Link href="/availability" className="text-sm font-bold text-rose hover:underline">
+                    Edit your availability →
+                  </Link>
+                </p>
               </Panel>
 
               <Panel title="Your shop" empty="">

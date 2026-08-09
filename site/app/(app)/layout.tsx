@@ -1,5 +1,6 @@
 import { createSupabaseServerClient, requireUser } from '@/lib/supabase-server'
 import { getConversations } from '@/lib/queries/conversations'
+import { getDashboardUser } from '@/lib/queries/dashboard'
 import { AppNav } from '@/components/AppNav'
 
 /**
@@ -34,17 +35,22 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const user = await requireUser()
 
   let unread = 0
+  let isProvider = false
   try {
     const supabase = await createSupabaseServerClient()
-    const convs = await getConversations(supabase, user.id)
+    const [convs, me] = await Promise.all([
+      getConversations(supabase, user.id),
+      getDashboardUser(supabase, user.id),
+    ])
     unread = convs.reduce((n, c) => n + c.unreadCount, 0)
+    isProvider = me.role === 'provider'
   } catch (e) {
     console.error('[app layout] unread count failed', e)
   }
 
   return (
     <div className="min-h-dvh bg-cream">
-      <AppNav unread={unread} />
+      <AppNav unread={unread} isProvider={isProvider} />
       <main className="mx-auto max-w-4xl px-4 py-8 sm:px-6">{children}</main>
     </div>
   )
