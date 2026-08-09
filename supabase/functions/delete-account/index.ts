@@ -86,14 +86,16 @@ async function preflight(me: string): Promise<string[]> {
   // What remains are two genuine open cases. Blocking here is deliberate: it
   // reports the problem with the account intact, instead of the old behaviour
   // of stripping the account and then failing on the auth delete.
+  // patch_tests USED TO BE LISTED HERE and no longer is. Migration 0007 made
+  // model_id, provider_id and logged_by ON DELETE SET NULL, so a patch test no
+  // longer blocks anything — it survives de-identified, because the record is
+  // the stylist's evidence that a required safety step happened and deleting it
+  // would let a claimant destroy the evidence against their own claim.
+  //
+  // Leaving it listed would have been worse than harmless: the preflight is a
+  // second copy of the schema's delete rules, so a stale entry refuses a
+  // deletion the database would now allow.
   const stillReferencing: [string, string][] = [
-    // Allergy patch tests. Needs its own decision — the model's own records
-    // should probably go with them, but patch_tests.provider_id and .logged_by
-    // also point at auth.users, and their nullability is unconfirmed. Not
-    // guessed at here.
-    ['patch_tests', 'model_id'],
-    ['patch_tests', 'provider_id'],
-    ['patch_tests', 'logged_by'],
     // An admin deleting their own account. admin_id records WHO acted, so
     // nulling it silently would gut the audit trail. Rare and deliberate
     // enough to want a human in the loop.
