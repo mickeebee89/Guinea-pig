@@ -7,8 +7,10 @@ import { SignOutButton } from '@/components/SignOutButton'
  * Server-rendered. The unread count comes from the layout, which already has to
  * know who the user is — see the note there about what that costs.
  */
+// No 'Dashboard' entry: the wordmark is the home link, which is the
+// convention everywhere else and frees a slot in a nav that has to stay short
+// on a phone.
 const LINKS = [
-  { href: '/dashboard',     label: 'Dashboard' },
   { href: '/sessions',      label: 'Bookings' },
   { href: '/messages',      label: 'Messages', badgeKey: 'unread' as const },
   { href: '/notifications', label: 'Notifications' },
