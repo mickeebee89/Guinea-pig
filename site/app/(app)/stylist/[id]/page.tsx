@@ -30,8 +30,13 @@ export default async function StylistPage({
 
   return (
     <>
-      <Link href="/messages" className="text-sm font-bold text-rose hover:underline">
-        ← Messages
+      {/* A stylist reaching their own shop came from the dashboard, not from a
+          conversation with themselves. */}
+      <Link
+        href={p.isOwner ? '/dashboard' : '/messages'}
+        className="text-sm font-bold text-rose hover:underline"
+      >
+        ← {p.isOwner ? 'Dashboard' : 'Messages'}
       </Link>
 
       <header className="mt-4 overflow-hidden rounded-lg border border-hairline bg-white shadow-soft">
