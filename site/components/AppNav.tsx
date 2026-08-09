@@ -25,7 +25,7 @@ export function AppNav({ unread = 0, isProvider = false }: { unread?: number; is
           href="/dashboard"
           className="mr-3 font-display text-lg text-warm-dark focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose"
         >
-          Cavy
+          Dashboard
         </Link>
 
         <ul className="flex flex-1 flex-wrap items-center gap-1">

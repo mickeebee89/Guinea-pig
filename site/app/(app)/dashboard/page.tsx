@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { createSupabaseServerClient, requireUser } from '@/lib/supabase-server'
 import {
-  getDashboardUser, getModelDashboard, getProviderDashboard,
+  getDashboardUser, getModelDashboard, getProviderDashboard, getStylistUpdates,
   type BookingCard,
 } from '@/lib/queries/dashboard'
 import { getConversations } from '@/lib/queries/conversations'
@@ -81,7 +81,19 @@ function InApp({ what }: { what: string }) {
 
 /* ── page ──────────────────────────────────────────────────────────────── */
 
-export default async function DashboardPage() {
+const RADII = [
+  { key: '5',   label: '5 miles',  miles: 5 },
+  { key: '10',  label: '10 miles', miles: 10 },
+  { key: '20',  label: '20 miles', miles: 20 },
+  { key: 'any', label: 'Any distance', miles: null },
+] as const
+
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ within?: string }>
+}) {
+  const { within } = await searchParams
   const user = await requireUser()
   const supabase = await createSupabaseServerClient()
 
@@ -106,6 +118,11 @@ export default async function DashboardPage() {
   const data = isProvider
     ? await getProviderDashboard(supabase, user.id)
     : await getModelDashboard(supabase, user.id)
+
+  // The feed is model-facing: it answers "who near me is free". A stylist has
+  // no use for other stylists' availability.
+  const radius = RADII.find(r => r.key === within) ?? RADII[2]   // default 20 miles
+  const feed = isProvider ? null : await getStylistUpdates(supabase, user.id, radius.miles)
 
   const activity = (
     <div className="space-y-6">
@@ -172,6 +189,68 @@ export default async function DashboardPage() {
         </div>
       </div>
 
+      {feed && (
+        <section className="mb-6 rounded-lg border border-hairline bg-white p-5 shadow-card">
+          <div className="mb-3 flex flex-wrap items-baseline justify-between gap-3">
+            <h2 className="font-display text-xl text-warm-dark">What’s on near you</h2>
+            <nav aria-label="Distance" className="flex flex-wrap gap-1.5">
+              {RADII.map(r => (
+                <Link
+                  key={r.key}
+                  href={`/dashboard?within=${r.key}`}
+                  aria-current={r.key === radius.key ? 'page' : undefined}
+                  className={`inline-flex min-h-11 items-center rounded-[999px] px-3 text-xs font-bold ${
+                    r.key === radius.key ? 'bg-rose text-white' : 'bg-input-bg text-muted hover:bg-soft-pink'
+                  }`}
+                >
+                  {r.label}
+                </Link>
+              ))}
+            </nav>
+          </div>
+
+          {!feed.viewerHasLocation && (
+            // Say why filtering is off rather than showing a distance control
+            // that quietly does nothing.
+            <p className="mb-3 rounded-md bg-input-bg px-3 py-2 text-xs text-muted">
+              We don’t have a location for your account, so these aren’t filtered by distance.
+              Set your location in the Cavy app and the miles filter will start working.
+            </p>
+          )}
+
+          {feed.updates.length === 0 ? (
+            <p className="text-sm text-muted">
+              No stylists have posted an update{radius.miles ? ` within ${radius.miles} miles` : ''} right
+              now. Updates last 48 hours, so this changes through the week.
+            </p>
+          ) : (
+            <ul className="space-y-2">
+              {feed.updates.map(u => (
+                <li key={u.providerId}>
+                  <Link
+                    href={`/stylist/${u.providerId}`}
+                    className="flex items-start gap-3 rounded-md p-2 transition-colors hover:bg-input-bg"
+                  >
+                    <Avatar src={u.picUrl} name={u.name} size={40} />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-bold text-warm-dark">
+                        {u.name}
+                        {u.distanceMiles != null && (
+                          <span className="ml-2 font-normal text-muted">
+                            {u.distanceMiles < 1 ? 'under a mile' : `${u.distanceMiles.toFixed(1)} miles`}
+                          </span>
+                        )}
+                      </p>
+                      <p className="text-sm text-muted">{u.text}</p>
+                    </div>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
+
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
         <div className="space-y-6">
           {data.kind === 'model' ? (
@@ -184,46 +263,11 @@ export default async function DashboardPage() {
               </Panel>
 
               <Panel
-                title="Your month" isEmpty={data.upcoming.length === 0}
-                empty="No treatments booked, so there’s nothing on the calendar yet."
-              >
-                {data.upcoming.length > 0 && (
-                  <MonthCalendar
-                    marks={data.upcoming.map((b): CalendarMark => ({
-                      date: b.date, kind: 'booked', label: `${b.otherName}${b.treatment ? ` · ${b.treatment}` : ''}`,
-                    }))}
-                    caption="Days you have a treatment booked."
-                  />
-                )}
-              </Panel>
-
-              <Panel
                 title="Waiting on a reply" isEmpty={data.pending.length === 0}
                 empty="You haven’t applied for any sessions yet."
               >
                 {data.pending.length > 0 && <ul>{data.pending.map(b => <BookingRow key={b.id} b={b} />)}</ul>}
                 <InApp what="Applying for a session" />
-              </Panel>
-
-              <Panel
-                title="Updates from your stylists" isEmpty={data.updates.length === 0}
-                empty="No updates. Stylists you’ve booked with can post a short update, and it shows here while it’s live."
-              >
-                {data.updates.length > 0 && (
-                  <ul className="space-y-2">
-                    {data.updates.map(u => (
-                      <li key={u.providerId}>
-                        <Link href={`/stylist/${u.providerId}`} className="flex items-start gap-3 rounded-md p-2 transition-colors hover:bg-input-bg">
-                          <Avatar src={u.picUrl} name={u.name} size={36} />
-                          <div className="min-w-0">
-                            <p className="text-sm font-bold text-warm-dark">{u.name}</p>
-                            <p className="text-sm text-muted">{u.text}</p>
-                          </div>
-                        </Link>
-                      </li>
-                    ))}
-                  </ul>
-                )}
               </Panel>
 
               <Panel

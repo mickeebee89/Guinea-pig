@@ -1,3 +1,5 @@
+import Link from 'next/link'
+
 /**
  * A read-only month grid.
  *
@@ -21,8 +23,19 @@ export interface CalendarMark {
 const WEEKDAYS = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
 
 export function MonthCalendar({
-  marks, month = new Date(), caption,
-}: { marks: CalendarMark[]; month?: Date; caption?: string }) {
+  marks, month = new Date(), caption, hrefFor, selected, minDate,
+}: {
+  marks: CalendarMark[]
+  month?: Date
+  caption?: string
+  /** Supply to make days clickable. Omit and the grid stays a read-only view. */
+  hrefFor?: (iso: string) => string
+  /** The day currently being edited, highlighted distinctly from a marked one. */
+  selected?: string
+  /** Days before this are not links — setting availability in the past is
+   *  never what someone meant to do. */
+  minDate?: string
+}) {
   const year = month.getFullYear()
   const m = month.getMonth()
   const first = new Date(year, m, 1)
@@ -53,22 +66,41 @@ export function MonthCalendar({
           const mark = byDate.get(iso)
           const day = Number(iso.slice(-2))
           const isToday = iso === todayIso
-          return (
-            <div
-              key={iso}
-              className={`aspect-square rounded-md p-1 text-sm ${
-                mark?.kind === 'booked' ? 'bg-rose font-bold text-white'
-                : mark?.kind === 'open' ? 'bg-soft-pink font-bold text-rose'
-                : 'text-muted'
-              } ${isToday && !mark ? 'ring-1 ring-rose/40' : ''}`}
-              title={mark?.label}
-            >
+          const isSelected = iso === selected
+          const clickable = !!hrefFor && (!minDate || iso >= minDate)
+
+          const tone = isSelected ? 'bg-warm-dark font-bold text-white'
+            : mark?.kind === 'booked' ? 'bg-rose font-bold text-white'
+            : mark?.kind === 'open' ? 'bg-soft-pink font-bold text-rose'
+            : 'text-muted'
+
+          const label = (
+            <>
               <span className="sr-only">
                 {new Date(iso + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'long' })}
                 {mark ? `, ${mark.label ?? mark.kind}` : ''}
+                {isSelected ? ', selected' : ''}
               </span>
               <span aria-hidden="true">{day}</span>
-            </div>
+            </>
+          )
+
+          const cls = `flex aspect-square items-center justify-center rounded-md p-1 text-sm ${tone} ${
+            isToday && !mark && !isSelected ? 'ring-1 ring-rose/40' : ''
+          }`
+
+          return clickable ? (
+            <Link
+              key={iso}
+              href={hrefFor(iso)}
+              aria-current={isSelected ? 'date' : undefined}
+              title={mark?.label}
+              className={`${cls} transition-colors hover:ring-2 hover:ring-rose focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-rose`}
+            >
+              {label}
+            </Link>
+          ) : (
+            <div key={iso} className={cls} title={mark?.label}>{label}</div>
           )
         })}
       </div>

@@ -51,6 +51,8 @@ export interface StylistProfile {
   }[]
   /** Blocked either direction. The page says so rather than pretending. */
   isBlocked: boolean
+  /** Dates in the next 60 days with an unbooked slot. */
+  openDates: string[]
 }
 
 export async function getStylistProfile(
@@ -76,7 +78,10 @@ export async function getStylistProfile(
     profile_pic_url: string | null; banner_url: string | null
   }
 
-  const [treatRes, portRes, revRes, blocked] = await Promise.all([
+  const today = new Date().toISOString().slice(0, 10)
+  const in60 = new Date(Date.now() + 60 * 86_400_000).toISOString().slice(0, 10)
+
+  const [treatRes, portRes, revRes, blocked, availRes] = await Promise.all([
     // Category is the only column edit-shop reliably fills; `name` holds a copy
     // and duration/price are never written. Same note as mobile.
     supabase.from('provider_treatments').select('category').eq('provider_id', providerId),
@@ -91,6 +96,9 @@ export async function getStylistProfile(
       .order('created_at', { ascending: false })
       .limit(20),
     getBlockedIds(supabase, viewerId).catch(() => new Set<string>()),
+    supabase.from('availability')
+      .select('date, is_taken').eq('provider_id', providerId)
+      .gte('date', today).lte('date', in60),
   ])
 
   const reviewRows = (revRes.data ?? []) as {
@@ -135,5 +143,9 @@ export async function getStylistProfile(
       reviewerName: displayName(r.reviewer_id ? nameMap[r.reviewer_id] : undefined, 'A member'),
     })),
     isBlocked: !!(prov.user_id && blocked.has(prov.user_id)),
+    openDates: [...new Set(
+      ((availRes.data ?? []) as { date: string; is_taken: boolean | null }[])
+        .filter(a => !a.is_taken).map(a => a.date),
+    )].sort(),
   }
 }

@@ -3,6 +3,7 @@ import { getSessions, type SessionRow } from '@/lib/queries/sessions'
 import Link from 'next/link'
 import { StatusPill, EmptyState, LoadError, Avatar } from '@/components/ui'
 import { SessionActions } from './SessionActions'
+import { MonthCalendar, type CalendarMark } from '@/components/MonthCalendar'
 
 export const metadata = { title: 'Bookings' }
 
@@ -106,6 +107,23 @@ export default async function SessionsPage() {
   return (
     <>
       <h1 className="mb-6 font-display text-3xl text-warm-dark">Bookings</h1>
+
+      {/* A visual read of the same list, not a second source of truth — it is
+          built from `rows` so it cannot drift from what is printed below. */}
+      {rows && rows.length > 0 && (
+        <div className="mb-8 max-w-sm">
+          <MonthCalendar
+            marks={rows
+              .filter(r => r.status === 'accepted' || r.status === 'pending')
+              .map((r): CalendarMark => ({
+                date: r.date,
+                kind: r.status === 'accepted' ? 'booked' : 'open',
+                label: `${r.otherPartyName}${r.treatmentName ? ` · ${r.treatmentName}` : ''}`,
+              }))}
+            caption="Pink is confirmed. Pale pink is waiting on a reply."
+          />
+        </div>
+      )}
 
       {rows === null ? (
         <LoadError what="bookings" />

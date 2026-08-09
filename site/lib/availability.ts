@@ -97,7 +97,12 @@ export async function saveDay(
     }))
     const { error } = await supabase
       .from('availability')
-      .upsert(rows, { onConflict: 'provider_id,date,start_time', ignoreDuplicates: false })
+      // FOUR columns. The unique index on availability is
+      // (provider_id, date, start_time, end_time) -- see booking-guard.sql:30 and
+      // ON_CONFLICT in mobile/src/lib/availability.ts:237. Naming three of them
+      // fails every save with 42P10, "no unique or exclusion constraint matching
+      // the ON CONFLICT specification".
+      .upsert(rows, { onConflict: 'provider_id,date,start_time,end_time', ignoreDuplicates: false })
     if (error) throw error
   }
 

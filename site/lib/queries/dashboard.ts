@@ -290,3 +290,102 @@ export async function getProviderDashboard(
     portfolioCount: portRes.count ?? 0,
   }
 }
+
+/* ── stylist updates, distance-filtered ────────────────────────────────── */
+
+/** Miles. Same constant and formula as mobile/src/app/(app)/index.tsx:44. */
+function haversineMiles(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 3958.8
+  const dLat = ((lat2 - lat1) * Math.PI) / 180
+  const dLon = ((lon2 - lon1) * Math.PI) / 180
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) ** 2
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+}
+
+export interface UpdateFeed {
+  updates: (StylistUpdate & { distanceMiles: number | null })[]
+  /** Null when the account has no stored location, which disables filtering. */
+  viewerHasLocation: boolean
+}
+
+/**
+ * Every live stylist update within `radiusMiles`, not just from stylists the
+ * model already knows.
+ *
+ * ── WHY THIS IS ALLOWED, AND WHERE THE LINE IS ────────────────────────────
+ * web-phase-1-handover §6a forbids an aggregated, cross-stylist,
+ * location-filtered feed on the ANON surface — "a live map of who is free
+ * where". The sentence immediately after it describes this feed: the model-side
+ * one "is authenticated and distance-filtered and stays that way".
+ *
+ * So the constraint is the audience, not the shape. This runs behind the auth
+ * gate, through RLS, for a signed-in member. Nothing here may ever be reachable
+ * from (public) — which is what the client-boundary check enforces.
+ *
+ * Restricted to PUBLISHED stylists: an unpublished shop is not visible in the
+ * app either, and a status update is not a way around that.
+ */
+export async function getStylistUpdates(
+  supabase: SupabaseClient,
+  userId: string,
+  radiusMiles: number | null,
+): Promise<UpdateFeed> {
+  const [meRes, provRes, blockRes] = await Promise.all([
+    supabase.from('users').select('latitude, longitude').eq('id', userId).maybeSingle(),
+    supabase.from('providers')
+      .select('id, user_id, name, profile_pic_url, status_text, status_expires_at, latitude, longitude, location_lat, location_lng')
+      .eq('is_published', true)
+      .not('status_text', 'is', null),
+    supabase.from('blocks').select('blocker_id, blocked_id')
+      .or(`blocker_id.eq.${userId},blocked_id.eq.${userId}`),
+  ])
+
+  const me = meRes.data as { latitude: number | null; longitude: number | null } | null
+  const hasLoc = me?.latitude != null && me?.longitude != null
+
+  const blocked = new Set(
+    ((blockRes.data ?? []) as { blocker_id: string; blocked_id: string }[])
+      .map(b => (b.blocker_id === userId ? b.blocked_id : b.blocker_id)),
+  )
+
+  const now = Date.now()
+  const rows = (provRes.data ?? []) as {
+    id: string; user_id: string | null; name: string | null; profile_pic_url: string | null
+    status_text: string | null; status_expires_at: string | null
+    latitude: number | null; longitude: number | null
+    location_lat: number | null; location_lng: number | null
+  }[]
+
+  const updates = rows
+    .filter(p => p.status_text)
+    // An expired status is gone even though the column still holds the text.
+    .filter(p => !p.status_expires_at || new Date(p.status_expires_at).getTime() > now)
+    .filter(p => !(p.user_id && blocked.has(p.user_id)))
+    .map(p => {
+      // providers carries lat/lng twice, the same duplication as
+      // location/location_text. Prefer whichever is populated rather than
+      // picking one and showing nothing for half the rows.
+      const lat = p.latitude ?? p.location_lat
+      const lng = p.longitude ?? p.location_lng
+      const distanceMiles =
+        hasLoc && lat != null && lng != null
+          ? haversineMiles(me!.latitude!, me!.longitude!, lat, lng)
+          : null
+      return {
+        providerId: p.id,
+        name: p.name ?? 'Stylist',
+        picUrl: p.profile_pic_url,
+        text: p.status_text as string,
+        expiresAt: p.status_expires_at,
+        distanceMiles,
+      }
+    })
+    // A stylist with no coordinates is kept when no radius is set and dropped
+    // when one is — being unable to prove they are near is not proof they are.
+    .filter(u => radiusMiles == null || (u.distanceMiles != null && u.distanceMiles <= radiusMiles))
+    .sort((a, b) => (a.distanceMiles ?? Infinity) - (b.distanceMiles ?? Infinity))
+
+  return { updates, viewerHasLocation: !!hasLoc }
+}

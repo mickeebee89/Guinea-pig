@@ -1,4 +1,3 @@
-import Link from 'next/link'
 import { createSupabaseServerClient, requireUser } from '@/lib/supabase-server'
 import { loadDay } from '@/lib/availability'
 import { MonthCalendar, type CalendarMark } from '@/components/MonthCalendar'
@@ -62,35 +61,19 @@ export default async function AvailabilityPage({
   const treatments = ((treatRes.data ?? []) as { id: string; name: string | null; category: string | null }[])
     .map(t => ({ id: t.id, label: t.name ?? t.category ?? 'Treatment' }))
 
-  // A fortnight of quick links. A full date picker is the obvious next step;
-  // this covers the case that actually happens — setting up the coming days.
-  const upcoming = Array.from({ length: 14 }, (_, i) =>
-    new Date(Date.now() + i * 86_400_000).toISOString().slice(0, 10))
-
   return (
     <>
       <h1 className="mb-6 font-display text-3xl text-warm-dark">Availability</h1>
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
         <div className="space-y-4">
-          <MonthCalendar marks={marks} caption="Pale pink is a day with slots. Pink means something is booked." />
-          <nav aria-label="Pick a day">
-            <ul className="flex flex-wrap gap-1.5">
-              {upcoming.map(d => (
-                <li key={d}>
-                  <Link
-                    href={`/availability?date=${d}`}
-                    aria-current={d === date ? 'page' : undefined}
-                    className={`inline-flex min-h-11 items-center rounded-[999px] px-3 text-sm font-bold ${
-                      d === date ? 'bg-rose text-white' : 'bg-input-bg text-muted hover:bg-soft-pink'
-                    }`}
-                  >
-                    {new Date(d + 'T00:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric' })}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </nav>
+          <MonthCalendar
+            marks={marks}
+            hrefFor={d => `/availability?date=${d}`}
+            selected={date}
+            minDate={today}
+            caption="Click a day to edit it. Pale pink has slots; pink means something is booked."
+          />
         </div>
 
         <DayEditor key={date} date={date} initial={slots} treatments={treatments} />

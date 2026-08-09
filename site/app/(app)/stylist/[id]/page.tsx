@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { createSupabaseServerClient, requireUser } from '@/lib/supabase-server'
 import { getStylistProfile } from '@/lib/queries/stylist'
 import { Avatar, EmptyState } from '@/components/ui'
+import { MonthCalendar, type CalendarMark } from '@/components/MonthCalendar'
 
 export const metadata = { title: 'Stylist' }
 
@@ -94,6 +95,22 @@ export default async function StylistPage({
           </ul>
         </section>
       )}
+
+      <section className="mt-6">
+        <h2 className="mb-2 text-xs font-bold uppercase tracking-widest text-muted">Availability</h2>
+        {p.openDates.length === 0 ? (
+          <EmptyState title="No open slots">
+            {p.name} hasn’t posted availability for the next couple of months.
+          </EmptyState>
+        ) : (
+          <div className="max-w-sm">
+            <MonthCalendar
+              marks={p.openDates.map((d): CalendarMark => ({ date: d, kind: 'open', label: 'Slots open' }))}
+              caption="Days with slots open. Picking one and applying is in the Cavy app for now."
+            />
+          </div>
+        )}
+      </section>
 
       {p.portfolio.length > 0 && (
         <section className="mt-6">
