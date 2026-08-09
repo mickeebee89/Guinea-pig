@@ -31,6 +31,12 @@ export interface SessionRow {
   treatmentCategory: string | null
   otherPartyName: string
   otherPartyPic: string | null
+  /**
+   * providers.id when the other party is a stylist, null when they are a model
+   * — there is no model profile route yet. NOT an auth user id.
+   */
+  otherPartyId: string | null
+  otherPartyKind: 'stylist' | 'model'
 }
 
 export async function getSessions(
@@ -101,6 +107,8 @@ export async function getSessions(
         treatmentCategory: treat?.category ?? null,
         otherPartyName: isModel ? (prov?.name ?? 'Stylist') : displayName(model),
         otherPartyPic: isModel ? (prov?.profile_pic_url ?? null) : (model?.profile_pic_url ?? null),
+        otherPartyId: isModel ? r.provider_id : null,
+        otherPartyKind: isModel ? 'stylist' : 'model',
       }
     })
 }

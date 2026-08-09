@@ -195,7 +195,18 @@ export function ChatThread({ thread, userId }: { thread: Thread; userId: string 
       <header className="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-hairline bg-white p-4">
         <Avatar src={thread.otherParty.picUrl} name={thread.otherParty.name} size={44} />
         <div className="min-w-0 flex-1">
-          <p className="font-bold text-warm-dark">{thread.otherParty.name}</p>
+          {/* Only the stylist has a profile route; a model's id here is an auth
+              user id and there is no page for it yet. */}
+          {thread.isModel ? (
+            <Link
+              href={`/stylist/${thread.session.provider_id}`}
+              className="font-bold text-warm-dark underline decoration-hairline underline-offset-2 hover:text-rose"
+            >
+              {thread.otherParty.name}
+            </Link>
+          ) : (
+            <p className="font-bold text-warm-dark">{thread.otherParty.name}</p>
+          )}
           <p className="text-xs text-muted">
             {new Date(thread.session.date + 'T00:00:00').toLocaleDateString('en-GB', {
               day: 'numeric', month: 'short', year: 'numeric',

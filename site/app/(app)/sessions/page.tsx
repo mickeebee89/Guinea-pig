@@ -1,5 +1,6 @@
 import { createSupabaseServerClient, getUser } from '@/lib/supabase-server'
 import { getSessions, type SessionRow } from '@/lib/queries/sessions'
+import Link from 'next/link'
 import { StatusPill, EmptyState, LoadError, Avatar } from '@/components/ui'
 
 export const metadata = { title: 'Bookings' }
@@ -22,7 +23,16 @@ function Group({ title, rows }: { title: string; rows: SessionRow[] }) {
               <Avatar src={s.otherPartyPic} name={s.otherPartyName} />
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-bold text-warm-dark">{s.otherPartyName}</span>
+                  {s.otherPartyId ? (
+                    <Link
+                      href={`/stylist/${s.otherPartyId}`}
+                      className="font-bold text-warm-dark underline decoration-hairline underline-offset-2 hover:text-rose focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose"
+                    >
+                      {s.otherPartyName}
+                    </Link>
+                  ) : (
+                    <span className="font-bold text-warm-dark">{s.otherPartyName}</span>
+                  )}
                   <StatusPill status={s.status} />
                   <span className="text-xs text-muted">
                     {s.role === 'model' ? 'you’re the model' : 'you’re the stylist'}
