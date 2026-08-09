@@ -108,36 +108,41 @@ export default async function SessionsPage() {
     <>
       <h1 className="mb-6 font-display text-3xl text-warm-dark">Bookings</h1>
 
-      {/* A visual read of the same list, not a second source of truth — it is
-          built from `rows` so it cannot drift from what is printed below. */}
-      {rows && rows.length > 0 && (
-        <div className="mb-8 max-w-sm">
-          <MonthCalendar
-            marks={rows
-              .filter(r => r.status === 'accepted' || r.status === 'pending')
-              .map((r): CalendarMark => ({
-                date: r.date,
-                kind: r.status === 'accepted' ? 'booked' : 'open',
-                label: `${r.otherPartyName}${r.treatmentName ? ` · ${r.treatmentName}` : ''}`,
-              }))}
-            caption="Pink is confirmed. Pale pink is waiting on a reply."
-          />
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,18rem)]">
+        <div className="min-w-0">
+          {rows === null ? (
+            <LoadError what="bookings" />
+          ) : rows.length === 0 ? (
+            <EmptyState title="No bookings yet">
+              When you apply for a session, or someone applies to you, it’ll appear here.
+            </EmptyState>
+          ) : (
+            <>
+              <Group title="Awaiting acceptance" rows={rows.filter(r => r.status === 'pending')} />
+              <Group title="Confirmed"           rows={rows.filter(r => r.status === 'accepted')} />
+              <Group title="Past" collapsible rows={rows.filter(r => r.status === 'completed')} />
+            </>
+          )}
         </div>
-      )}
 
-      {rows === null ? (
-        <LoadError what="bookings" />
-      ) : rows.length === 0 ? (
-        <EmptyState title="No bookings yet">
-          When you apply for a session, or someone applies to you, it’ll appear here.
-        </EmptyState>
-      ) : (
-        <>
-          <Group title="Awaiting acceptance" rows={rows.filter(r => r.status === 'pending')} />
-          <Group title="Confirmed"           rows={rows.filter(r => r.status === 'accepted')} />
-          <Group title="Past" collapsible rows={rows.filter(r => r.status === 'completed')} />
-        </>
-      )}
+        {/* A visual read of the same list, not a second source of truth — built
+            from `rows`, so it cannot drift from what is printed beside it.
+            Sticky on wide screens so it stays put while the list scrolls. */}
+        {rows && rows.length > 0 && (
+          <aside className="order-first lg:order-none lg:sticky lg:top-6 lg:self-start">
+            <MonthCalendar
+              marks={rows
+                .filter(r => r.status === 'accepted' || r.status === 'pending')
+                .map((r): CalendarMark => ({
+                  date: r.date,
+                  kind: r.status === 'accepted' ? 'booked' : 'open',
+                  label: `${r.otherPartyName}${r.treatmentName ? ` · ${r.treatmentName}` : ''}`,
+                }))}
+              caption="Pink is confirmed. Pale pink is waiting on a reply."
+            />
+          </aside>
+        )}
+      </div>
     </>
   )
 }
