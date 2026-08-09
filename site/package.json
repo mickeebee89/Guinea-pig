@@ -4,9 +4,10 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "node scripts/check-client-boundary.mjs && next build",
+    "build": "npm run checks && next build",
     "start": "next start",
     "lint": "eslint",
+    "checks": "node scripts/check-client-boundary.mjs && node scripts/check-route-coverage.mjs",
     "check-boundary": "node scripts/check-client-boundary.mjs"
   },
   "dependencies": {

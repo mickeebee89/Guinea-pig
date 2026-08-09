@@ -64,9 +64,15 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    // Authenticated area. Add new (app) routes here.
+    // Authenticated area. Add new (app) routes here — and if you forget,
+    // scripts/check-route-coverage.mjs fails the build rather than letting the
+    // route quietly stop refreshing its session cookie.
     '/dashboard/:path*',
     '/account/:path*',
+    '/sessions/:path*',
+    '/messages/:path*',
+    '/notifications/:path*',
+    '/stylist/:path*',
     // Auth screens need the cookie writer for sign-in and for the callbacks
     // that exchange a code for a session.
     //

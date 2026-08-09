@@ -14,12 +14,23 @@
  *   making something safe, it isn't. supabase-server.ts carries the warning;
  *   this file enforces it.
  *
- * TWO DIRECTIONS, BOTH WRONG
+ * THREE DIRECTIONS, ALL WRONG
  *   (public) importing supabase-server  -> breaks static rendering, and the
  *                                          route can leak session-dependent
  *                                          output into a cached page.
+ *   (public) importing supabase-browser -> a client-side query on a page whose
+ *                                          value is being prerendered; the
+ *                                          content stops existing in the HTML a
+ *                                          crawler sees.
  *   (app)/(auth) importing supabase-public -> reads as anon, so the page shows
  *                                          nothing and looks like a data bug.
+ *
+ * The supabase-browser rule is the one carrying real weight. Slice 2 added
+ * NEXT_PUBLIC_SUPABASE_ANON_KEY so realtime could work, which means a
+ * client-side Supabase query is now *possible to write* on any page — the exact
+ * thing the unprefixed env var used to make impossible. This check is what
+ * replaced that guarantee, so removing it silently gives up the protection
+ * phase 1 built the whole client split around.
  */
 
 import { readdirSync, readFileSync, statSync } from 'node:fs'
@@ -45,6 +56,11 @@ const RULES = [
     dir: path.join(ROOT, 'app', '(public)'),
     forbidden: 'lib/supabase-server',
     why: 'reading cookies makes the route dynamic and silently drops it from static rendering',
+  },
+  {
+    dir: path.join(ROOT, 'app', '(public)'),
+    forbidden: 'lib/supabase-browser',
+    why: 'a client-side query means the content is not in the prerendered HTML a crawler reads',
   },
   {
     dir: path.join(ROOT, 'app', '(app)'),
