@@ -737,6 +737,18 @@ Each of these was learned the expensive way here, not imported from a style guid
    success.** Both were optimisations around a step that was already fast enough. Now set to
    Automatic. **Do not reintroduce it.**
 
+   > **What does the job instead — and the first thing to check if a push doesn't deploy.**
+   > Vercel's own **"Skip deployments when there are no changes to the root directory"**
+   > toggle (Settings → Build and Deployment) is **Enabled**. It is the built-in equivalent
+   > of what the shell command was trying to do, and it is strictly more reliable: Vercel
+   > computes the diff itself rather than shelling out to `git diff` against a SHA that may
+   > not exist in a shallow clone. There is no exit code to misinterpret.
+   >
+   > So the skipping behaviour was never the problem — reimplementing it by hand was. If a
+   > commit that touches `site/` ever fails to produce a deployment, **look at that toggle
+   > first**, then at the deployment's build log. Commits touching only `supabase/`,
+   > `mobile/` or the root docs are *expected* not to deploy.
+
    The instructive part is not the bug, it is how it survived review. It was suggested **twice**
    — and the second time was a *correction* after `HEAD^` was rightly flagged as fragile. The
    replacement looked more rigorous, with four test cases proving the exit codes. Every one of
