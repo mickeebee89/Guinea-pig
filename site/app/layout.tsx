@@ -1,7 +1,5 @@
 import type { Metadata } from 'next'
 import { Fredoka, Quicksand } from 'next/font/google'
-import { SiteFooter } from '@/components/SiteFooter'
-import { SiteHeader } from '@/components/SiteHeader'
 import { IS_LIVE, SITE_NAME, SITE_TAGLINE, SITE_URL } from '@/lib/site'
 import './globals.css'
 
@@ -56,11 +54,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         >
           Skip to content
         </a>
-        <SiteHeader />
-        <main id="main" className="flex-1">
+        {/* Header and footer belong to (public), not here — the member area
+            has its own nav, and a signed-in user was getting both. */}
+        <main id="main" className="flex flex-1 flex-col">
           {children}
         </main>
-        <SiteFooter />
       </body>
     </html>
   )

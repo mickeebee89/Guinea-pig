@@ -49,6 +49,22 @@ const nextConfig: NextConfig = {
     // is unchanged.
     const devEval = process.env.NODE_ENV === 'production' ? '' : " 'unsafe-eval'"
 
+    // The member area talks to Supabase from the browser: PostgREST over https
+    // for sends and reads, and a WebSocket for realtime chat.
+    //
+    // `connect-src 'self'` was correct for phase 1, when this site made no
+    // client-side request of any kind. It became wrong the moment slice 2
+    // shipped, and it failed in the two worst ways at once: the send surfaced
+    // as an opaque "TypeError: Failed to fetch" with no mention of CSP, and
+    // realtime failed SILENTLY — the socket is refused, no error reaches the
+    // page, and chat simply never updates.
+    //
+    // Derived from the env var rather than hardcoded, so the policy cannot
+    // drift from the URL the client is actually calling.
+    const supabaseOrigin = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
+    const wsOrigin = supabaseOrigin.replace(/^https:/, 'wss:')
+    const connectSrc = ["'self'", supabaseOrigin, wsOrigin].filter(Boolean).join(' ')
+
     const csp = [
       "default-src 'self'",
       `script-src 'self' 'unsafe-inline'${devEval}`,
@@ -58,7 +74,7 @@ const nextConfig: NextConfig = {
       // listed for the unoptimised fallback path.
       "img-src 'self' data: https://ptluekkhiopowuyvkgnd.supabase.co",
       "font-src 'self'",
-      "connect-src 'self'",
+      `connect-src ${connectSrc}`,
       "form-action 'self'",
       "base-uri 'self'",
       "object-src 'none'",

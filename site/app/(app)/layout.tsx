@@ -1,5 +1,4 @@
-import { redirect } from 'next/navigation'
-import { createSupabaseServerClient, getUser } from '@/lib/supabase-server'
+import { createSupabaseServerClient, requireUser } from '@/lib/supabase-server'
 import { getConversations } from '@/lib/queries/conversations'
 import { AppNav } from '@/components/AppNav'
 
@@ -32,8 +31,7 @@ import { AppNav } from '@/components/AppNav'
  * It fails soft: a badge is not worth a 500 on every page.
  */
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
-  const user = await getUser()
-  if (!user) redirect('/sign-in')
+  const user = await requireUser()
 
   let unread = 0
   try {

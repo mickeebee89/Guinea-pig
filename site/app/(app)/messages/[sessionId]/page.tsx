@@ -1,5 +1,5 @@
 import { notFound } from 'next/navigation'
-import { createSupabaseServerClient, getUser } from '@/lib/supabase-server'
+import { createSupabaseServerClient, requireUser } from '@/lib/supabase-server'
 import { getThread } from '@/lib/queries/thread'
 import { ChatThread } from './ChatThread'
 
@@ -23,11 +23,11 @@ export default async function ThreadPage({
   params: Promise<{ sessionId: string }>
 }) {
   const { sessionId } = await params
-  const user = await getUser()
+  const user = await requireUser()
   const supabase = await createSupabaseServerClient()
 
-  const thread = await getThread(supabase, sessionId, user!.id)
+  const thread = await getThread(supabase, sessionId, user.id)
   if (!thread) notFound()
 
-  return <ChatThread thread={thread} userId={user!.id} />
+  return <ChatThread thread={thread} userId={user.id} />
 }

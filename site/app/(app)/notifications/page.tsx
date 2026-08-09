@@ -1,17 +1,17 @@
 import Link from 'next/link'
-import { createSupabaseServerClient, getUser } from '@/lib/supabase-server'
+import { createSupabaseServerClient, requireUser } from '@/lib/supabase-server'
 import { getNotifications, type AppNotification } from '@/lib/queries/notifications'
 import { EmptyState, LoadError } from '@/components/ui'
 
 export const metadata = { title: 'Notifications' }
 
 export default async function NotificationsPage() {
-  const user = await getUser()
+  const user = await requireUser()
   const supabase = await createSupabaseServerClient()
 
   let items: AppNotification[] | null = null
   try {
-    items = await getNotifications(supabase, user!.id)
+    items = await getNotifications(supabase, user.id)
   } catch (e) {
     console.error('[notifications] load failed', e)
   }

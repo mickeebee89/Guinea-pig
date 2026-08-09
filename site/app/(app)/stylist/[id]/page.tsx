@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
-import { createSupabaseServerClient, getUser } from '@/lib/supabase-server'
+import { createSupabaseServerClient, requireUser } from '@/lib/supabase-server'
 import { getStylistProfile } from '@/lib/queries/stylist'
 import { Avatar, EmptyState } from '@/components/ui'
 
@@ -19,10 +19,10 @@ export default async function StylistPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
-  const user = await getUser()
+  const user = await requireUser()
   const supabase = await createSupabaseServerClient()
 
-  const p = await getStylistProfile(supabase, id, user!.id)
+  const p = await getStylistProfile(supabase, id, user.id)
   // Not found and not visible to you both land here, on purpose.
   if (!p) notFound()
 

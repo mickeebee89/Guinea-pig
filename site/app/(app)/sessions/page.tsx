@@ -1,4 +1,4 @@
-import { createSupabaseServerClient, getUser } from '@/lib/supabase-server'
+import { createSupabaseServerClient, requireUser } from '@/lib/supabase-server'
 import { getSessions, type SessionRow } from '@/lib/queries/sessions'
 import Link from 'next/link'
 import { StatusPill, EmptyState, LoadError, Avatar } from '@/components/ui'
@@ -11,12 +11,19 @@ export const metadata = { title: 'Bookings' }
  * Grouped by what the user needs to do about them rather than by status name:
  * waiting on someone, happening, already happened.
  */
-function Group({ title, rows }: { title: string; rows: SessionRow[] }) {
+/**
+ * `collapsible` uses <details>, not React state — it works with no JavaScript,
+ * needs no client boundary, and the browser remembers nothing to get out of
+ * sync. Past bookings are the only group that grows without limit, so they are
+ * the only one that starts closed.
+ */
+function Group({
+  title, rows, collapsible = false,
+}: { title: string; rows: SessionRow[]; collapsible?: boolean }) {
   if (rows.length === 0) return null
-  return (
-    <section className="mb-8">
-      <h2 className="mb-3 text-xs font-bold uppercase tracking-widest text-muted">{title}</h2>
-      <ul className="space-y-3">
+
+  const list = (
+    <ul className="space-y-3">
         {rows.map(s => (
           <li key={s.id} className="rounded-lg border border-hairline bg-white p-4 shadow-soft">
             <div className="flex items-start gap-3">
@@ -50,18 +57,38 @@ function Group({ title, rows }: { title: string; rows: SessionRow[] }) {
             </div>
           </li>
         ))}
-      </ul>
-    </section>
+    </ul>
+  )
+
+  if (!collapsible) {
+    return (
+      <section className="mb-8">
+        <h2 className="mb-3 text-xs font-bold uppercase tracking-widest text-muted">{title}</h2>
+        {list}
+      </section>
+    )
+  }
+
+  return (
+    <details className="mb-8 group">
+      <summary className="mb-3 cursor-pointer list-none text-xs font-bold uppercase tracking-widest text-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose">
+        <span className="inline-flex items-center gap-2">
+          <span aria-hidden="true" className="transition-transform group-open:rotate-90">›</span>
+          {title} ({rows.length})
+        </span>
+      </summary>
+      {list}
+    </details>
   )
 }
 
 export default async function SessionsPage() {
-  const user = await getUser()
+  const user = await requireUser()
   const supabase = await createSupabaseServerClient()
 
   let rows: SessionRow[] | null = null
   try {
-    rows = await getSessions(supabase, user!.id)
+    rows = await getSessions(supabase, user.id)
   } catch (e) {
     console.error('[sessions] load failed', e)
   }
@@ -80,7 +107,7 @@ export default async function SessionsPage() {
         <>
           <Group title="Awaiting acceptance" rows={rows.filter(r => r.status === 'pending')} />
           <Group title="Confirmed"           rows={rows.filter(r => r.status === 'accepted')} />
-          <Group title="Past"                rows={rows.filter(r => r.status === 'completed')} />
+          <Group title="Past" collapsible rows={rows.filter(r => r.status === 'completed')} />
         </>
       )}
     </>

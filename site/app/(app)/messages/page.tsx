@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { createSupabaseServerClient, getUser } from '@/lib/supabase-server'
+import { createSupabaseServerClient, requireUser } from '@/lib/supabase-server'
 import { getConversations, type ConversationSummary } from '@/lib/queries/conversations'
 import { StatusPill, EmptyState, LoadError, Avatar } from '@/components/ui'
 
@@ -14,12 +14,12 @@ function when(iso: string) {
 }
 
 export default async function MessagesPage() {
-  const user = await getUser()
+  const user = await requireUser()
   const supabase = await createSupabaseServerClient()
 
   let convs: ConversationSummary[] | null = null
   try {
-    convs = await getConversations(supabase, user!.id)
+    convs = await getConversations(supabase, user.id)
   } catch (e) {
     console.error('[messages] load failed', e)
   }

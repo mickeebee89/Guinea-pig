@@ -1,4 +1,4 @@
-import { getUser } from '@/lib/supabase-server'
+import { requireUser } from '@/lib/supabase-server'
 import { SignOutButton } from '@/components/SignOutButton'
 
 /**
@@ -7,7 +7,7 @@ import { SignOutButton } from '@/components/SignOutButton'
  * slice 2.
  */
 export default async function Dashboard() {
-  const user = await getUser()
+  const user = await requireUser()
 
   return (
     <section className="mx-auto max-w-3xl px-6 py-16">

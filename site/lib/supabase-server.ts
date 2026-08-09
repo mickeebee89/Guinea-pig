@@ -1,5 +1,6 @@
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
+import { redirect } from 'next/navigation'
 
 /**
  * The AUTHENTICATED client. Cookie-backed session, one per request.
@@ -58,5 +59,29 @@ export async function createSupabaseServerClient() {
 export async function getUser() {
   const supabase = await createSupabaseServerClient()
   const { data: { user } } = await supabase.auth.getUser()
+  return user
+}
+
+/**
+ * The signed-in user, or a redirect. Use this in any (app) PAGE.
+ *
+ * ⚠️ THE LAYOUT GATE DOES NOT STOP A PAGE RENDERING.
+ *
+ * app/(app)/layout.tsx redirects when there is no user, and that is still the
+ * auth boundary — the response really is a redirect. But Next renders layouts
+ * and pages CONCURRENTLY, so the page's own body runs regardless, before the
+ * layout's redirect has resolved.
+ *
+ * Pages were written assuming otherwise, with `user!.id`. That is not a
+ * type-level shortcut, it is a crash: /messages threw
+ * "Cannot read properties of null (reading 'id')" for a signed-out visitor and
+ * rendered the error boundary instead of the sign-in page.
+ *
+ * redirect() throws, so everything after this call has a non-null user and no
+ * `!` is needed anywhere.
+ */
+export async function requireUser() {
+  const user = await getUser()
+  if (!user) redirect('/sign-in')
   return user
 }
