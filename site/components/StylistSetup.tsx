@@ -114,12 +114,20 @@ export function StylistSetupPanel({ setup }: { setup: StylistSetup }) {
   // and the honest answer — a person has not looked at it yet — is nowhere on
   // the screen unless it is put there.
   const waitingOnUs =
-    setup.detailsDone && setup.treatmentCount > 0 && setup.feeSettled && setup.idCheck === 'pending'
+    setup.publishBlockers.length === 0 && setup.feeSettled && setup.idCheck === 'pending'
+
+  // The opposite state, and the one 0016 created: the ID check has PASSED and
+  // publication is now waiting on the stylist. Before auto-publish existed this
+  // was a dead end only an admin could notice. Now it resolves itself the
+  // moment the list below is empty — so the list has to be on the screen.
+  const verifiedButIncomplete = setup.isVerified && setup.publishBlockers.length > 0
 
   return (
     <section className="rounded-lg border border-rose/30 bg-white p-5 shadow-card">
       <h2 className="font-display text-xl text-warm-dark">
-        {waitingOnUs ? 'Waiting on us' : 'Getting your shop live'}
+        {waitingOnUs ? 'Waiting on us'
+          : verifiedButIncomplete ? 'You’re verified — one thing left'
+          : 'Getting your shop live'}
       </h2>
       <p className="mt-1 text-sm text-muted">
         {waitingOnUs ? (
@@ -129,6 +137,12 @@ export function StylistSetupPanel({ setup }: { setup: StylistSetup }) {
             checked your ID selfie — that’s a person, not a computer, and it usually takes less
             than 24 hours. Nothing is broken and there’s nothing left for you to do.
           </>
+        ) : verifiedButIncomplete ? (
+          <>
+            Your ID check has passed. Your shop goes live{' '}
+            <span className="font-bold text-warm-dark">by itself, the moment</span> it has
+            everything a model needs — no one has to approve anything again.
+          </>
         ) : (
           <>
             Your shop is <span className="font-bold text-warm-dark">not published</span> yet, so
@@ -136,6 +150,20 @@ export function StylistSetupPanel({ setup }: { setup: StylistSetup }) {
           </>
         )}
       </p>
+
+      {/* Never make someone guess which field. This is the list the database
+          actually checks — provider_profile_is_complete() in 0016 — so an empty
+          list here means publication really will happen. */}
+      {setup.publishBlockers.length > 0 && (
+        <div className="mt-3 rounded-md bg-input-bg px-3 py-2">
+          <p className="text-sm font-bold text-warm-dark">
+            Your shop still needs{setup.publishBlockers.length === 1 ? '' : ':'}
+          </p>
+          <ul className="mt-1 list-inside list-disc text-sm text-muted">
+            {setup.publishBlockers.map(b => <li key={b}>{b}</li>)}
+          </ul>
+        </div>
+      )}
 
       <ol className="mt-4 space-y-3">
         <Step
@@ -205,7 +233,9 @@ export function StylistSetupPanel({ setup }: { setup: StylistSetup }) {
       <p className="mt-4 rounded-md bg-input-bg px-3 py-2 text-xs text-muted">
         {waitingOnUs
           ? 'We’ll send you a notification the moment it’s approved, and your shop goes live at the same time — there’s no switch for you to flip.'
-          : 'When the other steps are done, a person here looks at your ID selfie — usually within 24 hours. If it passes we publish your shop for you and send you a notification, so there’s no switch for you to flip.'}
+          : verifiedButIncomplete
+            ? 'Fill in what’s listed above and your shop publishes itself — you won’t need to ask anyone or wait again.'
+            : 'When the other steps are done, a person here looks at your ID selfie — usually within 24 hours. If it passes we publish your shop for you and send you a notification, so there’s no switch for you to flip.'}
       </p>
     </section>
   )

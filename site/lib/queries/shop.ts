@@ -22,6 +22,21 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 
 export type IdCheckState = 'none' | 'pending' | 'approved' | 'rejected'
 
+/**
+ * The bio length a shop needs before it can be published.
+ *
+ * ⚠️ NOT the authority. `provider_profile_is_complete()` (migration 0016) is,
+ * and `public_stylists` gates the open web on the same number. This copy exists
+ * only so the panel can say "yours is 12" instead of making the stylist press
+ * save to find out.
+ *
+ * Two thresholds for one idea is precisely how `location` and `location_text`
+ * happened — both plausible, both live, silently disagreeing. If this should be
+ * 60, it changes here, in 0016 and in public-web-views.sql in one commit, or
+ * not at all.
+ */
+export const BIO_MIN_CHARS = 40
+
 export interface StylistSetup {
   /** Null only if the signup trigger never made a providers row. */
   providerId: string | null
@@ -31,6 +46,16 @@ export interface StylistSetup {
   /** Name and area both filled in — the minimum a model needs to pick you. */
   detailsDone: boolean
   treatmentCount: number
+  /**
+   * What is stopping publication, in words, or empty when nothing is.
+   *
+   * Mirrors provider_profile_is_complete() (0016). Deliberately NOT the same
+   * list as `detailsDone`: publication needs a name, a bio and a treatment;
+   * the area is a quality nudge the database does not gate on. Conflating the
+   * two would have the panel demand something that is not actually blocking,
+   * which is its own kind of lie.
+   */
+  publishBlockers: string[]
   idCheck: IdCheckState
   /** The reviewer's note. On a rejection it is the only thing that makes it fixable. */
   idCheckNote: string | null
@@ -76,7 +101,8 @@ export async function getStylistSetup(
 
   const empty: StylistSetup = {
     providerId: null, name: null, bio: null, locationText: null,
-    detailsDone: false, treatmentCount: 0, idCheck: 'none', idCheckNote: null,
+    detailsDone: false, treatmentCount: 0, publishBlockers: [],
+    idCheck: 'none', idCheckNote: null,
     isVerified: false, feeSettled: false, isFoundingProvider: false,
     isPublished: false,
   }
@@ -103,6 +129,22 @@ export async function getStylistSetup(
   const req = reqRes.data as { status: string; notes: string | null } | null
 
   const locationText = prov.location_text ?? prov.location
+  const treatmentCount = treatRes.count ?? 0
+  const bioLength = (prov.bio ?? '').trim().length
+
+  // Says the number both ways round — what is needed and what they have — so
+  // "add a bit more" is actionable rather than a guessing game.
+  const publishBlockers: string[] = []
+  if (!prov.name?.trim()) publishBlockers.push('a name for your shop')
+  if (bioLength < BIO_MIN_CHARS) {
+    publishBlockers.push(
+      bioLength === 0
+        ? `a few lines about you (at least ${BIO_MIN_CHARS} characters)`
+        : `a bit more in your bio — ${BIO_MIN_CHARS} characters at least, yours is ${bioLength}`,
+    )
+  }
+  if (treatmentCount === 0) publishBlockers.push('at least one treatment')
+
   const idCheck: IdCheckState = u.is_verified
     ? 'approved'
     : req?.status === 'pending' || req?.status === 'rejected'
@@ -115,7 +157,8 @@ export async function getStylistSetup(
     bio: prov.bio,
     locationText,
     detailsDone: !!prov.name?.trim() && !!locationText?.trim(),
-    treatmentCount: treatRes.count ?? 0,
+    treatmentCount,
+    publishBlockers,
     idCheck,
     idCheckNote: req?.notes?.trim() ? req.notes.trim() : null,
     isVerified: !!u.is_verified,

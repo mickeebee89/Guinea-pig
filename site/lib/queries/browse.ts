@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { getBlockedIds } from '@/lib/blocks'
+import { BIO_MIN_CHARS } from '@/lib/queries/shop'
 
 /**
  * Browse published stylists.
@@ -75,7 +76,25 @@ export async function getBrowseStylists(
     is_verified: boolean | null; rating: number | null; review_count: number | null
     profile_pic_url: string | null
   }[]
-  const visible = rows.filter(r => !(r.user_id && blocked.has(r.user_id)))
+  const visible = rows
+    .filter(r => !(r.user_id && blocked.has(r.user_id)))
+    // CONTENT BAR, matching public_stylists. Treats the symptom, not the cause
+    // — 0016 is the cause — but the symptom was live: six providers were
+    // published and verified with no name at all, and this list rendered every
+    // one of them as a card labelled "Stylist" because of the `?? 'Stylist'`
+    // fallback below.
+    //
+    // Kept even though 0016 unpublishes those rows and refuses to publish
+    // another. is_published is one boolean away from being wrong again, an
+    // admin can still write providers directly, and a blank card in a list of
+    // people you are choosing a stranger from is worse than a shorter list.
+    //
+    // The bio threshold is BIO_MIN_CHARS, which is public_stylists' 40 and
+    // provider_profile_is_complete()'s 40. One number, three call sites.
+    .filter(r =>
+      !!r.name?.trim() &&
+      (r.bio ?? '').trim().length >= BIO_MIN_CHARS,
+    )
   if (visible.length === 0) return []
 
   const ids = visible.map(r => r.id)
@@ -115,6 +134,9 @@ export async function getBrowseStylists(
       categories: [...(cats.get(r.id) ?? [])].sort(),
       hasOpenSlots: openSlots.has(r.id),
     }))
+    // Third leg of the content bar. Split from the two above only because
+    // categories are not known until the treatments query has run.
+    .filter(s => s.categories.length > 0)
     .filter(s => !filters.category || s.categories.includes(filters.category))
     // Bookable first. Without distance, "can I actually get an appointment"
     // is the most useful thing to sort on — a five-star stylist with no slots
