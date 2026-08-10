@@ -86,9 +86,26 @@ a row. It is all silent degradation:
 
 ## Is the damage already there? — run this first
 
+> **⚠️ The baseline was never captured.** 0012 was applied on 10 Aug before
+> Blocks A and B were run, so the number of slots that had been carrying dead
+> ids is gone for good — the repair rewrote them. Nothing distinguishes a slot
+> the repair emptied from one that was always empty, so it cannot be
+> reconstructed. **The repair is therefore unverified against a before-figure,
+> and this doc should not be read as saying otherwise.**
+>
+> Blocks C, D and E survive intact: the migration deliberately does not touch
+> `sessions.treatment_id`, and D and E read only `pg_constraint` and
+> `provider_treatments`. D — the one that decides whether this was orphaning
+> bookings, duplicating rows, or deleting bookings — is unaffected.
+>
+> The ordering trap is worth naming: the diagnostic lived in comments *inside*
+> the file being applied, so "run the migration" and "run the thing that must
+> precede the migration" were the same paste. A pre-check that ships inside the
+> change it is checking will be skipped sooner or later. Next time it goes in
+> its own file.
+
 Full diagnostic blocks are in `supabase/migrations/0012_…sql` under **BEFORE
-APPLYING**. Run them and keep the output; the repair is only believable against
-a before-figure. The short version:
+APPLYING**. The short version:
 
 ```sql
 select a.provider_id, p.name, count(*) as slots_with_dead_ids
