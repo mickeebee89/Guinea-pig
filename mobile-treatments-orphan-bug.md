@@ -148,7 +148,14 @@ deletes always succeeded, so the `delError` fault never had a chance to bite.
 **All 19 affected bookings are test data and none of them are live.** Every one
 has Micky B as the stylist and Micky's own account as the model (bar one
 `Fulltestmodel`); every one is `completed`, `cancelled` or `declined`; the most
-recent is 27 Jul. **No repair was carried out and none is owed.**
+recent is 27 Jul.
+
+> **The 19 are ACCEPTED, not overlooked.** Decided 10 Aug: repair none of them.
+> They are terminal, they are June–July, and they are one test account booking
+> against itself — there is no user to whom the missing label means anything,
+> and inventing a treatment for a completed booking would put a guess into a
+> historical record. Anyone finding these later should leave them alone; the
+> query that lists them is above, and it will keep returning 19.
 
 The recovery attempt via `notifications.body` returned null for all 19. That is
 *not* evidence the route does not work — these rows look like `seed/seed.mjs`
@@ -183,14 +190,28 @@ bookings is the scenario the fix exists for.
    trigger. Nothing further to do there, but it depends on 0012 being applied;
    `node scripts/migration-status.mjs` will report it PENDING until then.
 
+4. **⬜ `sessions.treatment_id` is guarded, not constrained.** Migration `0013`
+   refuses removing a treatment while a `pending` or `accepted` booking uses it,
+   and allows it once that booking is terminal. A foreign key cannot express
+   that: `restrict` would mean a stylist who stops doing lashes can never remove
+   Lashes, because completed bookings are permanent, and `set null` would
+   silently blank the treatment on a live upcoming appointment.
+
+   This also makes an existing promise true. Both shop editors already said
+   *"a booking still uses it — it'll come off once that booking is finished or
+   cancelled"* and nothing implemented it, so the sentence could never fire.
+   **That is the third shipped sentence with no mechanism behind it**, after
+   `is_founding_provider` (0011) and the privacy policy's IP claim (0010). All
+   three were found by reading, none by anything failing.
+
+   **Not applied yet.** Run `supabase/diagnostics/pre-0013-treatment-delete-guard.sql`
+   first — it is a separate file precisely because 0012's pre-check was not.
+
 ## Still open
 
 * **`chat/[sessionId].tsx:546`** — a locked chat should show its date whether or
   not the treatment resolves. Small, separate, and a real loss of information to
   the model.
-* **Whether `sessions.treatment_id` should have a foreign key**, and which
-  `on delete` behaviour. Answer Block D before deciding — adding a constraint to
-  live data that currently violates it will simply fail.
 * **The `apply-session.tsx:293` fallback should probably go**, once orphans stop
   being manufactured. It exists to paper over this bug, and what it does when it
   fires is over-offer treatments. But it must not be removed until the diagnostic

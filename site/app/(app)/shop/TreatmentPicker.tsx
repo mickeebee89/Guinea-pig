@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { saveTreatments } from './actions'
+import { saveTreatments, type BlockedTreatment } from './actions'
 import { tap } from '@/lib/haptics'
 
 /**
@@ -25,6 +25,7 @@ export function TreatmentPicker({
   const [pending, start] = useTransition()
   const [msg, setMsg] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [blocked, setBlocked] = useState<BlockedTreatment[]>([])
 
   const toggle = (cat: string) => {
     tap()
@@ -40,20 +41,15 @@ export function TreatmentPicker({
 
   const save = () => {
     tap()
-    setMsg(null); setError(null)
+    setMsg(null); setError(null); setBlocked([])
     start(async () => {
       const res = await saveTreatments([...selected])
       if (!res.ok) { setError(res.error); return }
-      if (res.blocked.length > 0) {
-        // Naming them is the point: a booking holding a treatment is not a
-        // failure the stylist can fix by pressing save again.
-        setError(
-          `Saved, but ${res.blocked.join(' and ')} couldn’t be removed — ` +
-          'a booking still uses it. It’ll come off once that booking is finished or cancelled.',
-        )
-      } else {
-        setMsg('Saved.')
-      }
+      // A treatment held by a live booking is not something pressing save
+      // again will fix, so it gets its own panel naming the booking rather
+      // than a red line that reads like a failure to retry.
+      if (res.blocked.length > 0) setBlocked(res.blocked)
+      else setMsg('Saved.')
       router.refresh()
     })
   }
@@ -115,6 +111,21 @@ export function TreatmentPicker({
 
       {msg && <p role="status" className="mt-3 text-sm font-bold text-rose">{msg}</p>}
       {error && <p role="alert" className="mt-3 text-sm text-danger">{error}</p>}
+
+      {blocked.length > 0 && (
+        <div role="status" className="mt-3 rounded-md border border-hairline bg-input-bg p-3">
+          <p className="text-sm font-bold text-warm-dark">
+            Everything saved{blocked.length === 1
+              ? `, except taking ${blocked[0].category} off`
+              : ', except removing some treatments'}
+          </p>
+          <ul className="mt-1 space-y-1">
+            {blocked.map(b => (
+              <li key={b.category} className="text-sm text-muted">{b.detail}</li>
+            ))}
+          </ul>
+        </div>
+      )}
     </section>
   )
 }

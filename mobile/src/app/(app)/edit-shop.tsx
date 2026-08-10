@@ -107,6 +107,44 @@ export default function EditShopScreen() {
     })
   }
 
+  /**
+   * Which booking is holding a treatment, in words a stylist can act on.
+   *
+   * Migration 0013 refuses the delete; the message it raises is for logs, not
+   * for reading. Telling someone what is refused without telling them what
+   * happens next is half an error, so this names the booking and says the
+   * removal completes on its own.
+   *
+   * Mirrors 0013's predicate. If they drift, the delete is still correctly
+   * refused and only the wording gets vaguer — hence a complete fallback
+   * sentence rather than a placeholder.
+   */
+  const describeBlocker = async (treatmentId: string, category: string): Promise<string> => {
+    const { data } = await supabase
+      .from('sessions')
+      .select('date, start_time, status')
+      .eq('treatment_id', treatmentId)
+      .in('status', ['pending', 'accepted'])
+      .order('date').order('start_time')
+      .limit(1)
+      .maybeSingle()
+
+    const s = data as { date: string; start_time: string | null; status: string } | null
+    if (!s) return `You can remove ${category} once the booking using it is done or cancelled.`
+
+    const when = new Date(s.date + 'T00:00:00').toLocaleDateString('en-GB', {
+      weekday: 'long', day: 'numeric', month: 'long',
+    })
+    const at = s.start_time ? ` at ${s.start_time.slice(0, 5)}` : ''
+    const kind = s.status === 'pending' ? 'an application for' : 'a booking on'
+
+    return (
+      `There's ${kind} ${when}${at} using ${category}. ` +
+      `It'll come off your list on its own once that's finished or cancelled — ` +
+      `you don't need to do anything.`
+    )
+  }
+
   const handleSave = async () => {
     if (!providerId) return
     if (selectedCategories.size === 0) {
@@ -156,28 +194,30 @@ export default function EditShopScreen() {
         if (insError) throw insError
       }
 
-      // One at a time so a refusal can name the treatment. A row a booking
-      // still references may be undeletable, and the old code ignored its
-      // delete error entirely — then inserted anyway, duplicating rows and
+      // One at a time so a refusal can name the treatment. The old code ignored
+      // its delete error entirely — then inserted anyway, duplicating rows and
       // reporting success.
       const blocked: string[] = []
       for (const [cat, id] of toRemove) {
         const { error: delError } = await supabase
           .from('provider_treatments').delete().eq('id', id).eq('provider_id', providerId)
-        if (delError) {
-          console.error('edit-shop: could not remove treatment', cat, delError)
-          blocked.push(cat)
-        }
+        if (!delError) continue
+
+        console.error('edit-shop: could not remove treatment', cat, delError)
+        // 23503 is migration 0013 refusing because a live booking holds it.
+        // Anything else is a real fault and must not be dressed up as one —
+        // telling a stylist to wait for a booking to finish when the actual
+        // cause was a permission error sends them to wait for nothing.
+        blocked.push(
+          delError.code === '23503'
+            ? await describeBlocker(id, cat)
+            : `${cat} couldn't be removed just now — try again in a moment.`,
+        )
       }
 
       if (blocked.length > 0) {
         await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning)
-        Alert.alert(
-          'Saved, mostly',
-          `Everything saved except removing ${blocked.join(' and ')} — a booking still uses ` +
-          `${blocked.length === 1 ? 'it' : 'them'}. ${blocked.length === 1 ? 'It' : 'They'} ` +
-          'will come off once that booking is finished or cancelled.',
-        )
+        Alert.alert('Saved, mostly', `Everything else saved.\n\n${blocked.join('\n\n')}`)
         setSaving(false)
         load()
         return

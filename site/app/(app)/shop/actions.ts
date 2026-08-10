@@ -62,9 +62,63 @@ export async function saveShopDetails(input: {
 
 /* ── treatments ────────────────────────────────────────────────────────── */
 
+/** A treatment that could not be removed, and the booking holding it. */
+export interface BlockedTreatment {
+  category: string
+  /** Which booking, in the app's own voice. Never just "a booking". */
+  detail: string
+}
+
 export type TreatmentsResult =
-  | { ok: true; added: number; removed: number; blocked: string[] }
+  | { ok: true; added: number; removed: number; blocked: BlockedTreatment[] }
   | { ok: false; error: string }
+
+/**
+ * Turn a refused removal into something the stylist can act on.
+ *
+ * Migration 0013 raises 23503 when a pending or accepted session still uses the
+ * treatment. It deliberately does NOT carry the user-facing wording — the
+ * message it raises is for logs. This looks up which booking is holding it so
+ * the stylist is told what is refused AND what happens next, rather than half
+ * of that.
+ *
+ * The lookup mirrors 0013's predicate. If the two ever drift, the delete is
+ * still correctly refused and only the wording gets vaguer — which is why the
+ * fallback below is a complete sentence rather than a placeholder.
+ */
+async function describeBlocker(
+  supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>,
+  treatmentId: string,
+  category: string,
+): Promise<BlockedTreatment> {
+  const vague = `You can remove ${category} once the booking using it is done or cancelled.`
+
+  const { data } = await supabase
+    .from('sessions')
+    .select('date, start_time, status')
+    .eq('treatment_id', treatmentId)
+    .in('status', ['pending', 'accepted'])
+    .order('date').order('start_time')
+    .limit(1)
+    .maybeSingle()
+
+  const s = data as { date: string; start_time: string | null; status: string } | null
+  if (!s) return { category, detail: vague }
+
+  const when = new Date(s.date + 'T00:00:00').toLocaleDateString('en-GB', {
+    weekday: 'long', day: 'numeric', month: 'long',
+  })
+  const at = s.start_time ? ` at ${s.start_time.slice(0, 5)}` : ''
+  const kind = s.status === 'pending' ? 'an application for' : 'a booking on'
+
+  return {
+    category,
+    detail:
+      `There’s ${kind} ${when}${at} using ${category}. ` +
+      `It’ll come off your list on its own once that’s finished or cancelled — ` +
+      `you don’t need to do anything.`,
+  }
+}
 
 /**
  * Set which treatments this shop offers.
@@ -144,17 +198,25 @@ export async function saveTreatments(categories: string[]): Promise<TreatmentsRe
     }
   }
 
-  const blocked: string[] = []
+  const blocked: BlockedTreatment[] = []
   let removed = 0
   for (const row of toRemove) {
     const { error } = await supabase
       .from('provider_treatments').delete().eq('id', row.id).eq('provider_id', providerId)
-    if (error) {
-      console.error('[shop] treatment delete failed', row.id, error)
-      blocked.push(row.category ?? 'a treatment')
-    } else {
-      removed++
-    }
+    if (!error) { removed++; continue }
+
+    console.error('[shop] treatment delete failed', row.id, error)
+    const category = row.category ?? 'That treatment'
+    blocked.push(
+      // 23503 is 0013 refusing because a live booking holds it — expected, and
+      // explainable. Anything else is a genuine fault and must not be dressed
+      // up as one: saying "a booking is using it" when the real cause was a
+      // permission error sends the stylist to wait for something that will
+      // never happen.
+      error.code === '23503'
+        ? await describeBlocker(supabase, row.id, category)
+        : { category, detail: `We couldn’t remove ${category} just now. Try again in a moment.` },
+    )
   }
 
   revalidatePath('/shop')
