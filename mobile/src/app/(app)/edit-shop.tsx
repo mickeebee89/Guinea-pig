@@ -120,17 +120,21 @@ export default function EditShopScreen() {
    * sentence rather than a placeholder.
    */
   const describeBlocker = async (treatmentId: string, category: string): Promise<string> => {
+    // Mirrors 0015's predicate, date filter included. Without it the message
+    // would name a booking from three weeks ago while the guard was actually
+    // holding on a different one next week.
     const { data } = await supabase
       .from('sessions')
       .select('date, start_time, status')
       .eq('treatment_id', treatmentId)
       .in('status', ['pending', 'accepted'])
+      .gte('date', new Date().toISOString().slice(0, 10))
       .order('date').order('start_time')
       .limit(1)
       .maybeSingle()
 
     const s = data as { date: string; start_time: string | null; status: string } | null
-    if (!s) return `You can remove ${category} once the booking using it is done or cancelled.`
+    if (!s) return `You can remove ${category} once the booking using it has passed.`
 
     const when = new Date(s.date + 'T00:00:00').toLocaleDateString('en-GB', {
       weekday: 'long', day: 'numeric', month: 'long',
@@ -140,7 +144,7 @@ export default function EditShopScreen() {
 
     return (
       `There's ${kind} ${when}${at} using ${category}. ` +
-      `It'll come off your list on its own once that's finished or cancelled — ` +
+      `It'll come off your list on its own once that day has passed — ` +
       `you don't need to do anything.`
     )
   }

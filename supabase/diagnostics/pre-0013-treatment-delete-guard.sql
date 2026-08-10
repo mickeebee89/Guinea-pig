@@ -12,6 +12,24 @@
 -- A pre-check that ships inside the change it is checking will be skipped
 -- sooner or later. This directory is for the ones that must not be.
 --
+-- ── ⚠️ AND IT WAS SKIPPED ANYWAY. THE SEPARATE FILE WAS NOT THE FIX. ──────
+-- Run after 0013 had already been applied, on 10 Aug. The operator's diagnosis:
+-- "The instruction to run it lives in your message, and by the time I'm in the
+-- SQL editor I'm pasting migrations."
+--
+-- Correct, and it generalises — a pre-check that depends on someone remembering
+-- is not a check, wherever the file sits. Migration 0014 moves both halves
+-- INSIDE the migration: it records its own before-figures into
+-- migration_findings, and aborts on an assertion when the world is not what the
+-- author assumed. **New migrations should use that; do not add files here
+-- expecting them to be run.**
+--
+-- ── ⚠️ SECOND FAULT IN THIS FILE: TWO SELECTS, ONE VISIBLE ────────────────
+-- It has two statements, and the Supabase SQL editor only shows the LAST result
+-- set — so query 1, the one naming which treatments would become un-removable,
+-- ran and was never displayed. The migration files' own convention says "one
+-- paste per block, each ending in one select", and this file broke it.
+--
 -- ── WHAT THIS DIRECTORY IS ────────────────────────────────────────────────
 -- Read-only SQL. Nothing here writes, so anything in it is safe to run twice,
 -- out of order, or by mistake. Deliberately NOT under supabase/migrations/ —

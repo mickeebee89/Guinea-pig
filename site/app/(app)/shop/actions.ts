@@ -93,11 +93,15 @@ async function describeBlocker(
 ): Promise<BlockedTreatment> {
   const vague = `You can remove ${category} once the booking using it is done or cancelled.`
 
+  // Mirrors 0015's predicate, date filter included. Without the date the
+  // message would name a booking from three weeks ago as the reason, while the
+  // guard was actually holding on a different one next Tuesday.
   const { data } = await supabase
     .from('sessions')
     .select('date, start_time, status')
     .eq('treatment_id', treatmentId)
     .in('status', ['pending', 'accepted'])
+    .gte('date', new Date().toISOString().slice(0, 10))
     .order('date').order('start_time')
     .limit(1)
     .maybeSingle()
@@ -115,7 +119,7 @@ async function describeBlocker(
     category,
     detail:
       `There’s ${kind} ${when}${at} using ${category}. ` +
-      `It’ll come off your list on its own once that’s finished or cancelled — ` +
+      `It’ll come off your list on its own once that day has passed — ` +
       `you don’t need to do anything.`,
   }
 }
