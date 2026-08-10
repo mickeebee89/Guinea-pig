@@ -282,8 +282,8 @@ export default async function DashboardPage({
             // Say why filtering is off rather than showing a distance control
             // that quietly does nothing.
             <p className="mb-3 rounded-md bg-input-bg px-3 py-2 text-xs text-muted">
-              We don’t have a location for your account, so these aren’t filtered by distance.
-              Set your location in the Cavy app and the miles filter will start working.
+              We don’t have a location for your account, so these aren’t filtered by distance yet.
+              You can still find stylists by area on the browse page.
             </p>
           )}
 

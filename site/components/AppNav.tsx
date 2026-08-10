@@ -21,6 +21,8 @@ import { SignOutButton } from '@/components/SignOutButton'
  * tap target, and it is why they look over-padded on a desktop.
  */
 const LINKS = [
+  // Models browse. A stylist has no use for a list of other stylists.
+  { href: '/browse',        label: 'Browse', modelOnly: true },
   { href: '/sessions',      label: 'Bookings' },
   { href: '/availability',  label: 'Availability', providerOnly: true },
   { href: '/portfolio',     label: 'Portfolio',    providerOnly: true },
@@ -30,7 +32,9 @@ const LINKS = [
 ]
 
 export function AppNav({ unread = 0, isProvider = false }: { unread?: number; isProvider?: boolean }) {
-  const links = LINKS.filter(l => !l.providerOnly || isProvider)
+  const links = LINKS.filter(
+    l => (!l.providerOnly || isProvider) && (!l.modelOnly || !isProvider),
+  )
 
   return (
     <header className="border-b border-hairline bg-white">
