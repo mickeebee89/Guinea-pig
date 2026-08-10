@@ -131,6 +131,35 @@ asking whether `sessions.treatment_id` has a foreign key at all:
 
 The three call for different repairs, so do not skip it.
 
+## What the diagnostic actually found — 10 Aug
+
+```
+FK on sessions.treatment_id              NONE - nothing enforces it
+bookings pointing at a missing treatment 19
+providers with duplicate treatment rows  0
+trigger installed                        trg_strip_treatment_from_availability
+slots still holding a dead id            0
+```
+
+**No foreign key, so the orphans were real** — the third of the three worlds.
+Zero duplicates is consistent with that: with nothing enforcing the FK the
+deletes always succeeded, so the `delError` fault never had a chance to bite.
+
+**All 19 affected bookings are test data and none of them are live.** Every one
+has Micky B as the stylist and Micky's own account as the model (bar one
+`Fulltestmodel`); every one is `completed`, `cancelled` or `declined`; the most
+recent is 27 Jul. **No repair was carried out and none is owed.**
+
+The recovery attempt via `notifications.body` returned null for all 19. That is
+*not* evidence the route does not work — these rows look like `seed/seed.mjs`
+inserts (:417, :451), which write `sessions` directly and never create an apply
+notification. For a booking made through the app the notification would exist.
+Untested, not disproven.
+
+**The finding is about exposure, not damage.** This has been harmless because
+there has effectively been one stylist. Thirty cohort stylists with real
+bookings is the scenario the fix exists for.
+
 ## The fix — three parts, two of them done
 
 1. **✅ The database owns the rule.** `supabase/migrations/0012` adds an
