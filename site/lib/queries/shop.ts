@@ -23,17 +23,17 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 export type IdCheckState = 'none' | 'pending' | 'approved' | 'rejected'
 
 /**
- * The bio length a shop needs before it can be published.
+ * The bio length needed to appear on the PUBLIC website. Nothing else.
  *
- * ⚠️ NOT the authority. `provider_profile_is_complete()` (migration 0016) is,
- * and `public_stylists` gates the open web on the same number. This copy exists
- * only so the panel can say "yours is 12" instead of making the stylist press
- * save to find out.
+ * ⚠️ It is NOT a publishing requirement, and an earlier version of this file
+ * wrongly made it one. `public_stylists` uses this number to avoid a
+ * thin-content manual action from a search crawler indexing a new domain —
+ * that reason does not reach the member area, where there is no crawler. A
+ * stylist below it is live and bookable; they just do not show on
+ * cavybeauty.com. See migration 0016's header.
  *
- * Two thresholds for one idea is precisely how `location` and `location_text`
- * happened — both plausible, both live, silently disagreeing. If this should be
- * 60, it changes here, in 0016 and in public-web-views.sql in one commit, or
- * not at all.
+ * `public-web-views.sql` is the authority. This copy exists only so the panel
+ * can say "yours is 13" instead of making someone guess.
  */
 export const BIO_MIN_CHARS = 40
 
@@ -47,15 +47,27 @@ export interface StylistSetup {
   detailsDone: boolean
   treatmentCount: number
   /**
-   * What is stopping publication, in words, or empty when nothing is.
+   * What is stopping the shop going live, in words. Empty when nothing is.
    *
-   * Mirrors provider_profile_is_complete() (0016). Deliberately NOT the same
-   * list as `detailsDone`: publication needs a name, a bio and a treatment;
-   * the area is a quality nudge the database does not gate on. Conflating the
-   * two would have the panel demand something that is not actually blocking,
-   * which is its own kind of lie.
+   * Mirrors provider_shop_is_publishable() (0016): a name, and at least one
+   * treatment. Deliberately NOT the same list as `detailsDone` — the area is a
+   * quality nudge nothing gates on, and a panel that demands something which
+   * is not actually blocking is its own kind of lie.
    */
   publishBlockers: string[]
+
+  /**
+   * What is stopping the shop appearing on the PUBLIC website, once it is live.
+   *
+   * A separate list because it is a separate consequence. Being under the bio
+   * bar does not stop a model booking you — it stops you showing on
+   * cavybeauty.com. Merging the two would tell a live, bookable stylist they
+   * are blocked when they are only invisible to Google.
+   *
+   * Today this is only ever the bio: public_stylists' other two requirements
+   * (a name, a category) are already in publishBlockers.
+   */
+  websiteBlockers: string[]
   idCheck: IdCheckState
   /** The reviewer's note. On a rejection it is the only thing that makes it fixable. */
   idCheckNote: string | null
@@ -101,7 +113,7 @@ export async function getStylistSetup(
 
   const empty: StylistSetup = {
     providerId: null, name: null, bio: null, locationText: null,
-    detailsDone: false, treatmentCount: 0, publishBlockers: [],
+    detailsDone: false, treatmentCount: 0, publishBlockers: [], websiteBlockers: [],
     idCheck: 'none', idCheckNote: null,
     isVerified: false, feeSettled: false, isFoundingProvider: false,
     isPublished: false,
@@ -132,18 +144,23 @@ export async function getStylistSetup(
   const treatmentCount = treatRes.count ?? 0
   const bioLength = (prov.bio ?? '').trim().length
 
-  // Says the number both ways round — what is needed and what they have — so
-  // "add a bit more" is actionable rather than a guessing game.
+  // Going live: a name and a treatment. Nothing else, matching 0016.
   const publishBlockers: string[] = []
   if (!prov.name?.trim()) publishBlockers.push('a name for your shop')
-  if (bioLength < BIO_MIN_CHARS) {
-    publishBlockers.push(
+  if (treatmentCount === 0) publishBlockers.push('at least one treatment')
+
+  // Showing on cavybeauty.com: the bio bar, and only once they are otherwise
+  // live — telling someone about the public website while their shop still has
+  // no name is answering a question they have not reached yet.
+  const websiteBlockers: string[] = []
+  if (publishBlockers.length === 0 && bioLength < BIO_MIN_CHARS) {
+    // The number both ways round, so "add a bit more" is actionable.
+    websiteBlockers.push(
       bioLength === 0
-        ? `a few lines about you (at least ${BIO_MIN_CHARS} characters)`
+        ? `a few lines about you — at least ${BIO_MIN_CHARS} characters`
         : `a bit more in your bio — ${BIO_MIN_CHARS} characters at least, yours is ${bioLength}`,
     )
   }
-  if (treatmentCount === 0) publishBlockers.push('at least one treatment')
 
   const idCheck: IdCheckState = u.is_verified
     ? 'approved'
@@ -159,6 +176,7 @@ export async function getStylistSetup(
     detailsDone: !!prov.name?.trim() && !!locationText?.trim(),
     treatmentCount,
     publishBlockers,
+    websiteBlockers,
     idCheck,
     idCheckNote: req?.notes?.trim() ? req.notes.trim() : null,
     isVerified: !!u.is_verified,

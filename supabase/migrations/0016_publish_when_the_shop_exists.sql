@@ -1,9 +1,9 @@
 -- ===========================================================================
 -- 0016_publish_when_the_shop_exists
 --
--- A shop cannot be published without a name, a real bio and a treatment — and a
--- verified stylist who completes those three is published automatically, with
--- nobody intervening.
+-- A shop cannot be published without a name and at least one treatment — and a
+-- verified stylist who has both is published automatically, with nobody
+-- intervening.
 --
 -- ⚠️ Apply 0014 first — this migration writes to migration_findings.
 --
@@ -49,17 +49,56 @@
 -- than waiting for a bug report, because there will not be one — a promise with
 -- no mechanism does not throw, it just quietly is not true.
 --
--- ── WHY 40 CHARACTERS, AND WHY THAT EXACT NUMBER ──────────────────────────
--- public_stylists already gates the open web on
--- `length(btrim(coalesce(p.bio,''))) >= 40` (public-web-views.sql). This reuses
--- it rather than picking its own.
+-- ── THE BIO IS NOT PART OF THIS BAR, AND THE FIRST DRAFT SAID IT WAS ──────
 --
--- Not because 40 is special — it is a judgement about what stops a profile
--- reading as thin. It is because two thresholds for one idea is exactly how
--- location and location_text happened: both plausible, both live, silently
--- disagreeing, and every reader after that has to work out which one is real.
--- One number, one definition, in provider_profile_is_complete(). If it should
--- be 60, change it in both places in one commit or not at all.
+-- ⚠️ THE REUSABLE LESSON: A THRESHOLD TRAVELS, ITS REASON MAY NOT.
+--
+-- The first version of this migration required a 40-character bio to publish,
+-- reusing public_stylists' content bar on the stated grounds that "two
+-- thresholds for one idea is how location/location_text happened". That
+-- argument was about a number appearing twice. It said nothing about whether
+-- the number MEANT the same thing in both places, and it does not.
+--
+-- The 40-character bar exists to avoid a thin-content manual action from a
+-- SEARCH CRAWLER indexing a brand-new domain. That is the entire reason for it.
+--
+--   * There is no crawler behind an auth gate.
+--   * There is no crawler on a live diary.
+--
+-- A stylist with a name, six treatments and a thirteen-character bio is not a
+-- thin-content risk. They are a working shop that models can book.
+--
+-- The same mistake was made TWICE in one change: the publish guard here, and a
+-- copy of the same bar added to lib/queries/browse.ts. Both hid or unpublished
+-- real stylists to satisfy an SEO rule for an audience that was not present.
+--
+-- So the split is now:
+--
+--   publish (this migration)  a name, and at least one treatment
+--   public_stylists           name + bio >= 40 + a category   [unchanged]
+--   /browse                   a name, and a category
+--
+-- Three bars, on purpose, because they answer three different questions. The
+-- test for "is this duplication or is this a coincidence" is not whether the
+-- numbers match — it is whether one changing should force the other to.
+--
+-- ── HOW THIS WAS CAUGHT: 0014'S ASSERT, ON THE CONFIDENT RUN ──────────────
+-- The assert below aborted the first attempt: it would have unpublished
+-- Micky B — the project's own live provider account, with bookings on 12 and
+-- 15 August — for having a 13-character bio.
+--
+-- Worth recording precisely because of what had been said out loud minutes
+-- earlier: that the six blank profiles had no bookings, so this "should sail
+-- through". That prediction was confident, reasoned from real data, and wrong,
+-- because it was checking the wrong criterion — blank NAME rather than the
+-- full completeness rule the assert actually used.
+--
+-- That is 0014's assert catching something on both of its first two outings,
+-- and the second time it caught the author of the assert. **The run you are
+-- most confident about is exactly the run where the check pays**, because
+-- confidence is what removes the impulse to look. A check that only runs when
+-- someone already suspects a problem is a check that will not be there when it
+-- matters.
 --
 -- ── WHY first_published_at EXISTS ─────────────────────────────────────────
 -- Auto-publish must fire ONCE, ever. Without a marker, a stylist who
@@ -84,14 +123,19 @@ alter table public.providers
   add column if not exists first_published_at timestamptz;
 
 -- ---------------------------------------------------------------------------
--- 1. One definition of "this is a shop".
+-- 1. One definition of "there is a shop here to publish".
 --
---    STABLE, so it can be used in a WHERE clause without being re-evaluated
---    per row unnecessarily. SECURITY DEFINER so the guard can see
---    provider_treatments regardless of who is publishing — an admin approving
---    a stylist must not pass the check merely because RLS hid the evidence.
+--    NAMED for what it checks. The first draft called this
+--    provider_profile_is_complete(), which claimed more than it delivered — a
+--    profile with no bio, no location and no photo would have passed it. A
+--    function whose name overstates its check is the same failure as copy that
+--    overstates a feature, and this file already has a section about that.
+--
+--    STABLE so it can sit in a WHERE clause. SECURITY DEFINER so the guard sees
+--    provider_treatments regardless of who is publishing — an admin approving a
+--    stylist must not pass the check merely because RLS hid the evidence.
 -- ---------------------------------------------------------------------------
-create or replace function public.provider_profile_is_complete(p_provider_id uuid)
+create or replace function public.provider_shop_is_publishable(p_provider_id uuid)
  returns boolean language sql stable security definer set search_path to 'public'
 as $function$
   select exists (
@@ -99,7 +143,6 @@ as $function$
     from public.providers p
     where p.id = p_provider_id
       and coalesce(btrim(p.name), '') <> ''
-      and length(btrim(coalesce(p.bio, ''))) >= 40
       and exists (
         select 1 from public.provider_treatments pt
         where pt.provider_id = p.id and pt.category is not null
@@ -113,7 +156,7 @@ $function$;
 insert into public.migration_findings (version, item, value)
 select '0016', 'published providers with an incomplete profile', count(*)::text
 from public.providers p
-where p.is_published is true and not public.provider_profile_is_complete(p.id);
+where p.is_published is true and not public.provider_shop_is_publishable(p.id);
 
 insert into public.migration_findings (version, item, value)
 select '0016', 'published providers total, before', count(*)::text
@@ -136,7 +179,7 @@ begin
   select count(*) into v_risky
   from public.providers p
   where p.is_published is true
-    and not public.provider_profile_is_complete(p.id)
+    and not public.provider_shop_is_publishable(p.id)
     and exists (
       select 1 from public.sessions s
       where s.provider_id = p.id
@@ -162,7 +205,7 @@ end $$;
 update public.providers p
    set is_published = false
  where p.is_published is true
-   and not public.provider_profile_is_complete(p.id);
+   and not public.provider_shop_is_publishable(p.id);
 
 -- Everyone still published got there properly. Stamp them so auto-publish never
 -- touches them again and their on/off switch stays theirs.
@@ -194,9 +237,9 @@ begin
     v_missing := v_missing || 'a name';
   end if;
 
-  if length(btrim(coalesce(new.bio, ''))) < 40 then
-    v_missing := v_missing || 'a bio of at least 40 characters';
-  end if;
+  -- No bio check. A short bio keeps a shop off the PUBLIC website
+  -- (public_stylists' content bar) and out of nothing else. It is not a reason
+  -- to keep a stylist unbookable by members. See the header.
 
   if not exists (
     select 1 from public.provider_treatments pt
@@ -242,7 +285,7 @@ begin
    where p.id = p_provider_id
      and p.is_published is not true
      and p.first_published_at is null          -- once, ever. See header.
-     and public.provider_profile_is_complete(p.id)
+     and public.provider_shop_is_publishable(p.id)
      and exists (
        select 1 from public.users u
        where u.id = p.user_id and u.is_verified is true
@@ -316,7 +359,7 @@ from public.providers where is_published is true;
 
 -- MIGRATION FOOTER
 insert into public.schema_migrations (version, name, checksum)
-values ('0016', 'publish_when_the_shop_exists', '520cc3e4ee455e015aecb84054788857f0f8c1ea61739ce829e8709774bde3b0');
+values ('0016', 'publish_when_the_shop_exists', '4f234704fde7a87d7d8fe546d7bba5ee1ccb312bc6e3e24e50f97b4ca92fc14f');
 
 commit;
 
@@ -337,7 +380,7 @@ notify pgrst, 'reload schema';
 --
 --   select count(*) as should_be_zero
 --   from public.providers p
---   where p.is_published is true and not public.provider_profile_is_complete(p.id);
+--   where p.is_published is true and not public.provider_shop_is_publishable(p.id);
 --
 -- ── BLOCK C — the guard refuses. Rolls itself back. ──────────────────────
 --
@@ -349,6 +392,20 @@ notify pgrst, 'reload schema';
 --      where id = (select id from public.providers
 --                   where is_published is not true
 --                     and coalesce(btrim(name), '') = '' limit 1);
+--   rollback;
+--
+-- ── BLOCK C2 — a SHORT BIO does NOT block publishing ─────────────────────
+--
+--   The regression this migration was revised to prevent. Expect: no error.
+--
+--   begin;
+--     update public.providers set is_published = true
+--      where id = (select p.id from public.providers p
+--                   where coalesce(btrim(p.name), '') <> ''
+--                     and length(btrim(coalesce(p.bio, ''))) < 40
+--                     and exists (select 1 from public.provider_treatments pt
+--                                  where pt.provider_id = p.id and pt.category is not null)
+--                   limit 1);
 --   rollback;
 --
 -- ── BLOCK D — auto-publish fires with no admin. Rolls itself back. ───────
@@ -365,9 +422,7 @@ notify pgrst, 'reload schema';
 --     insert into public.provider_treatments (provider_id, name, category)
 --     select id, 'Nails', 'Nails' from target;
 --
---     update public.providers set
---       name = 'Verify 0016',
---       bio  = 'A bio comfortably past the forty character content bar.'
+--     update public.providers set name = 'Verify 0016'
 --      where id = (select id from public.providers
 --                   where is_published is not true and first_published_at is null limit 1);
 --

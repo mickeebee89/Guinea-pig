@@ -92,6 +92,21 @@ export function StylistSetupPanel({ setup }: { setup: StylistSetup }) {
           {setup.treatmentCount === 0 &&
             ' You haven’t listed any treatments yet, so you won’t come up when models filter by one.'}
         </p>
+
+        {/* Live, but not on the public website. Two different things, and
+            saying so is the whole point: this stylist is bookable right now.
+            Framed as an opportunity, never as a problem — nothing is broken and
+            nothing is blocked. */}
+        {setup.websiteBlockers.length > 0 && (
+          <div className="mt-3 rounded-md bg-input-bg px-3 py-2">
+            <p className="text-sm font-bold text-warm-dark">Want to show up on Google too?</p>
+            <p className="mt-1 text-sm text-muted">
+              You’re live and bookable in Cavy either way. To also appear on the public
+              cavybeauty.com pages, where people who aren’t members yet can find you, you’d
+              need {setup.websiteBlockers.join(' and ')}.
+            </p>
+          </div>
+        )}
         <p className="mt-3 flex flex-wrap gap-4">
           <Link href="/shop" className="text-sm font-bold text-rose hover:underline">
             Edit your shop →
@@ -152,8 +167,12 @@ export function StylistSetupPanel({ setup }: { setup: StylistSetup }) {
       </p>
 
       {/* Never make someone guess which field. This is the list the database
-          actually checks — provider_profile_is_complete() in 0016 — so an empty
-          list here means publication really will happen. */}
+          actually checks — provider_shop_is_publishable() in 0016 — so an empty
+          list here means publication really will happen.
+
+          It does NOT include the bio. A short bio keeps a shop off the public
+          website and nothing else; putting it here would tell a stylist they
+          are blocked when they are only invisible to Google. */}
       {setup.publishBlockers.length > 0 && (
         <div className="mt-3 rounded-md bg-input-bg px-3 py-2">
           <p className="text-sm font-bold text-warm-dark">
