@@ -1,5 +1,46 @@
+-- SUPERSEDED BY 0010
 -- ===========================================================================
 -- 0009_baseline_create_session_with_consent
+--
+-- ⚠⚠ DO NOT RUN THIS FILE. IT WAS NEVER APPLIED, AND APPLYING IT NOW WOULD
+--    BREAK BOOKING. ⚠⚠
+--
+-- This is not merely redundant. Running it is actively harmful, and the reason
+-- is not obvious from reading it:
+--
+--   * It contains CREATE OR REPLACE for the SEVENTEEN-argument signature,
+--     the one ending `p_device_info jsonb`.
+--   * Migration 0010 dropped that function and created a SIXTEEN-argument one
+--     without p_device_info, and dropped session_consents.device_info with it.
+--   * Postgres treats a different argument list as a DIFFERENT FUNCTION. So
+--     this would not replace anything — it would create a second overload
+--     alongside 0010's, and that overload still inserts into
+--     session_consents.device_info, a column that no longer exists.
+--
+--   Any call that resolved to the 17-argument overload would fail at runtime,
+--   on the booking path, with an error naming a column nobody would expect to
+--   still be referenced.
+--
+-- WHY IT WAS NEVER APPLIED: it was written as a step-0 capture on 9 Aug 2026
+-- and committed before it had been run. The collect-neither decision arrived
+-- the same day, 0010 was written against its body, and 0010 was applied
+-- instead. 0010's `drop function if exists` names the full 17-argument
+-- signature explicitly, so it removed the live function whether or not this
+-- had ever run — which is why the database is correct and only the record was
+-- wrong.
+--
+-- IT IS KEPT, NOT DELETED, because it is the only place the function's
+-- ORIGINAL definition is recorded — including the p_device_info parameter and
+-- the device_info insert that 0010's reasoning refers to. Deleting it would
+-- leave 0010 arguing with something no longer readable.
+--
+-- scripts/migration-status.mjs reads the SUPERSEDED BY line above and reports
+-- this as superseded rather than pending — but ONLY once 0010 has actually
+-- applied. If 0010 were ever rolled back, this reverts to PENDING and starts
+-- asking to be run again, which is correct: at that point the 17-argument
+-- function would be the right one.
+--
+-- ── WHAT FOLLOWS IS THE ORIGINAL FILE, UNCHANGED ─────────────────────────
 --
 -- A CAPTURE, NOT A CHANGE.
 --
@@ -100,7 +141,7 @@ end $function$;
 
 -- MIGRATION FOOTER
 insert into public.schema_migrations (version, name, checksum)
-values ('0009', 'baseline_create_session_with_consent', 'ea390b6616d80716314d5c2f6645a0b125a440d1830b1505460d2b6db06ddc97');
+values ('0009', 'baseline_create_session_with_consent', '0f1129d4b39c74313043b826d92008a60407eeb94b2612e05cb633e3792d2db4');
 
 commit;
 

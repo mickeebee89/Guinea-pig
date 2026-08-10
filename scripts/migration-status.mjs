@@ -12,9 +12,18 @@
  *   or a naming convention. The database records what it applied; this compares
  *   that against the files on disk and reports three things a convention cannot:
  *
- *     PENDING  — committed but never applied
- *     DRIFTED  — applied, but the file has changed since (checksum mismatch)
- *     ORPHAN   — applied, but no file explains it
+ *     PENDING     — committed but never applied
+ *     DRIFTED     — applied, but the file has changed since (checksum mismatch)
+ *     ORPHAN      — applied, but no file explains it
+ *     SUPERSEDED  — never applied, and a later migration replaced it first
+ *
+ *   SUPERSEDED IS VERIFIED, NOT ASSERTED. A file may carry
+ *   `-- SUPERSEDED BY 0010` near the top, and the tool then checks that 0010
+ *   ACTUALLY APPLIED before it stops nagging. Without that check the marker
+ *   would be a way to silence a genuinely pending migration by pointing it at
+ *   something that never ran either — a comment that turns a real problem into
+ *   a clean report, which is the exact failure this whole tool exists to
+ *   prevent.
  *
  *   DRIFTED is the one that matters. It is the failure mode where the repo
  *   looks authoritative and is wrong — which is how supabase/ came to document
@@ -44,7 +53,11 @@ const files = readdirSync(DIR)
   .sort()
   .map(f => {
     const sql = readFileSync(path.join(DIR, f), 'utf8')
-    return { file: f, version: f.slice(0, 4), name: f.slice(5, -4), sql, checksum: checksumOf(sql) }
+    const supersededBy = (sql.match(/^--\s*SUPERSEDED BY\s+(\d{4})/m) ?? [])[1] ?? null
+    return {
+      file: f, version: f.slice(0, 4), name: f.slice(5, -4),
+      sql, checksum: checksumOf(sql), supersededBy,
+    }
   })
 
 if (STAMP) {
@@ -90,7 +103,17 @@ console.log('  ' + '-'.repeat(62))
 for (const m of files) {
   const row = applied.get(m.version)
   let status
-  if (!row) { status = 'PENDING  — committed, never applied'; problems++ }
+  if (!row && m.supersededBy) {
+    // The marker only counts if the migration it names really applied.
+    const by = applied.get(m.supersededBy)
+    if (by) {
+      status = `SUPERSEDED by ${m.supersededBy} — never applied, and must not be`
+    } else {
+      status = `PENDING  — marked superseded by ${m.supersededBy}, but ${m.supersededBy} has not applied either`
+      problems++
+    }
+  }
+  else if (!row) { status = 'PENDING  — committed, never applied'; problems++ }
   else if (row.checksum === 'bootstrap') status = `applied ${row.applied_at.slice(0, 10)}`
   else if (row.checksum !== m.checksum) {
     status = `DRIFTED  — file changed since it was applied`; problems++
