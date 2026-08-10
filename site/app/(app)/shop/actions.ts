@@ -84,6 +84,14 @@ export type TreatmentsResult =
  * Removals go one at a time so a refusal can name the treatment. A row that a
  * booking still references may be undeletable, and "couldn't save" would leave
  * the stylist retrying forever without knowing which chip is the problem.
+ *
+ * A genuine removal still leaves that id sitting in any slot that referenced
+ * it. Stripping it is NOT done here on purpose — three writers can delete these
+ * rows (this action, mobile Edit Shop, an admin) and a rule copied into three
+ * clients is one client away from being wrong again. It belongs to the data:
+ * supabase/migrations/0012 does it in an `after delete` trigger. Until that is
+ * applied, removals here leave dangling ids the same way mobile does — just far
+ * fewer of them. `node scripts/migration-status.mjs` reports it PENDING.
  */
 export async function saveTreatments(categories: string[]): Promise<TreatmentsResult> {
   const user = await requireUser()

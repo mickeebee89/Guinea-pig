@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   View,
   Text,
@@ -43,6 +43,15 @@ export default function EditShopScreen() {
   const [loadError,          setLoadError]          = useState(false)
   const [saving,             setSaving]             = useState(false)
 
+  /**
+   * The provider_treatments rows as they exist in the database, category -> id.
+   *
+   * A ref, not state: nothing renders it, and it must reflect what was LOADED
+   * rather than what is currently ticked — that difference is the whole basis
+   * of the diff in handleSave.
+   */
+  const existingRows = useRef<Map<string, string>>(new Map())
+
   const load = useCallback(async () => {
     if (!userId) return
     setLoading(true)
@@ -61,14 +70,24 @@ export default function EditShopScreen() {
         setBio((prov as any).bio ?? '')
         setLocationText((prov as any).location_text ?? '')
 
-        // Load existing treatment categories
+        // Load existing treatment categories. The ids come too: a save is a
+        // diff against these rows, and a row we keep must keep its id.
         const { data: treats } = await supabase
           .from('provider_treatments')
-          .select('category')
+          .select('id, category')
           .eq('provider_id', pid)
-        if (treats && treats.length > 0) {
-          setSelectedCategories(new Set((treats as any[]).map(t => t.category as string)))
+
+        const rows = (treats ?? []) as { id: string; category: string | null }[]
+        const byCategory = new Map<string, string>()
+        for (const r of rows) {
+          // First id wins. Duplicates exist on accounts that saved while the
+          // old delete-all path was silently failing its delete — keeping the
+          // first is arbitrary but stable, and the extras are left alone
+          // rather than cleaned up here, because a booking may point at one.
+          if (r.category && !byCategory.has(r.category)) byCategory.set(r.category, r.id)
         }
+        existingRows.current = byCategory
+        if (byCategory.size > 0) setSelectedCategories(new Set(byCategory.keys()))
       }
     } catch (e) {
       console.error('edit-shop load failed:', e)
@@ -111,17 +130,58 @@ export default function EditShopScreen() {
         .eq('id', providerId)
       if (provErr) throw provErr
 
-      // Save treatments: delete all then re-insert selected
-      const { error: delError } = await supabase.from('provider_treatments').delete().eq('provider_id', providerId)
-      const rows = [...selectedCategories].map(cat => ({
-        provider_id: providerId,
-        name:        cat,
-        category:    cat,
-      }))
-      const { error: insError } = selectedCategories.size > 0
-        ? await supabase.from('provider_treatments').insert(rows)
-        : { error: null }
-      if (insError) throw insError
+      /**
+       * Treatments save as a DIFF. It used to delete every row and re-insert
+       * the selection, which minted a new uuid for each category on every save.
+       *
+       * Those uuids are not private to this table: availability.active_treatments
+       * is a uuid[] of them and sessions.treatment_id holds one. So pressing
+       * Save while changing nothing detached every slot's treatment list and
+       * left bookings pointing at rows that no longer existed — and because
+       * apply-session.tsx falls back to "all current treatments" for a slot
+       * that resolves to none, models were then offered treatments this stylist
+       * had deliberately not enabled for that slot.
+       *
+       * Keeping a category means keeping its row, and therefore its id.
+       * See supabase/migrations/0012 and mobile-treatments-orphan-bug.md.
+       */
+      const existing = existingRows.current
+      const toAdd    = [...selectedCategories].filter(cat => !existing.has(cat))
+      const toRemove = [...existing.entries()].filter(([cat]) => !selectedCategories.has(cat))
+
+      if (toAdd.length > 0) {
+        const { error: insError } = await supabase.from('provider_treatments').insert(
+          toAdd.map(cat => ({ provider_id: providerId, name: cat, category: cat })),
+        )
+        if (insError) throw insError
+      }
+
+      // One at a time so a refusal can name the treatment. A row a booking
+      // still references may be undeletable, and the old code ignored its
+      // delete error entirely — then inserted anyway, duplicating rows and
+      // reporting success.
+      const blocked: string[] = []
+      for (const [cat, id] of toRemove) {
+        const { error: delError } = await supabase
+          .from('provider_treatments').delete().eq('id', id).eq('provider_id', providerId)
+        if (delError) {
+          console.error('edit-shop: could not remove treatment', cat, delError)
+          blocked.push(cat)
+        }
+      }
+
+      if (blocked.length > 0) {
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning)
+        Alert.alert(
+          'Saved, mostly',
+          `Everything saved except removing ${blocked.join(' and ')} — a booking still uses ` +
+          `${blocked.length === 1 ? 'it' : 'them'}. ${blocked.length === 1 ? 'It' : 'They'} ` +
+          'will come off once that booking is finished or cancelled.',
+        )
+        setSaving(false)
+        load()
+        return
+      }
 
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
       router.back()
