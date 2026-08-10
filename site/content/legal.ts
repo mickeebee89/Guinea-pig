@@ -420,7 +420,7 @@ export const PRIVACY: LegalDoc = {
         },
         {
           type: 'p',
-          text: 'Agreements: when you agree to a treatment’s terms before a booking, we record exactly what you agreed to, when, and the IP address and device you agreed from — so the agreement can be proved later.',
+          text: 'Agreements: when you agree to a treatment’s terms before a booking, we record which version of the terms you were shown, a fingerprint of that exact wording, the specific points you ticked, and when — so it can be shown later precisely what you agreed to. We don’t record your IP address or your device.',
         },
         {
           type: 'p',
