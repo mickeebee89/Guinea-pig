@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { saveTreatments } from './actions'
 import { tap } from '@/lib/haptics'
 
@@ -107,7 +108,7 @@ export function TreatmentPicker({
 
           <p className="mt-3 text-xs text-muted">
             Adding a treatment doesn’t put it in your diary. Choose which ones a slot is for on{' '}
-            <a href="/availability" className="font-bold text-rose hover:underline">your availability</a>.
+            <Link href="/availability" className="font-bold text-rose hover:underline">your availability</Link>.
           </p>
         </>
       )}

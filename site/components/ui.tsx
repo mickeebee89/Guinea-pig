@@ -69,9 +69,15 @@ export function Avatar({ src, name, size = 40 }: { src: string | null; name: str
     )
   }
   return (
-    // eslint-disable-next-line @next/next/no-img-element -- avatars come from
-    // Supabase Storage at unknown sizes; next/image buys nothing here and adds
-    // a remotePatterns entry per bucket.
+    /* Avatars come from Supabase Storage at unknown sizes; next/image buys
+       nothing here and adds a remotePatterns entry per bucket.
+
+       The rationale sits ABOVE the directive on purpose. It used to be part of
+       it, and because `eslint-disable-next-line` means literally the next line,
+       the two trailing comment lines were what it disabled — so the directive
+       suppressed nothing and the <img> warned anyway. Nobody saw it, because
+       this app's eslint was crashing on startup at the time. */
+    // eslint-disable-next-line @next/next/no-img-element
     <img
       src={src}
       alt=""

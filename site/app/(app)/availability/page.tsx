@@ -40,6 +40,10 @@ export default async function AvailabilityPage({
 
   const today = new Date().toISOString().slice(0, 10)
   const date = /^\d{4}-\d{2}-\d{2}$/.test(dateParam ?? '') ? dateParam! : today
+  /* This is an async Server Component, not a render body. It runs once per
+     request and never re-renders, so there is no unstable result for the rule
+     to protect against — it cannot currently tell the two apart. */
+  // eslint-disable-next-line react-hooks/purity
   const in60 = new Date(Date.now() + 60 * 86_400_000).toISOString().slice(0, 10)
 
   const [slots, monthRes, treatRes] = await Promise.all([

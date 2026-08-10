@@ -66,6 +66,10 @@ export function PortfolioManager({
       // what makes account deletion sweep these files: the delete-account
       // function clears `${userId}/` in this bucket.
       const ext = file.name.split('.').pop()?.toLowerCase() || (isVideo ? 'mp4' : 'jpg')
+      /* Inside an upload handler, not a render body. A unique filename per
+         upload is the point, and the rule does not track that this runs from
+         an event. */
+      // eslint-disable-next-line react-hooks/purity
       const path = `${userId}/${Date.now()}-portfolio.${ext}`
 
       const { data: up, error: upErr } = await supabase.storage
