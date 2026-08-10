@@ -248,6 +248,31 @@ column we would rather retire. **Whoever finally drops `location` must fix
 * **Mobile has 15 pre-existing `tsc --noEmit` errors** in `_layout.tsx`,
   `leave-review.tsx` and `sessions.tsx`. Same shape as the eslint finding — a
   check nobody runs.
+
+* **Six published+verified providers have no name** (`paxegi5365@acoxs.com`,
+  `pinihe5553@bevriz.com`, `kabayix638@acoxs.com`, `kenado1974@bevriz.com`,
+  `lekap67940@acoxs.com`, and one bare uuid). Found 10 Aug in a list of 29
+  provider rows.
+
+  **`public_stylists` excludes them** on its content bar, so the open web is
+  safe. **`/browse` does not** — `lib/queries/browse.ts:60` filters on
+  `is_published` alone and renders `name ?? 'Stylist'`, so they show in the
+  signed-in member area as cards labelled "Stylist", today.
+
+  Cause: admin approval sets `is_verified` and `is_published` with no
+  completeness check (`admin/app/verification/page.tsx:80,87`), and
+  `enforce_publish_requires_verified` only checks verification. Mobile's
+  `togglePublished` DOES require a treatment — but admin approve writes
+  `providers` directly and bypasses it, so the one path with a check is the one
+  path approval never takes. **A cohort walks into this**: nothing enforces step
+  order, so a student can submit a selfie before writing any shop details and be
+  published empty.
+
+* **Teardown pass for provider rows — parked until slice 3 is done.** Same
+  discipline as the session teardown: fails loudly on partial rather than
+  half-deleting. 29 provider rows for one real stylist is mostly cruft. NB it
+  must not try to delete `reports` (append-only, refused by design) and must
+  delete `public.users` before the auth user, per `0003`.
 * **`/shop` is unverified in a browser.** It builds, typechecks, passes both
   guards, and correctly redirects to sign-in when signed out — but no stylist
   account has been signed in to look at it. `providers` row, treatment chips and
