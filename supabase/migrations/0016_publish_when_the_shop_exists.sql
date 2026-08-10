@@ -439,10 +439,16 @@ notify pgrst, 'reload schema';
 --
 --   The failure this would be worst: overriding a choice the stylist made.
 --
+--   NB `update ... limit 1` is not valid Postgres — UPDATE takes no LIMIT.
+--   Pick the row with a subquery. (This block shipped with that error and was
+--   corrected on the run that found it; it is below the MIGRATION FOOTER, so
+--   the checksum is unaffected and this is not drift.)
+--
 --   begin;
 --     update public.providers set is_published = false
---      where is_published is true limit 1;              -- first_published_at stays set
---     update public.providers set bio = bio || ' edited'
+--      where id = (select id from public.providers
+--                   where is_published is true limit 1);  -- first_published_at stays set
+--     update public.providers set bio = coalesce(bio, '') || ' edited'
 --      where first_published_at is not null and is_published is false;
 --     -- expect: still false
 --     select name, is_published from public.providers
