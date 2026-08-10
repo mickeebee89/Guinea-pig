@@ -97,30 +97,48 @@ without knowing which chip is the problem.
 assigned and never thrown), so a refused delete followed by a successful insert
 duplicates rows silently.
 
-### ⚠ Piece 4 is blocked on one unread storage policy
+**Mobile is now fixed** — `edit-shop.tsx` saves a diff, and the rule lives in
+the database as of migration `0012`. Full account in
+`mobile-treatments-orphan-bug.md`.
 
-**`verification-selfies` is a PRIVATE bucket and there may be no INSERT policy
-letting a user upload their own.** The TABLE side is fine — `vr_user_policy` is
-`FOR ALL … auth.uid() = user_id`, so `verification_requests` is writable. Only
-storage is unknown. It is in NO repo file: `storage-lockdown.sql` says
-"already private (untouched)" and the 8 Aug policy snapshot covers the `public`
-schema only. Mobile uploads successfully, so something permits it — but that
-could be a policy scoped to a role or a path shape the web wouldn't match.
+### ✅ Piece 4 is UNBLOCKED — and the policy is weaker than its name
 
-Answer it with, in the SQL editor:
+Answered 10 Aug against the live `pg_policies`. The relevant row:
 
-```sql
-select policyname, cmd, roles, qual, with_check
-from pg_policies
-where schemaname = 'storage' and tablename = 'objects'
-order by policyname;
+```
+users upload own verification selfie | INSERT | {authenticated}
+  with_check: (bucket_id = 'verification-selfies'::text)
 ```
 
-Then paste the rows mentioning `verification-selfies` in here. If an
-owner-scoped INSERT exists, piece 4 is a straight port of
+So an upload works and piece 4 is a straight port of
 `verify-payment.tsx:155-193` (key `${userId}/selfie-${Date.now()}.jpg`,
 `image/jpeg`, then insert `{user_id, selfie_url: up.path, status:'pending'}`).
-If it does not, it needs a migration before any code.
+
+**But it does not enforce "own", despite being called that.** Compare its two
+siblings, both of which do:
+
+```
+model photos upload     … AND ((storage.foldername(name))[1] = auth.uid()::text)
+portfolio photos upload … AND ((storage.foldername(name))[1] = auth.uid()::text)
+```
+
+Any authenticated user may therefore write to **any path** in the selfie bucket,
+including under someone else's uuid prefix. On its own that is untidy rather
+than dangerous — there is no user-facing SELECT (only `admins read verification
+selfies`) so the bucket cannot be listed, and no UPDATE policy so nothing can be
+overwritten.
+
+The reason it still matters: **`vr_user_policy` is `FOR ALL`, so a user writes
+their own `verification_requests.selfie_url` freely.** Point that column at a
+path belonging to someone else and the admin reviews *their* selfie while
+approving *your* account. Exploiting it needs a path you cannot list and cannot
+guess (it carries a millisecond timestamp), so this is a hardening item, not an
+incident — but "the ID check reviewed the wrong person's face" is the failure it
+leads to, so it should not sit unwritten.
+
+Fix is one migration: add the same `foldername(name))[1] = auth.uid()::text`
+clause the other two buckets already use. Do it **before** piece 4 ships, since
+piece 4 adds a second client writing to that bucket.
 
 ### ⚠ A human is still in the chain
 
@@ -221,12 +239,15 @@ column we would rather retire. **Whoever finally drops `location` must fix
 
 **Engineering**
 
-* `verification-selfies` INSERT policy — unverified, blocks setup-path piece 4.
-  The query to settle it is above.
-* **`site` eslint is broken and has been for a while** — `npx eslint <any file>`
-  dies with "Converting circular structure to JSON" inside `@eslint/eslintrc`,
-  on untouched files too. `npm run build` does not run it, so nothing has been
-  linting. Not caused by slice 3; worth an hour before it hides something.
+* ~~`verification-selfies` INSERT policy~~ — answered; piece 4 unblocked, and a
+  hardening migration is owed first (above).
+* ~~`site` eslint is broken~~ — fixed: it was the `FlatCompat` bridge against
+  eslint-config-next 16's native flat configs. **`admin`'s config works but its
+  lint runs nowhere** (`build` is a bare `next build`) and it has 22 errors
+  nobody has seen. Open decision: should either app's build fail on lint?
+* **Mobile has 15 pre-existing `tsc --noEmit` errors** in `_layout.tsx`,
+  `leave-review.tsx` and `sessions.tsx`. Same shape as the eslint finding — a
+  check nobody runs.
 * **`/shop` is unverified in a browser.** It builds, typechecks, passes both
   guards, and correctly redirects to sign-in when signed out — but no stylist
   account has been signed in to look at it. `providers` row, treatment chips and
