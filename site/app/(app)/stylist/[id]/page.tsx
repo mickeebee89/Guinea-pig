@@ -76,7 +76,7 @@ export default async function StylistPage({
       {p.isBlocked && (
         <p className="mt-4 rounded-lg border border-hairline bg-input-bg px-4 py-3 text-sm text-muted">
           You’ve blocked this person, or they’ve blocked you. You can’t message each other.
-          Unblocking is in settings in the app.
+          If you blocked them, you can undo that in Settings.
         </p>
       )}
 

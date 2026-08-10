@@ -26,6 +26,7 @@ const LINKS = [
   { href: '/portfolio',     label: 'Portfolio',    providerOnly: true },
   { href: '/messages',      label: 'Messages', badgeKey: 'unread' as const },
   { href: '/notifications', label: 'Alerts', longLabel: 'Notifications' },
+  { href: '/settings',      label: 'Settings' },
 ]
 
 export function AppNav({ unread = 0, isProvider = false }: { unread?: number; isProvider?: boolean }) {

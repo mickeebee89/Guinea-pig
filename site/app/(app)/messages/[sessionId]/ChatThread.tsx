@@ -249,7 +249,7 @@ export function ChatThread({ thread, userId }: { thread: Thread; userId: string 
 
       {thread.isBlocked ? (
         <p className="mt-3 rounded-lg border border-hairline bg-input-bg px-4 py-3 text-sm text-muted">
-          You can’t message this person. You can unblock them from settings in the app.
+          You can’t message this person. If you blocked them, you can undo that in Settings.
         </p>
       ) : thread.canSend ? (
         <form onSubmit={send} className="mt-3 flex items-end gap-2">
