@@ -1,6 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { getBlockedIds } from '@/lib/blocks'
-import { BIO_MIN_CHARS } from '@/lib/queries/shop'
 
 /**
  * Browse published stylists.
@@ -78,23 +77,29 @@ export async function getBrowseStylists(
   }[]
   const visible = rows
     .filter(r => !(r.user_id && blocked.has(r.user_id)))
-    // CONTENT BAR, matching public_stylists. Treats the symptom, not the cause
-    // — 0016 is the cause — but the symptom was live: six providers were
-    // published and verified with no name at all, and this list rendered every
-    // one of them as a card labelled "Stylist" because of the `?? 'Stylist'`
-    // fallback below.
+    // CONTENT BAR — deliberately NARROWER than public_stylists'.
     //
-    // Kept even though 0016 unpublishes those rows and refuses to publish
-    // another. is_published is one boolean away from being wrong again, an
-    // admin can still write providers directly, and a blank card in a list of
-    // people you are choosing a stranger from is worse than a shorter list.
+    // The symptom this exists for was live: six providers published and
+    // verified with no name at all, each rendering here as a card labelled
+    // "Stylist" via the `?? 'Stylist'` fallback below. Kept even after 0016
+    // stops that at the source, because is_published is one boolean away from
+    // being wrong again and a blank card in a list of people you are choosing a
+    // stranger from is worse than a shorter list.
     //
-    // The bio threshold is BIO_MIN_CHARS, which is public_stylists' 40 and
-    // provider_profile_is_complete()'s 40. One number, three call sites.
-    .filter(r =>
-      !!r.name?.trim() &&
-      (r.bio ?? '').trim().length >= BIO_MIN_CHARS,
-    )
+    // ── WHY NOT public_stylists' 40-CHARACTER BIO BAR ─────────────────────
+    // Because the REASON for it does not transfer. That threshold protects
+    // against a thin-content manual action from a search crawler indexing a new
+    // domain. There is no crawler behind the auth gate.
+    //
+    // What matters in a signed-in list is that a card is not blank. A stylist
+    // with a name, treatments and a two-line bio is a real shop a model can
+    // usefully book; hiding them from members to satisfy an SEO rule would take
+    // a bookable stylist off the page for a reason that has nothing to do with
+    // the person looking.
+    //
+    // Copying the number without checking the reason travelled with it is the
+    // same error as having two thresholds, wearing the opposite hat.
+    .filter(r => !!r.name?.trim())
   if (visible.length === 0) return []
 
   const ids = visible.map(r => r.id)
