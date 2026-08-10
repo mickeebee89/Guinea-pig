@@ -8,7 +8,7 @@ import { SignOutButton } from '@/components/SignOutButton'
  * know who the user is — see the note there about what that costs.
  *
  * ── BUILT FOR A PHONE FIRST ────────────────────────────────────────────────
- * A stylist sees five links plus sign-out. In a single wrapping row that
+ * A stylist sees six links plus sign-out. In a single wrapping row that
  * becomes three ragged lines on a 375px screen, and the wordmark ends up
  * sitting above a stack of pills.
  *
@@ -24,6 +24,7 @@ const LINKS = [
   // Models browse. A stylist has no use for a list of other stylists.
   { href: '/browse',        label: 'Browse', modelOnly: true },
   { href: '/sessions',      label: 'Bookings' },
+  { href: '/shop',          label: 'Shop',         providerOnly: true },
   { href: '/availability',  label: 'Availability', providerOnly: true },
   { href: '/portfolio',     label: 'Portfolio',    providerOnly: true },
   { href: '/messages',      label: 'Messages', badgeKey: 'unread' as const },

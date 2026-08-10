@@ -75,6 +75,7 @@ export const config = {
     '/stylist/:path*',
     '/availability/:path*',
     '/portfolio/:path*',
+    '/shop/:path*',
     '/settings/:path*',
     '/browse/:path*',
     // Auth screens need the cookie writer for sign-in and for the callbacks

@@ -7,7 +7,9 @@ import {
 import { getConversations } from '@/lib/queries/conversations'
 import { getNotifications } from '@/lib/queries/notifications'
 import { getGateState } from '@/lib/verification'
+import { getStylistSetup } from '@/lib/queries/shop'
 import { MonthCalendar, type CalendarMark } from '@/components/MonthCalendar'
+import { StylistSetupPanel } from '@/components/StylistSetup'
 import { Avatar, StatusPill, LoadError } from '@/components/ui'
 
 export const metadata = { title: 'Dashboard' }
@@ -153,6 +155,9 @@ export default async function DashboardPage({
   // The apply gate. Models only — a stylist never applies for anything.
   const gate = isProvider ? null : await getGateState(supabase, user.id)
 
+  // The stylist mirror of it: what stands between signing up and being findable.
+  const setup = isProvider ? await getStylistSetup(supabase, user.id) : null
+
   const activity = (
     <div className="space-y-6">
       <Panel
@@ -249,6 +254,16 @@ export default async function DashboardPage({
             update itself when they do.
           </p>
         </section>
+      )}
+
+      {/* Same reasoning as the model gate above: the thing blocking you comes
+          before the things you cannot do yet. Dropped once the shop is live —
+          the "Your shop" panel below carries it from then on, and a permanent
+          checklist reading "all done" is just noise. */}
+      {setup && !setup.isPublished && (
+        <div className="mb-6">
+          <StylistSetupPanel setup={setup} />
+        </div>
       )}
 
       {gate?.canApply && (
@@ -440,14 +455,19 @@ export default async function DashboardPage({
                     Founding Provider
                   </p>
                 )}
-                {data.providerId && (
-                  <p className="mt-3">
+                <p className="mt-3 flex flex-wrap gap-4">
+                  <Link href="/shop" className="text-sm font-bold text-rose hover:underline">
+                    Edit your shop &amp; treatments →
+                  </Link>
+                  <Link href="/portfolio" className="text-sm font-bold text-rose hover:underline">
+                    Manage your portfolio →
+                  </Link>
+                  {data.providerId && (
                     <Link href={`/stylist/${data.providerId}`} className="text-sm font-bold text-rose hover:underline">
                       View your public profile →
                     </Link>
-                  </p>
-                )}
-                <InApp what="Editing your shop, treatments and portfolio" />
+                  )}
+                </p>
               </Panel>
             </>
           )}

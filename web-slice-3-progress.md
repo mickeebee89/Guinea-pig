@@ -33,11 +33,13 @@ memory. Two are closed:
 |---|---|---|
 | ~~Unblock someone~~ | chat, stylist profile | **done** — `/settings` |
 | ~~Set your location~~ | feed distance notice | **done** — points at `/browse` |
+| ~~Editing shop & treatments~~ | stylist dashboard | **done** — `/shop` |
 | Membership | dashboard gate | Stripe |
-| ID check | dashboard gate | selfie capture |
+| ID check | dashboard gate, setup panel | selfie capture |
 | Applying for a session | dashboard, stylist page | apply flow |
 | Leaving a review | dashboard | reviews |
-| Editing shop & treatments | stylist dashboard | **next** |
+| Portfolio | (never was one) | `/portfolio` already existed — the dashboard
+  note claimed otherwise and was wrong |
 
 ### Order, as revised
 
@@ -50,8 +52,8 @@ memory. Two are closed:
 3. ~~Browse~~ — done, **deliberately without distance**. Geocoding is a new
    external dependency and in a Bromley/Dartford launch, seeing stylists at all
    matters more than 5-vs-20 miles.
-4. **Stylist setup path** ← current
-5. Stripe / membership
+4. ~~Stylist setup path~~ — pieces 1–3 done, piece 4 blocked (below)
+5. Stripe / membership ← current, unless the storage check clears piece 4
 6. Selfie capture in the browser
 7. Apply flow — depends on 5 and 6
 8. Reviews
@@ -62,20 +64,63 @@ memory. Two are closed:
 
 Signup → shop details → treatments → selfie → published.
 
-1. **Setup panel on the stylist dashboard** — the ordered steps, what each is
-   for, what "Not published" means. Stylist equivalent of the model gate.
-2. **Shop details** — name, bio, location on `providers`.
-3. **Treatments** — add/remove against `treatment_categories`, writing
-   `provider_treatments`.
-4. **Selfie upload** — file to the private `verification-selfies` bucket, then a
-   `verification_requests` row.
+1. ~~**Setup panel**~~ — `components/StylistSetup.tsx`. On the dashboard while
+   unpublished, and always at the top of `/shop`. Four steps: details,
+   treatments, the fee, the ID check. **Publishing is shown as an outcome, never
+   a button** — `enforce_publish_requires_verified` refuses an unverified
+   publish, so a switch would be a control the database overrules.
+2. ~~**Shop details**~~ — `/shop`, writes `name`, `bio`, `location_text`.
+   Writes `location_text` only. Browse still READS the dead `location` column so
+   nobody who filled it in long ago becomes unfindable; writing both would keep
+   it alive forever and guarantee the two disagree.
+3. ~~**Treatments**~~ — `/shop`, validated against `treatment_categories`
+   (active only, server-side) and written to `provider_treatments`.
+4. **Selfie upload** — blocked, see below.
 
-### ⚠ Unverified, and it decides whether piece 4 is possible
+### Treatments is a DIFF, and that is the whole point
+
+`mobile/.../edit-shop.tsx:115` deletes every `provider_treatments` row and
+re-inserts the selection, minting new uuids each save. Those uuids are not
+private to that table: **`availability.active_treatments` is a `uuid[]` of them
+and `sessions.treatment_id` points at one.** So on mobile, re-saving Edit Shop
+silently detaches every slot's treatment list and leaves existing bookings
+pointing at rows that no longer exist — the stylist changed nothing and their
+week emptied out.
+
+The web action inserts only genuine additions and deletes only genuine
+removals, so a category you keep keeps its id. Removals go one at a time so a
+refusal can name the treatment — a row a booking still references may be
+undeletable, and "couldn't save" would have the stylist retrying forever
+without knowing which chip is the problem.
+
+**Mobile still has the bug.** Same file also ignores `delError` (line 115,
+assigned and never thrown), so a refused delete followed by a successful insert
+duplicates rows silently.
+
+### ⚠ Piece 4 is blocked on one unread storage policy
 
 **`verification-selfies` is a PRIVATE bucket and there may be no INSERT policy
-letting a user upload their own.** Mobile does it, so something permits it, but
-the path has not been read. Check before building piece 4 — being wrong about a
-storage policy has already happened once this week.
+letting a user upload their own.** The TABLE side is fine — `vr_user_policy` is
+`FOR ALL … auth.uid() = user_id`, so `verification_requests` is writable. Only
+storage is unknown. It is in NO repo file: `storage-lockdown.sql` says
+"already private (untouched)" and the 8 Aug policy snapshot covers the `public`
+schema only. Mobile uploads successfully, so something permits it — but that
+could be a policy scoped to a role or a path shape the web wouldn't match.
+
+Answer it with, in the SQL editor:
+
+```sql
+select policyname, cmd, roles, qual, with_check
+from pg_policies
+where schemaname = 'storage' and tablename = 'objects'
+order by policyname;
+```
+
+Then paste the rows mentioning `verification-selfies` in here. If an
+owner-scoped INSERT exists, piece 4 is a straight port of
+`verify-payment.tsx:155-193` (key `${userId}/selfie-${Date.now()}.jpg`,
+`image/jpeg`, then insert `{user_id, selfie_url: up.path, status:'pending'}`).
+If it does not, it needs a migration before any code.
 
 ### ⚠ A human is still in the chain
 
@@ -177,6 +222,15 @@ column we would rather retire. **Whoever finally drops `location` must fix
 **Engineering**
 
 * `verification-selfies` INSERT policy — unverified, blocks setup-path piece 4.
+  The query to settle it is above.
+* **`site` eslint is broken and has been for a while** — `npx eslint <any file>`
+  dies with "Converting circular structure to JSON" inside `@eslint/eslintrc`,
+  on untouched files too. `npm run build` does not run it, so nothing has been
+  linting. Not caused by slice 3; worth an hour before it hides something.
+* **`/shop` is unverified in a browser.** It builds, typechecks, passes both
+  guards, and correctly redirects to sign-in when signed out — but no stylist
+  account has been signed in to look at it. `providers` row, treatment chips and
+  the setup panel are all untested against real data.
 * **Mobile layout of the member area is unverified.** Only "no horizontal
   overflow on public pages" was confirmed. Riskiest: `/availability` (seven
   columns of `<time>` inputs), the chat composer above a keyboard, and the
