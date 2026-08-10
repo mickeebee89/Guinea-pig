@@ -238,8 +238,10 @@ export default async function DashboardPage({
               done={gate.verified}
               title="ID check"
               doneText="Verified"
-              todoText="A selfie holding a handwritten note, checked by a person. It’s what keeps
-                        the people you meet accountable — and it’s why they can trust you too."
+              todoText="A selfie holding a handwritten note, looked at by a person. It shows there
+                        is a real person behind the account and that the profile photo hasn’t been
+                        taken from somewhere else. It is not an identity check — nobody sees a
+                        passport or a driving licence."
             />
           </ul>
           <p className="mt-4 rounded-md bg-input-bg px-3 py-2 text-xs text-muted">

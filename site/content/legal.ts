@@ -400,7 +400,7 @@ export const PRIVACY: LegalDoc = {
         },
         {
           type: 'p',
-          text: 'Identity verification: a selfie you take holding a handwritten note, which a member of our team compares to your profile. We keep the result of that check, and any note the reviewer makes.',
+          text: 'Account checks: a selfie you take holding a handwritten note, which a member of our team looks at alongside your profile photo. We keep the result of that check, and any note the reviewer makes. It is not an identity check against a document — we do not ask for, see, or keep a passport or driving licence.',
         },
         {
           type: 'p',
@@ -476,7 +476,7 @@ export const PRIVACY: LegalDoc = {
         },
         {
           type: 'p',
-          text: 'Your verification selfie. We use it so a member of our team can confirm you are who you say you are, by eye. We do not run facial recognition on it, we do not create a face template from it, and we do not use it to identify you anywhere else.',
+          text: 'Your account-check selfie. A member of our team looks at it beside your profile photo, to see that a real person is behind the account and that the photo has not been taken from somewhere else. It does not confirm who you are against any document. We do not run facial recognition on it, we do not create a face template from it, and we do not use it to identify you anywhere else.',
         },
         {
           type: 'p',
