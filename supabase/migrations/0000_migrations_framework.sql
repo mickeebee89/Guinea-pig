@@ -88,6 +88,15 @@
 --
 --   Phrase outcomes so a failure is readable without knowing what was expected
 --   — 'refused as expected — …' and 'PROBLEM: …' rather than true/false.
+--
+--   END EVERY FILE WITH THE SAME LAST STEP: run migration-status.mjs. Not as
+--   advice — as the final numbered instruction, so applying a migration and
+--   checking the record are one routine rather than two.
+--
+--   The verify blocks prove the migration DID what it meant to. Only the tool
+--   catches the other failure: a migration written, committed, and never run at
+--   all. 0009 sat in that state for a day and was found by someone noticing a
+--   missing row by eye. A check that depends on noticing is not a check.
 -- ===========================================================================
 
 begin;

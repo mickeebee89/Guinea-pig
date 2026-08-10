@@ -178,3 +178,22 @@ notify pgrst, 'reload schema';
 --   row on the exact boundary, which neither touches — harmless, but worth
 --   knowing it is the reason rather than wondering.
 -- ===========================================================================
+
+
+-- ===========================================================================
+-- LAST STEP, EVERY TIME
+--
+--   node scripts/migration-status.mjs
+--
+-- Apply, verify, THEN run this. It compares every file against
+-- public.schema_migrations and reports PENDING, DRIFTED, ORPHAN or SUPERSEDED.
+--
+-- It is the last step because it is the one that catches what the verify
+-- blocks above cannot: a migration that was written and committed but never
+-- actually run. That happened to 0009 -- it existed only as a file for a day,
+-- and it was noticed by eye rather than by anything checking. A check that
+-- depends on someone noticing is not a check.
+--
+-- Needs SUPABASE_SERVICE_ROLE_KEY in the shell:
+--   $env:SUPABASE_SERVICE_ROLE_KEY = '<service-role-key>'
+-- ===========================================================================
