@@ -6,6 +6,7 @@ import {
 } from '@/lib/queries/dashboard'
 import { getConversations } from '@/lib/queries/conversations'
 import { getNotifications } from '@/lib/queries/notifications'
+import { getGateState } from '@/lib/verification'
 import { MonthCalendar, type CalendarMark } from '@/components/MonthCalendar'
 import { Avatar, StatusPill, LoadError } from '@/components/ui'
 
@@ -70,6 +71,31 @@ function BookingRow({ b }: { b: BookingCard }) {
   )
 }
 
+/** One half of the apply gate: what it is, and where they stand on it. */
+function GateItem({
+  done, title, doneText, todoText,
+}: { done: boolean; title: string; doneText: string; todoText: string }) {
+  return (
+    <li className="flex items-start gap-3">
+      <span
+        className={`mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-[999px] text-sm font-bold ${
+          done ? 'bg-rose text-white' : 'bg-input-bg text-muted'
+        }`}
+        aria-hidden="true"
+      >
+        {done ? '✓' : '·'}
+      </span>
+      <div className="min-w-0">
+        <p className="text-sm font-bold text-warm-dark">
+          {title}
+          <span className="sr-only">: {done ? 'done' : 'still needed'}</span>
+        </p>
+        <p className="text-sm text-muted">{done ? doneText : todoText}</p>
+      </div>
+    </li>
+  )
+}
+
 /** Something the app can do and web can't yet. Says so once, plainly. */
 function InApp({ what }: { what: string }) {
   return (
@@ -123,6 +149,9 @@ export default async function DashboardPage({
   // no use for other stylists' availability.
   const radius = RADII.find(r => r.key === within) ?? RADII[2]   // default 20 miles
   const feed = isProvider ? null : await getStylistUpdates(supabase, user.id, radius.miles)
+
+  // The apply gate. Models only — a stylist never applies for anything.
+  const gate = isProvider ? null : await getGateState(supabase, user.id)
 
   const activity = (
     <div className="space-y-6">
@@ -188,6 +217,44 @@ export default async function DashboardPage({
           </p>
         </div>
       </div>
+
+      {/* Put the blocker ABOVE the feed. A list of stylists you cannot book is
+          a tease, and "I'm signed in and nothing works" is the state this panel
+          exists to replace. */}
+      {gate && !gate.canApply && (
+        <section className="mb-6 rounded-lg border border-rose/30 bg-white p-5 shadow-card">
+          <h2 className="font-display text-xl text-warm-dark">Before you can book</h2>
+          <p className="mt-1 text-sm text-muted">
+            Two things stand between you and your first treatment. Both are one-offs.
+          </p>
+          <ul className="mt-4 space-y-3">
+            <GateItem
+              done={gate.subscribed}
+              title="Membership"
+              doneText={gate.waived ? 'Active — membership waived on your account' : 'Active'}
+              todoText="£4.99 a month, cancel any time. It’s what lets you apply for sessions."
+            />
+            <GateItem
+              done={gate.verified}
+              title="ID check"
+              doneText="Verified"
+              todoText="A selfie holding a handwritten note, checked by a person. It’s what keeps
+                        the people you meet accountable — and it’s why they can trust you too."
+            />
+          </ul>
+          <p className="mt-4 rounded-md bg-input-bg px-3 py-2 text-xs text-muted">
+            Both are in the Cavy app for now. They’re coming to the web shortly — this page will
+            update itself when they do.
+          </p>
+        </section>
+      )}
+
+      {gate?.canApply && (
+        <p className="mb-6 rounded-lg border border-hairline bg-white px-4 py-3 text-sm text-warm-dark">
+          <span className="font-bold text-rose">You’re all set.</span> Membership and ID check are
+          both done, so you can apply for any session you like.
+        </p>
+      )}
 
       {feed && (
         <section className="mb-6 rounded-lg border border-hairline bg-white p-5 shadow-card">
