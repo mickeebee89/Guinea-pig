@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { createSupabaseServerClient, requireUser } from '@/lib/supabase-server'
 import { getBrowseStylists, getCategories, type BrowseStylist } from '@/lib/queries/browse'
+import { getDashboardUser } from '@/lib/queries/dashboard'
 import { Avatar, EmptyState, LoadError } from '@/components/ui'
 
 export const metadata = { title: 'Browse stylists' }
@@ -24,6 +25,26 @@ export default async function BrowsePage({
   const { category, place } = await searchParams
   const user = await requireUser()
   const supabase = await createSupabaseServerClient()
+
+  // Mirrors /availability, which tells a model the same thing in reverse.
+  //
+  // AppNav already hides this link from stylists, but a hidden link is not a
+  // gate: the page loaded and worked for anyone signed in, so a stylist who
+  // typed the URL got a list of stylists to book — including themselves. Saying
+  // whose page this is beats relying on nobody finding it.
+  const me = await getDashboardUser(supabase, user.id)
+  if (me.role === 'provider') {
+    return (
+      <>
+        <h1 className="mb-6 font-display text-3xl text-warm-dark">Browse stylists</h1>
+        <EmptyState title="This is for model accounts">
+          Browsing is how models find a stylist to apply to. Your account is a stylist — this is
+          the page models will find <em>you</em> on once your shop is live.
+          {' '}Finding models to invite is in the Cavy app for now.
+        </EmptyState>
+      </>
+    )
+  }
 
   let stylists: BrowseStylist[] | null = null
   let categories: string[] = []
