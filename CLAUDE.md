@@ -21,7 +21,7 @@ _This file is read automatically at the start of every Claude Code session. It h
 - **Format:** terse, numbered, **copy-paste-ready** command/SQL blocks. One task at a time. Minimal forward-planning — don't stack five future steps.
 - **Plain English, always.** Explain in plain language; the first time a technical term comes up, define it in a few words. When reporting a bug, lead with one plain sentence saying what breaks for the user — then the technical detail.
 - **When I have a choice to make, lay the options out as a short numbered list** so I can pick one.
-- **Always remind me to add haptic feedback** when we build a new screen or interaction.
+- **Always remind me to add haptic feedback** when we build a new screen or interaction **in `mobile/`**. Not on web: `navigator.vibrate` doesn't exist on iOS Safari at all and is a no-op on desktop, so it only ever reaches Android mobile-web — and a buzz nobody asked for isn't what "the web works without the app" means. Web haptics were added to `/shop` on 12 Aug and removed on 14 Aug for exactly this reason. The rule was written for expo-haptics, where the platform makes it real.
 - **Recurring trap — stale Metro bundles mask fixes.** After ANY mobile change, reload with `npx expo start -c --dev-client` before concluding a fix failed. Never declare a fix broken off a stale bundle.
 - Prefer **plan mode** for anything non-trivial: investigate the repo read-only, show me the plan, let me approve, then build.
 

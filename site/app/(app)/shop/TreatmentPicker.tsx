@@ -4,7 +4,6 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { saveTreatments, type BlockedTreatment } from './actions'
-import { tap } from '@/lib/haptics'
 
 /**
  * Which treatments this shop offers.
@@ -28,7 +27,6 @@ export function TreatmentPicker({
   const [blocked, setBlocked] = useState<BlockedTreatment[]>([])
 
   const toggle = (cat: string) => {
-    tap()
     setSelected(prev => {
       const next = new Set(prev)
       if (next.has(cat)) next.delete(cat); else next.add(cat)
@@ -40,7 +38,6 @@ export function TreatmentPicker({
     selected.size !== initial.length || initial.some(c => !selected.has(c))
 
   const save = () => {
-    tap()
     setMsg(null); setError(null); setBlocked([])
     start(async () => {
       const res = await saveTreatments([...selected])

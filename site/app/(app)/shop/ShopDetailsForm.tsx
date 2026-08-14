@@ -3,7 +3,6 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { saveShopDetails } from './actions'
-import { tap } from '@/lib/haptics'
 
 const LIMITS = { name: 80, bio: 500, location: 120 } as const
 
@@ -31,7 +30,6 @@ export function ShopDetailsForm({
     name !== initial.name || bio !== initial.bio || locationText !== initial.locationText
 
   const save = () => {
-    tap()
     setMsg(null); setError(null)
     start(async () => {
       const res = await saveShopDetails({ name, bio, locationText })
