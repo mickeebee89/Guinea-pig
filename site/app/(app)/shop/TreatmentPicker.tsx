@@ -48,8 +48,24 @@ export function TreatmentPicker({
       // A treatment held by a live booking is not something pressing save
       // again will fix, so it gets its own panel naming the booking rather
       // than a red line that reads like a failure to retry.
-      if (res.blocked.length > 0) setBlocked(res.blocked)
-      else setMsg('Saved.')
+      if (res.blocked.length > 0) {
+        setBlocked(res.blocked)
+        // Put the refused chips BACK ON. They were never removed, and leaving
+        // them off would have the page state a thing about this shop that is
+        // not true — until a reload silently corrects it, which reads as the
+        // page having changed its mind. The panel explains why they are on.
+        //
+        // Filtered against `all`: a blocked entry whose category was null
+        // arrives as the placeholder "That treatment", and adding that would
+        // put a value in the set with no chip able to show it — the exact
+        // invisible-selection bug categoryKey exists to prevent.
+        setSelected(prev => new Set([
+          ...prev,
+          ...res.blocked.map(b => b.category).filter(c => all.includes(c)),
+        ]))
+      } else {
+        setMsg('Saved.')
+      }
       router.refresh()
     })
   }
