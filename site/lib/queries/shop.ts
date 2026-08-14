@@ -37,6 +37,33 @@ export type IdCheckState = 'none' | 'pending' | 'approved' | 'rejected'
  */
 export const BIO_MIN_CHARS = 40
 
+/**
+ * The key two category names are the SAME category by.
+ *
+ * ── WHY THIS EXISTS ───────────────────────────────────────────────────────
+ * `provider_treatments.category` is free text and does not reliably match
+ * `treatment_categories.name`. mobile/src/app/(app)/edit-shop.tsx writes from a
+ * hardcoded list containing "Spray Tan"; the database says "Spray tan".
+ *
+ * That one capital letter made the shop editor unusable for the two providers
+ * holding it. The picker seeded its selection from provider_treatments, so
+ * "Spray Tan" was in the set; the chips came from treatment_categories, so the
+ * "Spray tan" chip tested `selected.has("Spray tan")`, saw false, and rendered
+ * OFF. The stylist could not see it, could not untick it, and every save was
+ * then rejected as "We don't offer Spray Tan as a category" — naming something
+ * they had never touched.
+ *
+ * ── THE CONVENTION WAS ALREADY THERE ──────────────────────────────────────
+ * public-web-views.sql:143 has always joined these two columns on
+ * `lower(btrim(tc.name)) = lower(btrim(pt.category))`. The database layer never
+ * assumed they agreed. This is that same rule, in the one place the web can
+ * share it.
+ *
+ * Comparison only — never store this. Canonical CASING comes from
+ * treatment_categories, so what gets written is the category's real name.
+ */
+export const categoryKey = (name: string): string => name.trim().toLowerCase()
+
 export interface StylistSetup {
   /** Null only if the signup trigger never made a providers row. */
   providerId: string | null
@@ -211,9 +238,21 @@ export async function getShopEditorData(
       .select('name, sort_order').eq('is_active', true).order('sort_order'),
   ])
 
+  const allCategories = ((allRes.data ?? []) as { name: string }[]).map(c => c.name)
+
+  // Map what this provider has onto the CANONICAL names, case-insensitively.
+  // Returning the stored spelling instead is what made the "Spray tan" chip
+  // unlightable for a provider holding "Spray Tan" — see categoryKey.
+  //
+  // A stored category matching no active category is dropped rather than
+  // returned: there is no chip that could represent it, so including it would
+  // put a value in the form that the user cannot see or remove, which is the
+  // exact bug this is fixing.
+  const canonical = new Map(allCategories.map(n => [categoryKey(n), n]))
   const selected = [...new Set(
     ((mineRes.data ?? []) as { category: string | null }[])
-      .map(t => t.category).filter((c): c is string => !!c),
+      .map(t => (t.category ? canonical.get(categoryKey(t.category)) : null))
+      .filter((c): c is string => !!c),
   )]
 
   return {
@@ -222,6 +261,6 @@ export async function getShopEditorData(
     bio: prov.bio ?? '',
     locationText: prov.location_text ?? prov.location ?? '',
     selected,
-    allCategories: ((allRes.data ?? []) as { name: string }[]).map(c => c.name),
+    allCategories,
   }
 }

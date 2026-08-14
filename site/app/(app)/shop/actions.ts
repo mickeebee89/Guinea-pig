@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createSupabaseServerClient, requireUser } from '@/lib/supabase-server'
+import { categoryKey } from '@/lib/queries/shop'
 
 /**
  * Writes for the stylist's own shop.
@@ -172,11 +173,18 @@ export async function saveTreatments(categories: string[]): Promise<TreatmentsRe
     console.error('[shop] category list failed', catErr)
     return { ok: false, error: 'We couldn’t check the treatment list just now. Nothing has changed.' }
   }
-  const valid = new Set(((catRows ?? []) as { name: string }[]).map(c => c.name))
-  const unknown = wanted.filter(c => !valid.has(c))
+  // Case-insensitive, and the CANONICAL spelling is what gets written. See
+  // categoryKey: provider_treatments.category is free text that does not
+  // reliably match treatment_categories.name, and comparing exactly is what
+  // made a "Spray Tan" row unremovable behind a "Spray tan" chip.
+  const canonical = new Map(
+    ((catRows ?? []) as { name: string }[]).map(c => [categoryKey(c.name), c.name]),
+  )
+  const unknown = wanted.filter(c => !canonical.has(categoryKey(c)))
   if (unknown.length > 0) {
     return { ok: false, error: `We don’t offer ${unknown[0]} as a category. Reload the page and try again.` }
   }
+  const wantedCanonical = [...new Set(wanted.map(c => canonical.get(categoryKey(c))!))]
 
   const { data: existingRows, error: readErr } = await supabase
     .from('provider_treatments').select('id, category').eq('provider_id', providerId)
@@ -186,9 +194,16 @@ export async function saveTreatments(categories: string[]): Promise<TreatmentsRe
   }
   const existing = (existingRows ?? []) as { id: string; category: string | null }[]
 
-  const have = new Set(existing.map(r => r.category).filter((c): c is string => !!c))
-  const toAdd = wanted.filter(c => !have.has(c))
-  const toRemove = existing.filter(r => !r.category || !wanted.includes(r.category))
+  // The diff runs on the case-insensitive key too, or a provider holding
+  // "Spray Tan" who ticks "Spray tan" would get a second row inserted beside
+  // the first rather than keeping the one they have — the duplicate-row failure
+  // this action was written to avoid, arriving through the back door.
+  const have = new Set(
+    existing.map(r => r.category).filter((c): c is string => !!c).map(categoryKey),
+  )
+  const wantedKeys = new Set(wantedCanonical.map(categoryKey))
+  const toAdd = wantedCanonical.filter(c => !have.has(categoryKey(c)))
+  const toRemove = existing.filter(r => !r.category || !wantedKeys.has(categoryKey(r.category)))
 
   if (toAdd.length > 0) {
     // name and category both carry the label, matching what mobile writes and

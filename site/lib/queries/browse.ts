@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { getBlockedIds } from '@/lib/blocks'
+import { categoryKey } from '@/lib/queries/shop'
 
 /**
  * Browse published stylists.
@@ -142,7 +143,14 @@ export async function getBrowseStylists(
     // Third leg of the content bar. Split from the two above only because
     // categories are not known until the treatments query has run.
     .filter(s => s.categories.length > 0)
-    .filter(s => !filters.category || s.categories.includes(filters.category))
+    // Case-insensitive, matching public-web-views.sql:143 and categoryKey. An
+    // exact match here silently dropped every provider whose stored casing
+    // differed from the filter's — filtering by "Spray tan" found nobody
+    // holding "Spray Tan", with no way for either party to notice.
+    .filter(s =>
+      !filters.category ||
+      s.categories.some(c => categoryKey(c) === categoryKey(filters.category!)),
+    )
     // Bookable first. Without distance, "can I actually get an appointment"
     // is the most useful thing to sort on — a five-star stylist with no slots
     // is not a result anyone wanted. Rating breaks the tie, and only where
