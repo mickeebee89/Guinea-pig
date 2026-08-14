@@ -305,9 +305,19 @@ export default function ChatScreen() {
   const handleBlock = async () => {
     setMenuOpen(false)
     const name = otherParty?.name ?? 'this user'
+    // The cancellation is named here because it is PERMANENT and this dialog is
+    // the only moment anyone can decline it. `cancelled` is terminal in
+    // enforce_session_status_transition, so unblocking cannot bring a booking
+    // back — and the old wording ("you can unblock from settings") implied the
+    // whole action was reversible when the most consequential half is not.
+    //
+    // Who presses this button is the reason it matters: someone uneasy about a
+    // stranger, expecting a reversible mute, who would otherwise lose an
+    // appointment they cannot get back and only find out afterwards.
     Alert.alert(
       `Block ${name}?`,
-      "They won't be able to message you. You can unblock from settings.",
+      "They won't be able to message you, and any upcoming bookings between you will be " +
+      "cancelled. Unblocking later won't bring those bookings back.",
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -315,6 +325,9 @@ export default function ChatScreen() {
           style: 'destructive',
           onPress: async () => {
             await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning)
+            // Reported back in the confirmation. "Blocked" alone left someone
+            // to discover a cancelled appointment later, from a list.
+            let cancelledCount = 0
             if (otherParty?.userId && userId) {
               const { error } = await supabase.from('blocks')
                 .insert({ blocker_id: userId, blocked_id: otherParty.userId })
@@ -353,6 +366,7 @@ export default function ChatScreen() {
                     await mustWrite(
                       supabase.from('sessions').update({ status: 'cancelled' }).in('id', ids),
                       'cancel sessions on block')
+                    cancelledCount = ids.length
                     // Notify the OTHER party per cancelled session — never mention blocking.
                     await supabase.from('notifications').insert(
                       ids.map(sid => ({
@@ -369,7 +383,13 @@ export default function ChatScreen() {
                 console.warn('block: cancel/notify bookings failed (non-blocking):', e)
               }
             }
-            Alert.alert('Blocked', `${name} has been blocked.`)
+            Alert.alert(
+              'Blocked',
+              cancelledCount > 0
+                ? `${name} has been blocked, and ${cancelledCount} upcoming ` +
+                  `booking${cancelledCount === 1 ? ' was' : 's were'} cancelled.`
+                : `${name} has been blocked.`,
+            )
           },
         },
       ]

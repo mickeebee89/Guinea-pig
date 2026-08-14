@@ -27,6 +27,7 @@ export function ChatThread({ thread, userId }: { thread: Thread; userId: string 
   const [sending, setSending] = useState(false)
   const [sendError, setSendError] = useState<string | null>(null)
   const [busy, setBusy] = useState<null | 'block' | 'report'>(null)
+  const [confirmBlock, setConfirmBlock] = useState(false)
   const [reportOpen, setReportOpen] = useState(false)
   const [reportReason, setReportReason] = useState('')
   const [notice, setNotice] = useState<string | null>(null)
@@ -290,16 +291,51 @@ export function ChatThread({ thread, userId }: { thread: Thread; userId: string 
         >
           Report this person
         </button>
-        {!thread.isBlocked && (
+        {!thread.isBlocked && !confirmBlock && (
           <button
-            onClick={block}
+            onClick={() => setConfirmBlock(true)}
             disabled={busy !== null}
             className="text-sm font-bold text-danger hover:underline disabled:opacity-50"
           >
-            {busy === 'block' ? 'Blocking…' : 'Block this person'}
+            Block this person
           </button>
         )}
       </div>
+
+      {/* Blocking cancels every live booking between the pair, permanently —
+          `cancelled` is terminal, so unblocking cannot bring one back. Until
+          this panel existed the web did all of that on ONE CLICK, with no
+          confirmation and nothing on screen saying bookings were involved.
+          Mobile at least asked.
+
+          Two steps rather than a window.confirm: it can be styled to say what
+          actually happens, and it cannot be suppressed by the browser. */}
+      {!thread.isBlocked && confirmBlock && (
+        <div className="mt-4 rounded-lg border border-danger/30 bg-white p-4">
+          <p className="font-bold text-warm-dark">Block this person?</p>
+          <p className="mt-1 text-sm text-muted">
+            They won’t be able to message you, and any upcoming bookings between you will be
+            cancelled. <span className="font-bold text-warm-dark">Unblocking later won’t bring
+            those bookings back.</span>
+          </p>
+          <div className="mt-3 flex flex-wrap gap-3">
+            <button
+              onClick={block}
+              disabled={busy !== null}
+              className="inline-flex min-h-11 items-center rounded-[999px] bg-danger px-5 text-sm font-bold text-white disabled:opacity-50"
+            >
+              {busy === 'block' ? 'Blocking…' : 'Block and cancel bookings'}
+            </button>
+            <button
+              onClick={() => setConfirmBlock(false)}
+              disabled={busy !== null}
+              className="inline-flex min-h-11 items-center rounded-[999px] bg-input-bg px-5 text-sm font-bold text-warm-dark disabled:opacity-50"
+            >
+              Keep them
+            </button>
+          </div>
+        </div>
+      )}
 
       {reportOpen && (
         <form onSubmit={report} className="mt-3 rounded-lg border border-hairline bg-white p-4">
