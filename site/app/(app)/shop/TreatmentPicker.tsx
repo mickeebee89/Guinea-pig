@@ -25,6 +25,7 @@ export function TreatmentPicker({
   const [msg, setMsg] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [blocked, setBlocked] = useState<BlockedTreatment[]>([])
+  const [savedSomething, setSavedSomething] = useState(false)
 
   const toggle = (cat: string) => {
     setSelected(prev => {
@@ -38,7 +39,7 @@ export function TreatmentPicker({
     selected.size !== initial.length || initial.some(c => !selected.has(c))
 
   const save = () => {
-    setMsg(null); setError(null); setBlocked([])
+    setMsg(null); setError(null); setBlocked([]); setSavedSomething(false)
     start(async () => {
       const res = await saveTreatments([...selected])
       if (!res.ok) { setError(res.error); return }
@@ -47,6 +48,11 @@ export function TreatmentPicker({
       // than a red line that reads like a failure to retry.
       if (res.blocked.length > 0) {
         setBlocked(res.blocked)
+        // Did anything ACTUALLY save? Toggling one treatment that then gets
+        // refused is a complete no-op, and "Everything saved, except…" reads as
+        // success at a glance with the failure buried underneath. True, and
+        // still the wrong impression.
+        setSavedSomething(res.added + res.removed > 0)
         // Put the refused chips BACK ON. They were never removed, and leaving
         // them off would have the page state a thing about this shop that is
         // not true — until a reload silently corrects it, which reads as the
@@ -128,9 +134,13 @@ export function TreatmentPicker({
       {blocked.length > 0 && (
         <div role="status" className="mt-3 rounded-md border border-hairline bg-input-bg p-3">
           <p className="text-sm font-bold text-warm-dark">
-            Everything saved{blocked.length === 1
-              ? `, except taking ${blocked[0].category} off`
-              : ', except removing some treatments'}
+            {savedSomething
+              ? <>Everything saved{blocked.length === 1
+                  ? `, except taking ${blocked[0].category} off`
+                  : ', except removing some treatments'}</>
+              : blocked.length === 1
+                ? `${blocked[0].category} couldn’t be taken off`
+                : 'Those treatments couldn’t be taken off'}
           </p>
           <ul className="mt-1 space-y-1">
             {blocked.map(b => (
