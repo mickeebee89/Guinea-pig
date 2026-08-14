@@ -27,13 +27,16 @@ reports the whole set clean as of 10 Aug.
 
 **Nothing on the web may require the app.** Every "in the Cavy app for now"
 notice is a defect with a deadline. Seven existed, found by grep rather than
-memory. Two are closed:
+memory. Two are closed — and an **eighth** turned up on 14 Aug that grep could
+never have found, because the web has no notice for it and no page to put one
+on: a stylist cannot find models at all. Grep finds admissions, not absences.
 
 | Sends you to the app | Where | State |
 |---|---|---|
 | ~~Unblock someone~~ | chat, stylist profile | **done** — `/settings` |
 | ~~Set your location~~ | feed distance notice | **done** — points at `/browse` |
 | ~~Editing shop & treatments~~ | stylist dashboard | **done** — `/shop` |
+| Finding models to invite | stylist side | **8th — was never on this list.** `stylist-model-discovery.md` |
 | Membership | dashboard gate | Stripe |
 | ID check | dashboard gate, setup panel | selfie capture |
 | Applying for a session | dashboard, stylist page | apply flow |
