@@ -177,10 +177,31 @@ export default function ModelProfileViewScreen() {
   const [loading,          setLoading]          = useState(true)
   const [isVerified,       setIsVerified]       = useState(false)
   const [inviting,         setInviting]         = useState(false)
+  const [blocked,          setBlocked]          = useState(false)
 
   useEffect(() => {
     if (!modelId) return
     ;(async () => {
+      // Blocked either way? Stop before loading anything.
+      //
+      // Migration 0018 is the enforcement — model_attributes and model_photos
+      // carry RESTRICTIVE policies that hide a blocked user's rows regardless
+      // of what any client asks for. This check exists so the screen SAYS so
+      // instead of rendering a name with an empty gallery under it, which reads
+      // as a broken page rather than a working block.
+      //
+      // Only the blocks a viewer is party to are readable (blocks_select_involved),
+      // so this cannot be used to probe other people's blocks.
+      const { data: blockRows } = await supabase
+        .from('blocks')
+        .select('blocker_id, blocked_id')
+        .or(`blocker_id.eq.${modelId},blocked_id.eq.${modelId}`)
+      if ((blockRows ?? []).length > 0) {
+        setBlocked(true)
+        setLoading(false)
+        return
+      }
+
       const [
         { data: userData,  error: userErr  },
         { data: attrData,  error: attrErr  },
@@ -366,6 +387,22 @@ export default function ModelProfileViewScreen() {
     return (
       <View style={[styles.container, { alignItems: 'center', justifyContent: 'center' }]}>
         <ActivityIndicator color={Colors.roseDark} />
+      </View>
+    )
+  }
+
+  // Deliberately does NOT say who blocked whom. The blocker's action is not the
+  // other party's business, and "they blocked you" is an invitation to go and
+  // find out why. Same wording in both directions.
+  if (blocked) {
+    return (
+      <View style={[styles.container, { alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 }]}>
+        <Text style={{ color: Colors.muted, fontSize: 15, textAlign: 'center' }}>
+          This profile isn’t available.
+        </Text>
+        <Text style={{ color: Colors.muted, fontSize: 13, textAlign: 'center', marginTop: 8 }}>
+          You can manage the people you’ve blocked in Settings.
+        </Text>
       </View>
     )
   }
