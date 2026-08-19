@@ -44,7 +44,11 @@ export default function VerifyPaymentScreen() {
   const [selfieUri,      setSelfieUri]       = useState<string | null>(null)
   const [requestNotes,   setRequestNotes]   = useState<string | null>(null)
   const [paymentLoading, setPaymentLoading] = useState(false)
-  const [hasPaid,        setHasPaid]        = useState(false)   // provider paid (pay-first)
+  // The £14.99 is SETTLED, not necessarily PAID. Waived and Founding Provider
+  // count too. It was called hasPaid and set only from verification_payments,
+  // so a founding stylist — whose whole offer is that they never pay — was
+  // shown "Pay £14.99" and could not reach the selfie at all.
+  const [feeSettled,        setFeeSettled]        = useState(false)
   const [feeOnly,        setFeeOnly]        = useState(false)   // already identity-verified provider who only owes the £14.99 fee (skip selfie)
   const [pendingIntentId, setPendingIntentId] = useState<string | null>(null)   // set when a charge succeeded but recording it failed → Retry target
   const [favourited,     setFavourited]     = useState(false)   // added this provider to favourites
@@ -72,10 +76,13 @@ export default function VerifyPaymentScreen() {
           .limit(1)
           .maybeSingle()
         paid = !!payRow
-        setHasPaid(paid)
       }
 
       const feeCovered = paid || !!(ud as any)?.is_founding_provider || !!(ud as any)?.provider_fee_waived
+      // Set from feeCovered, NOT from `paid`. This line was the bug: the waiver
+      // and Founding Provider were computed right below it and then ignored by
+      // every screen that asks "does this person still owe us £14.99".
+      setFeeSettled(feeCovered)
 
       if ((ud as any)?.is_verified) {
         // A verified provider who still owes the £14.99 can pay it here — identity is
@@ -121,9 +128,13 @@ export default function VerifyPaymentScreen() {
         }
       }
 
-      // No usable request. A provider who already paid goes straight to the camera
-      // (don't charge again); everyone else sees instructions (provider: "Pay £14.99").
-      if (isProvider && paid) setStep('camera')
+      // No usable request. A provider who owes nothing goes straight to the
+      // camera; everyone else sees instructions (provider: "Pay £14.99").
+      //
+      // feeCovered, not `paid` — a Founding Provider or a waived account owes
+      // nothing and must not be sent down the payment path to be charged for
+      // something the site has already promised them for free.
+      if (isProvider && feeCovered) setStep('camera')
       else setStep('instructions')
     } catch {
       setStep('instructions')
@@ -240,7 +251,7 @@ export default function VerifyPaymentScreen() {
       // Server says this user already paid → don't charge again; move straight on.
       if ((intentData as { alreadyPaid?: boolean } | null)?.alreadyPaid) {
         setPaymentLoading(false)
-        setHasPaid(true)
+        setFeeSettled(true)
         setStep(feeOnly ? 'success' : 'camera')
         return
       }
@@ -294,7 +305,7 @@ export default function VerifyPaymentScreen() {
       return
     }
     setPendingIntentId(null)
-    setHasPaid(true)
+    setFeeSettled(true)
     if (feeOnly) {
       // Already identity-verified — the fee was the only outstanding step, so they're
       // done: no selfie, no admin re-approval. Returning to the dashboard enables the
@@ -343,7 +354,7 @@ export default function VerifyPaymentScreen() {
                 ? 'You\'re already identity-verified. Pay the one-off £14.99 fee to make your shop live — no selfie needed.'
                 : <>Take a selfie holding a piece of paper with your first name and <Text style={{ fontFamily: Fonts.bodyBold, color: Colors.warmDark }}>"Cavy"</Text> written on it. Our team reviews within 24 hours.</>}
             </Text>
-            {isProvider && !hasPaid && (
+            {isProvider && !feeSettled && (
               <View style={styles.priceTag}>
                 <Text style={styles.priceTagText}>£14.99 one-off verification fee</Text>
               </View>
@@ -368,7 +379,7 @@ export default function VerifyPaymentScreen() {
           ))}
 
           {/* Refund terms shown BEFORE the charge (full policy: Terms section 9). */}
-          {isProvider && !hasPaid && (
+          {isProvider && !feeSettled && (
             <Text style={styles.refundNote}>
               This one-off fee covers processing your verification and is non-refundable
               once your verification has been completed. See{' '}
@@ -377,7 +388,7 @@ export default function VerifyPaymentScreen() {
             </Text>
           )}
 
-          {isProvider && !hasPaid ? (
+          {isProvider && !feeSettled ? (
             <TouchableOpacity
               style={[styles.primaryBtn, paymentLoading && { opacity: 0.7 }]}
               onPress={handlePayment}
@@ -402,7 +413,7 @@ export default function VerifyPaymentScreen() {
           <Text style={styles.legalNote}>
             {feeOnly
               ? 'Secured by Stripe. Paying makes your shop eligible to go live.'
-              : isProvider && !hasPaid
+              : isProvider && !feeSettled
               ? 'Secured by Stripe. After payment you\'ll take your verification selfie.'
               : 'Your selfie is stored securely and only used for identity verification.'}
           </Text>
