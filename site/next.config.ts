@@ -106,8 +106,20 @@ const nextConfig: NextConfig = {
           { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
           { key: 'X-Frame-Options', value: 'DENY' },
           {
+            // camera=(self), not camera=(). This site now HAS a camera feature:
+            // /verify takes the ID-check photo, and `camera=()` denies the
+            // capability to the page's own origin.
+            //
+            // The header was written when nothing here touched a camera, and it
+            // was right then. Piece 4 made it wrong — a rule that was correct
+            // for an earlier version of the app and outlived it.
+            //
+            // (self) is the minimum that works: this origin may use a camera,
+            // no third party may, and nothing can be framed here to try
+            // (frame-ancestors 'none'). Everything else stays fully denied —
+            // there is still no microphone, location, payment or USB use.
             key: 'Permissions-Policy',
-            value: 'camera=(), microphone=(), geolocation=(), payment=(), usb=()',
+            value: 'camera=(self), microphone=(), geolocation=(), payment=(), usb=()',
           },
           {
             key: 'Strict-Transport-Security',

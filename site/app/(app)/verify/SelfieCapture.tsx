@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useState, useTransition } from 'react'
+import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { submitSelfie } from './actions'
 
@@ -60,7 +60,6 @@ async function downscale(file: File): Promise<Blob> {
 
 export function SelfieCapture({ retake = false }: { retake?: boolean }) {
   const router = useRouter()
-  const inputRef = useRef<HTMLInputElement>(null)
   const [preview, setPreview] = useState<string | null>(null)
   const [blob, setBlob] = useState<Blob | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -108,7 +107,6 @@ export function SelfieCapture({ retake = false }: { retake?: boolean }) {
   return (
     <div>
       <input
-        ref={inputRef}
         type="file"
         accept="image/*"
         capture="user"
@@ -127,18 +125,30 @@ export function SelfieCapture({ retake = false }: { retake?: boolean }) {
       )}
 
       <div className="flex flex-wrap gap-3">
-        <button
-          type="button"
-          onClick={() => inputRef.current?.click()}
-          disabled={pending}
-          className={`inline-flex min-h-11 items-center rounded-[999px] px-5 text-sm font-bold disabled:opacity-50 ${
+        {/* A LABEL, not a button calling input.click().
+            
+            The button version did nothing on Android: opening a file picker
+            from JavaScript depends on the page having hydrated AND on the
+            browser being willing to activate a visually-hidden input
+            programmatically, and mobile browsers are stricter about both.
+            
+            A label needs neither. Clicking it activates the input natively, so
+            it works before hydration and on every browser that has ever
+            supported file inputs. The input keeps `sr-only` rather than
+            `display:none` so it stays focusable and screen readers still
+            announce it. */}
+        <label
+          htmlFor="selfie-input"
+          className={`inline-flex min-h-11 cursor-pointer items-center rounded-[999px] px-5 text-sm font-bold focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-rose ${
+            pending ? 'pointer-events-none opacity-50' : ''
+          } ${
             preview
               ? 'bg-input-bg text-warm-dark hover:bg-soft-pink'
               : 'bg-rose text-white hover:bg-rose-dark'
           }`}
         >
           {preview ? 'Take another' : retake ? 'Take a new photo' : 'Take your photo'}
-        </button>
+        </label>
 
         {preview && (
           <button
