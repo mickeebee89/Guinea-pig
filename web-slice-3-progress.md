@@ -38,7 +38,7 @@ on: a stylist cannot find models at all. Grep finds admissions, not absences.
 | ~~Editing shop & treatments~~ | stylist dashboard | **done** — `/shop` |
 | Finding models to invite | stylist side | **8th — was never on this list.** `stylist-model-discovery.md` |
 | Membership | dashboard gate | Stripe |
-| ID check | dashboard gate, setup panel | selfie capture |
+| ~~ID check~~ | dashboard gate, setup panel | **done** — `/verify` |
 | Applying for a session | dashboard, stylist page | apply flow |
 | Leaving a review | dashboard | reviews |
 | Portfolio | (never was one) | `/portfolio` already existed — the dashboard
@@ -55,10 +55,10 @@ on: a stylist cannot find models at all. Grep finds admissions, not absences.
 3. ~~Browse~~ — done, **deliberately without distance**. Geocoding is a new
    external dependency and in a Bromley/Dartford launch, seeing stylists at all
    matters more than 5-vs-20 miles.
-4. ~~Stylist setup path~~ — pieces 1–3 done and verified in a browser; piece 4
-   unblocked, its policy hardening closed by `0019`
-5. Selfie capture in the browser ← current, nothing left blocking it
-6. Stripe / membership
+4. ~~Stylist setup path~~ — **all four pieces done**, verified in a browser and
+   on a real handset
+5. ~~Selfie capture in the browser~~ — done, `/verify`
+6. Stripe / membership ← current
 7. Apply flow — depends on 5 and 6
 8. Reviews
 
@@ -79,7 +79,20 @@ Signup → shop details → treatments → selfie → published.
    it alive forever and guarantee the two disagree.
 3. ~~**Treatments**~~ — `/shop`, validated against `treatment_categories`
    (active only, server-side) and written to `provider_treatments`.
-4. **Selfie upload** — blocked, see below.
+4. ~~**Selfie upload**~~ — `/verify`. Server action, not a browser upload, so
+   ChatThread stays the only place the browser client is used and storage sees
+   the real `auth.uid()`. Path built from `requireUser()`, never the client.
+
+   **Verified on a handset 14 Aug**, end to end: camera opened, photo uploaded
+   under the uploader's own id (0019 accepting a second client for the first
+   time), admin approved it, and **the shop republished itself** — nobody
+   touched `is_published`. That is 0016's auto-publish firing for real, which
+   makes "we publish your shop for you" a mechanism rather than a sentence.
+
+   Three environment faults blocked that test and none were app code:
+   `upgrade-insecure-requests` in dev, `camera=()` denying the page's own
+   camera, and Next's `allowedDevOrigins` withholding all JS from a LAN origin.
+   The last was printed in the dev server's stdout the whole time.
 
 ### Treatments is a DIFF, and that is the whole point
 
