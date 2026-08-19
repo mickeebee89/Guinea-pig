@@ -91,16 +91,52 @@ where selfie_url is not null
   and selfie_url not like (user_id::text || '/%');
 
 -- ---------------------------------------------------------------------------
+-- NORMALISE the legacy rows, so the assert below has nothing to catch.
+--
+-- The first run of this migration aborted on four rows, all from 7-8 July, all
+-- of this shape:
+--
+--   https://<project>.supabase.co/storage/v1/object/public/verification-selfies/
+--     <user_id>/selfie-<timestamp>.jpg
+--
+-- Note `/object/public/` — these date from when the bucket was public. It is
+-- private now, so those URLs do not resolve for anyone: the path is the only
+-- usable form, which is why storage-lockdown.sql moved the column to paths and
+-- photoUrls.ts signs at render time.
+--
+-- Each URL already contains its own user_id, so the conversion is a strip
+-- rather than a guess. split_part on the bucket marker rather than a character
+-- offset: the project ref would silently change the offset and quietly corrupt
+-- every row.
+--
+-- All four were `approved`, so no admin would have touched them again and the
+-- policy would never actually have blocked anything. Converting anyway — four
+-- rows that silently cannot be updated is the same latent shape as the fault
+-- this migration exists to close, and "harmless because nobody goes there" is
+-- the reasoning that made the treatments bug wait a month.
+-- ---------------------------------------------------------------------------
+update public.verification_requests
+   set selfie_url = split_part(selfie_url, '/verification-selfies/', 2)
+ where selfie_url is not null
+   and selfie_url not like (user_id::text || '/%')
+   and selfie_url like '%/verification-selfies/%'
+   -- Only when the strip actually lands under the row's own user_id. Anything
+   -- else is not a legacy URL and must survive to trip the assert.
+   and split_part(selfie_url, '/verification-selfies/', 2) like (user_id::text || '/%');
+
+insert into public.migration_findings (version, item, value)
+select '0019', 'legacy full-URL rows converted to paths, remaining after', count(*)::text
+from public.verification_requests
+where selfie_url is not null
+  and selfie_url not like (user_id::text || '/%');
+
+-- ---------------------------------------------------------------------------
 -- ASSERT, per 0014.
 --
 -- The row policy below rejects any write whose selfie_url is not under the
--- row's user_id. Legacy rows store a FULL URL rather than a path — see
--- storage-lockdown.sql, "tolerant of legacy full-URL rows" — and those would
--- fail the check the next time an ADMIN touched the row to approve or reject
--- it. Verification would break for exactly the people waiting on it.
---
--- So this refuses to proceed while any such row exists, rather than letting a
--- reviewer discover it when they cannot approve someone.
+-- row's user_id. The conversion above handles the known legacy shape; this
+-- catches anything it could not, rather than letting a reviewer discover it
+-- when they cannot approve someone.
 -- ---------------------------------------------------------------------------
 do $$
 declare v_legacy integer;
@@ -157,7 +193,7 @@ create policy vr_selfie_path_matches_user
 
 -- MIGRATION FOOTER
 insert into public.schema_migrations (version, name, checksum)
-values ('0019', 'verification_selfie_path_is_your_own', 'ac4e79b15f40fe807236717268f96d2d110766869d1c707c6c10df9d1315fbb3');
+values ('0019', 'verification_selfie_path_is_your_own', 'f8797e3ff5f303718ed2c643f5cebf231894d16e80adbe0664005a8d955929d9');
 
 commit;
 
