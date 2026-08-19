@@ -55,9 +55,10 @@ on: a stylist cannot find models at all. Grep finds admissions, not absences.
 3. ~~Browse~~ — done, **deliberately without distance**. Geocoding is a new
    external dependency and in a Bromley/Dartford launch, seeing stylists at all
    matters more than 5-vs-20 miles.
-4. ~~Stylist setup path~~ — pieces 1–3 done, piece 4 blocked (below)
-5. Stripe / membership ← current, unless the storage check clears piece 4
-6. Selfie capture in the browser
+4. ~~Stylist setup path~~ — pieces 1–3 done and verified in a browser; piece 4
+   unblocked, its policy hardening closed by `0019`
+5. Selfie capture in the browser ← current, nothing left blocking it
+6. Stripe / membership
 7. Apply flow — depends on 5 and 6
 8. Reviews
 
@@ -139,9 +140,13 @@ guess (it carries a millisecond timestamp), so this is a hardening item, not an
 incident — but "the ID check reviewed the wrong person's face" is the failure it
 leads to, so it should not sit unwritten.
 
-Fix is one migration: add the same `foldername(name))[1] = auth.uid()::text`
-clause the other two buckets already use. Do it **before** piece 4 ships, since
-piece 4 adds a second client writing to that bucket.
+**✅ Closed by `0019`** (applied 14 Aug, verified on a device: selfie submitted
+and approved). Note it took TWO policies, not the obvious one — tightening the
+storage path stops someone uploading into another user's folder, but does
+nothing about pointing `selfie_url` at a path already there, and the reviewer
+opens whatever the row names. The second is a RESTRICTIVE policy tying
+`selfie_url` to the row's own `user_id`, keyed to `user_id` rather than
+`auth.uid()` so admin approvals still work.
 
 ### ⚠ A human is still in the chain
 
@@ -166,6 +171,18 @@ Migration `0011` grants it inside `handle_new_auth_user`: role provider, a
 `signup_source` present, and room under `settings.founding_provider_cap` (200).
 **This is why Stripe is NOT on the critical path for the cohort** — founding
 status settles the fee without payment.
+
+> ⚠️ **That sentence was false in the app until 14 Aug.**
+> `verify-payment.tsx` computed `feeCovered` (paid OR founding OR waived) and
+> then decided on `paid` alone, so a Founding Provider was shown "Pay £14.99"
+> and could not reach the selfie at all. The grant worked; the one screen that
+> spends it ignored it.
+>
+> Found only because a test account was reset to unverified — that screen never
+> has to decide for an account an admin already verified, so the fault sat
+> behind a state nobody had occupied. Fixed by setting `feeSettled` from
+> `feeCovered`. **Re-test this before any cohort onboards**, because it is the
+> difference between thirty free accounts and thirty £14.99 walls.
 
 Two limits: mobile signup sends no `signup_source`, so app signups never
 qualify; and there is **no manual grant path**, so someone who types the URL
@@ -242,8 +259,12 @@ column we would rather retire. **Whoever finally drops `location` must fix
 
 **Engineering**
 
-* ~~`verification-selfies` INSERT policy~~ — answered; piece 4 unblocked, and a
-  hardening migration is owed first (above).
+* ~~`verification-selfies` INSERT policy~~ — **closed by `0019`** (applied
+  14 Aug, verified on a device: selfie submitted and approved). It tightened the
+  storage path to the uploader AND added a RESTRICTIVE policy tying
+  `verification_requests.selfie_url` to the row's own `user_id` — the storage
+  half alone would not have closed it, because the reviewer opens whatever path
+  the row names. **Piece 4 is now clear to build.**
 * ~~`site` eslint is broken~~ — fixed: it was the `FlatCompat` bridge against
   eslint-config-next 16's native flat configs. **`admin`'s config works but its
   lint runs nowhere** (`build` is a bare `next build`) and it has 22 errors
