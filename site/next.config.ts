@@ -47,7 +47,8 @@ const nextConfig: NextConfig = {
     // overlay reports an error on every page load. React never uses eval() in
     // production, so this is added in development ONLY and the shipped policy
     // is unchanged.
-    const devEval = process.env.NODE_ENV === 'production' ? '' : " 'unsafe-eval'"
+    const isProd = process.env.NODE_ENV === 'production'
+    const devEval = isProd ? '' : " 'unsafe-eval'"
 
     // The member area talks to Supabase from the browser: PostgREST over https
     // for sends and reads, and a WebSocket for realtime chat.
@@ -79,7 +80,21 @@ const nextConfig: NextConfig = {
       "base-uri 'self'",
       "object-src 'none'",
       "frame-ancestors 'none'",
-      'upgrade-insecure-requests',
+      // PRODUCTION ONLY. This rewrites every http:// subresource request to
+      // https://, which is right for a shipped site and breaks the dev server
+      // the moment it is reached over anything but localhost.
+      //
+      // Browsers exempt localhost as a "potentially trustworthy" origin, so
+      // this never bites on a desktop. A bare LAN IP gets no exemption — so
+      // testing on a phone at http://10.x.x.x:PORT loads the HTML (requested
+      // before the header is parsed) and then upgrades every stylesheet and
+      // script to https, which the dev server does not speak. The page renders
+      // as unstyled markup with dead buttons and nothing in the console
+      // mentions CSP.
+      //
+      // Mobile web is half the point of this app existing, so testing it on a
+      // real handset must not require deploying first.
+      ...(isProd ? ['upgrade-insecure-requests'] : []),
     ].join('; ')
 
     return [
