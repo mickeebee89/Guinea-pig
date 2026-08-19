@@ -227,6 +227,12 @@ export function StylistSetupPanel({ setup }: { setup: StylistSetup }) {
             : 'todo'
           }
           title="The ID check"
+          // Only offered once the fee is settled, matching what /verify itself
+          // will do. A link that lands on "the fee comes first" is a link that
+          // wasted the tap.
+          href={setup.feeSettled && setup.idCheck !== 'approved' && setup.idCheck !== 'pending'
+            ? '/verify' : undefined}
+          linkLabel={setup.idCheck === 'rejected' ? 'Try again' : 'Do the ID check'}
         >
           {setup.idCheck === 'approved' && 'Passed.'}
           {setup.idCheck === 'pending' &&
@@ -235,7 +241,6 @@ export function StylistSetupPanel({ setup }: { setup: StylistSetup }) {
             <>
               We couldn’t accept the last one, so it needs doing again.
               {setup.idCheckNote && <> The reviewer said: “{setup.idCheckNote}”</>}
-              {' '}Retaking it is in the Cavy app for now.
             </>
           )}
           {setup.idCheck === 'none' && (
@@ -243,7 +248,6 @@ export function StylistSetupPanel({ setup }: { setup: StylistSetup }) {
               A selfie holding a handwritten note, looked at by a person. It shows there’s a real
               person behind the shop and that the profile photo hasn’t been taken from somewhere
               else — it isn’t an identity check, and nobody sees a passport or a driving licence.
-              Doing it is in the Cavy app for now.
             </>
           )}
         </Step>
