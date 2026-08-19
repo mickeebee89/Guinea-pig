@@ -16,6 +16,31 @@ const nextConfig: NextConfig = {
    */
   ...(process.env.VERCEL ? {} : { turbopack: { root: __dirname } }),
 
+  /**
+   * DEVELOPMENT ONLY. Hosts allowed to fetch /_next/* from the dev server.
+   *
+   * Next blocks dev resources for any origin that is not localhost, which is
+   * right — a dev server should not hand its internals to anything on the
+   * network. But it means a PHONE on the same Wi-Fi gets the HTML and none of
+   * the JavaScript, so the page renders and nothing works: no hydration, no
+   * event handlers, no uploads. The failure looks like broken app code, and the
+   * only place it is explained is the dev server's own stdout.
+   *
+   * This app's whole premise is "the web works without the app", most of which
+   * means a phone browser, so testing on a real handset cannot require a
+   * deploy. Set DEV_LAN_ORIGIN in .env.local when your LAN address changes —
+   * DHCP will move it eventually.
+   *
+   * Never set on Vercel: production serves everything from one origin and has
+   * no dev resources to expose.
+   */
+  ...(process.env.NODE_ENV === 'production' ? {} : {
+    allowedDevOrigins: [
+      ...(process.env.DEV_LAN_ORIGIN ? [process.env.DEV_LAN_ORIGIN] : []),
+      '10.25.91.247',
+    ],
+  }),
+
   images: {
     // Stylist avatars and banners live in the public `profile-pics` bucket.
     // Without this every image 400s at runtime with an error that reads like a
