@@ -82,6 +82,8 @@ Deno.serve(async (req) => {
         return await revenueSummary(userId)
       case 'reconcile_audit':
         return await reconcileAudit(userId)
+      case 'sync_subscription':
+        return await syncSubscription(userId)
       default:
         return respond({ error: `Unknown action: ${body.action}` }, 400)
     }
@@ -251,13 +253,34 @@ async function confirmVerification(userId: string, paymentIntentId: string) {
 // then), and records it. Actually calls Stripe — never just a local flag.
 
 async function cancelSubscription(userId: string) {
-  const { data: row } = await db
+  // eslint-disable-next-line prefer-const -- reassigned by the Stripe recovery below
+  let { data: row } = await db
     .from('subscriptions')
     .select('stripe_subscription_id, status, current_period_end')
     .eq('user_id', userId)
     .maybeSingle()
 
-  if (!row?.stripe_subscription_id) return respond({ error: 'No subscription to cancel' }, 404)
+  // No local row is NOT proof there is nothing to cancel. On the swallowed-confirm
+  // path Stripe bills while we hold nothing, and returning 404 here is what made
+  // "cancel at any time" untrue - the promise failed at the one moment it mattered.
+  // Ask Stripe before refusing.
+  if (!row?.stripe_subscription_id) {
+    const recovered = await syncSubscription(userId)
+    const body = await recovered.json().catch(() => null)
+    if (!body?.active) {
+      return respond({ error: 'No subscription to cancel' }, 404)
+    }
+    const { data: repaired } = await db
+      .from('subscriptions')
+      .select('stripe_subscription_id, status, current_period_end')
+      .eq('user_id', userId)
+      .maybeSingle()
+    const rr = repaired as { stripe_subscription_id: string | null; status: string; current_period_end: string | null } | null
+    if (!rr?.stripe_subscription_id) {
+      return respond({ error: 'Subscription found in Stripe but could not be recorded - contact support' }, 500)
+    }
+    row = rr as typeof row
+  }
   // Idempotent: already scheduled to cancel → report success with the same end date.
   if (row.status === 'cancelling') return respond({ success: true, cancelsAt: row.current_period_end })
 
@@ -567,5 +590,144 @@ async function reconcileAudit(userId: string) {
     unverifiableNoCustomerId: unverifiable.map(r => ({
       userId: r.user_id, ourStatus: r.status,
     })),
+  })
+}
+
+// -- sync_subscription --------------------------------------------------------
+// The authoritative answer to "is this person subscribed", reconciled against
+// Stripe when our own record cannot be trusted.
+//
+// -- WHY THE GATE CANNOT JUST READ OUR OWN ROW -------------------------------
+// Two failures, in opposite directions, and both are live:
+//
+//  1. We OVER-GRANT. hasActiveSubscription applies its date check only to
+//     'cancelling', so an 'active' row whose period ended keeps granting access
+//     for ever. 8 of 11 rows were in that state on 24 Aug 2026.
+//
+//  2. A naive date check would OVER-REVOKE, from the people actually paying.
+//     There is no webhook, so current_period_end is only ever written by
+//     confirm_subscription - at initial subscribe. Stripe renews; our row does
+//     not move. Someone who subscribed in January still shows a February end
+//     date in April, while paying every month. Denying them would be the worse
+//     of the two bugs.
+//
+// So a lapsed-looking row is not evidence of anything. It is a prompt to ask
+// Stripe. That is what makes the date check safe, and why this must land in the
+// same change as it.
+//
+// FAST PATH: a row that is unambiguously current returns immediately with no
+// Stripe call. Stripe is consulted only when our record is missing, stale, or
+// unverifiable - so the common case costs nothing.
+async function syncSubscription(userId: string) {
+  const { data: rowData } = await db
+    .from('subscriptions')
+    .select('stripe_customer_id, stripe_subscription_id, status, current_period_end')
+    .eq('user_id', userId)
+    .maybeSingle()
+
+  const row = rowData as {
+    stripe_customer_id: string | null; stripe_subscription_id: string | null
+    status: string | null; current_period_end: string | null
+  } | null
+
+  const endsInFuture = !!row?.current_period_end &&
+    new Date(row.current_period_end).getTime() > Date.now()
+
+  if (row && ['active', 'cancelling'].includes(row.status ?? '') &&
+      endsInFuture && row.stripe_customer_id) {
+    return respond({
+      ok: true, source: 'local', active: true,
+      status: row.status, currentPeriodEnd: row.current_period_end,
+      cancelAtPeriodEnd: row.status === 'cancelling',
+    })
+  }
+
+  // Resolve the customer. Prefer the id we already hold; otherwise find it by the
+  // user_id stamped on the customer at creation. A row with no customer id is the
+  // malformed shape found on 24 Aug - unreconcilable from our side alone, which is
+  // exactly why we look it up rather than trusting the row.
+  let customerId = row?.stripe_customer_id ?? null
+  if (!customerId) {
+    try {
+      const found = await stripe.customers.search({
+        query: 'metadata[\'user_id\']:\'' + userId + '\'', limit: 1,
+      })
+      customerId = found.data[0]?.id ?? null
+    } catch (err) {
+      console.error('[stripe-payment] customer search failed', err)
+      // Fail CLOSED on an inconclusive lookup: report that we could not tell,
+      // rather than reporting "not subscribed" and cutting off a payer.
+      return respond({
+        ok: false, source: 'stripe', active: null,
+        error: 'Could not reach Stripe to verify subscription state',
+      }, 503)
+    }
+  }
+
+  if (!customerId) {
+    // No customer in Stripe at all. Nothing is being billed, so any local row
+    // claiming otherwise is wrong.
+    if (row && ['active', 'cancelling'].includes(row.status ?? '')) {
+      await db.from('subscriptions').update({ status: 'expired' }).eq('user_id', userId)
+      await db.from('users')
+        .update({ subscription_status: 'free', subscription_next_billing: null })
+        .eq('id', userId)
+    }
+    return respond({ ok: true, source: 'stripe', active: false, status: 'expired', repaired: !!row })
+  }
+
+  const subs = await stripe.subscriptions.list({ customer: customerId, status: 'all', limit: 10 })
+  const BILLABLE = ['active', 'trialing', 'past_due']
+  const live = subs.data.find(x => BILLABLE.includes(x.status))
+
+  if (!live) {
+    if (row && ['active', 'cancelling'].includes(row.status ?? '')) {
+      await db.from('subscriptions')
+        .update({ status: 'expired', stripe_customer_id: customerId })
+        .eq('user_id', userId)
+      await db.from('users')
+        .update({ subscription_status: 'free', subscription_next_billing: null })
+        .eq('id', userId)
+    }
+    return respond({ ok: true, source: 'stripe', active: false, status: 'expired', repaired: !!row })
+  }
+
+  // Stripe says they are paying. Write the truth back, so the fast path works
+  // next time and cancel_subscription has a row to act on.
+  const periodEnd = new Date(live.current_period_end * 1000).toISOString()
+  const status    = live.cancel_at_period_end ? 'cancelling' : 'active'
+  const price     = live.items?.data?.[0]?.price
+
+  const { error: upsertErr } = await db.from('subscriptions').upsert({
+    user_id:                userId,
+    stripe_customer_id:     customerId,
+    stripe_subscription_id: live.id,
+    status,
+    current_period_start:   new Date(live.current_period_start * 1000).toISOString(),
+    current_period_end:     periodEnd,
+    amount_pence:           price?.unit_amount ?? 499,
+    currency_code:          (price?.currency ?? 'gbp').toUpperCase(),
+    plan:                   'monthly',
+  }, { onConflict: 'user_id' })
+
+  const { error: userErr } = await db.from('users')
+    .update({ subscription_status: status, subscription_next_billing: periodEnd })
+    .eq('id', userId)
+
+  // A failed repair must not be reported as success - that is the exact defect
+  // confirm_subscription has, returning 200 with { success: false } that no
+  // caller reads. Access is still granted, because Stripe says they are paying
+  // and that is what the answer turns on.
+  if (upsertErr || userErr) {
+    console.error('[stripe-payment] sync_subscription repair failed',
+      JSON.stringify({ upsertErr, userErr }))
+  }
+
+  return respond({
+    ok: true, source: 'stripe', active: true, status,
+    currentPeriodEnd: periodEnd,
+    cancelAtPeriodEnd: !!live.cancel_at_period_end,
+    repaired: true,
+    ...(upsertErr || userErr ? { repairWriteFailed: (upsertErr || userErr)!.message } : {}),
   })
 }

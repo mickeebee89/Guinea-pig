@@ -12,34 +12,74 @@ export async function isIdentityVerified(userId: string): Promise<boolean> {
   return !!(data as any)?.is_verified
 }
 
-// Active £4.99/mo subscription. Grants access while 'active', or while 'cancelling'
-// (cancel-at-period-end) up to current_period_end — so a cancelled user keeps what
-// they paid for and access lapses at period end (date-driven; there is no webhook).
+/**
+ * Active GBP 4.99/mo subscription.
+ *
+ * -- WHY THIS ASKS STRIPE SOMETIMES ----------------------------------------
+ * Reading our own row alone fails in BOTH directions, and both were live on
+ * 24 Aug 2026:
+ *
+ *   OVER-GRANT. This used to be `if (status === 'active') return true`, with the
+ *     date check applied only to 'cancelling'. An 'active' row whose period had
+ *     ended kept granting access for ever. 8 of 11 rows were in that state.
+ *
+ *   OVER-REVOKE. Adding a bare date check would have been worse. There is no
+ *     webhook, so current_period_end is written only by confirm_subscription at
+ *     initial subscribe. Stripe renews; our row does not move. Someone who
+ *     subscribed in January still shows a February end date in April while
+ *     paying every month - and a date check alone would cut them off.
+ *
+ * So a lapsed-looking row is not evidence. It is a reason to ask Stripe, which
+ * is what sync_subscription does: it reconciles, repairs our rows, and returns
+ * the authoritative answer. The fast path below means Stripe is only consulted
+ * when our own record cannot settle it.
+ *
+ * FAILS CLOSED-ISH, DELIBERATELY: if Stripe cannot be reached the answer is
+ * "keep granting" rather than "deny". Wrongly denying a paying subscriber is a
+ * worse outcome than briefly granting one who has lapsed, and an outage on our
+ * side must not look like non-payment on theirs.
+ */
 export async function hasActiveSubscription(userId: string): Promise<boolean> {
-  // Admin comp / promo: a waived membership grants access WITHOUT a Stripe subscription
-  // (mirrors provider_fee_waived on the provider side). Used for App-Review demo accounts,
-  // comps and promos. Read defensively — a hiccup here must never block a real subscriber.
-  const { data: u } = await supabase
-    .from('users')
-    .select('subscription_waived')
-    .eq('id', userId)
-    .maybeSingle()
-  if ((u as any)?.subscription_waived) return true
+  const { data: waived } = await supabase
+    .from('users').select('subscription_waived').eq('id', userId).maybeSingle()
+  if ((waived as any)?.subscription_waived) return true
 
   const { data, error } = await supabase
     .from('subscriptions')
-    .select('status, current_period_end')
+    .select('status, current_period_end, stripe_customer_id')
     .eq('user_id', userId)
     .maybeSingle()
   if (error) throw error
-  if (!data) return false
-  const status = (data as any).status as string
-  if (status === 'active') return true
-  if (status === 'cancelling') {
-    const end = (data as any).current_period_end
-    return !!end && new Date(end) > new Date()
+
+  const row = data as {
+    status: string; current_period_end: string | null; stripe_customer_id: string | null
+  } | null
+
+  const endsInFuture = !!row?.current_period_end &&
+    new Date(row.current_period_end).getTime() > Date.now()
+
+  // Fast path: unambiguously current, no Stripe call.
+  if (row && ['active', 'cancelling'].includes(row.status) &&
+      endsInFuture && row.stripe_customer_id) {
+    return true
   }
-  return false
+
+  // Definitely nothing: no row at all, or already expired.
+  if (!row || !['active', 'cancelling'].includes(row.status)) return false
+
+  // Ambiguous - lapsed date, or no customer id to trust. Ask Stripe.
+  try {
+    const { data: synced, error: syncErr } = await supabase.functions.invoke('stripe-payment', {
+      body: { action: 'sync_subscription' },
+    })
+    if (syncErr) throw syncErr
+    if (synced?.active === true) return true
+    if (synced?.active === false) return false
+    return true   // active === null means Stripe was unreachable
+  } catch (e) {
+    console.warn('[verification] sync_subscription failed, granting on last known state:', e)
+    return true
+  }
 }
 
 // Apply gate: a model may apply ONLY with BOTH an active subscription AND identity
