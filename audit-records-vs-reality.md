@@ -187,6 +187,53 @@ All of these were corrected on 24 Aug unless marked open.
 
 ---
 
+## Known blind spot: configuration
+
+**Added 24 Aug 2026.** Every check this project has built covers code or data.
+**Nothing covers configuration**, and configuration can silently override both.
+
+Two instances found on the same day:
+
+**1. A secret can override a value the code states plainly.**
+`stripe-payment/index.ts:135` says `unit_amount: 499`. But `:127` reads
+`STRIPE_MONTHLY_PRICE_ID` and returns it if set, so the live price is whatever
+that secret points at. Someone reading the code concludes £4.99 and cannot
+discover otherwise from the repository. Confirmed £4.99 on 24 Aug — by looking in
+Stripe, which is the only place that could answer.
+
+**2. A secret duplicated between two systems has nothing keeping it in step.**
+`PUSH_HOOK_SECRET` lives in the edge-function environment AND baked into the
+bodies of `tg_message_push` / `tg_notify_push` (`push-setup.sql:38, :82`). Rotate
+one and not the other and every push fails — silently, with both halves looking
+correct and `supabase secrets list` showing a healthy digest.
+
+Related: `stripe_secret_key` existed alongside `STRIPE_SECRET_KEY`, differing only
+in case. `Deno.env.get` is case-sensitive, so the lowercase one had never been
+read by anything — while looking, in a list, exactly like the live one. Unset on
+24 Aug. Rotating the wrong one during an incident would have succeeded, updated
+the digest, and changed nothing.
+
+### What can actually be done about it
+
+Reading the repo can never answer these. The mitigations are all "make the code
+check reality rather than trust a stated value":
+
+* **`send-push` now describes its rejections** — header present? length match?
+  prefix match? — so a rotation mismatch is legible in the logs instead of being
+  a bare 403. Leaks no values. *(Done 24 Aug.)*
+* **`reconcile_audit` will report the resolved Stripe price**, turning "which
+  price is actually live" from unanswerable into a routine output.
+* **Consider making `resolveMonthlyPriceId` refuse a surprise** — retrieve the
+  price and throw if `unit_amount` is not 499, so a wrong env var fails at the
+  first subscription rather than quietly charging the wrong amount for months.
+  Same principle as `0014`'s asserts.
+
+The general rule this suggests: **where a value exists in two places, the code
+should compare them or report the disagreement.** Remembering to keep them in
+step is not a mechanism.
+
+---
+
 ## Order
 
 **1. ~~Verify retention~~** — done 24 Aug, and it found the structural failure.

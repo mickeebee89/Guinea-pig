@@ -25,8 +25,43 @@ function respond(body: unknown, status = 200) {
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
 
-  // Shared-secret guard — only our DB triggers (which include this header) may call this.
-  if (req.headers.get('x-push-secret') !== Deno.env.get('PUSH_HOOK_SECRET')) {
+  // ── Shared-secret guard, and it says WHY it refused ──────────────────────
+  //
+  // Only our DB triggers may call this, and they carry the secret in the header.
+  // The catch is that the SAME secret lives in two places that nothing keeps in
+  // step: this env var, and the bodies of tg_message_push / tg_notify_push,
+  // where it is baked in literally (see supabase/push-setup.sql:38, :82).
+  //
+  // Rotate one and not the other and every push fails — silently, with both
+  // halves looking correctly configured, and `supabase secrets list` showing a
+  // healthy digest. That is a configuration mismatch no check in this project
+  // can currently see, so the least this function can do is describe the
+  // rejection instead of returning a bare 403.
+  //
+  // The comparisons below leak nothing: they report whether a header arrived and
+  // whether the length and first six characters agree, never a value. That is
+  // enough to tell "not our trigger at all" from "our trigger, holding the old
+  // secret" — which are the two cases with completely different fixes.
+  const expectedSecret = Deno.env.get('PUSH_HOOK_SECRET')
+  if (!expectedSecret) {
+    // Fail closed, same as purge-selfies with CRON_SECRET. An unset secret must
+    // never mean "let everyone in".
+    console.error('[send-push] PUSH_HOOK_SECRET is not configured — refusing all calls')
+    return respond({ error: 'PUSH_HOOK_SECRET not configured' }, 500)
+  }
+
+  const gotSecret = req.headers.get('x-push-secret')
+  if (gotSecret !== expectedSecret) {
+    console.error('[send-push] REJECTED', JSON.stringify({
+      headerPresent:  gotSecret !== null,
+      lengthMatches:  gotSecret?.length === expectedSecret.length,
+      prefixMatches:  gotSecret?.slice(0, 6) === expectedSecret.slice(0, 6),
+      hint: gotSecret === null
+        ? 'No x-push-secret header — caller is not one of our DB triggers.'
+        : 'Header present but wrong. If length and prefix match, the tail differs; '
+        + 'if they do not, the trigger is almost certainly holding a pre-rotation '
+        + 'secret. Re-run supabase/push-setup.sql with the current value.',
+    }))
     return respond({ error: 'Forbidden' }, 403)
   }
 
