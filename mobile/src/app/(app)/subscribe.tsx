@@ -102,9 +102,66 @@ export default function SubscribeScreen() {
         },
       })
       console.log('SUB CONFIRM →', JSON.stringify({ data: confirmData, error: confirmErr }))
-      if (confirmErr) {
-        // Subscription active in Stripe; webhook will sync DB — proceed
-        console.warn('[subscribe] confirm_subscription failed:', confirmErr.message)
+
+      // ── DO NOT CLAIM SUCCESS WE HAVE NOT ESTABLISHED ────────────────────
+      //
+      // This used to swallow confirmErr with "webhook will sync DB — proceed".
+      // There is no webhook, and there never was. On that path Stripe billed
+      // £4.99 every month while our subscriptions row was never written, so
+      // Settings showed "Free Plan", the Cancel row never rendered, and
+      // cancel_subscription 404'd on the missing row — against a published
+      // promise of "cancel at any time".
+      //
+      // There is a SECOND path the old code could not even see:
+      // confirmSubscription returns HTTP 200 with { success: false } when its
+      // database write fails, so confirmErr is null and nothing was checked.
+      //
+      // What we actually know at this point: presentPaymentSheet returned
+      // without error, which means Stripe confirmed the payment. The card WAS
+      // charged. What is unknown is only whether we recorded it — so the honest
+      // move is not a message, it is to go and find out.
+      const confirmedOk = !confirmErr && confirmData?.success !== false
+      if (!confirmedOk) {
+        console.warn('[subscribe] confirm_subscription did not succeed:',
+          confirmErr?.message ?? JSON.stringify(confirmData))
+
+        // sync_subscription asks Stripe directly and repairs our rows. It is the
+        // same reconcile the gate uses, so this cannot drift from it.
+        const { data: synced } = await supabase.functions.invoke('stripe-payment', {
+          body: { action: 'sync_subscription' },
+        })
+
+        if (synced?.active === true) {
+          // Recorded now. Genuine success — say so.
+          await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
+          setLoading(false)
+          setStep('success')
+          return
+        }
+
+        setLoading(false)
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning)
+
+        if (synced?.active === false) {
+          // Payment sheet succeeded but Stripe has no billable subscription.
+          // Rare and genuinely wrong — never tell them they are a member.
+          Alert.alert(
+            'Payment taken, membership not set up',
+            'Your card was charged but the membership did not activate. Do not pay again — '
+            + 'email support@guineapigapp.co.uk and we will either activate it or refund you.',
+          )
+          return
+        }
+
+        // Stripe unreachable. State genuinely unknown on our side; the charge is not.
+        Alert.alert(
+          'Payment taken, still confirming',
+          'Your card was charged. We could not confirm your membership just now, which is a '
+          + 'problem at our end rather than with your payment. Open Settings in a few minutes — '
+          + 'it should appear on its own. Do not pay again; if it has not appeared, email '
+          + 'support@guineapigapp.co.uk.',
+        )
+        return
       }
 
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)

@@ -27,8 +27,9 @@ live money, one a child-safety commitment.
 | ✅ Closed | The dangerous record lines (item 1b) |
 | ✅ Closed | Selfie retention: structurally impossible, fixed, proven |
 | ✅ Decided | What is retained after a purge |
+| ✅ Closed | Item 2 — subscription reconcile, proven on live data 24 Aug |
 | 📋 Scoped | Revocation of verification (item 8) — not built |
-| ⬜ Open | Items 2–7 |
+| ⬜ Open | Items 3–7 |
 
 ---
 
@@ -57,7 +58,21 @@ turns "no rows" from ambiguous into diagnostic.
 
 ## B. A paying subscriber can be billed with no way to cancel
 
-**Unfair-practice exposure, not a latent bug. OPEN — this is item 2.**
+**CLOSED 24 Aug 2026.** Fixed and demonstrated on live data — full account in
+`subscription-state-reconcile.md`.
+
+**`reconcile_audit` established `billedButNoRow: 0` before anything was changed:
+the swallowed-confirm path never actually fired, so nobody was charged without a
+record and no remedy is owed.** The real damage was the inverse — 9 rows granting
+access against nothing billable in Stripe, all test accounts.
+
+**A near-miss worth keeping:** the obvious fix (honour `current_period_end` for
+`active`) would have cut off every paying subscriber at their first renewal,
+because with no webhook that column is written only at initial subscribe. Caught
+by tracing what actually writes it rather than trusting `notes.md:52`, which
+calls the design "date-driven" — true only of the `cancelling` branch.
+
+The original finding follows.
 
 `legal.ts:218` promises "cancel at any time from within the app".
 
