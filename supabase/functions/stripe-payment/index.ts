@@ -80,6 +80,8 @@ Deno.serve(async (req) => {
         return await cancelSubscription(userId)
       case 'revenue_summary':
         return await revenueSummary(userId)
+      case 'reconcile_audit':
+        return await reconcileAudit(userId)
       default:
         return respond({ error: `Unknown action: ${body.action}` }, 400)
     }
@@ -406,4 +408,164 @@ async function revenueSummary(userId: string) {
   }
 
   return respond({ verifications, subscriptions, recent })
+}
+
+// -- reconcile_audit ----------------------------------------------------------
+// READ-ONLY. Compares Stripe's subscribers against our `subscriptions` table and
+// reports the disagreements. Writes nothing, anywhere.
+//
+// -- WHY THIS EXISTS ---------------------------------------------------------
+// subscribe.tsx:105 swallows a failed confirm_subscription ("webhook will sync
+// DB - proceed"), and confirmSubscription ALSO returns HTTP 200 with
+// { success: false } when its database write fails, which no client checks. On
+// either path Stripe bills every month while we hold no row at all - so the
+// affected people are invisible to every query that starts from our own tables.
+// You cannot count them from this side. You have to ask Stripe.
+//
+// Same reasoning as the 19 orphaned bookings: fixing the mechanism does not
+// repair the damage, and the damage cannot be known without looking.
+//
+// Deliberately the READ half. sync_subscription will reuse this lookup and add
+// repair; shipping the read first means the numbers are known before anything
+// is changed by them.
+async function reconcileAudit(userId: string) {
+  const { data: adminRow } = await db.from('admins').select('user_id').eq('user_id', userId).maybeSingle()
+  if (!adminRow) return respond({ error: 'Forbidden' }, 403)
+
+  // Which price is ACTUALLY live. STRIPE_MONTHLY_PRICE_ID silently overrides the
+  // `unit_amount: 499` written in this file, and nothing in the repo can reveal
+  // what it points at - see the configuration blind spot in
+  // audit-records-vs-reality.md. Reported so a routine check answers it.
+  let priceReport: Record<string, unknown>
+  try {
+    const priceId = await resolveMonthlyPriceId()
+    const price   = await stripe.prices.retrieve(priceId)
+    priceReport = {
+      resolved: priceId,
+      fromEnvVar: !!Deno.env.get('STRIPE_MONTHLY_PRICE_ID'),
+      unitAmount: price.unit_amount,
+      currency: price.currency,
+      active: price.active,
+      matchesExpected499: price.unit_amount === 499,
+    }
+  } catch (err) {
+    priceReport = { resolved: null, error: err instanceof Error ? err.message : String(err) }
+  }
+
+  // Every subscription costing someone money, or about to. past_due and unpaid
+  // are included deliberately: they are exactly the states a missing webhook
+  // hides from us.
+  const BILLABLE = ['active', 'trialing', 'past_due', 'unpaid']
+  const stripeSubs: {
+    id: string; status: string; userId: string | null; customerId: string
+    currentPeriodEnd: string | null; cancelAtPeriodEnd: boolean; unitAmount: number | null
+  }[] = []
+
+  let startingAfter: string | undefined
+  for (let guard = 0; guard < 100; guard++) {
+    const page = await stripe.subscriptions.list({
+      status: 'all', limit: 100, expand: ['data.customer'],
+      ...(startingAfter ? { starting_after: startingAfter } : {}),
+    })
+    for (const sub of page.data) {
+      if (!BILLABLE.includes(sub.status)) continue
+      const cust = sub.customer as Stripe.Customer | string
+      const customerId = typeof cust === 'string' ? cust : cust.id
+      // user_id is stamped on the CUSTOMER at creation. A subscription without
+      // one cannot be matched to an account at all, which is its own finding.
+      const metaUserId = typeof cust === 'string' ? null : (cust?.metadata?.user_id ?? null)
+      stripeSubs.push({
+        id: sub.id,
+        status: sub.status,
+        userId: metaUserId,
+        customerId,
+        currentPeriodEnd: sub.current_period_end
+          ? new Date(sub.current_period_end * 1000).toISOString() : null,
+        cancelAtPeriodEnd: !!sub.cancel_at_period_end,
+        unitAmount: sub.items?.data?.[0]?.price?.unit_amount ?? null,
+      })
+    }
+    if (!page.has_more) break
+    startingAfter = page.data[page.data.length - 1]?.id
+  }
+
+  const { data: localRows, error: localErr } = await db
+    .from('subscriptions')
+    .select('user_id, stripe_subscription_id, stripe_customer_id, status, current_period_end')
+  if (localErr) return respond({ error: 'Could not read subscriptions: ' + localErr.message }, 500)
+
+  const local = (localRows ?? []) as {
+    user_id: string; stripe_subscription_id: string | null
+    stripe_customer_id: string | null; status: string; current_period_end: string | null
+  }[]
+  const localByUser  = new Map(local.map(r => [r.user_id, r]))
+  const stripeByUser = new Map(stripeSubs.filter(s => s.userId).map(s => [s.userId as string, s]))
+  const now = Date.now()
+
+  // BILLED BUT INVISIBLE - the population this whole exercise exists to count.
+  const billedNoRow = stripeSubs.filter(s => !s.userId || !localByUser.has(s.userId))
+
+  // A local row claiming to grant access with nothing behind it in Stripe.
+  const rowNoStripe = local.filter(r =>
+    ['active', 'cancelling'].includes(r.status) && !stripeByUser.has(r.user_id))
+
+  // Present in both, disagreeing about status or period end.
+  const disagree = local.flatMap(r => {
+    const s = stripeByUser.get(r.user_id)
+    if (!s) return []
+    const statusDiffers = !(
+      (r.status === 'active' && ['active', 'trialing'].includes(s.status)) ||
+      (r.status === 'cancelling' && s.cancelAtPeriodEnd)
+    )
+    const endDiffers = (r.current_period_end ?? null) !== (s.currentPeriodEnd ?? null)
+    if (!statusDiffers && !endDiffers) return []
+    return [{
+      userId: r.user_id, ourStatus: r.status, stripeStatus: s.status,
+      stripeCancelAtPeriodEnd: s.cancelAtPeriodEnd,
+      ourPeriodEnd: r.current_period_end, stripePeriodEnd: s.currentPeriodEnd,
+      statusDiffers, endDiffers,
+    }]
+  })
+
+  // Granting access on a row whose period has already ended.
+  // hasActiveSubscription applies the date check only to 'cancelling', so these
+  // are live right now.
+  const lapsedButGranting = local.filter(r =>
+    r.status === 'active' && r.current_period_end != null &&
+    new Date(r.current_period_end).getTime() < now)
+
+  // Cannot be reconciled at all: no Stripe customer recorded, so there is
+  // nothing to ask about.
+  const unverifiable = local.filter(r =>
+    ['active', 'cancelling'].includes(r.status) && !r.stripe_customer_id)
+
+  return respond({
+    ok: true,
+    readOnly: true,
+    price: priceReport,
+    counts: {
+      stripeBillable: stripeSubs.length,
+      localRows: local.length,
+      billedButNoRow: billedNoRow.length,
+      rowButNotBillingInStripe: rowNoStripe.length,
+      disagreeing: disagree.length,
+      lapsedButStillGranting: lapsedButGranting.length,
+      unverifiableNoCustomerId: unverifiable.length,
+    },
+    billedButNoRow: billedNoRow.map(s => ({
+      subscriptionId: s.id, customerId: s.customerId, userId: s.userId,
+      status: s.status, periodEnd: s.currentPeriodEnd, unitAmount: s.unitAmount,
+    })),
+    rowButNotBillingInStripe: rowNoStripe.map(r => ({
+      userId: r.user_id, ourStatus: r.status, periodEnd: r.current_period_end,
+      stripeSubscriptionId: r.stripe_subscription_id,
+    })),
+    disagreeing: disagree,
+    lapsedButStillGranting: lapsedButGranting.map(r => ({
+      userId: r.user_id, periodEnd: r.current_period_end,
+    })),
+    unverifiableNoCustomerId: unverifiable.map(r => ({
+      userId: r.user_id, ourStatus: r.status,
+    })),
+  })
 }
