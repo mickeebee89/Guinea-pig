@@ -68,6 +68,32 @@ export default function RevenuePage() {
     load()
   }, [])
 
+  // -- Reconcile against Stripe -----------------------------------------------
+  // Read-only. Calls the `reconcile_audit` action, which compares Stripe's
+  // billable subscriptions against our `subscriptions` table.
+  //
+  // It lives behind a button rather than running on page load because it pages
+  // through every subscription in the Stripe account, and because it answers a
+  // question you ask deliberately rather than one worth asking on every visit.
+  //
+  // Why it exists at all: on the swallowed-confirm path Stripe bills monthly
+  // while we hold no row, so those people are invisible to any query starting
+  // from our own tables. The count can only come from Stripe.
+  const [rec, setRec] = useState<Record<string, unknown> | null>(null)
+  const [recBusy, setRecBusy] = useState(false)
+  const [recErr, setRecErr] = useState<string | null>(null)
+
+  async function runReconcile() {
+    setRecBusy(true); setRecErr(null); setRec(null)
+    const { data, error } = await supabase.functions.invoke('stripe-payment', {
+      body: { action: 'reconcile_audit' },
+    })
+    setRecBusy(false)
+    if (error) { setRecErr(error.message); return }
+    if (data?.error) { setRecErr(String(data.error)); return }
+    setRec(data as Record<string, unknown>)
+  }
+
   function exportCSV() {
     const rows = [
       ['Type', 'Email', 'Amount', 'Date'],
@@ -93,6 +119,64 @@ export default function RevenuePage() {
 
       {loading ? <div className="text-[#3D2E2E]/40 text-sm">Loading…</div> : (
         <div className="space-y-6">
+          {/* Stripe reconciliation - read-only, on demand */}
+          <div className="bg-white rounded-xl border border-black/5 shadow-sm p-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-widest text-[#3D2E2E]/40">
+                  Reconcile against Stripe
+                </div>
+                <p className="text-sm text-[#3D2E2E]/60 mt-1 max-w-2xl">
+                  Compares Stripe&apos;s billable subscriptions against our records. Read-only -
+                  it writes nothing. Anyone billed with no row on our side is invisible to every
+                  other query on this page, so this is the only way to count them.
+                </p>
+              </div>
+              <button onClick={runReconcile} disabled={recBusy}
+                className="px-4 py-2 text-sm font-medium text-white rounded-lg hover:opacity-80 transition-opacity disabled:opacity-50 shrink-0"
+                style={{ backgroundColor: '#8C4A58' }}>
+                {recBusy ? 'Checking...' : 'Run check'}
+              </button>
+            </div>
+
+            {recErr && <div className="mt-3 text-sm text-red-700">{recErr}</div>}
+
+            {rec != null && (
+              <div className="mt-4 space-y-4">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  {Object.entries((rec.counts ?? {}) as Record<string, number>).map(([k, v]) => {
+                    const bad = v > 0 && k !== 'stripeBillable' && k !== 'localRows'
+                    return (
+                      <div key={k} className={`rounded-lg p-3 ${bad ? 'bg-red-50' : 'bg-black/[0.03]'}`}>
+                        <div className="text-[11px] text-[#3D2E2E]/50 leading-tight">{k}</div>
+                        <div className={`text-xl font-bold ${bad ? 'text-red-700' : 'text-[#3D2E2E]'}`}>{v}</div>
+                      </div>
+                    )
+                  })}
+                </div>
+
+                <div className="rounded-lg bg-black/[0.03] p-3">
+                  <div className="text-[11px] text-[#3D2E2E]/50 mb-1">
+                    Live price (what STRIPE_MONTHLY_PRICE_ID actually resolves to)
+                  </div>
+                  <pre className="text-xs whitespace-pre-wrap break-all">
+                    {JSON.stringify(rec.price, null, 2)}
+                  </pre>
+                </div>
+
+                {/* Full detail, so nothing is summarised away */}
+                <details>
+                  <summary className="text-sm font-medium text-[#3D2E2E] cursor-pointer">
+                    Full report
+                  </summary>
+                  <pre className="mt-2 text-xs whitespace-pre-wrap break-all bg-black/[0.03] rounded-lg p-3">
+                    {JSON.stringify(rec, null, 2)}
+                  </pre>
+                </details>
+              </div>
+            )}
+          </div>
+
           <TotalsRow label="Provider Verifications" totals={verifTotals} />
           <TotalsRow label="Model Subscriptions"   totals={subTotals} />
 
