@@ -1,6 +1,8 @@
 # The 90-day selfie retention promise has never been kept, and could not have been
 
-_Found 24 Aug 2026, during the audit. Not yet fixed._
+_Found 24 Aug 2026, during the audit. **`0020` applied 24 Aug 13:04** — the
+constraint is gone and the stranded row is repaired. The end-to-end proof
+(Block C) has not yet been run._
 
 **The privacy policy publishes a 90-day retention period for identity-verification
 selfies. The job that enforces it cannot complete. Not in an edge case — its
@@ -96,8 +98,8 @@ Rejected alternatives:
 
 ### Also required
 
-1. **Repair the stranded row** — set `selfie_url` null once the constraint
-   allows it, since its object is already gone.
+1. ~~**Repair the stranded row**~~ — done by `0020`. `346e01a0…` now has
+   `selfie_url` null; its object was already gone.
 2. **Make the job observable when idle.** It returns early and writes nothing
    when there is nothing to purge, which is exactly why 20 green rows meant
    nothing. An audit row on every run, including zero-purge runs, turns "no rows"
@@ -109,6 +111,45 @@ Rejected alternatives:
    `supabase/purge-selfies-cron.sql:73` already said this: *"Only publish the
    90-day sentence in the privacy policy once a real run has completed and the
    audit entries are appearing."* That instruction was written, and not followed.
+
+---
+
+## Decision: what we keep after a purge, and what we do not
+
+**Settled 24 Aug 2026.** The end state below is intended, not a side effect.
+
+After the 90 days elapse and the purge runs, an account is **permanently
+verified and the photograph is gone**. What remains:
+
+* `verification_requests` — status, `reviewed_at`, the reviewer's note
+* `admin_audit_log` — the approval: who decided, when, the outcome
+* `admin_audit_log` — the deletion, recording that retention was honoured
+
+So the *decision* is retained and the *input to it* is not. That is the right way
+round. Keeping a face on file indefinitely so it could hypothetically be
+re-examined is precisely what a retention policy exists to prevent, and
+re-examining a photograph months later is not a meaningful control anyway. For a
+check described as modestly as this one — a person compared a selfie against a
+profile photo — the decision record IS the artefact.
+
+**What this deliberately gives up:** the ability to look at the original image
+during a later dispute. Accepted. The audit trail answers who verified whom and
+when, which is the question a dispute actually turns on.
+
+### The real gap this exposed is revocation, not retention
+
+Checked 24 Aug: `is_verified` is set to `true` in two places in the admin
+console and **set to `false` nowhere in the entire product**. Verification is
+one-way. Not reversible for a mistaken approval, for fraud, for an account that
+later proves to be someone else, or for a dispute. The only route today is an
+`UPDATE` by hand.
+
+That — not the retention behaviour — is what needs building, and it happens to
+dissolve the resubmit problem: an admin revoke that clears `is_verified` and
+deletes the request row leaves the account in a state `/verify` already handles
+(provider, no request, submit offered). No new web surface required.
+
+Scoped as its own item; see the audit plan.
 
 ---
 
