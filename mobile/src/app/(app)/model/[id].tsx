@@ -22,6 +22,8 @@ import { supabase } from '@/lib/supabase'
 import { signModelPhotos } from '@/lib/photoUrls'
 import { isIdentityVerified } from '@/lib/verification'
 import ScreenDecor from '@/components/ScreenDecor'
+import SafetySheet from '@/components/SafetySheet'
+import { getBlockedIds } from '@/lib/blocks'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -165,6 +167,8 @@ export default function ModelProfileViewScreen() {
   const { id: modelId } = useLocalSearchParams<{ id: string }>()
   const { session } = useAuth()
   const viewerUserId = session?.user?.id
+  const [safetyOpen, setSafetyOpen] = useState(false)
+  const [isBlocked,  setIsBlocked]  = useState(false)   // mutual block, either direction
 
   const [profile,          setProfile]          = useState<ModelProfile | null>(null)
   const [attrs,            setAttrs]            = useState<ModelAttrs | null>(null)
@@ -246,6 +250,12 @@ export default function ModelProfileViewScreen() {
       const signedMap = await signModelPhotos(photoRows.map(r => r.photo_url))
       setPhotos(photoRows.map(r => ({ ...r, photo_url: signedMap.get(r.photo_url) ?? r.photo_url })))
       try { setIsVerified(await isIdentityVerified(modelId)) } catch {}
+      // Mutual block, so the safety sheet can offer the right action rather
+      // than a Block button that would fail on a unique violation.
+      if (viewerUserId) {
+        const blocked = await getBlockedIds(viewerUserId).catch(() => new Set<string>())
+        setIsBlocked(blocked.has(modelId))
+      }
 
       // Fetch reviews about this model
       try {
@@ -438,7 +448,23 @@ export default function ModelProfileViewScreen() {
           <Ionicons name="chevron-back" size={20} color={Colors.roseDark} />
         </TouchableOpacity>
         <Text style={styles.topBarTitle}>Model Profile</Text>
-        <View style={{ width: 36 }} />
+        {/* Report/block, reachable without a booking and without a chat.
+            Hidden on your own profile, where it would mean nothing. */}
+        {viewerUserId && viewerUserId !== modelId ? (
+          <TouchableOpacity
+            style={styles.backBtn}
+            onPress={async () => {
+              await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+              setSafetyOpen(true)
+            }}
+            activeOpacity={0.75}
+            accessibilityLabel="Safety options"
+          >
+            <Ionicons name="ellipsis-horizontal" size={20} color={Colors.roseDark} />
+          </TouchableOpacity>
+        ) : (
+          <View style={{ width: 36 }} />
+        )}
       </View>
 
       <ScrollView
@@ -668,6 +694,20 @@ export default function ModelProfileViewScreen() {
           )}
         </View>
       </Modal>
+
+      {/* This route's param IS an auth user id — unlike provider/[id], which
+          carries a providers.id. The tagged subject is what keeps the two
+          straight at the call site rather than three lines deep. */}
+      {viewerUserId && viewerUserId !== modelId && (
+        <SafetySheet
+          visible={safetyOpen}
+          onClose={() => setSafetyOpen(false)}
+          subject={{ userId: modelId }}
+          name={profile.first_name ?? 'this model'}
+          reporterId={viewerUserId}
+          alreadyBlocked={isBlocked}
+        />
+      )}
     </View>
   )
 }

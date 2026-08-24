@@ -5,15 +5,21 @@ import { getStylistProfile } from '@/lib/queries/stylist'
 import { Avatar, EmptyState } from '@/components/ui'
 import { MonthCalendar, type CalendarMark } from '@/components/MonthCalendar'
 import { PortfolioGallery } from '@/components/PortfolioGallery'
+import { SafetyMenu } from '@/components/SafetyMenu'
 
 export const metadata = { title: 'Stylist' }
 
 /**
  * A stylist's profile, for signed-in members.
  *
- * Read-only. Applying for a session is slice 3; favouriting is not slice 2.
+ * Read-only apart from the safety controls. Applying for a session is slice 3;
+ * favouriting is not slice 2.
+ *
  * The route takes a providers.id — the same id the conversation list carries as
- * otherPartyId for a stylist, and NOT an auth user id.
+ * otherPartyId for a stylist, and NOT an auth user id. That is why SafetyMenu is
+ * handed `{ providerId: id }`: reports key on an auth user id, and passing this
+ * one straight through would fail on a NOT NULL email-hash violation rather than
+ * on anything legible. lib/report.ts does the resolving, in one place.
  */
 export default async function StylistPage({
   params,
@@ -70,6 +76,15 @@ export default async function StylistPage({
               </p>
             )}
           </div>
+          {/* Reporting must not depend on having a booking with this person, and
+              must not depend on their account still being live. */}
+          {!p.isOwner && (
+            <SafetyMenu
+              subject={{ providerId: id }}
+              name={p.name}
+              alreadyBlocked={p.isBlocked}
+            />
+          )}
         </div>
       </header>
 

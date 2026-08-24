@@ -12,9 +12,18 @@ interface Party {
   email: string
 }
 
+interface SubjectHistory {
+  reported_email_hash: string
+  child_safety_reports: number
+  last_child_safety_at: string | null
+  total_reports: number
+}
+
 interface Report {
   id: string
   reason: string
+  /** Machine-readable category from migration 0021. Null on pre-0021 rows. */
+  reason_code: string | null
   details: string | null
   status: string
   created_at: string
@@ -34,6 +43,33 @@ interface Report {
 // What each action actually does. Warn/suspend/ban act on the USER and leave the
 // report open; dismiss/resolve only close the REPORT and don't touch the user —
 // so handling someone properly is a two-step job, which the buttons alone don't say.
+/**
+ * ── THE PRIORITY RULE ──────────────────────────────────────────────────────
+ *
+ * A report is flagged, and sorts to the top, if EITHER:
+ *   * it is itself a child-safety report, or
+ *   * the person it is about has EVER been the subject of one.
+ *
+ * The second half is the one that matters and the one that is easy to leave
+ * out. A flag that lives on the individual report disappears the moment that
+ * report is resolved — so a person reported for child safety in March, dealt
+ * with, and reported again in June for something else would arrive in the queue
+ * looking new. The history is the signal, not the row.
+ *
+ * It keys on `reported_email_hash` rather than the user id because that is the
+ * identity that survives (migration 0004): deleting the account, or deleting
+ * and re-registering, does not reset the flag.
+ *
+ * This is also the mechanism behind a promise made to reporters in the app —
+ * "child-safety reports go to the top of our queue and we look at these first".
+ * If this sort is removed, that sentence has to go with it.
+ */
+function isFlagged(r: Report, history: Map<string, SubjectHistory>): boolean {
+  if (r.reason_code === 'child_safety') return true
+  const h = r.reported_email_hash ? history.get(r.reported_email_hash) : undefined
+  return !!h && h.child_safety_reports > 0
+}
+
 const ACTION_HELP: Record<string, string> = {
   warn:    'Sends this user an official warning in the app. It does NOT close the report — resolve it afterwards.',
   suspend: 'Blocks this user from applying, messaging and reviewing for the chosen number of days. It does NOT close the report — resolve it afterwards.',
@@ -81,6 +117,7 @@ interface Message {
 
 export default function ReportsPage() {
   const [reports, setReports] = useState<Report[]>([])
+  const [history, setHistory] = useState<Map<string, SubjectHistory>>(new Map())
   const [statusFilter, setStatusFilter] = useState('open')
   const [loading, setLoading] = useState(true)
   const [chat, setChat] = useState<{ report: Report; messages: Message[] } | null>(null)
@@ -92,14 +129,46 @@ export default function ReportsPage() {
     setLoading(true)
     let q = supabase
       .from('reports')
-      .select(`id, reason, details, status, created_at, session_id,
+      .select(`id, reason, reason_code, details, status, created_at, session_id,
         reporter_name, reporter_email_hash, reported_name, reported_email_hash,
         reporter:users!reporter_id(id, first_name, last_name, last_initial, email),
         reported:users!reported_id(id, first_name, last_name, last_initial, email)`)
       .order('created_at', { ascending: false })
     if (statusFilter !== 'all') q = q.eq('status', statusFilter)
-    const { data } = await q
-    setReports((data as unknown as Report[]) ?? [])
+
+    // The history spans EVERY status, so it is fetched separately rather than
+    // derived from the filtered list. Deriving it from `data` would mean the
+    // "open" tab could not see a resolved child-safety report — which is the
+    // one case this exists for.
+    const [{ data }, { data: hist, error: histErr }] = await Promise.all([
+      q,
+      supabase.rpc('report_subject_history'),
+    ])
+
+    if (histErr) {
+      // Loud rather than silently unflagged. An unflagged queue looks like a
+      // calm queue, which is the worst way for this to fail.
+      console.error('[reports] report_subject_history failed', histErr)
+      alert(
+        'Could not load report history, so child-safety flags are NOT shown and the queue ' +
+        'is in date order only. Reload before working through it.',
+      )
+    }
+    const map = new Map<string, SubjectHistory>()
+    for (const h of ((hist ?? []) as SubjectHistory[])) map.set(h.reported_email_hash, h)
+    setHistory(map)
+
+    const rows = (data as unknown as Report[]) ?? []
+    // Flagged first, then newest first within each group. Sorting here rather
+    // than in the query because the flag depends on the history, which the
+    // database cannot express as one ordering without a join this page does not
+    // need.
+    rows.sort((a, b) => {
+      const fa = isFlagged(a, map), fb = isFlagged(b, map)
+      if (fa !== fb) return fa ? -1 : 1
+      return b.created_at.localeCompare(a.created_at)
+    })
+    setReports(rows)
     setLoading(false)
   }
 
@@ -201,7 +270,12 @@ export default function ReportsPage() {
             <div key={r.id} className="bg-white rounded-xl border border-black/5 shadow-sm p-5">
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-2">
+                  <div className="flex items-center gap-2 mb-2 flex-wrap">
+                    {isFlagged(r, history) && (
+                      <span className="text-xs px-2 py-0.5 rounded-full font-bold bg-red-600 text-white">
+                        CHILD SAFETY
+                      </span>
+                    )}
                     <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusColor(r.status)}`}>{r.status}</span>
                     <span className="text-xs text-[#3D2E2E]/40">{new Date(r.created_at).toLocaleDateString('en-GB')}</span>
                   </div>
@@ -212,8 +286,31 @@ export default function ReportsPage() {
                     <span className="font-medium text-[#3D2E2E]">{fullName(r.reported, r.reported_name)}</span>
                     <span className="text-[#3D2E2E]/40"> ({identity(r.reported, r.reported_email_hash)})</span>
                   </div>
-                  <div className="text-sm font-semibold text-[#8C4A58] mb-1">{r.reason}</div>
+                  <div className="text-sm font-semibold text-[#8C4A58] mb-1">
+                    {r.reason}
+                    {!r.reason_code && (
+                      <span className="ml-2 text-xs font-normal text-[#3D2E2E]/40">
+                        (filed before categories existed)
+                      </span>
+                    )}
+                  </div>
                   {r.details && <div className="text-sm text-[#3D2E2E]/60">{r.details}</div>}
+                  {/* When the flag comes from HISTORY rather than from this
+                      report, say so — otherwise an admin reads "CHILD SAFETY"
+                      against a spam report and assumes the badge is broken. */}
+                  {isFlagged(r, history) && r.reason_code !== 'child_safety' && (
+                    <div className="mt-1 text-xs font-medium text-red-700">
+                      This person has been the subject of{' '}
+                      {history.get(r.reported_email_hash ?? '')?.child_safety_reports} child-safety
+                      report(s) before, including resolved ones.
+                    </div>
+                  )}
+                  {(history.get(r.reported_email_hash ?? '')?.total_reports ?? 0) > 1 && (
+                    <div className="mt-1 text-xs text-[#3D2E2E]/50">
+                      {history.get(r.reported_email_hash ?? '')?.total_reports} reports about this
+                      person in total, across every status.
+                    </div>
+                  )}
                 </div>
                 <div className="flex gap-2 flex-wrap shrink-0">
                   {r.session_id && (

@@ -73,6 +73,8 @@ export const config = {
     '/messages/:path*',
     '/notifications/:path*',
     '/stylist/:path*',
+    // Takes an auth user id, not a providers.id — see the model profile route.
+    '/model/:path*',
     '/availability/:path*',
     '/portfolio/:path*',
     '/shop/:path*',

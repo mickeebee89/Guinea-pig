@@ -22,6 +22,7 @@ import { useAuth } from '@/context/auth'
 import { supabase } from '@/lib/supabase'
 import { mustWrite, tryWrite } from '@/lib/db'
 import { getBlockedIds } from '@/lib/blocks'
+import SafetySheet from '@/components/SafetySheet'
 import { signModelPhotos } from '@/lib/photoUrls'
 import LoadErrorState from '@/components/LoadErrorState'
 import ApplicationPhotos from '@/components/ApplicationPhotos'
@@ -122,9 +123,6 @@ export default function ChatScreen() {
   const [menuOpen,        setMenuOpen]        = useState(false)
   const [alreadyReviewed, setAlreadyReviewed] = useState(false)
   const [markingComplete, setMarkingComplete] = useState(false)
-  const [reportOpen,       setReportOpen]       = useState(false)
-  const [reportReason,     setReportReason]     = useState('')
-  const [reportSubmitting, setReportSubmitting]  = useState(false)
 
   // ── Load ───────────────────────────────────────────────────────────────────
 
@@ -301,133 +299,17 @@ export default function ChatScreen() {
   }
 
   // ── Block / Report ─────────────────────────────────────────────────────────
-
-  const handleBlock = async () => {
-    setMenuOpen(false)
-    const name = otherParty?.name ?? 'this user'
-    // The cancellation is named here because it is PERMANENT and this dialog is
-    // the only moment anyone can decline it. `cancelled` is terminal in
-    // enforce_session_status_transition, so unblocking cannot bring a booking
-    // back — and the old wording ("you can unblock from settings") implied the
-    // whole action was reversible when the most consequential half is not.
-    //
-    // Who presses this button is the reason it matters: someone uneasy about a
-    // stranger, expecting a reversible mute, who would otherwise lose an
-    // appointment they cannot get back and only find out afterwards.
-    Alert.alert(
-      `Block ${name}?`,
-      "They won't be able to message you, and any upcoming bookings between you will be " +
-      "cancelled. Unblocking later won't bring those bookings back.",
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Block',
-          style: 'destructive',
-          onPress: async () => {
-            await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning)
-            // Reported back in the confirmation. "Blocked" alone left someone
-            // to discover a cancelled appointment later, from a list.
-            let cancelledCount = 0
-            if (otherParty?.userId && userId) {
-              const { error } = await supabase.from('blocks')
-                .insert({ blocker_id: userId, blocked_id: otherParty.userId })
-              // 23505 = unique_violation → already blocked; treat as success.
-              if (error && (error as any).code !== '23505') {
-                Alert.alert('Couldn’t block', error.message ?? 'Please try again.')
-                return
-              }
-
-              // Best-effort: cancel any live bookings between the pair and notify the
-              // other party. If this fails, the block still stands (log, don't fail).
-              try {
-                const me = userId
-                const them = otherParty.userId
-                // Resolve provider ownership for both sides (blocker/blocked).
-                const { data: provRows } = await supabase.from('providers')
-                  .select('id, user_id').in('user_id', [me, them])
-                const myProviderId    = (provRows ?? []).find((p: any) => p.user_id === me)?.id
-                const theirProviderId = (provRows ?? []).find((p: any) => p.user_id === them)?.id
-
-                // Sessions between the pair, either direction (I'm provider / I'm model).
-                const orParts: string[] = []
-                if (myProviderId)    orParts.push(`and(model_user_id.eq.${them},provider_id.eq.${myProviderId})`)
-                if (theirProviderId) orParts.push(`and(model_user_id.eq.${me},provider_id.eq.${theirProviderId})`)
-
-                if (orParts.length > 0) {
-                  const { data: pairSessions } = await supabase.from('sessions')
-                    .select('id')
-                    .in('status', ['pending', 'accepted'])
-                    .or(orParts.join(','))
-                  const ids = (pairSessions ?? []).map((r: any) => r.id as string)
-                  if (ids.length > 0) {
-                    // If this is refused the bookings stay live between two people
-                    // who can no longer message each other — the one outcome the
-                    // block is meant to prevent.
-                    await mustWrite(
-                      supabase.from('sessions').update({ status: 'cancelled' }).in('id', ids),
-                      'cancel sessions on block')
-                    cancelledCount = ids.length
-                    // Notify the OTHER party per cancelled session — never mention blocking.
-                    await supabase.from('notifications').insert(
-                      ids.map(sid => ({
-                        user_id:    them,
-                        type:       'session_cancelled',
-                        title:      'Booking cancelled',
-                        body:       'Your upcoming treatment has been cancelled.',
-                        session_id: sid,
-                      }))
-                    )
-                  }
-                }
-              } catch (e) {
-                console.warn('block: cancel/notify bookings failed (non-blocking):', e)
-              }
-            }
-            Alert.alert(
-              'Blocked',
-              cancelledCount > 0
-                ? `${name} has been blocked, and ${cancelledCount} upcoming ` +
-                  `booking${cancelledCount === 1 ? ' was' : 's were'} cancelled.`
-                : `${name} has been blocked.`,
-            )
-          },
-        },
-      ]
-    )
-  }
-
-  const handleReport = async () => {
-    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
-    setMenuOpen(false)
-    setReportReason('')
-    setReportOpen(true)
-  }
-
-  const submitReport = async () => {
-    const reason = reportReason.trim()
-    if (!reason || reportSubmitting) return
-    if (!otherParty?.userId || !userId) { setReportOpen(false); return }
-    setReportSubmitting(true)
-    // `reason` is a required column — the old fire-and-forget insert omitted it and
-    // silently failed the NOT NULL constraint, so nothing reached the admin. Surface
-    // errors now instead of swallowing them. (status defaults to 'open'.)
-    const { error } = await supabase.from('reports').insert({
-      reporter_id: userId,
-      reported_id: otherParty.userId,
-      session_id:  sessionId,
-      reason,
-    })
-    setReportSubmitting(false)
-    if (error) {
-      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)
-      Alert.alert('Couldn’t send report', error.message ?? 'Please try again.')
-      return
-    }
-    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
-    setReportOpen(false)
-    setReportReason('')
-    Alert.alert('Reported', 'Thank you. Our team will review this.')
-  }
+  //
+  // Both moved to <SafetySheet>, which calls the shared helpers in lib/report.ts.
+  // They used to live here: the block cascade inline, the report a free-text box
+  // whose NOT NULL `reason` column meant a distressed person had to find the
+  // right words before anything reached moderation.
+  //
+  // They are shared now because the two profile screens offer the same two
+  // actions, and a copy per surface is exactly how a block from a profile
+  // quietly stops cancelling the pair's live bookings while the one in chat
+  // still does. For a safety control that divergence is the failure that
+  // matters, so there is one implementation.
 
   const handleLeaveReview = async () => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
@@ -841,104 +723,19 @@ export default function ChatScreen() {
         <View style={{ height: Math.max(insets.bottom, 8) }} />
       )}
 
-      {/* ── Block / Report modal ── */}
-      <Modal
-        visible={menuOpen}
-        animationType="slide"
-        transparent
-        onRequestClose={() => setMenuOpen(false)}
-      >
-        <View style={styles.menuOuter}>
-          <TouchableOpacity
-            style={styles.menuBackdrop}
-            onPress={() => setMenuOpen(false)}
-            activeOpacity={1}
-          />
-          <View style={[styles.menuSheet, { paddingBottom: Math.max(insets.bottom, 16) }]}>
-            <View style={styles.menuHandle} />
-            <Text style={styles.menuTitle}>{otherParty?.name ?? 'User'}</Text>
-
-            <TouchableOpacity style={styles.menuItem} onPress={handleBlock} activeOpacity={0.8}>
-              <View style={[styles.menuItemIcon, { backgroundColor: '#FEF2F2' }]}>
-                <Ionicons name="ban-outline" size={20} color="#DC2626" />
-              </View>
-              <View style={styles.menuItemText}>
-                <Text style={styles.menuItemLabel}>Block {otherParty?.name}</Text>
-                <Text style={styles.menuItemSub}>They won't be able to message you</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={16} color={Colors.muted} />
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.menuItem} onPress={handleReport} activeOpacity={0.8}>
-              <View style={[styles.menuItemIcon, { backgroundColor: '#FFF7ED' }]}>
-                <Ionicons name="flag-outline" size={20} color="#EA580C" />
-              </View>
-              <View style={styles.menuItemText}>
-                <Text style={styles.menuItemLabel}>Report {otherParty?.name}</Text>
-                <Text style={styles.menuItemSub}>Report a safety or conduct concern</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={16} color={Colors.muted} />
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.menuCancel}
-              onPress={async () => {
-                await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
-                setMenuOpen(false)
-              }}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.menuCancelText}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-      {/* ── Report modal (free-text reason) ── */}
-      <Modal
-        visible={reportOpen}
-        animationType="slide"
-        transparent
-        onRequestClose={() => setReportOpen(false)}
-      >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          style={styles.menuOuter}
-        >
-          <TouchableOpacity
-            style={styles.menuBackdrop}
-            onPress={() => setReportOpen(false)}
-            activeOpacity={1}
-          />
-          <View style={[styles.menuSheet, { paddingBottom: Math.max(insets.bottom, 16) }]}>
-            <View style={styles.menuHandle} />
-            <Text style={styles.menuTitle}>Report {otherParty?.name ?? 'user'}</Text>
-            <Text style={styles.reportHelp}>
-              Tell us why you're reporting. Our team will review this conversation.
-            </Text>
-            <TextInput
-              style={styles.reportInput}
-              value={reportReason}
-              onChangeText={setReportReason}
-              placeholder="Why are you reporting?"
-              placeholderTextColor={Colors.muted}
-              multiline
-              maxLength={500}
-            />
-            <TouchableOpacity
-              style={[styles.reportSubmit, (!reportReason.trim() || reportSubmitting) && styles.reportSubmitDisabled]}
-              disabled={!reportReason.trim() || reportSubmitting}
-              onPress={submitReport}
-              activeOpacity={0.85}
-            >
-              <Text style={styles.reportSubmitText}>{reportSubmitting ? 'Sending…' : 'Send report'}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.menuCancel} onPress={() => setReportOpen(false)} activeOpacity={0.8}>
-              <Text style={styles.menuCancelText}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
+      {/* Reporting must not depend on the session status, on there being a
+          booking at all, or on the other account still being live. */}
+      {otherParty?.userId && userId && (
+        <SafetySheet
+          visible={menuOpen}
+          onClose={() => setMenuOpen(false)}
+          subject={{ userId: otherParty.userId }}
+          name={otherParty.name ?? 'this user'}
+          reporterId={userId}
+          sessionId={sessionId}
+          alreadyBlocked={isBlocked}
+        />
+      )}
 
       <PhotoViewerModal uri={enlargedPhoto} onClose={() => setEnlargedPhoto(null)} />
     </KeyboardAvoidingView>

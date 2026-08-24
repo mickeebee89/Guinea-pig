@@ -1,11 +1,11 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { getSupabaseBrowser } from '@/lib/supabase-browser'
 import { markThreadRead, type Thread, type ThreadMessage } from '@/lib/queries/thread'
 import { Avatar, StatusPill } from '@/components/ui'
+import { SafetyMenu } from '@/components/SafetyMenu'
 
 /**
  * The realtime half of a conversation.
@@ -20,17 +20,11 @@ import { Avatar, StatusPill } from '@/components/ui'
  */
 export function ChatThread({ thread, userId }: { thread: Thread; userId: string }) {
   const supabase = getSupabaseBrowser()
-  const router = useRouter()
 
   const [messages, setMessages] = useState<ThreadMessage[]>(thread.messages)
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
   const [sendError, setSendError] = useState<string | null>(null)
-  const [busy, setBusy] = useState<null | 'block' | 'report'>(null)
-  const [confirmBlock, setConfirmBlock] = useState(false)
-  const [reportOpen, setReportOpen] = useState(false)
-  const [reportReason, setReportReason] = useState('')
-  const [notice, setNotice] = useState<string | null>(null)
 
   const bottomRef = useRef<HTMLDivElement>(null)
   const sessionId = thread.session.id
@@ -112,80 +106,20 @@ export function ChatThread({ thread, userId }: { thread: Thread; userId: string 
   }, [supabase, sessionId, userId, text, sending])
 
   /**
-   * Block, with the cascade. Ported from chat/[sessionId].tsx:316-371.
+   * Block and report both moved to <SafetyMenu>, which calls the server actions
+   * in app/(app)/safety-actions.ts.
    *
-   * The cascade is the point: cancelling live bookings between the pair. Leaving
-   * them booked in while they can no longer message each other is the one
-   * outcome blocking exists to prevent — they would still be expected to meet.
+   * They used to live here as two inline callbacks — the block cascade
+   * hand-ported from mobile, the report a free-text box. Both are now shared
+   * with the two profile screens. A copy per surface is precisely how the chat
+   * version and the profile version drift into doing different things, and for
+   * a block that means one of them silently stops cancelling the pair's live
+   * bookings.
+   *
+   * It also moved them off the browser client and onto the server, so this file
+   * keeps being the only browser-client user on the site.
    */
-  const block = useCallback(async () => {
-    if (!otherUserId || busy) return
-    setBusy('block')
-    try {
-      const { error } = await supabase.from('blocks')
-        .insert({ blocker_id: userId, blocked_id: otherUserId })
-      // 23505 = already blocked. That is the desired end state, not a failure.
-      if (error && error.code !== '23505') throw error
 
-      const { data: provRows } = await supabase.from('providers')
-        .select('id, user_id').in('user_id', [userId, otherUserId])
-      type ProvRow = { id: string; user_id: string }
-      const rows = (provRows ?? []) as ProvRow[]
-      const mine   = rows.find(p => p.user_id === userId)?.id
-      const theirs = rows.find(p => p.user_id === otherUserId)?.id
-
-      const orParts: string[] = []
-      if (mine)   orParts.push(`and(model_user_id.eq.${otherUserId},provider_id.eq.${mine})`)
-      if (theirs) orParts.push(`and(model_user_id.eq.${userId},provider_id.eq.${theirs})`)
-
-      if (orParts.length > 0) {
-        const { data: pair } = await supabase.from('sessions')
-          .select('id').in('status', ['pending', 'accepted']).or(orParts.join(','))
-        const ids = ((pair ?? []) as { id: string }[]).map(r => r.id)
-        if (ids.length > 0) {
-          const { error: cancelErr } = await supabase.from('sessions')
-            .update({ status: 'cancelled' }).in('id', ids)
-          if (cancelErr) throw cancelErr
-          // Never mentions blocking — the other party is told their booking is
-          // cancelled, not that they were blocked.
-          await supabase.from('notifications').insert(ids.map(sid => ({
-            user_id: otherUserId,
-            type: 'session_cancelled',
-            title: 'Booking cancelled',
-            body: 'Your upcoming treatment has been cancelled.',
-            session_id: sid,
-          })))
-        }
-      }
-      router.refresh()
-    } catch (e) {
-      console.error('[chat] block failed', e)
-      setNotice('We couldn’t complete that. Nothing has changed — please try again.')
-    } finally {
-      setBusy(null)
-    }
-  }, [supabase, router, userId, otherUserId, busy])
-
-  const report = useCallback(async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!otherUserId || !reportReason.trim() || busy) return
-    setBusy('report')
-    const { error } = await supabase.from('reports').insert({
-      reporter_id: userId,
-      reported_id: otherUserId,
-      session_id: sessionId,
-      reason: reportReason.trim(),
-    })
-    setBusy(null)
-    if (error) {
-      console.error('[chat] report failed', error)
-      setNotice('We couldn’t send that report. Please try again.')
-      return
-    }
-    setReportOpen(false)
-    setReportReason('')
-    setNotice('Thanks — we’ve received your report and someone will look at it.')
-  }, [supabase, userId, otherUserId, sessionId, reportReason, busy])
 
   return (
     <div className="flex min-h-[70dvh] flex-col">
@@ -196,18 +130,18 @@ export function ChatThread({ thread, userId }: { thread: Thread; userId: string 
       <header className="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-hairline bg-white p-4">
         <Avatar src={thread.otherParty.picUrl} name={thread.otherParty.name} size={44} />
         <div className="min-w-0 flex-1">
-          {/* Only the stylist has a profile route; a model's id here is an auth
-              user id and there is no page for it yet. */}
-          {thread.isModel ? (
-            <Link
-              href={`/stylist/${thread.session.provider_id}`}
-              className="font-bold text-warm-dark underline decoration-hairline underline-offset-2 hover:text-rose"
-            >
-              {thread.otherParty.name}
-            </Link>
-          ) : (
-            <p className="font-bold text-warm-dark">{thread.otherParty.name}</p>
-          )}
+          {/* Both sides have a profile route now. The stylist's takes a
+              providers.id and the model's takes an auth user id — they are
+              different kinds of id and always will be, which is why the safety
+              controls take a tagged subject rather than a string. */}
+          <Link
+            href={thread.isModel
+              ? `/stylist/${thread.session.provider_id}`
+              : `/model/${otherUserId}`}
+            className="font-bold text-warm-dark underline decoration-hairline underline-offset-2 hover:text-rose"
+          >
+            {thread.otherParty.name}
+          </Link>
           <p className="text-xs text-muted">
             {new Date(thread.session.date + 'T00:00:00').toLocaleDateString('en-GB', {
               day: 'numeric', month: 'short', year: 'numeric',
@@ -218,11 +152,6 @@ export function ChatThread({ thread, userId }: { thread: Thread; userId: string 
         <StatusPill status={thread.session.status} />
       </header>
 
-      {notice && (
-        <p role="status" className="mb-3 rounded-md border border-hairline bg-input-bg px-3 py-2 text-sm text-warm-dark">
-          {notice}
-        </p>
-      )}
 
       <ol className="flex-1 space-y-2 overflow-y-auto rounded-lg border border-hairline bg-white p-4">
         {messages.length === 0 && (
@@ -283,95 +212,21 @@ export function ChatThread({ thread, userId }: { thread: Thread; userId: string 
       {sendError && <p role="alert" className="mt-2 text-sm text-danger">{sendError}</p>}
 
       {/* Safety controls. Present whatever the session status — being unable to
-          message someone is not the same as being unable to report them. */}
+          message someone is not the same as being unable to report them. And
+          present whatever state the other account is in: reports outlive
+          accounts by design (migration 0004), so the UI must not be the half
+          that cannot. */}
       <div className="mt-6 flex flex-wrap gap-3 border-t border-hairline pt-4">
-        <button
-          onClick={() => setReportOpen(o => !o)}
-          className="text-sm font-bold text-muted hover:text-warm-dark"
-        >
-          Report this person
-        </button>
-        {!thread.isBlocked && !confirmBlock && (
-          <button
-            onClick={() => setConfirmBlock(true)}
-            disabled={busy !== null}
-            className="text-sm font-bold text-danger hover:underline disabled:opacity-50"
-          >
-            Block this person
-          </button>
+        {otherUserId && (
+          <SafetyMenu
+            subject={{ userId: otherUserId }}
+            name={thread.otherParty.name}
+            sessionId={sessionId}
+            alreadyBlocked={thread.isBlocked}
+            align="left"
+          />
         )}
       </div>
-
-      {/* Blocking cancels every live booking between the pair, permanently —
-          `cancelled` is terminal, so unblocking cannot bring one back. Until
-          this panel existed the web did all of that on ONE CLICK, with no
-          confirmation and nothing on screen saying bookings were involved.
-          Mobile at least asked.
-
-          Two steps rather than a window.confirm: it can be styled to say what
-          actually happens, and it cannot be suppressed by the browser. */}
-      {!thread.isBlocked && confirmBlock && (
-        <div className="mt-4 rounded-lg border border-danger/30 bg-white p-4">
-          <p className="font-bold text-warm-dark">Block this person?</p>
-          <p className="mt-1 text-sm text-muted">
-            They won’t be able to message you, and any upcoming bookings between you will be
-            cancelled. <span className="font-bold text-warm-dark">Unblocking later won’t bring
-            those bookings back.</span>
-          </p>
-          <div className="mt-3 flex flex-wrap gap-3">
-            <button
-              onClick={block}
-              disabled={busy !== null}
-              className="inline-flex min-h-11 items-center rounded-[999px] bg-danger px-5 text-sm font-bold text-white disabled:opacity-50"
-            >
-              {busy === 'block' ? 'Blocking…' : 'Block and cancel bookings'}
-            </button>
-            <button
-              onClick={() => setConfirmBlock(false)}
-              disabled={busy !== null}
-              className="inline-flex min-h-11 items-center rounded-[999px] bg-input-bg px-5 text-sm font-bold text-warm-dark disabled:opacity-50"
-            >
-              Keep them
-            </button>
-          </div>
-        </div>
-      )}
-
-      {reportOpen && (
-        <form onSubmit={report} className="mt-3 rounded-lg border border-hairline bg-white p-4">
-          <label htmlFor="reason" className="block text-sm font-bold text-warm-dark">
-            What’s happened?
-          </label>
-          <p className="mt-1 text-xs text-muted">
-            This goes to our moderation team. Blocking is separate — it stops them contacting you
-            straight away.
-          </p>
-          <textarea
-            id="reason"
-            value={reportReason}
-            onChange={e => setReportReason(e.target.value)}
-            rows={3}
-            maxLength={1000}
-            className="mt-2 w-full resize-none rounded-md border border-hairline bg-white px-3 py-2 text-sm text-warm-dark focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose"
-          />
-          <div className="mt-3 flex gap-2">
-            <button
-              type="submit"
-              disabled={!reportReason.trim() || busy !== null}
-              className="inline-flex min-h-11 items-center rounded-[999px] bg-rose px-5 text-sm font-bold text-white disabled:opacity-50"
-            >
-              {busy === 'report' ? 'Sending…' : 'Send report'}
-            </button>
-            <button
-              type="button"
-              onClick={() => setReportOpen(false)}
-              className="inline-flex min-h-11 items-center rounded-[999px] bg-input-bg px-5 text-sm font-bold text-muted"
-            >
-              Cancel
-            </button>
-          </div>
-        </form>
-      )}
     </div>
   )
 }

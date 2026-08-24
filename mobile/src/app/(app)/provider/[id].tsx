@@ -18,6 +18,7 @@ import { Colors, CategoryColors, Fonts, Radius, Shadow } from '@/constants/Color
 import { useAuth } from '@/context/auth'
 import { supabase } from '@/lib/supabase'
 import { getBlockedIds } from '@/lib/blocks'
+import SafetySheet from '@/components/SafetySheet'
 import { useProfileNav } from '@/lib/profileNav'
 import AvailabilityCalendar from '@/components/AvailabilityCalendar'
 
@@ -130,6 +131,7 @@ export default function ProviderShopScreen() {
   const [availability,  setAvailability]  = useState<AvailabilitySlot[]>([])
   const [hasOpenSlots,  setHasOpenSlots]  = useState(false)
   const [isBlocked,     setIsBlocked]     = useState(false)   // mutual block either direction
+  const [safetyOpen,    setSafetyOpen]    = useState(false)
   const [isFavourite,   setIsFavourite]   = useState(false)
   const [refreshing,    setRefreshing]    = useState(false)
   const [loading,       setLoading]       = useState(true)
@@ -367,6 +369,21 @@ export default function ProviderShopScreen() {
                 color={isFavourite ? Colors.rose : Colors.white}
               />
             </TouchableOpacity>
+            {/* Report/block, reachable without a booking and without a chat.
+                Hidden on your own shop, where it would mean nothing. */}
+            {ownShop !== '1' && (
+              <TouchableOpacity
+                style={styles.bannerIconBtn}
+                onPress={async () => {
+                  await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+                  setSafetyOpen(true)
+                }}
+                activeOpacity={0.85}
+                accessibilityLabel="Safety options"
+              >
+                <Ionicons name="ellipsis-horizontal" size={20} color={Colors.white} />
+              </TouchableOpacity>
+            )}
           </View>
         </View>
 
@@ -571,6 +588,21 @@ export default function ProviderShopScreen() {
             </TouchableOpacity>
           )}
         </View>
+      )}
+
+      {/* The subject is tagged as a providers.id because that is what this route
+          carries. lib/report.ts resolves it to the owner's user id — passing it
+          straight through would die on a NOT NULL email-hash violation rather
+          than on anything legible. */}
+      {userId && ownShop !== '1' && (
+        <SafetySheet
+          visible={safetyOpen}
+          onClose={() => setSafetyOpen(false)}
+          subject={{ providerId: id }}
+          name={provider.name ?? 'this stylist'}
+          reporterId={userId}
+          alreadyBlocked={isBlocked}
+        />
       )}
     </View>
   )
