@@ -1,8 +1,8 @@
 # The 90-day selfie retention promise has never been kept, and could not have been
 
-_Found 24 Aug 2026, during the audit. **`0020` applied 24 Aug 13:04** — the
-constraint is gone and the stranded row is repaired. The end-to-end proof
-(Block C) has not yet been run._
+_Found 24 Aug 2026, during the audit. **FIXED AND PROVEN the same day.**
+`0020` applied 13:04; the end-to-end proof completed 16:29 — the first selfie
+this system has ever deleted._
 
 **The privacy policy publishes a 90-day retention period for identity-verification
 selfies. The job that enforces it cannot complete. Not in an edge case — its
@@ -104,13 +104,46 @@ Rejected alternatives:
    when there is nothing to purge, which is exactly why 20 green rows meant
    nothing. An audit row on every run, including zero-purge runs, turns "no rows"
    from ambiguous into diagnostic.
-3. **Re-run the manual proof** — age a row, dry run, real run, confirm the object
-   is gone, `selfie_url` is null, and an `admin_audit_log` row exists. Only that
-   sequence demonstrates the promise can be kept.
-4. **Do not publish the 90-day sentence as verified until step 3 passes.**
-   `supabase/purge-selfies-cron.sql:73` already said this: *"Only publish the
-   90-day sentence in the privacy policy once a real run has completed and the
-   audit entries are appearing."* That instruction was written, and not followed.
+3. ~~**Re-run the manual proof**~~ — done, 24 Aug 16:21–16:29. See below.
+4. ~~**Do not publish the 90-day sentence as verified until step 3 passes.**~~ —
+   step 3 now passes. `supabase/purge-selfies-cron.sql:73` set that condition
+   (*"Only publish the 90-day sentence in the privacy policy once a real run has
+   completed and the audit entries are appearing"*) and it has finally been met,
+   rather than assumed.
+
+---
+
+## The proof, 24 Aug 2026
+
+Row `2d33f81f-534a-4b21-9d64-d3bf12799e68`, submitted through `/verify` on the
+web, then aged past the cutoff.
+
+| Step | Result |
+|---|---|
+| Age `created_at` to 16 May | `pending`, `selfie_url` populated |
+| Dry run | `wouldPurge: 1`, `breakdown: { approved: 0, rejected: 0, abandoned: 1 }` |
+| Real run | `ok: true, dryRun: false, purged: 1`, no `auditWriteFailed` |
+| Confirm | `selfie_url` **null** · object **gone** from storage · **1** `selfie_retention_purge` audit row |
+
+The `abandoned: 1` in the breakdown matters: it confirms the row was selected by
+the branch intended, and that nothing else was swept in alongside it.
+
+**Coverage.** The two selection queries differ only in their WHERE clause and
+merge into one list; `paths`, `storage.remove`, the null and the audit write are
+common code. This run exercised the **abandoned** selection plus the entire
+shared tail. The **decided** selection was demonstrated separately on 24 Aug —
+it found its row and reached `storage.remove` before dying on the NOT NULL. So
+both selections and the shared destructive path have now each been shown to
+work.
+
+**The row does not come back.** It keeps `status = 'pending'` with `selfie_url`
+null, and the abandoned query filters on `selfie_url is not null` — so it is not
+re-selected on subsequent nights. The self-perpetuating re-selection that the
+old failure produced does not occur.
+
+**Still outstanding:** the job writes nothing when there is nothing to purge, so
+a future breakage would again be invisible until someone asked. See "Also
+required", item 2.
 
 ---
 
