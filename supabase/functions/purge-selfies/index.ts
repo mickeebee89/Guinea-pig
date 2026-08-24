@@ -43,6 +43,41 @@ function respond(body: unknown, status = 200) {
   })
 }
 
+/**
+ * Get a readable message out of anything that was thrown.
+ *
+ * The handler used to be `err instanceof Error ? err.message : String(err)`,
+ * which turned every non-Error into the string "[object Object]". supabase-js
+ * returns `{ data, error }` where that error is a PLAIN OBJECT, not an Error —
+ * so `throw rmErr` hit the String() branch and the function reported an empty
+ * fact about a failure it had fully in hand.
+ *
+ * That is the same failure shape as the rest of this job's history: a signal
+ * that reports something other than what it knows. Every future failure of this
+ * function was unreportable until this was fixed.
+ */
+function describeError(err: unknown): { message: string; detail: unknown } {
+  if (err instanceof Error) return { message: err.message, detail: { name: err.name } }
+  if (err && typeof err === 'object') {
+    const o = err as Record<string, unknown>
+    const message =
+      typeof o.message === 'string' ? o.message
+      : typeof o.error === 'string' ? o.error
+      : JSON.stringify(o)
+    // The whole object goes back too: StorageError carries statusCode and error,
+    // and which of those is set is usually the difference between "wrong key"
+    // and "not allowed".
+    return { message, detail: o }
+  }
+  return { message: String(err), detail: null }
+}
+
+/** Throw with the step named, so a message says WHERE as well as what. */
+function fail(step: string, err: unknown): never {
+  const { message, detail } = describeError(err)
+  throw Object.assign(new Error(`${step}: ${message}`), { step, detail })
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
 
@@ -101,7 +136,7 @@ Deno.serve(async (req) => {
       .not('selfie_url', 'is', null)
       .lt('reviewed_at', cutoff)
       .limit(MAX_PER_RUN)
-    if (decidedErr) throw decidedErr
+    if (decidedErr) fail('query decided rows', decidedErr)
 
     // Never reviewed and older than the window — abandoned, so it falls under the
     // same promise. Keyed on created_at because reviewed_at is null by definition.
@@ -112,7 +147,7 @@ Deno.serve(async (req) => {
       .not('selfie_url', 'is', null)
       .lt('created_at', cutoff)
       .limit(MAX_PER_RUN)
-    if (abandonedErr) throw abandonedErr
+    if (abandonedErr) fail('query abandoned rows', abandonedErr)
 
     const rows = [...(decided ?? []), ...(abandoned ?? [])]
     if (rows.length === 0) {
@@ -142,7 +177,17 @@ Deno.serve(async (req) => {
     // Remove the objects first. If this fails we keep selfie_url pointing at them,
     // so the next run retries rather than orphaning files we've lost the path to.
     const { error: rmErr } = await db.storage.from(BUCKET).remove(paths)
-    if (rmErr) throw rmErr
+    if (rmErr) {
+      // The attempted keys go in the detail. "Object not found" and "not
+      // permitted" look identical from the outside, and the difference is
+      // usually visible in the key itself — a full URL where a path belongs, a
+      // leading slash, a bucket name doubled into the key.
+      const { message, detail } = describeError(rmErr)
+      throw Object.assign(new Error(`storage.remove: ${message}`), {
+        step: 'storage.remove',
+        detail: { storageError: detail, bucket: BUCKET, attemptedPaths: paths },
+      })
+    }
 
     // Then drop the reference. The admin UI already renders a missing object as
     // "No photo", so a null here reads correctly rather than as a broken image.
@@ -150,11 +195,16 @@ Deno.serve(async (req) => {
       .from('verification_requests')
       .update({ selfie_url: null })
       .in('id', rows.map(r => r.id))
-    if (nullErr) throw nullErr
+    if (nullErr) fail('null selfie_url', nullErr)
 
     // Evidence the retention promise is being kept. admin_id is null: this is the
     // system acting on a schedule, not a person.
-    await db.from('admin_audit_log').insert({
+    // Deliberately NOT `fail()`: the objects are already gone and the rows are
+    // already nulled, so throwing here would report a purge that did happen as
+    // one that didn't. But an unchecked insert is how the evidence for a legal
+    // retention claim goes missing without anyone noticing, so it is logged
+    // loudly and named in the response instead.
+    const { error: auditErr } = await db.from('admin_audit_log').insert({
       action: 'selfie_retention_purge',
       admin_id: null,
       details: {
@@ -167,9 +217,29 @@ Deno.serve(async (req) => {
       },
     })
 
-    return respond({ ok: true, dryRun: false, cutoff, purged: rows.length })
+    if (auditErr) {
+      console.error('[purge-selfies] PURGED BUT NOT AUDITED',
+        JSON.stringify(describeError(auditErr)))
+    }
+
+    return respond({
+      ok: true, dryRun: false, cutoff, purged: rows.length,
+      // Surfaced rather than swallowed: a purge with no audit row is a deletion
+      // this system cannot later prove it performed.
+      ...(auditErr ? { auditWriteFailed: describeError(auditErr).message } : {}),
+    })
   } catch (err) {
-    console.error('[purge-selfies]', err)
-    return respond({ error: err instanceof Error ? err.message : String(err) }, 500)
+    const { message, detail } = describeError(err)
+    // Full object server-side: the response is for whoever called, the log is
+    // for whoever has to work out why at 03:15 with nobody watching.
+    console.error('[purge-selfies] FAILED', message, JSON.stringify({
+      step: (err as { step?: string })?.step ?? 'unknown',
+      detail: (err as { detail?: unknown })?.detail ?? detail,
+    }))
+    return respond({
+      error: message,
+      step: (err as { step?: string })?.step ?? 'unknown',
+      detail: (err as { detail?: unknown })?.detail ?? detail,
+    }, 500)
   }
 })
