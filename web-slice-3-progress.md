@@ -17,9 +17,15 @@ portfolio with video upload, settings with the blocked list, browse.
 **Slice 3 — booking.** Step 1 done (the apply gate, read-only). Steps 2 and 3
 were reordered and are also done — see below.
 
-**Migrations 0000–0011 applied, except 0009**, which is `SUPERSEDED BY 0010` and
-**must never be run** — its header explains why in detail. `migration-status.mjs`
-reports the whole set clean as of 10 Aug.
+**Migrations 0000–0019 applied, except 0009**, which is `SUPERSEDED BY 0010` and
+**must never be run** — its header explains why in detail. This line said
+"0000–0011 … clean as of 10 Aug" until 24 Aug; 0012–0019 all shipped and were
+confirmed applied by their own verify blocks.
+
+⚠️ `migration-status.mjs` has NOT been run since, because it needs
+`SUPABASE_SERVICE_ROLE_KEY` in the shell and that has not been set in any
+session. "Applied" here means each migration's own verify output was checked by
+hand, not that the checksum ledger was reconciled. Those are different claims.
 
 ---
 
@@ -83,7 +89,7 @@ Signup → shop details → treatments → selfie → published.
    ChatThread stays the only place the browser client is used and storage sees
    the real `auth.uid()`. Path built from `requireUser()`, never the client.
 
-   **Verified on a handset 14 Aug**, end to end: camera opened, photo uploaded
+   **Verified on a handset 19 Aug**, end to end: camera opened, photo uploaded
    under the uploader's own id (0019 accepting a second client for the first
    time), admin approved it, and **the shop republished itself** — nobody
    touched `is_published`. That is 0016's auto-publish firing for real, which
@@ -110,13 +116,13 @@ refusal can name the treatment — a row a booking still references may be
 undeletable, and "couldn't save" would have the stylist retrying forever
 without knowing which chip is the problem.
 
-**Mobile still has the bug.** Same file also ignores `delError` (line 115,
-assigned and never thrown), so a refused delete followed by a successful insert
-duplicates rows silently.
-
-**Mobile is now fixed** — `edit-shop.tsx` saves a diff, and the rule lives in
-the database as of migration `0012`. Full account in
+**Mobile is now fixed** — `edit-shop.tsx` saves a diff, `delError` is finally
+read, and the rule lives in the database as of migration `0012`. Full account in
 `mobile-treatments-orphan-bug.md`.
+
+(Until 24 Aug this paragraph was immediately preceded by "**Mobile still has the
+bug**", written before the fix and never removed. Two contradictory statements
+four lines apart, and the stale one came first.)
 
 ### ✅ Piece 4 is UNBLOCKED — and the policy is weaker than its name
 
@@ -153,7 +159,7 @@ guess (it carries a millisecond timestamp), so this is a hardening item, not an
 incident — but "the ID check reviewed the wrong person's face" is the failure it
 leads to, so it should not sit unwritten.
 
-**✅ Closed by `0019`** (applied 14 Aug, verified on a device: selfie submitted
+**✅ Closed by `0019`** (applied 19 Aug, verified on a device: selfie submitted
 and approved). Note it took TWO policies, not the obvious one — tightening the
 storage path stops someone uploading into another user's folder, but does
 nothing about pointing `selfie_url` at a path already there, and the reviewer
@@ -185,7 +191,7 @@ Migration `0011` grants it inside `handle_new_auth_user`: role provider, a
 **This is why Stripe is NOT on the critical path for the cohort** — founding
 status settles the fee without payment.
 
-> ⚠️ **That sentence was false in the app until 14 Aug.**
+> ⚠️ **That sentence was false in the app until 19 Aug.**
 > `verify-payment.tsx` computed `feeCovered` (paid OR founding OR waived) and
 > then decided on `paid` alone, so a Founding Provider was shown "Pay £14.99"
 > and could not reach the selfie at all. The grant worked; the one screen that
@@ -273,7 +279,7 @@ column we would rather retire. **Whoever finally drops `location` must fix
 **Engineering**
 
 * ~~`verification-selfies` INSERT policy~~ — **closed by `0019`** (applied
-  14 Aug, verified on a device: selfie submitted and approved). It tightened the
+  19 Aug, verified on a device: selfie submitted and approved). It tightened the
   storage path to the uploader AND added a RESTRICTIVE policy tying
   `verification_requests.selfie_url` to the row's own `user_id` — the storage
   half alone would not have closed it, because the reviewer opens whatever path
@@ -282,7 +288,7 @@ column we would rather retire. **Whoever finally drops `location` must fix
   eslint-config-next 16's native flat configs. **`admin`'s config works but its
   lint runs nowhere** (`build` is a bare `next build`) and it has 22 errors
   nobody has seen. Open decision: should either app's build fail on lint?
-* **Mobile has 15 pre-existing `tsc --noEmit` errors** in `_layout.tsx`,
+* **Mobile has 6 pre-existing `tsc --noEmit` errors** in `_layout.tsx`,
   `leave-review.tsx` and `sessions.tsx`. Same shape as the eslint finding — a
   check nobody runs.
 

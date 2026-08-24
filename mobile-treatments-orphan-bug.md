@@ -217,5 +217,5 @@ bookings is the scenario the fix exists for.
   fires is over-offer treatments. But it must not be removed until the diagnostic
   says the data is clean, or it will start showing "no treatments" on real slots.
 * **Nothing has been type-checking or linting mobile either.** `tsc --noEmit`
-  reports 15 pre-existing errors across `_layout.tsx`, `leave-review.tsx` and
+  reports 6 pre-existing errors across `_layout.tsx`, `leave-review.tsx` and
   `sessions.tsx`. None are from this change, and none were noticed.

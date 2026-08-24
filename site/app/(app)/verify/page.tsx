@@ -87,7 +87,7 @@ export default async function VerifyPage() {
 
   // The fee gate. Settled means paid OR Founding Provider OR waived — never
   // just paid. Reading it as "paid" is what had founding stylists shown a
-  // £14.99 wall in the app until 14 Aug.
+  // £14.99 wall in the app until 19 Aug.
   if (!setup.feeSettled) {
     return (
       <Wrap>

@@ -58,7 +58,8 @@ correct answer.
 
 ## Deployment (Vercel)
 
-Not yet done. Steps, in order:
+**Done - live since 7 Aug 2026.** Kept below as the record of how it was set up.
+Steps, in order:
 
 1. **New Vercel project** pointed at `github.com/mickeebee89/Guinea-pig`, with
    **Root Directory = `site`**, and **"Include files outside of the Root

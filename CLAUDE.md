@@ -4,7 +4,7 @@
 > "Be the guinea pig, get the glow."). **The legal entity is unchanged — Guinea Pig
 > App Ltd.** Cavy is a trading name, so Terms, Privacy, the data controller and any
 > company details must still read *"Cavy is a trading name of Guinea Pig App Ltd,
-> registered in England & Wales, company no. [NUMBER]."*
+> registered in England & Wales, company no. 17272796."*
 >
 > The git repo, the local folder path and the `guineapigapp.co.uk` domain all keep
 > the old name on purpose — renaming them buys nothing and breaks links. The tagline
@@ -30,7 +30,15 @@ _This file is read automatically at the start of every Claude Code session. It h
 - **Mobile:** React Native / Expo (Android-first, iOS planned), Expo Router, EAS. Runs via Metro tunnel on my phone.
 - **Backend:** Supabase (Postgres / auth / storage / realtime), project `ptluekkhiopowuyvkgnd`.
 - **Admin:** Next.js 16.2.7 / Vercel (App Router, Turbopack).
-- **Payments:** Stripe (currently TEST mode). **Media:** Cloudinary. **Email:** Resend.
+- **Payments:** Stripe — **LIVE since 17 Jul 2026, not TEST.** Real cards are
+  charged. The test card below only works against a client deliberately pointed
+  at test keys. This line said TEST until 24 Aug 2026, which is exactly how
+  someone ends up exercising a card flow against real money.
+- **Media:** Supabase Storage — buckets `profile-pics`, `model-photos`,
+  `portfolio-photos`, `verification-selfies`. Cloudinary is named in older notes
+  and is called by no code in any of the three apps.
+- **Email:** Supabase Auth SMTP via Resend, sending from
+  `no-reply@guineapigapp.co.uk` — not yet moved to cavybeauty.com.
 - **Repo:** github.com/mickeebee89/Guinea-pig — commit direct to `main`.
 - **Repo root (Windows):** `C:\Users\micky\Documents\Guinea-pig` — **no app lives at the root.**
   Three sibling apps: `admin\` (Next.js console), `site\` (public website), `mobile\` (Expo).
@@ -47,7 +55,13 @@ _This file is read automatically at the start of every Claude Code session. It h
 - **"Micky B" (provider/app + backup admin):** user_id `ff06d568-8936-45fa-ad5f-0b88c150ec30` (micky.buckfield@gmail.com); `providers.id` `49d40aae-a830-41d1-bca8-0fbdb2695455`.
 - **Model test acct:** `b0df9c2f-02c5-4fef-afb0-9b184c3b9130` (micky.buckfield@hotmail.co.uk — subscribed + verified).
 - **Provider test acct** `nahitih259@bevriz.com`: user_id `517c2853-50bb-4e8f-87fe-d79311bc37c0`.
-- **Palette:** gold `#C2A14D`, blush/softPink `#F4DADC`, off-white `#FBF6F1`, warmDark `#3A302C`, pinkVibrant `#F45D9E`, roseDark `#A8862E`.
+- **Palette — `mobile/src/constants/Colors.ts` is canonical, read it rather than
+  trusting this list.** This file carried the pre-restyle GOLD palette until
+  24 Aug 2026, in which `roseDark` was a gold (`#A8862E`) — every value was
+  wrong, so anyone following it built gold UI into a pink app. Current: rose
+  `#DB4B86`, roseDark `#C23A71`, softPink `#FFE3EF`, pinkVibrant `#DB4B86`,
+  cream `#FFF7FA`, warmDark `#2B2531`, muted `#6E6675`, inputBg `#FFF0F6`,
+  border `#F6E1EA`.
 
 ## Schema anchors (verified against live DB)
 
@@ -59,7 +73,7 @@ _This file is read automatically at the start of every Claude Code session. It h
 - Messages: body column is **`messages.body`** (not `content`). British spelling: **`colour_hex`**. There is **no `profiles` table**. Admin status lives in the **`admins`** table. Model profile data lives in **`model_attributes`**.
 - **RLS:** use the `authenticated` role. RESTRICTIVE policies AND with permissive ones — a RESTRICTIVE INSERT still needs a matching permissive INSERT to exist. `public_profiles` is the usual path for cross-user reads if users RLS blocks a direct read.
 
-## Payments / pricing (TEST mode — swap to LIVE before launch)
+## Payments / pricing (**LIVE since 17 Jul 2026** — real cards are charged)
 
 - Provider: **£14.99 one-off** verification (first 100–200 free — "Founding Providers"). Model: **£4.99/mo** subscription.
 - **Provider is PAY-FIRST:** Get Verified → pay £14.99 → selfie → admin approves → unlock (`is_verified` + `is_published`). Provider entry points: provider-dashboard + settings.
