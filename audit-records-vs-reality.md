@@ -113,12 +113,36 @@ accepted, and the inability to act on it is structural.
 **OPEN — this is item 3.**
 
 `legal.ts:701`, `:683` (child safety) and Terms §12 `:260` all promise it. Every
-`reports` and `blocks` insert in both clients sits inside a chat thread and needs
-a `session_id`; a chat only opens once a booking is confirmed. Stylist and model
-profile screens have no report or block action at all.
+`reports` and `blocks` insert in both clients sits inside a chat thread. Stylist
+and model profile screens have no report or block action at all.
 
 So a model harassed by someone she hasn't booked has **no in-app route**. It also
 isn't one tap — the modal requires free text, because `reports.reason` is NOT NULL.
+
+> **Corrected 24 Aug 2026, twice.**
+>
+> **1. The gate is "a session exists", not "a booking was accepted."** Report and
+> block render for any session you are party to, including `pending`. The site
+> says so in its own comment: *"being unable to message someone is not the same
+> as being unable to report them."* Narrower than stated above, still untrue
+> against the published claim.
+>
+> **2. A fourth gap that was never listed: the web has no model profile route
+> at all.** `ChatThread.tsx:199` — *"a model's id here is an auth user id and
+> there is no page for it yet."* So a stylist on the web cannot report a model
+> from anywhere, on the side of the marketplace being actively recruited.
+> Deferring it would relocate the gap rather than close it.
+>
+> **What is NOT the blocker:** `reports.session_id` is already nullable (`0004`
+> re-added the FK as `ON DELETE SET NULL`), `gp_reports_insert` already permits
+> any authenticated reporter with no session or relationship check, and
+> `admin/app/reports/page.tsx` already null-guards `session_id` in all three
+> places. No migration and no policy change is required — this is client work.
+>
+> **The constraint that IS real:** `trg_report_subjects` fills the NOT NULL
+> `reported_email_hash` by looking up `public.users` from `reported_id`. A
+> profile report must pass a **user id, never a `providers.id`** — otherwise it
+> fails on a NOT NULL hash rather than on anything legible.
 
 | Commitment | Where | Status |
 |---|---|---|
