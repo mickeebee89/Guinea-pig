@@ -53,11 +53,42 @@ Deno.serve(async (req) => {
   if (!expected) return respond({ error: 'CRON_SECRET not configured' }, 500)
   if (req.headers.get('x-cron-secret') !== expected) return respond({ error: 'Forbidden' }, 403)
 
-  let dryRun = false
-  try {
-    const body = await req.json().catch(() => ({}))
-    dryRun = body?.dryRun === true
-  } catch { /* no body is fine */ }
+  // ── HOW dryRun IS READ, AND WHY IT FAILS CLOSED ─────────────────────────
+  //
+  // This used to be `await req.json().catch(() => ({}))`, so ANY unparseable
+  // body silently became "not a dry run" — the destructive default. On 24 Aug a
+  // dry run sent from PowerShell came back `{"dryRun":false,...,"purged":0}`:
+  // PowerShell 5.1 mangles `\"` when handing arguments to a native exe, so
+  // curl's body arrived as the fragment `{\"` and never parsed. Nothing was lost
+  // only because nothing was eligible yet. Had a row been aged first — which was
+  // the very next step — that call would have deleted it while the operator
+  // believed they were checking what it WOULD delete.
+  //
+  // A safety flag that degrades to the dangerous mode when its input is
+  // malformed is worse than no flag, because it reads as confirmation.
+  //
+  // So: a body that is present but unparseable is now a REFUSAL, not a default.
+  // Cron sends a valid `{}` (see purge-selfies-cron.sql), so this cannot affect
+  // the scheduled run. The query parameter is offered because it survives every
+  // shell's quoting rules, which a JSON body demonstrably does not.
+  const dryRunFromQuery = new URL(req.url).searchParams.get('dryRun') === 'true'
+
+  let dryRunFromBody = false
+  const raw = await req.text()
+  if (raw.trim().length > 0) {
+    try {
+      dryRunFromBody = (JSON.parse(raw) as { dryRun?: unknown })?.dryRun === true
+    } catch {
+      return respond({
+        error: 'Body was sent but is not valid JSON. Refusing to run.',
+        hint: 'A malformed body must never be read as "not a dry run". '
+            + 'Use ?dryRun=true on the URL, or send a valid JSON body.',
+        received: raw.slice(0, 80),
+      }, 400)
+    }
+  }
+
+  const dryRun = dryRunFromQuery || dryRunFromBody
 
   const cutoff = new Date(Date.now() - RETAIN_DAYS * 864e5).toISOString()
 
