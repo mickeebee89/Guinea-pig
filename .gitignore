@@ -53,3 +53,8 @@ supabase/.temp/
 
 # Demo seed images — never commit faces or licensed stock
 seed/photos/
+
+# Created by running `deno check` on the edge functions locally. There is no
+# deno.json in this repo and Supabase deploys without it, so it is an artefact
+# rather than a dependency lock worth tracking.
+deno.lock
