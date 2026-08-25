@@ -1,6 +1,7 @@
 # Report and block, without a booking
 
-_Item 3 of the audit. Found 19 Aug 2026, built 24 Aug 2026._
+_Item 3 of the audit. Found 19 Aug 2026, built 24 Aug 2026, proven on live data
+25 Aug 2026._
 
 **Three published statements were untrue. "Block or report anyone in one tap"
 (Community Guidelines, `legal.ts:701`), "report any account or message in one tap
@@ -8,6 +9,19 @@ inside the app" (the child-safety section, `legal.ts:683`) and "you can report a
 concern in the app" (Terms §12, `legal.ts:260`). Report and block existed only
 inside a chat thread, and the modal demanded free text — so it was neither
 "anyone" nor "one tap".**
+
+---
+
+## Proven end to end
+
+| Claim | How it was shown |
+|---|---|
+| Files without a session | `submitReport` logged with `sessionId: null`, row landed |
+| One tap, no free text | `details: ""` accepted for `child_safety` |
+| Sorts to the top with a flag | Confirmed in the admin queue |
+| **The flag survives resolution** | Both child-safety reports resolved, then a **spam** report filed against the same person — still top, still flagged, still carrying the line about prior child-safety history |
+
+The last row is the one that mattered. It is keyed to the person, not the row.
 
 ---
 
@@ -196,6 +210,27 @@ On the web both actions moved off the browser client onto server actions, so
 
 ---
 
+## A profile report never carries a session, by construction
+
+Neither profile page passes `sessionId`; `SafetyMenu` defaults it to `null` and
+nothing anywhere looks a session up. So the nulls are structural, not an artefact
+of the reported account having no bookings.
+
+**It should stay that way.** Attaching the most recent session would be a guess
+written into an evidence field. `session_id` is what puts "View Chat" in front of
+a moderator, so a guessed one makes the report read as being *about that
+appointment* when the reporter said nothing of the sort — and if the guess is an
+old, unrelated booking, it is actively misleading. It would also hand a moderator
+a conversation the reporter did not choose to submit.
+
+A report filed from a profile is about the *person*. The row should say only what
+the reporter actually claimed.
+
+If moderators need the context, the right place is the admin console: look up
+what sessions exist between the two parties at review time and show them as
+context, rather than writing one onto the report as though the reporter had cited
+it. Not built; noted here so the decision is not re-made by accident.
+
 ## Still open
 
 **The Play Console child-safety / CSAE declaration.** Recorded as done at
@@ -203,6 +238,18 @@ On the web both actions moved off the browser client onto server actions, so
 an in-app reporting route for any user, it was inaccurate as filed and is now
 accurate — but that needs checking against what was actually submitted, not
 against this file.
+
+**The web has no stylist-facing route to a model's profile except chat.** The
+only link to `/model/[id]` anywhere on the site is in `ChatThread`, and the
+dashboard renders applicant names as plain text while stylist names elsewhere are
+links. So a stylist can reach a model's profile only for a model they already
+have a session with; any other model is URL-only.
+
+Today that is nearly moot — every model a stylist can see on the web arrives via
+an application, which *is* a session. It stops being moot the moment stylist-side
+model discovery ships (`stylist-model-discovery.md`), which is exactly when the
+no-session stylist-to-model case starts to exist. Linking the model names on the
+dashboard and sessions list is a small job and should happen before that.
 
 **Legacy rows carry no `reason_code`.** Deliberate. Guessing a category from free
 text could invent a child-safety flag, and an invented flag is worse than an

@@ -28,7 +28,7 @@ live money, one a child-safety commitment.
 | ✅ Closed | Selfie retention: structurally impossible, fixed, proven |
 | ✅ Decided | What is retained after a purge |
 | ✅ Closed | Item 2 — subscription reconcile, proven on live data 24 Aug |
-| 🔨 Built | Item 3 — report/block without a booking; migration 0021 pending |
+| ✅ Closed | Item 3 — report/block without a booking, proven on live data 25 Aug |
 | 📋 Scoped | Revocation of verification (item 8) — not built |
 | ⬜ Open | Items 4–7 |
 
@@ -111,7 +111,7 @@ accepted, and the inability to act on it is structural.
 
 ## C. "Report anyone in one tap" — only if you already have a booking
 
-**BUILT 24 Aug 2026, migration 0021 not yet applied.** Full account in
+**CLOSED 25 Aug 2026, proven on live data.** `0021` applied. Full account in
 `report-and-block-without-a-booking.md`. Report and block now reach both profile
 screens on both clients, plus a new web model-profile route; eight preset reasons
 replace the free-text box; and the admin queue sorts child-safety subjects to the

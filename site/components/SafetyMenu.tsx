@@ -89,12 +89,34 @@ export function SafetyMenu({
 
   return (
     <>
+      {/* ── WHY THIS IS ROSE AND NOT GREY ──────────────────────────────────
+          It was `text-muted` inside a hairline border: grey on white, quieter
+          than the "Verified" badge sitting next to it. Micky could not find it
+          on his own stylist profile and had to ask where it was — which is the
+          test result, not a preference. This is the only route to a
+          child-safety report on the web, and it was styled like a footnote.
+
+          `shrink-0` + `ml-auto` pin it to the right of the header row. The row
+          is `flex-wrap`, so without shrink-0 it drops onto its own line below
+          the name at narrow widths — the one place it is least likely to be
+          looked for, on the device most likely to be used in the moment. */}
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="rounded-md border border-hairline px-3 py-1.5 text-sm font-bold text-muted hover:text-rose"
+        className="ml-auto inline-flex shrink-0 items-center gap-1.5 rounded-md border border-rose/40 px-3 py-1.5 text-sm font-bold text-rose hover:bg-soft-pink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose"
         aria-haspopup="dialog"
+        aria-label={`Report or block ${name}`}
       >
+        {/* Inline so it cannot fail to load. This site pulls in no icon set and
+            no external asset — see the CSP in next.config.ts. */}
+        <svg
+          width="14" height="14" viewBox="0 0 24 24" fill="none"
+          stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"
+          strokeLinejoin="round" aria-hidden="true"
+        >
+          <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
+          <line x1="4" y1="22" x2="4" y2="15" />
+        </svg>
         Safety
       </button>
 
