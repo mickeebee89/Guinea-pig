@@ -54,6 +54,11 @@ const TYPE_CFG: Record<string, IconCfg> = {
   system:           { icon: 'information-circle', color: Colors.muted,   bg: Colors.inputBg,         filter: 'Activity' },
   admin_warning:    { icon: 'warning',            color: Colors.error,   bg: '#FEF2F2',              filter: 'Activity' },
   admin_message:    { icon: 'mail',               color: Colors.roseDark,bg: Colors.softPink + '30', filter: 'Activity' },
+  // A failed payment is the notification that tells someone their access is at
+  // risk. Without an entry here it renders as the generic grey fallback dot,
+  // which is the wrong weight for the only warning they get before Stripe
+  // gives up and the subscription ends.
+  payment_failed:   { icon: 'card',                color: Colors.error,   bg: '#FEF2F2',              filter: 'Activity' },
 }
 
 const DEFAULT_CFG: IconCfg = {

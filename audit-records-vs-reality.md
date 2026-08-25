@@ -30,8 +30,9 @@ live money, one a child-safety commitment.
 | ✅ Closed | Item 2 — subscription reconcile, proven on live data 24 Aug |
 | ✅ Closed | Item 3 — report/block without a booking, proven on live data 25 Aug |
 | ✅ Closed | Item 4 — copy that overstated the ID check, 25 Aug |
+| 🔨 Built | Item 6 — Stripe webhook; needs registering + secret before it is live |
 | 📋 Scoped | Revocation of verification (item 8) — not built |
-| ⬜ Open | Items 5–7, plus 9 and 10 |
+| ⬜ Open | Items 5, 7, plus 9, 10 and 11 |
 
 ---
 
@@ -320,7 +321,19 @@ migration says one line) or correct the published claim. Same for the selfie
 resubmit orphan. Plus the zero-purge audit row, so the purge stops being
 unobservable when idle.
 
-**6. The webhook**, as its own scoped piece — the proper fix behind item 2, and
+**6. ~~The webhook~~** — built 25 Aug, NOT yet live. Full account in
+`stripe-webhook.md`. Failed payment gives grace to period end and tells the user;
+`customer.subscription.deleted` is what actually ends access. Every delivery is
+recorded and the Revenue page opens with a "last event received" panel, because
+an unregistered endpoint and a registered quiet one are otherwise identical.
+Found and fixed on the way: `sync_subscription` wrote `active` for a Stripe
+`past_due`, so read-time sync would have silently overwritten the webhook and
+restarted the grace period on every app open.
+
+Remaining: register the endpoint, set `STRIPE_WEBHOOK_SECRET`, send a test event.
+Nothing is proven until then.
+
+Original scope: the webhook, as its own scoped piece — the proper fix behind item 2, and
 what makes "renews automatically each month" and the Settings billing date true.
 
 **7. Remaining record reconciliation.** The rest of the drift table above.
@@ -342,6 +355,16 @@ this control: discoverability IS the feature, and the surfaces nobody happened t
 open have had no such test. Wanted: a deliberate pass over every surface offering
 report/block on both clients — mobile chat, mobile model and provider profiles,
 web chat, web stylist and model profiles — checked at 375px as well as desktop.
+
+**11. Pre-launch: the six treatment pages must not be empty** — NEW, 25 Aug.
+`/hair-models` and the other five render zero stylist cards today. That is
+expected and not a bug — `public_stylists` needs a published stylist with a
+40-character bio and there are two published stylists in total — but these pages
+are the whole SEO plan, and "the SEO pages are empty" is exactly the thing that
+looks fine right up until launch day. An explicit check with a named owner, not
+a note: before launch, each of the six must render at least one real stylist, and
+the verified tick's new "Photo checked" tooltip must be seen rendering — it has
+never been observed on live data because no card has ever displayed it.
 
 **8. Revocation of verification** — NEW, found 24 Aug. `is_verified` is set to
 `true` in two places in the admin console and set to `false` **nowhere in the

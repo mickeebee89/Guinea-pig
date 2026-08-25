@@ -79,6 +79,34 @@ export default function RevenuePage() {
   // Why it exists at all: on the swallowed-confirm path Stripe bills monthly
   // while we hold no row, so those people are invisible to any query starting
   // from our own tables. The count can only come from Stripe.
+  // ── IS THE WEBHOOK ACTUALLY RECEIVING ANYTHING ────────────────────────────
+  // The endpoint URL is configured in the Stripe dashboard and the signing
+  // secret in the Supabase one. Neither is in the repo and nothing compares
+  // them, so a webhook that was never registered looks exactly like one that is
+  // registered and simply quiet: no errors, no rows, no difference.
+  //
+  // This panel is the difference. It loads on page open rather than behind a
+  // button, because the question it answers is "is this thing on", and that is
+  // worth knowing every time rather than only when someone thinks to ask.
+  const [hook, setHook] = useState<{
+    last_event_at: string | null
+    last_event_type: string | null
+    events_7d: number
+    failures_7d: number
+    last_failure_at: string | null
+    last_failure_note: string | null
+  } | null>(null)
+  const [hookErr, setHookErr] = useState<string | null>(null)
+
+  useEffect(() => {
+    async function loadHook() {
+      const { data, error } = await supabase.rpc('stripe_webhook_health')
+      if (error) { setHookErr(error.message); return }
+      setHook((data as unknown[] | null)?.[0] as typeof hook ?? null)
+    }
+    loadHook()
+  }, [])
+
   const [rec, setRec] = useState<Record<string, unknown> | null>(null)
   const [recBusy, setRecBusy] = useState(false)
   const [recErr, setRecErr] = useState<string | null>(null)
@@ -119,6 +147,60 @@ export default function RevenuePage() {
 
       {loading ? <div className="text-[#3D2E2E]/40 text-sm">Loading…</div> : (
         <div className="space-y-6">
+          {/* Webhook health - the "is it on" panel */}
+          <div className="bg-white rounded-xl border border-black/5 shadow-sm p-5">
+            <div className="text-xs font-semibold uppercase tracking-widest text-[#3D2E2E]/40">
+              Stripe webhook
+            </div>
+
+            {hookErr ? (
+              <p className="mt-2 text-sm font-medium text-red-700">
+                Couldn&apos;t read webhook health: {hookErr}
+              </p>
+            ) : !hook || !hook.last_event_at ? (
+              /* The state an unregistered endpoint and a correctly-registered
+                 quiet one would otherwise share. Say it out loud. */
+              <div className="mt-2">
+                <p className="text-sm font-bold text-red-700">
+                  No Stripe event has ever been received.
+                </p>
+                <p className="text-sm text-[#3D2E2E]/60 mt-1 max-w-2xl">
+                  Either the endpoint isn&apos;t registered in the Stripe dashboard, or it is and
+                  nothing has happened yet. Those look identical from here, so send a test event
+                  from Stripe &rarr; Developers &rarr; Webhooks and this line should change.
+                  Until it does, renewals, failed payments and dashboard-side cancellations are
+                  not reaching us.
+                </p>
+              </div>
+            ) : (
+              <div className="mt-2 space-y-1">
+                <p className="text-sm text-[#3D2E2E]">
+                  Last event{' '}
+                  <span className="font-bold">
+                    {new Date(hook.last_event_at).toLocaleString('en-GB')}
+                  </span>
+                  {hook.last_event_type && (
+                    <span className="text-[#3D2E2E]/50"> &middot; {hook.last_event_type}</span>
+                  )}
+                </p>
+                <p className="text-sm text-[#3D2E2E]/60">
+                  {hook.events_7d} event{hook.events_7d === 1 ? '' : 's'} in the last 7 days
+                  {hook.failures_7d > 0 && (
+                    <span className="font-bold text-red-700">
+                      {' '}&middot; {hook.failures_7d} failed
+                    </span>
+                  )}
+                </p>
+                {hook.last_failure_at && (
+                  <p className="text-sm text-red-700">
+                    Last failure {new Date(hook.last_failure_at).toLocaleString('en-GB')}:{' '}
+                    <span className="text-[#3D2E2E]/70">{hook.last_failure_note}</span>
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+
           {/* Stripe reconciliation - read-only, on demand */}
           <div className="bg-white rounded-xl border border-black/5 shadow-sm p-5">
             <div className="flex items-center justify-between">

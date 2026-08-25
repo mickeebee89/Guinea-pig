@@ -667,7 +667,7 @@ async function syncSubscription(userId: string) {
   if (!customerId) {
     // No customer in Stripe at all. Nothing is being billed, so any local row
     // claiming otherwise is wrong.
-    if (row && ['active', 'cancelling'].includes(row.status ?? '')) {
+    if (row && ['active', 'cancelling', 'past_due'].includes(row.status ?? '')) {
       await db.from('subscriptions').update({ status: 'expired' }).eq('user_id', userId)
       await db.from('users')
         .update({ subscription_status: 'free', subscription_next_billing: null })
@@ -695,7 +695,21 @@ async function syncSubscription(userId: string) {
   // Stripe says they are paying. Write the truth back, so the fast path works
   // next time and cancel_subscription has a row to act on.
   const periodEnd = new Date(live.current_period_end * 1000).toISOString()
-  const status    = live.cancel_at_period_end ? 'cancelling' : 'active'
+
+  // ── MUST AGREE WITH stripe-webhook's mapStatus() ──────────────────────────
+  // This used to be `cancel_at_period_end ? 'cancelling' : 'active'`, which
+  // wrote 'active' for a Stripe subscription that is actually past_due. Once
+  // the webhook exists, that is two mechanisms writing the same column with
+  // different answers: the webhook records past_due on a failed payment and
+  // the next read-time sync quietly overwrites it with active, so the user is
+  // never shown as behind and the grace period silently restarts.
+  //
+  // Both are still hand-written lists in separate deployments. Migration 0022
+  // asserts the status vocabulary is closed, which is what stops a third value
+  // appearing that neither of them names.
+  const status = live.cancel_at_period_end
+    ? 'cancelling'
+    : (live.status === 'past_due' || live.status === 'unpaid') ? 'past_due' : 'active'
   const price     = live.items?.data?.[0]?.price
 
   const { error: upsertErr } = await db.from('subscriptions').upsert({
@@ -710,8 +724,13 @@ async function syncSubscription(userId: string) {
     plan:                   'monthly',
   }, { onConflict: 'user_id' })
 
+  // past_due still IS a live membership — access continues to period end — so
+  // Settings must not show it as anything else. Same mapping as the webhook.
   const { error: userErr } = await db.from('users')
-    .update({ subscription_status: status, subscription_next_billing: periodEnd })
+    .update({
+      subscription_status:       status === 'past_due' ? 'active' : status,
+      subscription_next_billing: periodEnd,
+    })
     .eq('id', userId)
 
   // A failed repair must not be reported as success - that is the exact defect

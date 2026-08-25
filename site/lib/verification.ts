@@ -81,12 +81,17 @@ export async function hasActiveSubscription(
   const endsInFuture = !!row.current_period_end &&
     new Date(row.current_period_end).getTime() > Date.now()
 
+  // 'past_due' grants. A failed payment is not a lapse: Stripe retries for up to
+  // ~3 weeks, and access runs to current_period_end either way. If Stripe gives
+  // up it sends customer.subscription.deleted and the webhook writes 'expired',
+  // which is what actually ends access. Cutting someone off on a card hiccup is
+  // the failure this whole file already leans away from.
   // Fast path: unambiguously current, no Stripe call.
-  if (['active', 'cancelling'].includes(row.status) && endsInFuture && row.stripe_customer_id) {
+  if (['active', 'cancelling', 'past_due'].includes(row.status) && endsInFuture && row.stripe_customer_id) {
     return { active: true, waived: false }
   }
 
-  if (!['active', 'cancelling'].includes(row.status)) return { active: false, waived: false }
+  if (!['active', 'cancelling', 'past_due'].includes(row.status)) return { active: false, waived: false }
 
   // Ambiguous - lapsed date, or no customer id to trust. Ask Stripe.
   try {
