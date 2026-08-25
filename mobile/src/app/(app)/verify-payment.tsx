@@ -348,11 +348,18 @@ export default function VerifyPaymentScreen() {
             <View style={styles.heroIconCircle}>
               <Ionicons name="shield-checkmark" size={44} color={Colors.white} />
             </View>
-            <Text style={styles.heroTitle}>{feeOnly ? 'Verification fee' : 'Identity check'}</Text>
+            {/* ── SAY LESS THAN IS TRUE ───────────────────────────────────
+                "Identity check" and "identity-verified" claimed something that
+                does not happen: no document is requested, seen or kept. A model
+                weighs this when deciding whether to be alone with a stranger,
+                so overstating it is a safety claim, not marketing copy. The web
+                was corrected first; mobile kept the old wording until now. The
+                rule is written out in site/app/(app)/verify/page.tsx. */}
+            <Text style={styles.heroTitle}>{feeOnly ? 'Verification fee' : 'ID check'}</Text>
             <Text style={styles.heroSub}>
               {feeOnly
                 ? 'You\'re already identity-verified. Pay the one-off £14.99 fee to make your shop live — no selfie needed.'
-                : <>Take a selfie holding a piece of paper with your first name and <Text style={{ fontFamily: Fonts.bodyBold, color: Colors.warmDark }}>"Cavy"</Text> written on it. Our team reviews within 24 hours.</>}
+                : <>Take a selfie holding a piece of paper with your first name and <Text style={{ fontFamily: Fonts.bodyBold, color: Colors.warmDark }}>"Cavy"</Text> written on it. A person compares it to your profile picture, usually within 24 hours. It isn’t an identity check — nobody sees a passport or a driving licence, and no document is kept.</>}
             </Text>
             {isProvider && !feeSettled && (
               <View style={styles.priceTag}>
@@ -415,7 +422,7 @@ export default function VerifyPaymentScreen() {
               ? 'Secured by Stripe. Paying makes your shop eligible to go live.'
               : isProvider && !feeSettled
               ? 'Secured by Stripe. After payment you\'ll take your verification selfie.'
-              : 'Your selfie is stored securely and only used for identity verification.'}
+              : 'Your selfie is stored securely and only used for the ID check. No document is requested, seen or kept.'}
           </Text>
         </ScrollView>
       )}

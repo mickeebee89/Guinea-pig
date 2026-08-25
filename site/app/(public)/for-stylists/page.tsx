@@ -19,8 +19,13 @@ const POINTS = [
     body: 'Most stylists are here to build a book. Agree the photos in chat before the appointment and the work is yours to post.',
   },
   {
-    title: 'Everyone is verified',
-    body: 'Every member completes identity verification before they can offer or apply for treatments, so you know who you’re meeting.',
+    title: 'Everyone does the ID check',
+    // Was "Every member completes identity verification". No document is
+    // requested, seen or kept — a person compares a selfie holding a
+    // handwritten note against the profile photo. Describing that as identity
+    // verification invites someone to accept a risk on the strength of a check
+    // that did not happen. See app/(app)/verify/page.tsx for the rule.
+    body: 'Every member sends a selfie holding their name on a piece of paper, and a person checks it against their profile photo before they can offer or apply for treatments. It’s not an ID document check — but it means there’s a real person behind the profile and the photo isn’t lifted from somewhere else.',
   },
   {
     title: 'You set the terms',

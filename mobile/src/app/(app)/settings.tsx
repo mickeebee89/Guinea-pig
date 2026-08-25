@@ -433,10 +433,15 @@ export default function SettingsScreen() {
     )
   }
 
-  const upgradeSubscription = async () => {
-    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
-    Alert.alert('Upgrade to Premium', 'Premium features coming soon! You\'ll be notified when plans are available.')
-  }
+  // upgradeSubscription removed. It said "Premium features coming soon! You'll
+  // be notified when plans are available" — false twice over. There is no
+  // Premium tier planned, and nothing in the product sends that notification.
+  //
+  // There IS a real GBP 4.99/mo membership, and it is taken at apply-time
+  // deliberately: standalone entry points were removed once already because
+  // they stranded accounts in half-finished states. So this is now an
+  // informational row describing the real thing, rather than a button
+  // promising a different, imaginary one.
 
   // ── Verification ───────────────────────────────────────────────────────────
 
@@ -677,13 +682,8 @@ export default function SettingsScreen() {
               {!isPaid && !isComped && (
                 <Row
                   icon="sparkles-outline"
-                  label="Upgrade to Premium"
-                  onPress={upgradeSubscription}
-                  rightEl={
-                    <View style={styles.upgradePill}>
-                      <Text style={styles.upgradePillText}>Upgrade</Text>
-                    </View>
-                  }
+                  label="Membership"
+                  value="£4.99/mo — starts when you apply"
                 />
               )}
               {isPaid && !isCanceling && (
@@ -1104,11 +1104,6 @@ const styles = StyleSheet.create({
   },
 
   // Subscription
-  upgradePill: {
-    backgroundColor: Colors.rose, borderRadius: Radius.sm,
-    paddingHorizontal: 10, paddingVertical: 4,
-  },
-  upgradePillText: { fontSize: 12, fontWeight: '700', color: Colors.white },
 
   // Verification badges
   verifiedBadge: {

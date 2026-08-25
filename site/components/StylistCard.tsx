@@ -23,8 +23,25 @@ export function StylistCard({ stylist }: { stylist: PublicStylist }) {
       <div className="min-w-0">
         <p className="truncate font-display text-lg text-warm-dark">
           {stylist.name}
+          {/* ── SAY LESS THAN IS TRUE ─────────────────────────────────────
+              This read "Identity verified", on pages served to logged-out
+              visitors and indexed by search engines. Nothing of the sort
+              happens: a person compares a selfie holding a handwritten note
+              against the profile photo. No document is requested, seen or kept.
+
+              A model weighs this when deciding whether to be alone with a
+              stranger. Someone who believes a passport was checked accepts a
+              risk they would not otherwise accept, on the strength of our
+              wording — which makes it a safety claim, not marketing copy. The
+              rule is stated in full at app/(app)/verify/page.tsx; this was the
+              last place still breaking it, and the most public. */}
           {stylist.is_verified && (
-            <span className="ml-1.5 text-sm text-rose" title="Identity verified">
+            <span
+              className="ml-1.5 text-sm text-rose"
+              title="Photo checked — a person compared their selfie to their profile photo. Not an ID document check."
+              aria-label="Photo checked"
+              role="img"
+            >
               ✓
             </span>
           )}

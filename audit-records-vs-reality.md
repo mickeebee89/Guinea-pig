@@ -29,8 +29,9 @@ live money, one a child-safety commitment.
 | ✅ Decided | What is retained after a purge |
 | ✅ Closed | Item 2 — subscription reconcile, proven on live data 24 Aug |
 | ✅ Closed | Item 3 — report/block without a booking, proven on live data 25 Aug |
+| ✅ Closed | Item 4 — copy that overstated the ID check, 25 Aug |
 | 📋 Scoped | Revocation of verification (item 8) — not built |
-| ⬜ Open | Items 4–7 |
+| ⬜ Open | Items 5–7, plus 9 and 10 |
 
 ---
 
@@ -300,7 +301,18 @@ both clients. Three published statements are untrue until this lands; separately
 check the Play Console child-safety declaration's submitted wording, which is not
 in the repo.
 
-**4. Copy fixes.** Mobile "identity verification" wording, `StylistCard` badge
+**4. ~~Copy fixes~~** — done 25 Aug. The one that mattered was
+`StylistCard`'s `title="Identity verified"`, live on logged-out indexable pages:
+it told a model that a stranger's identity had been checked against a document
+when no document is requested, seen or kept. A model weighs that when deciding
+whether to be alone with someone, which makes it a safety claim rather than
+marketing copy — the rule set on the web ID-check wording, still being broken in
+public. Also `/for-stylists` ("Every member completes identity verification"),
+four strings in mobile `verify-payment.tsx`, the apply-gate line in
+`subscribe.tsx`, and Settings' "Premium features coming soon! You'll be notified"
+— which promised a tier that does not exist via a notification nothing sends.
+
+Original scope: Mobile "identity verification" wording, `StylistCard` badge
 title, Settings "Premium coming soon".
 
 **5. Legal reconciliation.** Patch tests: either add to `run_retention_purge` (the
@@ -312,6 +324,24 @@ unobservable when idle.
 what makes "renews automatically each month" and the Settings billing date true.
 
 **7. Remaining record reconciliation.** The rest of the drift table above.
+
+**9. Link model names to `/model/[id]`** — NEW, 25 Aug. The only link to the new
+model profile anywhere on the site is in `ChatThread`; the stylist dashboard
+renders applicant names as plain text while stylist names elsewhere are links. So
+a stylist reaches a model's profile only for a model they already share a session
+with. Nearly moot today — every model a stylist sees arrives via an application,
+which is a session — and not moot at all once stylist-side model discovery ships,
+which is exactly when the no-session stylist-to-model case begins to exist. An
+item rather than a note, because notes do not get done.
+
+**10. The Safety control's findability, on both clients** — NEW, 25 Aug. Micky
+could not find it on a stylist profile the day it was built; it was `text-muted`
+grey, quieter than the "Verified" badge beside it, and wrapped below the name at
+narrow widths. Restyled where it was noticed. That is the wrong shape of fix for
+this control: discoverability IS the feature, and the surfaces nobody happened to
+open have had no such test. Wanted: a deliberate pass over every surface offering
+report/block on both clients — mobile chat, mobile model and provider profiles,
+web chat, web stylist and model profiles — checked at 375px as well as desktop.
 
 **8. Revocation of verification** — NEW, found 24 Aug. `is_verified` is set to
 `true` in two places in the admin console and set to `false` **nowhere in the

@@ -271,8 +271,9 @@ export default function SubscribeScreen() {
             <Text style={styles.renewalStrong}>£4.99 every month</Text> until you cancel.
           </Text>
           <Text style={styles.refundNote}>
-            After subscribing you'll complete a quick identity check (a selfie) before you
-            can apply — our team reviews it within 24 hours.
+            After subscribing you’ll do a quick ID check — a selfie holding your name on a
+            piece of paper, which a person compares to your profile picture, usually within
+            24 hours. It isn’t an identity check and no document is kept.
           </Text>
           <Text style={styles.refundNote}>
             Cancel anytime in Settings — your membership runs to the end of the month
