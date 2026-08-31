@@ -182,6 +182,25 @@ export default function VerifyPaymentScreen() {
         .upload(path, decode(manipulated.base64), { contentType: 'image/jpeg' })
       if (uploadErr) throw uploadErr
 
+      // ── DELETE THE OLD OBJECT, NOT JUST THE OLD ROW ────────────────────
+      // Each submission uploads to a fresh timestamped path, and the row is the
+      // only thing that has ever pointed at it. Deleting the row without
+      // deleting the object leaves the object referenced by nothing — and
+      // purge-selfies finds objects VIA the rows, so nothing can ever reach it
+      // again. The 90-day retention promise failed silently for anyone rejected
+      // once.
+      const { data: prior } = await supabase
+        .from('verification_requests').select('selfie_url').eq('user_id', userId)
+      const stale = ((prior ?? []) as { selfie_url: string | null }[])
+        .map(r => r.selfie_url).filter((p): p is string => !!p && p !== up.path)
+      if (stale.length > 0) {
+        const { error: rmErr } = await supabase.storage
+          .from('verification-selfies').remove(stale)
+        // Best-effort: a failure here must not block the resubmission. The
+        // sweep in purge-selfies is the backstop, which is why it exists.
+        if (rmErr) console.warn('[verify] could not remove prior selfie object:', rmErr.message)
+      }
+
       // Delete any previous rejected request so we can submit fresh
       await supabase.from('verification_requests').delete().eq('user_id', userId)
 

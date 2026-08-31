@@ -302,20 +302,34 @@ notify pgrst, 'reload schema';
 --
 -- ── BLOCK E — the defaults own the insert path ──────────────────────────
 --
---   A brand-new subscription must get its defaults rather than nulls.
+--   A brand-new subscription must get its column defaults, not nulls.
 --
---   begin;
---     select public.apply_subscription_state(
---       (select id from public.users
---         where id not in (select user_id from public.subscriptions) limit 1),
---       'active');
---     select plan, amount_pence, currency_code from public.subscriptions
---      where user_id = (select id from public.users
---        where id not in (select user_id from public.subscriptions) limit 1);
---   rollback;
+--   NOT written as a single self-contained block on purpose: the obvious
+--   version selects a user `not in (select user_id from subscriptions)`,
+--   inserts a row for them, then re-evaluates the same subquery — which now
+--   excludes the row it just created and returns nothing. That reads as a
+--   failure and is not. It was written that way once; see the VERIFY-block
+--   rules in scripts/migration-status.mjs.
 --
---   Expect the column defaults, not nulls. If it raises 23502 again, a NOT NULL
---   column without a default is still unsupplied and ASSERT 1 did not catch it.
+--   Step 1 — pick an id and COPY IT:
+--
+--     select id from public.users
+--     where id not in (select user_id from public.subscriptions) limit 1;
+--
+--   Step 2 — paste that id into both places below and run as one statement:
+--
+--     begin;
+--       select public.apply_subscription_state('<PASTE-ID>'::uuid, 'active');
+--       select plan, amount_pence, currency_code, status
+--       from public.subscriptions where user_id = '<PASTE-ID>'::uuid;
+--     rollback;
+--
+--   Expect the column defaults rather than nulls. A 23502 here means a NOT NULL
+--   column with no default is still unsupplied and ASSERT 1 failed to catch it.
+--
+--   ⚠️ amount_pence defaults to 299 — £2.99, while Stripe charges £4.99. That is
+--   a wrong number in a billing column and is being decided separately; nothing
+--   reads it today.
 -- ===========================================================================
 
 

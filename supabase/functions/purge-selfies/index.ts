@@ -78,6 +78,63 @@ function fail(step: string, err: unknown): never {
   throw Object.assign(new Error(`${step}: ${message}`), { step, detail })
 }
 
+
+/**
+ * ── THE ORPHAN SWEEP ───────────────────────────────────────────────────────
+ * Everything above finds objects VIA verification_requests rows. That is the
+ * whole mechanism, and it has a hole: a resubmission uploads to a fresh
+ * timestamped path and then deletes the previous row, so the previous OBJECT is
+ * left referenced by nothing and no row-based query can ever reach it again.
+ * The 90-day promise failed silently for anyone rejected once.
+ *
+ * Both clients now delete the old object before deleting the row. This exists
+ * because that fix depends on every writer remembering, and the retention claim
+ * should not. It also clears the orphans already sitting in the bucket, which
+ * the client fix cannot reach.
+ *
+ * Only objects OLDER THAN THE CUTOFF are considered. An object uploaded seconds
+ * ago legitimately has no row yet — the upload happens before the insert — so
+ * sweeping on "unreferenced" alone would delete a selfie mid-submission.
+ */
+async function findOrphans(cutoff: string): Promise<{ paths: string[]; scannedFolders: number; capped: boolean }> {
+  const MAX_FOLDERS = 500
+
+  // Every path currently claimed by a row, so nothing referenced is touched.
+  const { data: refRows, error: refErr } = await db
+    .from('verification_requests').select('selfie_url').not('selfie_url', 'is', null)
+  if (refErr) fail('query referenced selfie paths', refErr)
+  const referenced = new Set((refRows ?? []).map(r => r.selfie_url as string))
+
+  // The bucket is one folder per user id.
+  const { data: folders, error: folderErr } = await db.storage
+    .from(BUCKET).list('', { limit: MAX_FOLDERS })
+  if (folderErr) fail('list selfie folders', folderErr)
+
+  const capped = (folders ?? []).length >= MAX_FOLDERS
+  const orphans: string[] = []
+
+  for (const folder of folders ?? []) {
+    if (!folder.name) continue
+    const { data: files, error: fileErr } = await db.storage
+      .from(BUCKET).list(folder.name, { limit: 100 })
+    if (fileErr) {
+      // One unreadable folder must not abort the whole sweep, but it must not
+      // pass silently either — an unswept folder is an unkept promise.
+      console.error('[purge-selfies] could not list folder', folder.name, fileErr.message)
+      continue
+    }
+    for (const file of files ?? []) {
+      const path = `${folder.name}/${file.name}`
+      if (referenced.has(path)) continue
+      const created = file.created_at ?? file.updated_at
+      if (!created || created >= cutoff) continue   // too new, or unknown age
+      orphans.push(path)
+    }
+  }
+
+  return { paths: orphans, scannedFolders: (folders ?? []).length, capped }
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
 
@@ -151,21 +208,59 @@ Deno.serve(async (req) => {
 
     const rows = [...(decided ?? []), ...(abandoned ?? [])]
     if (rows.length === 0) {
+      // NO ROWS DUE IS NOT NOTHING TO DO. This used to return here, which would
+      // have skipped the orphan sweep in the single most common case — no rows
+      // expiring today, orphaned objects sitting in the bucket regardless. The
+      // sweep exists precisely for objects no row points at, so gating it on
+      // rows would have made it unreachable exactly when it was needed.
+      const orphans = await findOrphans(cutoff)
+      let swept = 0
+      if (!dryRun && orphans.paths.length > 0) {
+        const { error: orphanErr } = await db.storage.from(BUCKET).remove(orphans.paths)
+        if (orphanErr) {
+          console.error('[purge-selfies] orphan sweep failed',
+            JSON.stringify(describeError(orphanErr)))
+        } else {
+          swept = orphans.paths.length
+          const { error: auditErr } = await db.from('admin_audit_log').insert({
+            action: 'selfie_retention_purge',
+            admin_id: null,
+            details: { purged: 0, orphans_purged: swept, retain_days: RETAIN_DAYS, cutoff },
+          })
+          if (auditErr) {
+            console.error('[purge-selfies] ORPHANS PURGED BUT NOT AUDITED',
+              JSON.stringify(describeError(auditErr)))
+          }
+        }
+      }
       // Report against the field the caller expects — saying "purged: 0" on a dry
       // run claims an action that didn't happen, which misreads in logs later.
       return respond({
         ok: true, dryRun, cutoff,
-        ...(dryRun ? { wouldPurge: 0 } : { purged: 0 }),
-        message: 'Nothing to purge.',
+        ...(dryRun
+          ? { wouldPurge: 0, wouldPurgeOrphans: orphans.paths.length, orphanPaths: orphans.paths }
+          : { purged: 0, orphansPurged: swept }),
+        ...(orphans.capped ? { orphanScanCapped: orphans.scannedFolders } : {}),
+        message: orphans.paths.length === 0
+          ? 'Nothing to purge.'
+          : `No rows due, but ${orphans.paths.length} orphaned object(s) found.`,
       })
     }
 
     const paths = rows.map(r => r.selfie_url as string).filter(Boolean)
 
     if (dryRun) {
+      const orphans = await findOrphans(cutoff)
       return respond({
         ok: true, dryRun: true, cutoff,
         wouldPurge: rows.length,
+        // Named separately from wouldPurge: these are objects no row points at,
+        // which is a different failure from a row whose time is up.
+        wouldPurgeOrphans: orphans.paths.length,
+        orphanPaths: orphans.paths,
+        // No silent caps. If the folder listing hit its limit, say so — a sweep
+        // that quietly covered part of the bucket reads as a clean bucket.
+        ...(orphans.capped ? { orphanScanCapped: orphans.scannedFolders } : {}),
         breakdown: {
           approved:  rows.filter(r => r.status === 'approved').length,
           rejected:  rows.filter(r => r.status === 'rejected').length,
@@ -197,6 +292,23 @@ Deno.serve(async (req) => {
       .in('id', rows.map(r => r.id))
     if (nullErr) fail('null selfie_url', nullErr)
 
+    // The orphan sweep, after the row-based purge so the referenced set already
+    // reflects the nulls written above.
+    const orphans = await findOrphans(cutoff)
+    let orphansPurged = 0
+    if (orphans.paths.length > 0) {
+      const { error: orphanErr } = await db.storage.from(BUCKET).remove(orphans.paths)
+      if (orphanErr) {
+        // Logged, not thrown: the row-based purge above already succeeded and
+        // throwing here would report it as failed. But it is named in the
+        // response so a silent failure cannot look like an empty bucket.
+        console.error('[purge-selfies] orphan sweep failed',
+          JSON.stringify(describeError(orphanErr)))
+      } else {
+        orphansPurged = orphans.paths.length
+      }
+    }
+
     // Evidence the retention promise is being kept. admin_id is null: this is the
     // system acting on a schedule, not a person.
     // Deliberately NOT `fail()`: the objects are already gone and the rows are
@@ -209,6 +321,7 @@ Deno.serve(async (req) => {
       admin_id: null,
       details: {
         purged: rows.length,
+        orphans_purged: orphansPurged,
         retain_days: RETAIN_DAYS,
         cutoff,
         approved:  rows.filter(r => r.status === 'approved').length,
@@ -224,6 +337,8 @@ Deno.serve(async (req) => {
 
     return respond({
       ok: true, dryRun: false, cutoff, purged: rows.length,
+      orphansPurged,
+      ...(orphans.capped ? { orphanScanCapped: orphans.scannedFolders } : {}),
       // Surfaced rather than swallowed: a purge with no audit row is a deletion
       // this system cannot later prove it performed.
       ...(auditErr ? { auditWriteFailed: describeError(auditErr).message } : {}),

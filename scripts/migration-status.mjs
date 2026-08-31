@@ -28,6 +28,32 @@
  *   DRIFTED is the one that matters. It is the failure mode where the repo
  *   looks authoritative and is wrong — which is how supabase/ came to document
  *   about a third of the live schema while reading like a complete record.
+ *
+ * ── WRITING VERIFY BLOCKS: THEY RUN IN THE SUPABASE SQL EDITOR ─────────────
+ *
+ *   That is the only tool these are ever pasted into, and four blocks this
+ *   month were written for a different one. A block that cannot be run is not
+ *   a verification step; it is a step that gets skipped, which is how 0012's
+ *   baseline was lost for good.
+ *
+ *   Rules that follow from the editor's behaviour:
+ *
+ *   * NO TEMP TABLES and no reliance on session state between statements.
+ *     Statements do not reliably share a session, so `create temp table` in one
+ *     and `select` from it in the next fails.
+ *
+ *   * NO SUBQUERY THAT THE BLOCK'S OWN WRITE INVALIDATES. 0024's Block E
+ *     selected a user `not in (select user_id from subscriptions)`, inserted a
+ *     row for them, then re-evaluated the same subquery — which now excluded
+ *     the row it had just created and returned nothing. That reads as failure
+ *     and is not. Capture the id in a literal, or use a CTE, or say plainly in
+ *     the comment that the id must be pasted in by hand.
+ *
+ *   * PREFER ONE SELF-CONTAINED STATEMENT per check, with the expected result
+ *     written above it.
+ *
+ *   * `begin; ... rollback;` is fine — it is the multi-statement dependencies
+ *     inside that break, not the transaction.
  */
 
 import { readFileSync, readdirSync, writeFileSync } from 'node:fs'

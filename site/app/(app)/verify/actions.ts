@@ -83,9 +83,27 @@ export async function submitSelfie(form: FormData): Promise<VerifyResult> {
     return { ok: false, error: 'That didn’t upload. Check your connection and try again.' }
   }
 
-  // Clear any previous request first. Mobile does the same: a rejected row would
-  // otherwise keep the screen showing the old rejection while a fresh selfie sits
-  // unreviewed. The upload has already succeeded, so this cannot strand a row.
+  // ── DELETE THE OLD OBJECT, NOT JUST THE OLD ROW ──────────────────────────
+  // The comment that used to be here said "the upload has already succeeded, so
+  // this cannot strand a row". True, and beside the point: the ROW is fine, the
+  // OBJECT is stranded. Each submission uploads to a fresh timestamped path and
+  // the row is the only thing that ever pointed at the previous one, so deleting
+  // the row leaves an object nothing references — and purge-selfies finds
+  // objects VIA the rows. The 90-day retention promise failed silently for
+  // anyone rejected once.
+  const { data: prior } = await supabase
+    .from('verification_requests').select('selfie_url').eq('user_id', user.id)
+  const stale = ((prior ?? []) as { selfie_url: string | null }[])
+    .map(r => r.selfie_url).filter((p): p is string => !!p && p !== up.path)
+  if (stale.length > 0) {
+    const { error: rmErr } = await supabase.storage.from('verification-selfies').remove(stale)
+    // Best-effort: this must not block a resubmission. The sweep in
+    // purge-selfies is the backstop, which is why it exists.
+    if (rmErr) console.warn('[verify] could not remove prior selfie object', rmErr)
+  }
+
+  // Then the row. A rejected row left in place would keep the screen showing the
+  // old rejection while a fresh selfie sat unreviewed.
   await supabase.from('verification_requests').delete().eq('user_id', user.id)
 
   // up.path, NOT a public URL. The bucket is private and the admin signs at
