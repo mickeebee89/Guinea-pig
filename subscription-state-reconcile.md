@@ -10,11 +10,50 @@ would 404 even if there had been one, while Stripe billed £4.99 every month.**
 
 ---
 
-## Nobody was affected — established before anything was changed
+## ⚠️ CORRECTION, 31 Aug 2026 — the conclusion below was wrong
+
+**Three subscriptions were genuinely live in Stripe and had been billing for a
+month.** They were found by hand on 31 Aug, cancelled immediately, and the
+payments refunded. Nothing further will charge.
+
+So "nobody was affected", "nobody out of pocket" and "no refund or apology is
+owed" — all written below on 24 Aug — were false. Real charges were taken against
+real cards for about a month while our own table showed those accounts lapsed.
+
+**`reconcile_audit` did surface this. I misread it.** The three are the
+`disagreeing: 3` bucket. I read the headline `billedButNoRow: 0` as "nobody is
+being charged invisibly" and let it carry the whole conclusion, then described
+`disagreeing` as "matched but out of step" without ever establishing *which
+direction* they were out of step in. One direction is us giving access away; the
+other is Stripe taking money against a row we think is dead. I checked whether
+the buckets overlapped and never asked what the disagreement meant.
+
+**The lesson is not "build a reconciler".** The reconciler existed, ran, and
+printed the number. The failure was reading the bucket that confirmed the
+comfortable story and summarising the one that didn't. A count is not a finding
+until you know which way it points — and the bucket I skimmed was the only one
+that involved money leaving somebody's account.
+
+It also existed for weeks before the tool did: the disagreement predates
+`reconcile_audit`, so the window where nobody could have noticed is longer than
+the month of billing.
+
+**Open question for the record:** whether all three were the test accounts, or
+whether any belonged to someone other than the test accounts. That decides
+whether anything is owed beyond the refunds already made.
+
+---
+
+## Nobody was affected — WRONG, see the correction above
 
 `reconcile_audit` reported **`billedButNoRow: 0`**. The swallowed-confirm path has
 never actually fired since Stripe went live on 17 July. Nobody has been charged
 without a record, and no refund or apology is owed.
+
+> **False.** Three accounts were being billed. `billedButNoRow` counts people
+> with NO row at all; it cannot see someone who has a row that merely disagrees
+> with Stripe. Answering "is anyone being charged?" with that one number was the
+> mistake — it is the right answer to a narrower question.
 
 That number could not be obtained from our own database. Anyone in that state is
 absent from every table we hold, so a query starting from our side returns them
@@ -29,13 +68,18 @@ What the audit did find was the inverse of the fear:
 | `rowButNotBillingInStripe` | **9** — we grant access, nobody is paying |
 | `lapsedButStillGranting` | **8** — period ended, still granting, live that day |
 | `unverifiableNoCustomerId` | **1** — a row with no Stripe customer at all |
-| `disagreeing` | **3** — matched but out of step |
+| `disagreeing` | **3** — matched but out of step. **These three were being charged.** Direction never established at the time |
 
 `rowButNotBillingInStripe` (9) and `disagreeing` (3) are disjoint and together
 account for all 12 rows, so **not one row agreed with Stripe**. The other two are
 cross-cutting flags over the same 12, not separate buckets.
 
-All test accounts. Nobody out of pocket; we were giving access away.
+~~All test accounts. Nobody out of pocket; we were giving access away.~~
+
+**Both halves of that were wrong.** Nine rows were us giving access away; three
+were Stripe taking money. Writing one summary sentence over five buckets lost the
+distinction that mattered, and it happened to lose it in the reassuring
+direction.
 
 ---
 

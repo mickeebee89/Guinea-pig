@@ -65,9 +65,14 @@ turns "no rows" from ambiguous into diagnostic.
 **CLOSED 24 Aug 2026.** Fixed and demonstrated on live data — full account in
 `subscription-state-reconcile.md`.
 
-**`reconcile_audit` established `billedButNoRow: 0` before anything was changed:
-the swallowed-confirm path never actually fired, so nobody was charged without a
-record and no remedy is owed.** The real damage was the inverse — 9 rows granting
+**⚠️ CORRECTED 31 Aug 2026 — a remedy WAS owed and has now been given.** Three
+subscriptions were live in Stripe and billing for a month while our table showed
+them lapsed; found by hand, cancelled and refunded on 31 Aug. They are the
+`disagreeing: 3` bucket, which `reconcile_audit` printed on 24 Aug and I did not
+chase the direction of. `billedButNoRow: 0` is true and answers a narrower
+question than the one I used it for — it counts people with no row at all, not
+people whose row disagrees with Stripe. Full account in
+`subscription-state-reconcile.md`. The real damage was the inverse — 9 rows granting
 access against nothing billable in Stripe, all test accounts.
 
 **A near-miss worth keeping:** the obvious fix (honour `current_period_end` for
