@@ -51,10 +51,10 @@
  * ⚠ SECTION 7 NEEDS A SOLICITOR BEFORE LAUNCH. Three Article 9 questions, in
  * descending order of how arguable they are:
  *
- *   1. PATCH TEST RESULTS ARE HEALTH DATA. Not arguable. patch_tests.result
- *      records whether someone's skin reacted to a product. Needs an Article 9
- *      condition; the drafted text leans on consent plus safety necessity, and
- *      that choice needs confirming, not assuming.
+ *   1. ~~PATCH TEST RESULTS ARE HEALTH DATA.~~ Withdrawn 31 Aug 2026 — not
+ *      because the point was wrong, but because the copy describing them was
+ *      removed. Nothing writes patch_tests, so there is no processing to find a
+ *      condition for. See the patch test section below.
  *   2. HAIR TYPE AND SKIN TONE may reveal racial or ethnic origin. Genuinely
  *      arguable — they are also the core search mechanic of the product.
  *   3. THE VERIFICATION SELFIE. Section 7 states plainly that no facial
@@ -70,22 +70,47 @@
  * logged_by ON DELETE SET NULL, the preflight entry was removed with it, and
  * the function's own comment now explains why. Deletion is not blocked.
  *
- * ⚠ WHAT REPLACED IT, 31 Aug 2026. The retention claim was the live problem,
- * not the deletion one. patch_tests is deliberately absent from
- * run_retention_purge (0007 explains why: six years would over-retain Article 9
- * health data, three might under-retain it, and a migration comment is not
- * where that gets decided), so patch test results are retained INDEFINITELY —
- * while this file published that every retained record is deleted after six
- * years. The copy now says indefinite and says the period is not yet set.
+ * ── PATCH TESTS: THE COPY IS GONE, 31 Aug 2026 ────────────────────────────
  *
- * ⚠ STILL FALSE, AND IT NEEDS A DECISION RATHER THAN A REWRITE. Sections 6 and
- * 7 describe patch test results in the present tense — what we record, why, and
- * the Article 9 basis for it. NO CODE WRITES patch_tests. The table is empty,
- * the only surface is a checkbox whose value is never persisted, and the
- * feature does not exist. So the policy describes a category of health data we
- * do not hold, which is a different fault from the one fixed above and cannot
- * be fixed by better wording: either the feature is coming, in which case the
- * copy is early, or it is not, in which case the copy should go.
+ * Sections 6 and 7 used to describe allergy patch test results in the present
+ * tense — what we record, why, and the Article 9 basis for it. Section 3 listed
+ * them as sensitive data, the retention section gave them a retention position,
+ * and the deletion page named them as a thing that survives account deletion.
+ *
+ * NO CODE WRITES patch_tests. The table is empty, the only surface is a
+ * checkbox whose value is never persisted, and the feature does not exist. A
+ * policy that describes a category of health data we do not hold is false
+ * regardless of what we intend to build later, so all of it has been removed.
+ *
+ * It comes back WITH the mechanism, not ahead of it. Publishing the policy
+ * first is precisely the pattern this month has been spent unwinding: the
+ * Founding Provider offer, the IP clause, "we publish your shop for you", the
+ * ID-check wording, the 90-day selfie promise, "cancel at any time", "report
+ * anyone in one tap". Every one of them was a sentence with nothing behind it.
+ *
+ * A week earlier the retention sentence here was corrected to say patch test
+ * results are kept indefinitely, which was true of the table and false of
+ * reality — there is nothing in it to keep. That paragraph has gone with the
+ * rest.
+ *
+ * ── WHAT THIS LEAVES, STATED RATHER THAN CLOSED ───────────────────────────
+ *
+ * Migration 0007 still retains patch test data indefinitely: patch_tests is
+ * deliberately absent from run_retention_purge, because six years would
+ * over-retain Article 9 health data and three might under-retain it, and that
+ * is not a choice to make from a migration comment. That reasoning still holds.
+ *
+ * With the copy gone, this is an UNUSED TABLE WITH AN UNRESOLVED RETENTION
+ * POSITION, not a live data-protection gap — there is no data in it and no way
+ * to put any there. It stops being a published falsehood and becomes a decision
+ * owed before the feature ships. If patch tests are ever built, the retention
+ * period must be settled and run_retention_purge updated BEFORE the first row
+ * is written, not after.
+ *
+ * ⚠ SECTION 7 STILL NEEDS A SOLICITOR for the two remaining Article 9
+ * questions: hair type and skin tone as possible indicators of racial or ethnic
+ * origin, and whether the verification selfie is biometric data. Removing the
+ * patch test copy removes the least arguable of the three and none of the work.
  */
 
 import { SUPPORT_EMAIL } from '@/lib/site'
@@ -362,7 +387,7 @@ export const PRIVACY: LegalDoc = {
         },
         {
           type: 'p',
-          text: 'Some of what we hold is sensitive — allergy patch test results, photos of you, and details about your hair and skin. Those get extra protection, and section 7 explains them separately.',
+          text: 'Some of what we hold is sensitive — photos of you, and details about your hair and skin. Those get extra protection, and section 7 explains them separately.',
         },
       ],
     },
@@ -426,10 +451,6 @@ export const PRIVACY: LegalDoc = {
         },
         {
           type: 'p',
-          text: 'Allergy patch tests: where a treatment needs a skin test first, we record that it was done, when, whether it passed, when it expires, and any notes.',
-        },
-        {
-          type: 'p',
           text: 'Agreements: when you agree to a treatment’s terms before a booking, we record which version of the terms you were shown, a fingerprint of that exact wording, the specific points you ticked, and when — so it can be shown later precisely what you agreed to. We don’t record your IP address or your device.',
         },
         {
@@ -478,10 +499,6 @@ export const PRIVACY: LegalDoc = {
         },
         {
           type: 'p',
-          text: 'Allergy patch test results. A patch test checks whether your skin reacts to a product before a treatment such as hair dye. The result is information about your health. We record it because carrying out the treatment without it would be unsafe, and because a stylist needs to know a valid test exists before proceeding.',
-        },
-        {
-          type: 'p',
           text: 'Details about your hair and skin. Hair type and skin tone are how stylists find models suited to a particular treatment, which is the core of what the app does. Depending on how they are described, they can also indicate someone’s ethnic origin. You choose whether to provide them and you can remove them at any time.',
         },
         {
@@ -490,7 +507,7 @@ export const PRIVACY: LegalDoc = {
         },
         {
           type: 'p',
-          text: 'Where we rely on your consent for any of the above, you can withdraw it at any time by emailing us or by removing the information in the app. Withdrawing consent for a patch test record may mean we cannot let a booking go ahead, because the safety check would no longer exist.',
+          text: 'Where we rely on your consent for any of the above, you can withdraw it at any time by emailing us or by removing the information in the app.',
         },
       ],
     },
@@ -535,18 +552,6 @@ export const PRIVACY: LegalDoc = {
         {
           type: 'p',
           text: 'Safety and agreement records: up to 6 years, then deleted automatically. This covers records that you agreed to a treatment, any moderation action taken, and reports made by or about you. These survive account deletion — a report about someone shouldn’t disappear because they left. What stays is your first name and a scrambled version of your email address that we cannot turn back into an address, not your photos, messages or contact details. Our Request account & data deletion page explains this in full.',
-        },
-        {
-          // Added 31 Aug 2026. patch_tests is NOT in run_retention_purge (0005)
-          // and 0007 says why: six years would over-retain Article 9 health data
-          // and three might under-retain it, and that is not a choice to make
-          // from a migration comment. The consequence is indefinite retention,
-          // and until now the policy said the opposite — that every retained
-          // record goes at six years. Saying "we have not set a period" is worse
-          // copy and true copy; the alternative was leaving a published sentence
-          // false until a solicitor answers.
-          type: 'p',
-          text: 'Allergy patch test results: kept indefinitely for now. A patch test result is a safety record — evidence that a required skin test was done before a treatment — and it is also health information, which carries stricter rules. We have not yet set how long we keep it. We are taking advice on the right period and will publish it here once it is set.',
         },
         {
           type: 'p',
@@ -837,7 +842,7 @@ export const DELETE_ACCOUNT: LegalDoc = {
       blocks: [
         {
           type: 'p',
-          text: 'Some things stay: a record that you agreed to a treatment, any moderation action taken on your account, any reports involving you, and any allergy patch test result. We keep these so we can respond to a safety concern or a legal claim.',
+          text: 'Some things stay: a record that you agreed to a treatment, any moderation action taken on your account, and any reports involving you. We keep these so we can respond to a safety concern or a legal claim.',
         },
         {
           type: 'p',
@@ -855,10 +860,6 @@ export const DELETE_ACCOUNT: LegalDoc = {
           type: 'p',
           text: 'We keep reports for up to 6 years, the same as the records above, and then delete them.',
         },
-        {
-          type: 'p',
-          text: 'Allergy patch test results are different, and we would rather say so than round it off. If a patch test has ever been logged for you, that result stays after you delete your account, and we have not yet set how long we keep it. It is a record that a required safety step was done before a treatment, and it is health information, which carries stricter rules than the records above. We are taking advice on the right period and will publish it here once it is set.',
-        },
       ],
     },
     {
@@ -866,7 +867,7 @@ export const DELETE_ACCOUNT: LegalDoc = {
       blocks: [
         {
           type: 'p',
-          text: 'Deletion is immediate, and anything remaining is cleared within 30 days. The records described above are the only exceptions. Consent records, moderation actions and reports are deleted after 6 years. An allergy patch test result is the one we cannot yet put a date on, and it is kept until we set one.',
+          text: 'Deletion is immediate, and anything remaining is cleared within 30 days. The records described above are the only exceptions, and all of them are deleted after 6 years.',
         },
       ],
     },

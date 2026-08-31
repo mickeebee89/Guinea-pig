@@ -31,10 +31,10 @@ live money, one a child-safety commitment.
 | ✅ Closed | Item 3 — report/block without a booking, proven on live data 25 Aug |
 | ✅ Closed | Item 4 — copy that overstated the ID check, 25 Aug |
 | ✅ Closed | Item 6 — Stripe webhook, live and proven on real traffic 31 Aug |
-| 🔨 Fix pending | 0023 — atomic subscription writes; found the expiry path never worked |
-| 🔨 Part done | Item 5 — retention copy corrected 31 Aug; two halves remain |
+| ✅ Closed | 0023–0025 — atomic subscription writes, real schema read, price default removed |
+| ✅ Closed | Item 5 — patch test copy removed, selfie orphan fixed, 31 Aug |
 | 📋 Scoped | Revocation of verification (item 8) — not built |
-| ⬜ Open | Item 7, plus 9, 10 and 11 |
+| ⬜ Open | Item 7, plus 8, 9, 10 and 11 |
 
 ---
 
@@ -336,11 +336,32 @@ solicitor answers. Also corrected a stale warning in `legal.ts`'s own header
 claiming deletion is blocked by `patch_tests`; `0007` fixed that and the
 preflight entry went with it.
 
-**Two halves remain.** (a) Sections 6 and 7 describe patch test results in the
-present tense and NO CODE WRITES `patch_tests` — the table is empty and the only
-surface is a checkbox whose value is never persisted. That needs a decision, not
-a rewrite: either the feature is coming and the copy is early, or it is not and
-the copy should go. (b) The selfie-resubmit orphan, untouched.
+**~~Two halves remain.~~ Both closed 31 Aug.** (a) **The patch test copy is out.** Sections 6 and 7 described
+patch test results in the present tense while nothing writes `patch_tests` — the
+table is empty, the only surface is a checkbox whose value is never persisted.
+Rather than decide the feature's future today, the copy was removed: a policy
+describing a category of health data we do not hold is false regardless of what
+we intend later. **It comes back with the mechanism, not ahead of it** — which is
+the pattern this whole month has been spent unwinding.
+
+The retention sentence corrected a week earlier went with it. Saying "patch test
+results are kept indefinitely" was true of the table and false of reality; there
+is nothing in it to keep.
+
+**What that leaves, stated rather than closed.** `0007` still retains patch test
+data indefinitely, and its reasoning still holds — six years would over-retain
+Article 9 health data, three might under-retain it, and that is not a choice to
+make from a migration comment. With the copy gone this is an **unused table with
+an unresolved retention position, not a live gap**: no data, no way to create
+any, and no published claim about it. It becomes a decision owed *before* the
+feature ships. If patch tests are ever built, the retention period must be
+settled and `run_retention_purge` updated **before the first row is written.**
+
+(b) **The selfie-resubmit orphan is fixed.** Both clients now delete the prior
+storage object before deleting the row, and `purge-selfies` gained a sweep for
+unreferenced objects older than the cutoff — because the client fix depends on
+every writer remembering, and it is the only thing that can reach the orphans
+already in the bucket.
 
 Original scope: Patch tests: either add to `run_retention_purge` (the
 migration says one line) or correct the published claim. Same for the selfie
