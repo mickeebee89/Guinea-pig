@@ -368,7 +368,10 @@ async function confirmSubscription(
     p_period_end:      periodEnd,
     p_amount_pence:    amountPence,
     p_currency_code:   currencyCode,
-    p_plan:            'monthly',
+    // plan is deliberately NOT passed. The column defaults to 'model_monthly';
+    // these two call sites used to send 'monthly', which is how one column ended
+    // up holding two names for the same thing with no reader to notice. 0024
+    // normalised the rows and made the default canonical.
   })
 
   console.log('CONFIRM SUB WRITE →', JSON.stringify({ writeErr }))
@@ -731,7 +734,10 @@ async function syncSubscription(userId: string) {
     p_period_end:      periodEnd,
     p_amount_pence:    price?.unit_amount ?? 499,
     p_currency_code:   (price?.currency ?? 'gbp').toUpperCase(),
-    p_plan:            'monthly',
+    // plan is deliberately NOT passed. The column defaults to 'model_monthly';
+    // these two call sites used to send 'monthly', which is how one column ended
+    // up holding two names for the same thing with no reader to notice. 0024
+    // normalised the rows and made the default canonical.
   })
 
   // The users write used to be a second statement here. It is gone:
