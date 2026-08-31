@@ -1,7 +1,7 @@
 # The Stripe webhook
 
-_Item 6 of the audit. Built 25 Aug 2026. **Not yet live — needs the endpoint
-registering and the secret setting.**_
+_Item 6 of the audit. Built 25 Aug 2026, live and proven on real traffic
+31 Aug 2026._
 
 **Item 2 made subscription state repairable. This makes it observable.** Read-time
 reconcile only learns the truth when someone opens the app; renewals, failed
@@ -120,8 +120,31 @@ function refuses every event rather than trusting an unverified body.
 
 ---
 
-## Still open
+## Proven, and how
 
-**Nothing is proven until step 5.** Everything above is code that compiles and has
-never received a real event. The panel exists precisely so that stays visible
-rather than being assumed.
+Both sides agree, which is the whole point of building the second one.
+
+| | |
+|---|---|
+| Stripe dashboard | Total 4, Failed 0. Deliveries 25/08 and 27/08, responses 2–3s |
+| Our panel | "4 events in the last 7 days. Last event 27/08/2026, 16:12:10 · `invoice.payment_succeeded`" |
+
+The panel is not a nicer view of Stripe's page — it is the independent second
+account. Agreement between them is evidence; either alone would only have been a
+claim.
+
+---
+
+## Two things worth knowing before someone debugs this under pressure
+
+**1. There is no synthetic event available in live mode.** Stripe's Shell is
+read-only in live mode, so `stripe trigger` cannot reach a live endpoint. If this
+webhook ever misbehaves, the options are real traffic or standing up a separate
+test-mode endpoint — there is no "just fire a test event at it" path. Worth
+knowing in advance rather than discovering it while something is broken.
+
+**2. What proved it was luck, not design.** The four events were real
+subscription cancellations made by hand, not a test anyone arranged. It worked,
+and the evidence is genuine, but nobody had planned a way to exercise this. Given
+(1), that gap does not close by itself: if this needs proving again, someone has
+to either wait for real traffic or build the test-mode endpoint deliberately.

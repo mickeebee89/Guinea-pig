@@ -30,9 +30,10 @@ live money, one a child-safety commitment.
 | ✅ Closed | Item 2 — subscription reconcile, proven on live data 24 Aug |
 | ✅ Closed | Item 3 — report/block without a booking, proven on live data 25 Aug |
 | ✅ Closed | Item 4 — copy that overstated the ID check, 25 Aug |
-| 🔨 Built | Item 6 — Stripe webhook; needs registering + secret before it is live |
+| ✅ Closed | Item 6 — Stripe webhook, live and proven on real traffic 31 Aug |
+| 🔨 Part done | Item 5 — retention copy corrected 31 Aug; two halves remain |
 | 📋 Scoped | Revocation of verification (item 8) — not built |
-| ⬜ Open | Items 5, 7, plus 9, 10 and 11 |
+| ⬜ Open | Item 7, plus 9, 10 and 11 |
 
 ---
 
@@ -316,12 +317,39 @@ four strings in mobile `verify-payment.tsx`, the apply-gate line in
 Original scope: Mobile "identity verification" wording, `StylistCard` badge
 title, Settings "Premium coming soon".
 
-**5. Legal reconciliation.** Patch tests: either add to `run_retention_purge` (the
+**5. Legal reconciliation — PART DONE 31 Aug.** The published sentence is no
+longer false. `/delete-account` said the retained records "are the only
+exception, and all of them are deleted after 6 years"; patch test results are a
+fourth exception and are retained indefinitely, because `patch_tests` is
+deliberately absent from `run_retention_purge` (`0007`: six years would
+over-retain Article 9 health data, three might under-retain it, and a migration
+comment is not where that gets decided). Privacy and the deletion page now both
+say indefinite, and say plainly that the period has not been set and is being
+advised on. Worse copy, true copy — the alternative was leaving it false until a
+solicitor answers. Also corrected a stale warning in `legal.ts`'s own header
+claiming deletion is blocked by `patch_tests`; `0007` fixed that and the
+preflight entry went with it.
+
+**Two halves remain.** (a) Sections 6 and 7 describe patch test results in the
+present tense and NO CODE WRITES `patch_tests` — the table is empty and the only
+surface is a checkbox whose value is never persisted. That needs a decision, not
+a rewrite: either the feature is coming and the copy is early, or it is not and
+the copy should go. (b) The selfie-resubmit orphan, untouched.
+
+Original scope: Patch tests: either add to `run_retention_purge` (the
 migration says one line) or correct the published claim. Same for the selfie
 resubmit orphan. Plus the zero-purge audit row, so the purge stops being
 unobservable when idle.
 
-**6. ~~The webhook~~** — built 25 Aug, NOT yet live. Full account in
+**6. ~~The webhook~~** — done 25 Aug, live and proven on real traffic 31 Aug:
+Stripe reports 4 delivered and 0 failed, our panel independently reports the same
+four and the same last event. Two facts recorded in `stripe-webhook.md` for
+whoever debugs it next: Stripe's Shell is read-only in live mode so `stripe
+trigger` can never reach a live endpoint, and the events that proved this were
+real cancellations rather than a test anyone arranged — lucky rather than
+designed.
+
+Original note: built 25 Aug, NOT yet live. Full account in
 `stripe-webhook.md`. Failed payment gives grace to period end and tells the user;
 `customer.subscription.deleted` is what actually ends access. Every delivery is
 recorded and the Revenue page opens with a "last event received" panel, because

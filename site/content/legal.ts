@@ -63,19 +63,29 @@
  *      "specific technical processing" and so biometric data under Article 9 is
  *      the question, and it needs someone who will sign their name to it.
  *
- * ⚠ SECTION 10 CLAIMS SOMETHING THE CODE MAY NOT HONOUR. It says you can delete
- * your account at any time. The delete-account edge function's preflight
- * (supabase/functions/delete-account/index.ts:89-101) ABORTS on any row in
- * patch_tests referencing the user — model_id, provider_id or logged_by — and
- * returns 409 without deleting anything. So a user who has had a patch test
- * logged currently CANNOT delete their account, which is both a false statement
- * here and an Apple Guideline 5.1.1(v) failure.
+ * ✅ SECTION 10 — RESOLVED, and this warning was stale. It used to say the
+ * delete-account preflight ABORTS on any patch_tests row, so anyone with a
+ * patch test logged could not delete their account: a false statement here and
+ * an Apple 5.1.1(v) failure. Migration 0007 made model_id, provider_id and
+ * logged_by ON DELETE SET NULL, the preflight entry was removed with it, and
+ * the function's own comment now explains why. Deletion is not blocked.
  *
- * LATENT OR LIVE DEPENDS ON WHETHER patch_tests HAS ROWS — unverified at the
- * time of writing. `select count(*) from public.patch_tests;` settles it. This
- * is flagged rather than fixed because the fix is a decision about what happens
- * to a safety record when its subject leaves, which is the same question 0004
- * answered for reports and deserves the same care.
+ * ⚠ WHAT REPLACED IT, 31 Aug 2026. The retention claim was the live problem,
+ * not the deletion one. patch_tests is deliberately absent from
+ * run_retention_purge (0007 explains why: six years would over-retain Article 9
+ * health data, three might under-retain it, and a migration comment is not
+ * where that gets decided), so patch test results are retained INDEFINITELY —
+ * while this file published that every retained record is deleted after six
+ * years. The copy now says indefinite and says the period is not yet set.
+ *
+ * ⚠ STILL FALSE, AND IT NEEDS A DECISION RATHER THAN A REWRITE. Sections 6 and
+ * 7 describe patch test results in the present tense — what we record, why, and
+ * the Article 9 basis for it. NO CODE WRITES patch_tests. The table is empty,
+ * the only surface is a checkbox whose value is never persisted, and the
+ * feature does not exist. So the policy describes a category of health data we
+ * do not hold, which is a different fault from the one fixed above and cannot
+ * be fixed by better wording: either the feature is coming, in which case the
+ * copy is early, or it is not, in which case the copy should go.
  */
 
 import { SUPPORT_EMAIL } from '@/lib/site'
@@ -527,6 +537,18 @@ export const PRIVACY: LegalDoc = {
           text: 'Safety and agreement records: up to 6 years, then deleted automatically. This covers records that you agreed to a treatment, any moderation action taken, and reports made by or about you. These survive account deletion — a report about someone shouldn’t disappear because they left. What stays is your first name and a scrambled version of your email address that we cannot turn back into an address, not your photos, messages or contact details. Our Request account & data deletion page explains this in full.',
         },
         {
+          // Added 31 Aug 2026. patch_tests is NOT in run_retention_purge (0005)
+          // and 0007 says why: six years would over-retain Article 9 health data
+          // and three might under-retain it, and that is not a choice to make
+          // from a migration comment. The consequence is indefinite retention,
+          // and until now the policy said the opposite — that every retained
+          // record goes at six years. Saying "we have not set a period" is worse
+          // copy and true copy; the alternative was leaving a published sentence
+          // false until a solicitor answers.
+          type: 'p',
+          text: 'Allergy patch test results: kept indefinitely for now. A patch test result is a safety record — evidence that a required skin test was done before a treatment — and it is also health information, which carries stricter rules. We have not yet set how long we keep it. We are taking advice on the right period and will publish it here once it is set.',
+        },
+        {
           type: 'p',
           text: 'Waitlist details: until Cavy launches and we’ve told you, or until you unsubscribe or ask us to delete them — whichever comes first.',
         },
@@ -815,7 +837,7 @@ export const DELETE_ACCOUNT: LegalDoc = {
       blocks: [
         {
           type: 'p',
-          text: 'Two things stay: a record that you agreed to a treatment, and any moderation action taken on your account. We keep these so we can respond to a safety concern or a legal claim.',
+          text: 'Some things stay: a record that you agreed to a treatment, any moderation action taken on your account, any reports involving you, and any allergy patch test result. We keep these so we can respond to a safety concern or a legal claim.',
         },
         {
           type: 'p',
@@ -833,6 +855,10 @@ export const DELETE_ACCOUNT: LegalDoc = {
           type: 'p',
           text: 'We keep reports for up to 6 years, the same as the records above, and then delete them.',
         },
+        {
+          type: 'p',
+          text: 'Allergy patch test results are different, and we would rather say so than round it off. If a patch test has ever been logged for you, that result stays after you delete your account, and we have not yet set how long we keep it. It is a record that a required safety step was done before a treatment, and it is health information, which carries stricter rules than the records above. We are taking advice on the right period and will publish it here once it is set.',
+        },
       ],
     },
     {
@@ -840,7 +866,7 @@ export const DELETE_ACCOUNT: LegalDoc = {
       blocks: [
         {
           type: 'p',
-          text: 'Deletion is immediate, and anything remaining is cleared within 30 days. The records described above are the only exception, and all of them are deleted after 6 years.',
+          text: 'Deletion is immediate, and anything remaining is cleared within 30 days. The records described above are the only exceptions. Consent records, moderation actions and reports are deleted after 6 years. An allergy patch test result is the one we cannot yet put a date on, and it is kept until we set one.',
         },
       ],
     },
