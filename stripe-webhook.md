@@ -108,7 +108,10 @@ persistent ones leave a row the Revenue panel surfaces.
    `customer.subscription.created`, `.updated`, `.deleted`,
    `invoice.payment_succeeded`, `invoice.payment_failed`.
 4. `npx supabase secrets set STRIPE_WEBHOOK_SECRET=whsec_...` from that endpoint.
-5. Send a test event and check the Revenue panel changes.
+5. Check the Revenue panel. **Not with `stripe trigger`** — see fact 1 below;
+   the Shell is read-only in live mode and cannot reach a live endpoint. The
+   panel changing on the first real event is the proof, which is how this one
+   was actually confirmed.
 
 **`--no-verify-jwt` is required and is not a hole.** Stripe does not send a
 Supabase JWT; without the flag the gateway rejects every delivery before the
