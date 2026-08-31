@@ -31,6 +31,7 @@ live money, one a child-safety commitment.
 | ✅ Closed | Item 3 — report/block without a booking, proven on live data 25 Aug |
 | ✅ Closed | Item 4 — copy that overstated the ID check, 25 Aug |
 | ✅ Closed | Item 6 — Stripe webhook, live and proven on real traffic 31 Aug |
+| 🔨 Fix pending | 0023 — atomic subscription writes; found the expiry path never worked |
 | 🔨 Part done | Item 5 — retention copy corrected 31 Aug; two halves remain |
 | 📋 Scoped | Revocation of verification (item 8) — not built |
 | ⬜ Open | Item 7, plus 9, 10 and 11 |

@@ -110,10 +110,24 @@ async function resolveUserId(customerId: string | null): Promise<string | null> 
 }
 
 /**
- * Write the state to BOTH places that hold it: `subscriptions`, which the
- * access gates read, and `users`, which Settings reads. cancel_subscription
- * already does this — a write to one and not the other is how Settings ends up
- * showing "Free Plan" to somebody who is being billed.
+ * Write the state.
+ *
+ * ── THIS USED TO BE TWO STATEMENTS AND IT SPLIT ───────────────────────────
+ * It ran `subscriptions.upsert` and `users.update` in a Promise.all and threw
+ * afterwards if either failed. Throwing does not undo the one that succeeded.
+ *
+ * On 31 Aug 2026 three customer.subscription.deleted events failed on
+ * users_subscription_status_check and left exactly that: subscriptions
+ * 'expired', users still 'active'. Three accounts reading as paying members
+ * with access, on the one event whose entire job is to end access.
+ *
+ * Now it is a single SECURITY DEFINER function (migration 0023). A function
+ * body is one transaction, so a constraint violation on the second table rolls
+ * back the first. Both tables move or neither does.
+ *
+ * The value written for "not paying" is no longer guessed here either. It was
+ * 'free', which the constraint rejects; 0023 discovered the permitted value by
+ * probing the live constraint and baked it into the function.
  */
 async function writeState(args: {
   userId: string
@@ -123,35 +137,18 @@ async function writeState(args: {
   periodStart: string | null
   periodEnd: string | null
 }): Promise<void> {
-  const { userId, status, customerId, subscriptionId, periodStart, periodEnd } = args
-
-  const subRow: Record<string, unknown> = { user_id: userId, status }
-  if (customerId)     subRow.stripe_customer_id = customerId
-  if (subscriptionId) subRow.stripe_subscription_id = subscriptionId
-  if (periodStart)    subRow.current_period_start = periodStart
-  if (periodEnd)      subRow.current_period_end = periodEnd
-
-  // Settings shows 'free' for anything that is not a live membership. past_due
-  // still IS a live membership — access continues — so it must not read as free.
-  const userStatus =
-    status === 'expired' ? 'free' :
-    status === 'past_due' ? 'active' :
-    status
-
-  const [{ error: subErr }, { error: userErr }] = await Promise.all([
-    db.from('subscriptions').upsert(subRow, { onConflict: 'user_id' }),
-    db.from('users').update({
-      subscription_status:       userStatus,
-      subscription_next_billing: status === 'expired' ? null : periodEnd,
-    }).eq('id', userId),
-  ])
+  const { error } = await db.rpc('apply_subscription_state', {
+    p_user_id:         args.userId,
+    p_status:          args.status,
+    p_customer_id:     args.customerId,
+    p_subscription_id: args.subscriptionId,
+    p_period_start:    args.periodStart,
+    p_period_end:      args.periodEnd,
+  })
 
   // Thrown, not logged. A webhook that could not write must return non-2xx so
-  // Stripe retries — swallowing it here is exactly the defect confirm_subscription
-  // had, returning success while the row never landed.
-  if (subErr || userErr) {
-    throw new Error(`db write failed: ${(subErr || userErr)!.message}`)
-  }
+  // Stripe retries — swallowing it is the defect confirm_subscription had.
+  if (error) throw new Error(`db write failed: ${error.message}`)
 }
 
 /** Tell the user their payment failed. Once per invoice, not once per retry. */
@@ -185,6 +182,49 @@ async function notifyPaymentFailed(userId: string, invoiceId: string, periodEnd:
       `You haven’t been charged twice. (ref ${invoiceId})`,
   })
   if (error) console.error('[stripe-webhook] payment_failed notification failed', error)
+}
+
+/**
+ * The subscription this invoice belongs to, from either payload shape.
+ *
+ * ── WHY THERE ARE TWO ────────────────────────────────────────────────────
+ * Two real £4.99 renewals arrived on 31 Aug 2026 and were recorded as
+ * "invoice with no subscription (one-off payment)" and IGNORED. They were not
+ * one-off payments. `invoice.subscription` was removed in Stripe API version
+ * 2025-04-30.basil and moved to
+ * `invoice.parent.subscription_details.subscription`, and the payload shape is
+ * set by the WEBHOOK ENDPOINT'S API version — not by the SDK pinned in this
+ * file. A new endpoint registered in 2026 gets the current version, so the
+ * field this code read had already moved.
+ *
+ * Both shapes are read, so this keeps working whichever version the endpoint
+ * is on.
+ */
+function subscriptionIdFrom(inv: Stripe.Invoice): string | null {
+  const direct = (inv as unknown as { subscription?: string | { id: string } | null }).subscription
+  if (direct) return typeof direct === 'string' ? direct : direct.id
+
+  const nested = (inv as unknown as {
+    parent?: { subscription_details?: { subscription?: string | { id: string } | null } | null } | null
+  }).parent?.subscription_details?.subscription
+  if (nested) return typeof nested === 'string' ? nested : nested.id
+
+  return null
+}
+
+/**
+ * Does Stripe consider this a subscription invoice, regardless of where the id
+ * lives? `billing_reason` is stable across both API shapes.
+ *
+ * This exists so 'ignored' can only ever mean "not ours to act on", never "we
+ * could not tell". Conflating those is what turned two real renewals into two
+ * rows that looked fine.
+ */
+function isSubscriptionInvoice(inv: Stripe.Invoice): boolean {
+  return [
+    'subscription', 'subscription_create', 'subscription_cycle',
+    'subscription_update', 'subscription_threshold',
+  ].includes(inv.billing_reason ?? '')
 }
 
 // ── Handler ────────────────────────────────────────────────────────────────
@@ -303,8 +343,23 @@ Deno.serve(async (req) => {
         const inv = event.data.object as Stripe.Invoice
         // Only subscription invoices matter here; the £14.99 provider fee is a
         // PaymentIntent and has no subscription attached.
-        if (!inv.subscription) {
-          await finish('ignored', 'Invoice with no subscription (one-off payment)')
+        const subIdFound = subscriptionIdFrom(inv)
+        if (!subIdFound) {
+          // 'ignored' must mean "not ours", never "we could not tell". A
+          // subscription invoice we cannot resolve is a FAILURE and has to look
+          // like one — two real renewals were filed as one-off payments here.
+          if (isSubscriptionInvoice(inv)) {
+            await finish('failed',
+              `Subscription invoice (billing_reason=${inv.billing_reason}) but no subscription id `
+              + `in either invoice.subscription or invoice.parent.subscription_details.subscription. `
+              + `Check the endpoint's API version in the Stripe dashboard.`)
+            // 200, not 500: redelivering the same payload cannot fix a shape
+            // problem, and an endless retry would bury real failures.
+            return new Response(JSON.stringify({ received: true, unresolved: true }), { status: 200 })
+          }
+          await finish('ignored',
+            `Invoice with no subscription (billing_reason=${inv.billing_reason ?? 'unknown'}) `
+            + `— genuinely a one-off payment`)
           break
         }
         const customerId = typeof inv.customer === 'string' ? inv.customer : inv.customer?.id ?? null
@@ -317,7 +372,7 @@ Deno.serve(async (req) => {
         // Read the subscription rather than trusting the invoice's period: on a
         // renewal the invoice line period and the subscription period can differ
         // by proration, and the gates read current_period_end.
-        const subId = typeof inv.subscription === 'string' ? inv.subscription : inv.subscription.id
+        const subId = subIdFound
         const sub = await stripe.subscriptions.retrieve(subId)
 
         await writeState({
@@ -336,8 +391,18 @@ Deno.serve(async (req) => {
 
       case 'invoice.payment_failed': {
         const inv = event.data.object as Stripe.Invoice
-        if (!inv.subscription) {
-          await finish('ignored', 'Failed invoice with no subscription (one-off payment)')
+        const failedSubId = subscriptionIdFrom(inv)
+        if (!failedSubId) {
+          if (isSubscriptionInvoice(inv)) {
+            await finish('failed',
+              `Failed subscription invoice (billing_reason=${inv.billing_reason}) but no `
+              + `subscription id in either payload shape. The user has NOT been told their `
+              + `payment failed. Check the endpoint's API version.`)
+            return new Response(JSON.stringify({ received: true, unresolved: true }), { status: 200 })
+          }
+          await finish('ignored',
+            `Failed invoice with no subscription (billing_reason=${inv.billing_reason ?? 'unknown'}) `
+            + `— genuinely a one-off payment`)
           break
         }
         const customerId = typeof inv.customer === 'string' ? inv.customer : inv.customer?.id ?? null
@@ -347,7 +412,7 @@ Deno.serve(async (req) => {
           return new Response(JSON.stringify({ received: true, unattributed: true }), { status: 200 })
         }
 
-        const subId = typeof inv.subscription === 'string' ? inv.subscription : inv.subscription.id
+        const subId = failedSubId
         const sub = await stripe.subscriptions.retrieve(subId)
         const periodEnd = iso(sub.current_period_end)
 

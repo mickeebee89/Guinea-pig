@@ -180,3 +180,65 @@ visits.
 The date check is what makes its absence *bounded* rather than unbounded: access
 now expires within a billing period unless Stripe confirms otherwise. That is why
 the webhook can sit at item 4 rather than first — but it is not optional.
+
+---
+
+## 31 Aug 2026 — the deletion path, and two defects it exposed
+
+Cancelling the three live subscriptions fired three
+`customer.subscription.deleted` events. **All three failed**, and left this:
+
+```
+subscriptions.status = 'expired'   users.subscription_status = 'active'
+```
+
+Three accounts still reading as paying members with access, on the one event
+whose entire job is to end access.
+
+### 1. The write was not atomic
+
+`writeState` issued the two updates in a `Promise.all` and threw afterwards if
+either failed. **Throwing does not undo the one that succeeded.** Two tables that
+must agree were being written by two independent statements.
+
+Migration `0023` replaces every write site — the webhook, `sync_subscription`,
+`confirm_subscription`, `cancel_subscription` — with one `SECURITY DEFINER`
+function. A function body is a single transaction, so a constraint violation on
+the second table rolls back the first. Both move or neither does.
+
+### 2. `'free'` was never a permitted value, and nothing said so
+
+The failure was `users_subscription_status_check`. The code wrote `'free'`;
+mobile's own Settings screen has always commented its not-paying cases as
+*"none / cancelled / null"*.
+
+**The webhook did not introduce this.** `sync_subscription` has two expiry
+branches. Both write `'free'`. **Neither checks the error.** Both then return
+`{ ok: true, repaired: true }`.
+
+So every expiry repair since Stripe went live has reported success for a write
+that could not succeed. The webhook is simply the first code to check the error,
+so it is the first to make it visible. Same shape as everything else here: a
+success signal that does not depend on the thing it claims to prove.
+
+`0023` does not guess the replacement. It reads the constraint, records its
+definition in `migration_findings` — putting the answer in the repo for the first
+time — and **proves** which values are writable by attempting each inside a
+savepoint and rolling back.
+
+### 3. Two real renewals were filed as one-off payments
+
+Two `invoice.payment_succeeded` events were recorded `ignored — invoice with no
+subscription (one-off payment)`. They were £4.99 renewals that charged a card.
+
+`invoice.subscription` was removed in Stripe API version **2025-04-30.basil** and
+moved to `invoice.parent.subscription_details.subscription`. The payload shape is
+set by the **webhook endpoint's** API version, not the SDK pinned in the function
+— so an endpoint registered in 2026 gets the current shape, and the field the
+code read had already moved.
+
+Both shapes are now read. More importantly, **`ignored` can no longer mean "we
+could not tell"**: `billing_reason` decides whether Stripe considers it a
+subscription invoice, and one we cannot resolve is recorded as `failed`.
+Conflating "not ours" with "couldn't work it out" is what turned two real
+renewals into two rows that looked fine.

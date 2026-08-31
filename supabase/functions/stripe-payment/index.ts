@@ -287,17 +287,20 @@ async function cancelSubscription(userId: string) {
   // Real Stripe call — cancel at period end so they keep what they paid for.
   await stripe.subscriptions.update(row.stripe_subscription_id, { cancel_at_period_end: true })
 
-  // Reflect it in BOTH sources of truth: the gate reads subscriptions.status; the
-  // Settings panel reads users.subscription_status.
-  const [{ error: subErr }, { error: userErr }] = await Promise.all([
-    db.from('subscriptions').update({ status: 'cancelling' }).eq('user_id', userId),
-    db.from('users')
-      .update({ subscription_status: 'cancelling', subscription_next_billing: row.current_period_end })
-      .eq('id', userId),
-  ])
-  if (subErr || userErr) {
-    console.error('[stripe-payment] cancel_subscription db write failed', { subErr, userErr })
-    return respond({ success: false, error: (subErr || userErr)!.message }, 500)
+  // ── ONE TRANSACTION, BOTH TABLES (migration 0023) ──────────────────────────
+  // These used to be two independent statements in a Promise.all. On 31 Aug 2026
+  // that shape left three accounts 'expired' in subscriptions and 'active' in
+  // users, because the second write violated users_subscription_status_check and
+  // the first had already committed. apply_subscription_state does both in one
+  // function body, so either both move or neither does.
+  const { error: writeErr } = await db.rpc('apply_subscription_state', {
+    p_user_id:      userId,
+    p_status:       'cancelling',
+    p_period_end:   row.current_period_end,
+  })
+  if (writeErr) {
+    console.error('[stripe-payment] cancel_subscription db write failed', writeErr)
+    return respond({ success: false, error: writeErr.message }, 500)
   }
 
   return respond({ success: true, cancelsAt: row.current_period_end })
@@ -350,35 +353,26 @@ async function confirmSubscription(
   const amountPence  = price?.unit_amount ?? 499
   const currencyCode = (price?.currency ?? 'gbp').toUpperCase()
 
-  const [{ error: userErr }, { error: subErr }] = await Promise.all([
-    // Update users table
-    db.from('users')
-      .update({
-        subscription_status:       'active',
-        subscription_next_billing: periodEnd,
-      })
-      .eq('id', userId),
+  // ── ONE TRANSACTION, BOTH TABLES (migration 0023) ──────────────────────────
+  // These used to be two independent statements in a Promise.all. On 31 Aug 2026
+  // that shape left three accounts 'expired' in subscriptions and 'active' in
+  // users, because the second write violated users_subscription_status_check and
+  // the first had already committed. apply_subscription_state does both in one
+  // function body, so either both move or neither does.
+  const { error: writeErr } = await db.rpc('apply_subscription_state', {
+    p_user_id:         userId,
+    p_status:          'active',
+    p_customer_id:     subCustomerId,
+    p_subscription_id: subscriptionId,
+    p_period_start:    periodStart,
+    p_period_end:      periodEnd,
+    p_amount_pence:    amountPence,
+    p_currency_code:   currencyCode,
+    p_plan:            'monthly',
+  })
 
-    // Upsert subscription record
-    db.from('subscriptions')
-      .upsert(
-        {
-          user_id:                userId,
-          stripe_customer_id:     subCustomerId,
-          stripe_subscription_id: subscriptionId,
-          status:                 'active',
-          current_period_start:   periodStart,
-          current_period_end:     periodEnd,
-          amount_pence:           amountPence,
-          currency_code:          currencyCode,
-          plan:                   'monthly',
-        },
-        { onConflict: 'user_id' },
-      ),
-  ])
-
-  console.log('CONFIRM SUB WRITE →', JSON.stringify({ userErr, subErr }))
-  if (subErr || userErr) return respond({ success: false, userErr, subErr })
+  console.log('CONFIRM SUB WRITE →', JSON.stringify({ writeErr }))
+  if (writeErr) return respond({ success: false, error: writeErr.message })
 
   return respond({ success: true, periodEnd })
 }
@@ -668,10 +662,19 @@ async function syncSubscription(userId: string) {
     // No customer in Stripe at all. Nothing is being billed, so any local row
     // claiming otherwise is wrong.
     if (row && ['active', 'cancelling', 'past_due'].includes(row.status ?? '')) {
-      await db.from('subscriptions').update({ status: 'expired' }).eq('user_id', userId)
-      await db.from('users')
-        .update({ subscription_status: 'free', subscription_next_billing: null })
-        .eq('id', userId)
+      // Was two unchecked writes of subscription_status: 'free'. The constraint
+      // rejects 'free', so this branch has been failing silently since Stripe
+      // went live while still returning `repaired: true` — the exact
+      // success-signal-that-proves-nothing shape this audit keeps finding.
+      // 0023 discovered the permitted value and owns it now; the error is
+      // checked rather than discarded.
+      const { error: expErr } = await db.rpc('apply_subscription_state', {
+        p_user_id: userId, p_status: 'expired',
+      })
+      if (expErr) {
+        console.error('[stripe-payment] sync_subscription expire failed', expErr)
+        return respond({ ok: false, error: 'Could not expire subscription: ' + expErr.message }, 500)
+      }
     }
     return respond({ ok: true, source: 'stripe', active: false, status: 'expired', repaired: !!row })
   }
@@ -681,13 +684,20 @@ async function syncSubscription(userId: string) {
   const live = subs.data.find(x => BILLABLE.includes(x.status))
 
   if (!live) {
-    if (row && ['active', 'cancelling'].includes(row.status ?? '')) {
-      await db.from('subscriptions')
-        .update({ status: 'expired', stripe_customer_id: customerId })
-        .eq('user_id', userId)
-      await db.from('users')
-        .update({ subscription_status: 'free', subscription_next_billing: null })
-        .eq('id', userId)
+    if (row && ['active', 'cancelling', 'past_due'].includes(row.status ?? '')) {
+      // Was two unchecked writes of subscription_status: 'free'. The constraint
+      // rejects 'free', so this branch has been failing silently since Stripe
+      // went live while still returning `repaired: true` — the exact
+      // success-signal-that-proves-nothing shape this audit keeps finding.
+      // 0023 discovered the permitted value and owns it now; the error is
+      // checked rather than discarded.
+      const { error: expErr } = await db.rpc('apply_subscription_state', {
+        p_user_id: userId, p_status: 'expired', p_customer_id: customerId,
+      })
+      if (expErr) {
+        console.error('[stripe-payment] sync_subscription expire failed', expErr)
+        return respond({ ok: false, error: 'Could not expire subscription: ' + expErr.message }, 500)
+      }
     }
     return respond({ ok: true, source: 'stripe', active: false, status: 'expired', repaired: !!row })
   }
@@ -712,34 +722,30 @@ async function syncSubscription(userId: string) {
     : (live.status === 'past_due' || live.status === 'unpaid') ? 'past_due' : 'active'
   const price     = live.items?.data?.[0]?.price
 
-  const { error: upsertErr } = await db.from('subscriptions').upsert({
-    user_id:                userId,
-    stripe_customer_id:     customerId,
-    stripe_subscription_id: live.id,
-    status,
-    current_period_start:   new Date(live.current_period_start * 1000).toISOString(),
-    current_period_end:     periodEnd,
-    amount_pence:           price?.unit_amount ?? 499,
-    currency_code:          (price?.currency ?? 'gbp').toUpperCase(),
-    plan:                   'monthly',
-  }, { onConflict: 'user_id' })
+  const { error: upsertErr } = await db.rpc('apply_subscription_state', {
+    p_user_id:         userId,
+    p_status:          status,
+    p_customer_id:     customerId,
+    p_subscription_id: live.id,
+    p_period_start:    new Date(live.current_period_start * 1000).toISOString(),
+    p_period_end:      periodEnd,
+    p_amount_pence:    price?.unit_amount ?? 499,
+    p_currency_code:   (price?.currency ?? 'gbp').toUpperCase(),
+    p_plan:            'monthly',
+  })
 
-  // past_due still IS a live membership — access continues to period end — so
-  // Settings must not show it as anything else. Same mapping as the webhook.
-  const { error: userErr } = await db.from('users')
-    .update({
-      subscription_status:       status === 'past_due' ? 'active' : status,
-      subscription_next_billing: periodEnd,
-    })
-    .eq('id', userId)
-
-  // A failed repair must not be reported as success - that is the exact defect
-  // confirm_subscription has, returning 200 with { success: false } that no
-  // caller reads. Access is still granted, because Stripe says they are paying
-  // and that is what the answer turns on.
-  if (upsertErr || userErr) {
+  // The users write used to be a second statement here. It is gone:
+  // apply_subscription_state does both tables in one transaction, and the
+  // past_due -> 'active' mapping for Settings now lives inside that function
+  // rather than being repeated in every caller.
+  //
+  // A failed repair must not be reported as success — that was the defect
+  // confirm_subscription had, returning 200 with { success: false } no caller
+  // read. Access is still granted, because Stripe says they are paying and that
+  // is what the answer turns on.
+  if (upsertErr) {
     console.error('[stripe-payment] sync_subscription repair failed',
-      JSON.stringify({ upsertErr, userErr }))
+      JSON.stringify({ upsertErr }))
   }
 
   return respond({
@@ -747,6 +753,6 @@ async function syncSubscription(userId: string) {
     currentPeriodEnd: periodEnd,
     cancelAtPeriodEnd: !!live.cancel_at_period_end,
     repaired: true,
-    ...(upsertErr || userErr ? { repairWriteFailed: (upsertErr || userErr)!.message } : {}),
+    ...(upsertErr ? { repairWriteFailed: upsertErr.message } : {}),
   })
 }
