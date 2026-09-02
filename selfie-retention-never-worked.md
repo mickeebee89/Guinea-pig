@@ -200,3 +200,50 @@ reporting a problem, so there appeared not to be one.
 The general defence is the one this job lacked: **make the thing execute its real
 path, deliberately, before it has to do so unattended.** This was found only
 because the system was driven into a state it had never occupied.
+
+---
+
+## 2 Sep 2026 — the leak is older than the fix that found it
+
+The orphan sweep's first real listing found **two** unreferenced objects, both
+under the provider test account `517c2853`:
+
+```
+517c2853-.../selfie-1787162837357.jpg   2026-08-19
+517c2853-.../selfie-1783525522986.jpg   2026-07-08
+```
+
+**The 8 July object matters more than the August one.** The August orphan was
+created during piece 4's testing, so it could be dismissed as an artefact of
+looking. July's cannot: it predates that work by six weeks and was made by the
+ordinary resubmit path. The leak is not something the audit introduced by poking
+at verification — it has been running since at least early July, and every
+rejected-then-resubmitted selfie since has left one behind.
+
+That also settles what the sweep is for. It was justified as "the client fix
+depends on every writer remembering". Its first run showed it is also the only
+thing that can reach objects stranded before the fix existed, which is the larger
+half.
+
+### Why `storage.objects.created_at` was not edited to test it
+
+The obvious way to exercise the sweep today is to age an object past the 90-day
+cutoff. That means `update storage.objects set created_at = ...` — a table
+Supabase owns, in a schema with its own triggers, which the Storage API reads
+through.
+
+Hand-editing `auth.users` earlier this month produced malformed rows that broke
+both sign-in and account deletion. Same category: a platform table whose
+invariants are not ours and are not written down anywhere we control. Six weeks
+of waiting is cheaper than one malformed storage row, and the July object crosses
+90 days in early October by itself.
+
+Instead the function takes an `?orphanCutoff=` parameter that is **accepted only
+on a dry run** and refused with a 400 on a real one. It moves what the scan
+*lists*, never what gets *deleted*, and the response names the override whenever
+it is in effect so a widened scan cannot be mistaken for the real one. The
+row-based purge always uses the true 90-day cutoff regardless.
+
+That proves the query today and leaves the deletion to happen on its own
+schedule — which is also a better test, because nobody will have touched
+anything by then.

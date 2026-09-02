@@ -182,7 +182,40 @@ Deno.serve(async (req) => {
 
   const dryRun = dryRunFromQuery || dryRunFromBody
 
-  const cutoff = new Date(Date.now() - RETAIN_DAYS * 864e5).toISOString()
+  const realCutoff = new Date(Date.now() - RETAIN_DAYS * 864e5).toISOString()
+
+  // ── DRY-RUN-ONLY CUTOFF OVERRIDE ──────────────────────────────────────────
+  // Proving the orphan sweep otherwise means waiting for an object to age past
+  // 90 days, or hand-editing `storage.objects.created_at` — a platform table
+  // Supabase owns, with its own triggers, which is the same category of edit
+  // that produced malformed `auth.users` rows and broke sign-in and account
+  // deletion earlier this month.
+  //
+  // So the sweep's QUERY can be exercised against a nearer date instead. This
+  // changes what is listed, never what is deleted.
+  //
+  // REFUSED ON A REAL RUN, deliberately and loudly. An override that widens a
+  // deletion window is exactly the shape of thing that gets passed by accident
+  // once and takes real data with it, and "dryRun defaulted to destructive" is
+  // a mistake this function has already made once.
+  const cutoffOverride = new URL(req.url).searchParams.get('orphanCutoff')
+  if (cutoffOverride && !dryRun) {
+    return respond({
+      error: 'orphanCutoff is only accepted on a dry run. It widens the deletion '
+           + 'window, so it must never decide what actually gets removed. Re-send with '
+           + '?dryRun=true, or wait for the real 90-day cutoff.',
+      realCutoff,
+    }, 400)
+  }
+  if (cutoffOverride && Number.isNaN(Date.parse(cutoffOverride))) {
+    return respond({ error: `orphanCutoff is not a date I can parse: ${cutoffOverride}` }, 400)
+  }
+
+  // Row-based purging ALWAYS uses the real cutoff. Only the orphan scan moves.
+  const cutoff = realCutoff
+  const orphanCutoff = cutoffOverride
+    ? new Date(cutoffOverride).toISOString()
+    : realCutoff
 
   try {
     // Decided (approved or rejected) more than RETAIN_DAYS ago.
@@ -213,7 +246,7 @@ Deno.serve(async (req) => {
       // expiring today, orphaned objects sitting in the bucket regardless. The
       // sweep exists precisely for objects no row points at, so gating it on
       // rows would have made it unreachable exactly when it was needed.
-      const orphans = await findOrphans(cutoff)
+      const orphans = await findOrphans(orphanCutoff)
       let swept = 0
       if (!dryRun && orphans.paths.length > 0) {
         const { error: orphanErr } = await db.storage.from(BUCKET).remove(orphans.paths)
@@ -237,6 +270,7 @@ Deno.serve(async (req) => {
       // run claims an action that didn't happen, which misreads in logs later.
       return respond({
         ok: true, dryRun, cutoff,
+        ...(orphanCutoff !== cutoff ? { orphanCutoffOverride: orphanCutoff } : {}),
         ...(dryRun
           ? { wouldPurge: 0, wouldPurgeOrphans: orphans.paths.length, orphanPaths: orphans.paths }
           : { purged: 0, orphansPurged: swept }),
@@ -250,9 +284,10 @@ Deno.serve(async (req) => {
     const paths = rows.map(r => r.selfie_url as string).filter(Boolean)
 
     if (dryRun) {
-      const orphans = await findOrphans(cutoff)
+      const orphans = await findOrphans(orphanCutoff)
       return respond({
         ok: true, dryRun: true, cutoff,
+        ...(orphanCutoff !== cutoff ? { orphanCutoffOverride: orphanCutoff } : {}),
         wouldPurge: rows.length,
         // Named separately from wouldPurge: these are objects no row points at,
         // which is a different failure from a row whose time is up.
@@ -294,7 +329,7 @@ Deno.serve(async (req) => {
 
     // The orphan sweep, after the row-based purge so the referenced set already
     // reflects the nulls written above.
-    const orphans = await findOrphans(cutoff)
+    const orphans = await findOrphans(orphanCutoff)
     let orphansPurged = 0
     if (orphans.paths.length > 0) {
       const { error: orphanErr } = await db.storage.from(BUCKET).remove(orphans.paths)
