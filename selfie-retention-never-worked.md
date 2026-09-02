@@ -247,3 +247,50 @@ row-based purge always uses the true 90-day cutoff regardless.
 That proves the query today and leaves the deletion to happen on its own
 schedule — which is also a better test, because nobody will have touched
 anything by then.
+
+---
+
+## ⏰ THE OCTOBER CHECK — DIARISED 2 Sep 2026
+
+**A one-time reminder is scheduled for 8 October 2026** (Claude Code scheduled
+task `selfie-orphan-purge-check`, and this heading, because a reminder that lives
+only in a tool nobody opens is not a record).
+
+The 8 July orphan crosses 90 days on about **6 October**. The
+`purge-verification-selfies` cron runs **daily at 03:15**, so it should be deleted
+without anyone arranging it.
+
+**Why the date matters more than the deletion.** This is the only end-to-end proof
+this job will ever get that nobody set up. Every other test of it has been staged:
+a row aged by hand, an object listed against a moved cutoff, a dry run pointed at
+a nearer date. All of those prove the query. None proves the *schedule*.
+
+**If nobody looks, it passes unobserved — which is the same failure as the twenty
+green `cron.job_run_details` rows.** Those recorded dispatch and were read as
+completion for weeks. An unwatched success is indistinguishable from an unwatched
+failure, and this file exists because that distinction was missed once already.
+
+What to check on the day:
+
+```sql
+-- 1. The July object should be gone. The August one may remain; it crosses
+--    90 days in mid-November, and that is correct rather than a failure.
+select o.name, o.created_at
+from storage.objects o
+where o.bucket_id = 'verification-selfies'
+  and o.name not in (
+    select selfie_url from public.verification_requests where selfie_url is not null
+  )
+order by o.created_at;
+
+-- 2. The evidence. A purge with no audit row is a deletion we cannot prove.
+select created_at, details
+from public.admin_audit_log
+where action = 'selfie_retention_purge'
+order by created_at desc limit 10;
+```
+
+If the July object is still there, that is a real finding rather than a delay:
+the sweep works on demand but is not running in production. Look at
+`cron.job_run_details`, then the function logs, then whether the deployed version
+predates the sweep.
