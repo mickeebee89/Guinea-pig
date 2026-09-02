@@ -17,15 +17,15 @@ portfolio with video upload, settings with the blocked list, browse.
 **Slice 3 — booking.** Step 1 done (the apply gate, read-only). Steps 2 and 3
 were reordered and are also done — see below.
 
-**Migrations 0000–0019 applied, except 0009**, which is `SUPERSEDED BY 0010` and
-**must never be run** — its header explains why in detail. This line said
-"0000–0011 … clean as of 10 Aug" until 24 Aug; 0012–0019 all shipped and were
-confirmed applied by their own verify blocks.
+**Migrations 0000–0025 applied, except 0009**, which is `SUPERSEDED BY 0010` and
+**must never be run** — its header explains why in detail. This line has now been
+wrong twice: it read "0000–0011 … clean as of 10 Aug" until 24 Aug, then
+"0000–0019" until 2 Sep. 0020–0025 shipped in between.
 
-⚠️ `migration-status.mjs` has NOT been run since, because it needs
-`SUPABASE_SERVICE_ROLE_KEY` in the shell and that has not been set in any
-session. "Applied" here means each migration's own verify output was checked by
-hand, not that the checksum ledger was reconciled. Those are different claims.
+✅ **Resolved 2 Sep 2026.** `migration-status.mjs` has now been run against the
+live ledger: **25 applied, no drift, 0009 superseded.** The distinction this note
+drew was the right one — "each verify block passed" and "the checksum ledger
+agrees" are different claims — and both now hold.
 
 ---
 

@@ -1,6 +1,8 @@
 # Cavy Web — Phase 2: Full Parity
 
-> **Status: SCOPING. Nothing built.**
+> **Status (2 Sep 2026): SLICES 1–3 SHIPPED.** This read "SCOPING. Nothing built."
+> until today, while the member area, chat, the shop editor and the web ID check
+> were all live. See the slice progress files for what actually landed.
 > Read `web-phase-1-handover.md` first — its constraints and principles carry over unchanged,
 > including **migrations-first for any schema change** and the chain that produced them.
 

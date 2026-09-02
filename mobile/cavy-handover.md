@@ -69,7 +69,7 @@ package `com.cavyapp.app`, new keystore `JnbgqzbhMX`.
     lookup key ever misses — would undo the dashboard rename. One string to change.
 13. #69/#70 admin console write-error checking and correctness pass.
 14. #52/#74 post-launch: narrow photo signing and admin message reads.
-15. 🔴 **#75 LAUNCH BLOCKER** — `node seed/teardown.mjs` before going live. Seeded
+15. 🔴 **#75 LAUNCH BLOCKER** — `node seed/teardown.mjs` before going live. **Necessary but NOT sufficient (noted 2 Sep 2026): `teardown.mjs` matches `@seed.guineapig.invalid` and nothing else, and refuses to run if that suffix is edited - deliberately, so it can never reach a live account. The hand-made test accounts on `@acoxs.com`, `@bevriz.com`, gmail and hotmail are therefore OUT OF ITS REACH BY DESIGN and must be cleared separately.** Seeded
     stylists are published and genuinely bookable.
 
 ## Method that kept working
@@ -175,7 +175,9 @@ Full audit of the notification system (every `type` created vs every `type` hand
 - **Optional follow-up (NOT done):** centralise notification `type` string literals into one shared constants module so a future create/handle drift becomes a compile error (touches ~8 files) — flagged as a separate hardening task.
 
 ### 🟢 P7 — DOUBLE-BOOKING RACE (new issue found 14 Jul) — DONE + verified (DB guard live + 23505 handler reviewed)
-> **Numbering note:** this was a NEW issue that surfaced during testing on 14 Jul, numbered **P7** so it does NOT collide with the still-open **P5 (notification-type audit + remove the non-functional notification toggles)** and **P6 (email / forgot-password UX)** — both of those remain **OPEN / not started**.
+> **Numbering note:** this was a NEW issue that surfaced during testing on 14 Jul, numbered **P7** so it does NOT collide with the still-open **P5 (notification-type audit + remove the non-functional notification toggles)** and **P6 (email / forgot-password UX)** — both of those were still open at the time.
+>
+> **Corrected 2 Sep 2026.** This said P5 and P6 "remain OPEN / not started" while the same file marks both DONE + verified, seventeen lines above. A file that contradicts itself is worse than one merely out of date: whichever line you read first wins, and nothing signals that the other exists.
 
 Slot-collision prevention was **display-time only**: the model booking wizard greys out slots already held by pending/accepted sessions (server RPC `taken_slots`), then inserts a `sessions` row with **no pre-insert re-check, no transaction, and no DB uniqueness** (`availability_id` is a non-unique FK; no unique constraint on `sessions` anywhere). Two models racing for the same free slot could **both** insert active bookings — a time-of-check/time-of-use race. Sequential booking was always safe; completing/declining/cancelling correctly frees a slot (unchanged, by design).
 - **Fix — DB atomic guard (LIVE + verified):** partial unique index `sessions_active_slot_uniq` on `(provider_id, date, start_time)` `where status in ('pending','accepted')` — the second concurrent insert now fails atomically. Active-only, so completed/declined/cancelled still re-open the slot (matches `taken_slots`). SQL saved to `supabase/booking-guard.sql` (with a pre-check for existing dupes — returned clean). Index confirmed present in `pg_indexes`.

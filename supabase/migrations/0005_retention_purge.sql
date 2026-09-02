@@ -443,8 +443,9 @@ notify pgrst, 'reload schema';
 --
 --
 -- ── STILL TO DO, AND THE JOB IS ONLY HALF-USEFUL WITHOUT IT ────────────────
---   * Admin dashboard tile: last successful run from public.retention_runs,
---     red past 40 days. Until it exists, a job that stops is invisible.
+--   * ~~Admin dashboard tile~~ — BUILT. admin/app/page.tsx renders the Retention
+--     Purge card from public.retention_runs, red when stale or unreadable. This
+--     line said STILL TO DO until 2 Sep 2026, long after the tile shipped.
 --   * Tighten cavybeauty.com/delete-account: "for as long as it could still
 --     matter to a safety decision or a legal claim" becomes the specific
 --     period once this has run successfully at least once. That sentence in

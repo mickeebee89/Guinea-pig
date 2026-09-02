@@ -175,7 +175,7 @@ bookings is the scenario the fix exists for.
    A trigger, not client code: three writers can delete these rows (mobile, web
    `/shop`, admin) and putting the rule in three clients leaves it one client
    away from being wrong again, which is this bug's whole history.
-   **Not applied yet — paste it into the SQL editor.**
+   **Applied 10 Aug 2026.** (This said "not applied yet" until 2 Sep.)
 
 2. **✅ Mobile stops asking for it.** `edit-shop.tsx` now saves a **diff**:
    a kept category keeps its row and its id, only real additions are inserted,
@@ -204,7 +204,10 @@ bookings is the scenario the fix exists for.
    `is_founding_provider` (0011) and the privacy policy's IP claim (0010). All
    three were found by reading, none by anything failing.
 
-   **Not applied yet.** Run `supabase/diagnostics/pre-0013-treatment-delete-guard.sql`
+   **Applied 19 Aug 2026**, and its guard was later narrowed by `0015` after stale
+   `accepted` rows locked treatments permanently. (This said "not applied yet"
+   until 2 Sep.) The pre-check was run AFTER the fact, which is what produced
+   `0014`. Run `supabase/diagnostics/pre-0013-treatment-delete-guard.sql`
    first — it is a separate file precisely because 0012's pre-check was not.
 
 ## Still open

@@ -34,7 +34,8 @@ live money, one a child-safety commitment.
 | ✅ Closed | 0023–0025 — atomic subscription writes, real schema read, price default removed |
 | ✅ Closed | Item 5 — patch test copy removed, selfie orphan fixed, 31 Aug |
 | 📋 Scoped | Revocation of verification (item 8) — not built |
-| ⬜ Open | Item 7, plus 8, 9, 10 and 11 |
+| ✅ Closed | Item 7 — record reconciliation, 2 Sep |
+| ⬜ Open | Items 8, 9, 10 and 11 |
 
 ---
 
@@ -391,7 +392,54 @@ Nothing is proven until then.
 Original scope: the webhook, as its own scoped piece — the proper fix behind item 2, and
 what makes "renews automatically each month" and the Settings billing date true.
 
-**7. Remaining record reconciliation.** The rest of the drift table above.
+**7. ~~Remaining record reconciliation~~** — done 2 Sep 2026. Every row of the
+drift table re-derived against the current code rather than trusted; the table was
+itself a fortnight old, which is the joke this item exists to stop being funny.
+
+**The headline is not staleness.** `mobile/notes.md` has documented, since July,
+that `users.subscription_status` is constrained to
+`none | trialling | active | cancelled | cancelling` and that the value is
+**`'none'` and NOT `'free'`** — naming the exact bug, and noting it had already
+broken one cancel attempt silently.
+
+On 31 Aug that question cost migration `0023` (which probed the live constraint to
+discover it), `0024` (which corrected `0023`), three failed
+`customer.subscription.deleted` events and a split-state repair. Both migration
+headers state the answer "was not in this repo". **It was.** The search covered
+`supabase/migrations/` and the schema snapshot and never went near
+`mobile/notes.md`.
+
+**A record that is correct and unread fails exactly like one that is wrong: it
+does not reach the decision.** And it sat three lines above "No Stripe webhook
+handler exists" — a claim that was wrong and was trusted. Same file, same screen,
+opposite failures.
+
+The migration headers are left as written. They are applied artefacts and their
+checksums are the ledger; editing them to look wiser after the fact is precisely
+what the checksum exists to prevent. The correction lives here and in
+`mobile/notes.md`.
+
+**What was actually still wrong, and is now fixed:**
+
+| Record | Said | Actually |
+|---|---|---|
+| `mobile/notes.md` ×2 | "No Stripe webhook exists", "fine for now" | Live since 25 Aug, proven 31 Aug. "Fine for now" was not: three subs billed for a month unseen |
+| `mobile/notes.md` | "There are no migration files" | 0000–0025, checksummed, all applied |
+| `web-phase-2-plan.md:3` | "SCOPING. Nothing built." | Slices 1–3 shipped |
+| `web-slice-3-progress.md:20` | "0000–0019 applied" | 0000–0025 — wrong for the second time |
+| `web-slice-3-progress.md` | "`migration-status.mjs` has NOT been run" | Run 2 Sep: 25 applied, no drift |
+| `mobile-treatments-orphan-bug.md` ×2 | `0012`/`0013` "not applied yet" | Applied 10 and 19 Aug |
+| `0005:446` | Admin tile "STILL TO DO" | Built; below the footer, so no checksum drift |
+| `legal.ts:804` | App-scope privacy "STILL OUTSTANDING" | Closed 8 Aug — contradicted by the same file in two other places |
+| `cavy-handover.md:178` | P5/P6 "remain OPEN / not started" | Same file marks both DONE seventeen lines above |
+| `cavy-handover.md:72` | "run `teardown.mjs` before going live" | True but not sufficient: it matches `@seed.guineapig.invalid` only, so the hand-made test accounts are out of its reach by design |
+
+**Already fixed earlier and confirmed still correct:** `CLAUDE.md` (Stripe LIVE,
+company number, palette, Cloudinary), `site/README.md` (Vercel live 7 Aug).
+
+**Added to `CLAUDE.md`:** the subscription status vocabulary and the rule that
+`apply_subscription_state` is the only supported write path — not because it was
+undocumented, but because it was documented somewhere nobody looked.
 
 **9. Link model names to `/model/[id]`** — NEW, 25 Aug. The only link to the new
 model profile anywhere on the site is in `ChatThread`; the stylist dashboard

@@ -801,11 +801,12 @@ export const COMMUNITY: LegalDoc = {
  * job visible; without it, this page could go on claiming a deletion that had
  * quietly stopped happening.
  *
- * STILL OUTSTANDING: the app-scope privacy policy. PRIVACY (line ~297) says
- * plainly that it covers the waitlist and "does not yet cover the app", so the
- * retained-reports clause could not be added there — it belongs in the app
- * policy when that is written, and this page is currently the only place a
- * user can read it.
+ * ~~STILL OUTSTANDING: the app-scope privacy policy.~~ CLOSED, and this note was
+ * stale almost from the day it was written. The gap was closed on 8 Aug 2026 and
+ * this same file says so twice over: the header above records it, and PRIVACY's
+ * own published text now reads "This notice covers everything: the Cavy website,
+ * the waitlist, and the Cavy app." One file contradicting itself in three places
+ * is how the retained-reports clause looked homeless when it already had a home.
  */
 export const DELETE_ACCOUNT: LegalDoc = {
   slug: 'delete-account',

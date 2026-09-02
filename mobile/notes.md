@@ -48,8 +48,20 @@ _Anchored to latest commit `f5eef16`._
 ### Payments / billing (Stripe — TEST mode)
 - **£14.99 provider fee** + **£4.99/mo model sub** via the `stripe-payment` edge fn (pay-first for providers). Successful payments are recorded server-side (`verification_payments` / `subscriptions`) with **errors surfaced** — the client never reports success on a failed write (a failed record shows a Retry screen; the money is never re-charged).
 - **Cancel subscription = end-of-period:** calls Stripe `cancel_at_period_end`, sets `subscriptions.status` + `users.subscription_status='cancelling'`; access continues until `current_period_end`, then the apply gate blocks. Settings shows "Ends on {date}".
+- ⭐ **THIS LINE WAS RIGHT ALL ALONG AND NOBODY READ IT.** On 31 Aug 2026 a failed
+  webhook write sent us hunting for what `users_subscription_status_check` permits.
+  It cost migration `0023` (which probed the live constraint to discover it),
+  `0024` (which corrected `0023`), three failed `customer.subscription.deleted`
+  events and a split-state repair. Both migration headers state that the answer
+  "was not in this repo". **It was — here, since July, including the specific
+  warning that the value is `'none'` and NOT `'free'`, which is exactly the bug.**
+  The search covered `supabase/migrations/` and the schema snapshot and never came
+  here. A record that is correct and unread fails the same way as one that is
+  wrong: it does not reach the decision. It sits three lines above a claim that
+  WAS wrong and was trusted.
 - **`users.subscription_status` is CHECK-constrained** to `['none','trialling','active','cancelled','cancelling']` (British spelling). `'none'` = no sub (NOT `'free'`). Writing a value outside this set fails — that's what silently broke the first cancel attempt (wrote `'canceling'`).
-- **No Stripe webhook handler exists** — state is reconciled at write time and cancellation expiry is **date-driven** (`hasActiveSubscription` checks `current_period_end` for canceling subs).
+- ~~**No Stripe webhook handler exists**~~ **A webhook exists and is live** (`supabase/functions/stripe-webhook`, shipped 25 Aug 2026, proven on real traffic 31 Aug). It handles subscription create/update/delete and invoice succeeded/failed, records every delivery in `stripe_webhook_events`, and the admin Revenue page shows when the last event arrived. A failed payment gives grace to period end; `customer.subscription.deleted` is what ends access.
+  ⚠️ The old "cancellation expiry is **date-driven**" claim was half-true and nearly caused a worse bug than the one it described: the date check existed only on the `cancelling` branch, so adding a bare date check to `active` would have cut off every paying subscriber at their first renewal. See `subscription-state-reconcile.md`.
 - Failed Stripe cancel during account delete → logged to `admin_audit_log` (`billing_orphan_on_delete`); erasure still proceeds.
 
 ### Admin (web app, separate — repo root Next.js)
@@ -87,7 +99,7 @@ Verification queue, Reports, Moderation, Users (with **Free access / waive-fee**
 - 🔒 **Email confirmation is OFF** — re-enable before launch, then re-test. The landing page (`web/auth-confirmed.html` at `/auth/confirmed`) + `SignupScreen` `emailRedirectTo` are already wired and the URL is in Supabase Redirect URLs, so re-enabling should just work (confirmation completes server-side; the page is a friendly landing).
 - 💳 **Stripe is LIVE — VERIFIED with a real transaction (17 Jul).** Mobile `pk_live` in `.env` (local) + `eas.json` (preview + production); edge fns `stripe-payment` + `delete-account` on `sk_live` + live `STRIPE_MONTHLY_PRICE_ID` (`price_1Tu7cA…`). Standard Stripe, we're merchant of record (VAT/tax is ours). A real live £4.99 subscription went through; single canonical price reused (no duplicate spawned). ⚠️ Go-live gotcha for next time: both the `pk_live` and `sk_live` initially arrived truncated/with a stray char (`sk_live…#`) → `Invalid API Key` with NOTHING in Stripe's account logs (unauthenticated requests aren't attributed) — the error was only in the Supabase edge logs. Also a stale lowercase `stripe_secret_key` secret (from early July) still exists; harmless (code reads uppercase) but delete it sometime.
 - 🧾 Mobile treatments are **category-only** (no per-treatment pricing/colour in the app UI).
-- ⚠️ **No Stripe webhook** — payment/sub state is reconciled at write time; cancellation expiry is date-driven. Fine for now, but a webhook would be the robust long-term reconciler (e.g. external cancellations, failed renewals).
+- ✅ ~~**No Stripe webhook**~~ — built and live since 25 Aug 2026; see the payments section above and `stripe-webhook.md`. The "fine for now" was not: with no webhook, three subscriptions billed for a month while our own table showed them lapsed.
 - ✅ ~~Provider "New application" notification not tappable~~ — **fixed** in `cc111dd`.
 - ✅ ~~£14.99 payment succeeded but never recorded (payer locked out)~~ — **fixed** in `154fbcf`.
 - ✅ ~~Subscription cancel + account delete didn't stop Stripe billing~~ — **fixed** in `0db4cf4`.
@@ -105,7 +117,9 @@ Verification queue, Reports, Moderation, Users (with **Free access / waive-fee**
 ---
 
 ## Live DB changes (applied directly in Supabase — NOT versioned in the repo)
-There are no migration files; schema changes are run by hand in the SQL editor. Recent ones to be aware of:
+⚠️ **THIS HEADING AND SENTENCE ARE BOTH OUT OF DATE.** There is a versioned migration framework: `supabase/migrations/0000`–0025, with checksums in `schema_migrations` and `node scripts/migration-status.mjs` reporting PENDING/DRIFTED/ORPHAN/SUPERSEDED. As of 2 Sep 2026 all 25 are applied with no drift (`0009` is SUPERSEDED by `0010` and must never be run). Schema changes go through a migration, not the SQL editor by hand.
+
+The changes below predate the framework and are kept as history:
 - `users.provider_fee_waived boolean not null default false` (admin free-access for the £14.99 gate) + backfill of existing verified-unpaid providers.
 - `users.last_name text` (private full surname) + `handle_new_auth_user` trigger updated to populate it.
 - `users.subscription_status` CHECK constraint standardised to `['none','trialling','active','cancelled','cancelling']`.
