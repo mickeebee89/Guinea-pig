@@ -107,7 +107,26 @@ export async function getSessions(
         treatmentCategory: treat?.category ?? null,
         otherPartyName: isModel ? (prov?.name ?? 'Stylist') : displayName(model),
         otherPartyPic: isModel ? (prov?.profile_pic_url ?? null) : (model?.profile_pic_url ?? null),
-        otherPartyId: isModel ? r.provider_id : null,
+        // ── WHY THIS WAS `null`, AND WHY IT NO LONGER IS ────────────────
+        // It returned null for a stylist deliberately, and the reason was
+        // correct when it was written (commit 2e39ca1, 9 Aug 2026):
+        //
+        //   "Only stylists link through: the other-party id for a model is an
+        //    auth user id and there is no page for it."
+        //
+        // True at the time. It stopped being true on 24 Aug when /model/[id]
+        // shipped, and nothing connected the two, so for nine days a stylist
+        // saw every model's name here as dead text with a profile sitting one
+        // route away.
+        //
+        // The reason was recorded in the right place for a REVIEWER and the
+        // wrong place for a MAINTAINER: a commit message is read once, this
+        // line is read every time. Hence the reason now lives here.
+        //
+        // Not a privacy decision. Both ids are already exposed to this viewer
+        // — they are party to the session — and `otherPartyKind` below has
+        // always told the caller which kind it is holding.
+        otherPartyId: isModel ? r.provider_id : r.model_user_id,
         otherPartyKind: isModel ? 'stylist' : 'model',
       }
     })

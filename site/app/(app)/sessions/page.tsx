@@ -34,7 +34,12 @@ function Group({
                 <div className="flex flex-wrap items-center gap-2">
                   {s.otherPartyId ? (
                     <Link
-                      href={`/stylist/${s.otherPartyId}`}
+                      // A stylist's counterparty is a model (an auth user id);
+                      // a model's is a stylist (a providers.id). Not
+                      // interchangeable, which is why the kind decides.
+                      href={s.otherPartyKind === 'model'
+                        ? `/model/${s.otherPartyId}`
+                        : `/stylist/${s.otherPartyId}`}
                       className="font-bold text-warm-dark underline decoration-hairline underline-offset-2 hover:text-rose focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose"
                     >
                       {s.otherPartyName}

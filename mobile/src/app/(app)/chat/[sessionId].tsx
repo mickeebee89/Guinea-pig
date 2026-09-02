@@ -22,6 +22,7 @@ import { useAuth } from '@/context/auth'
 import { supabase } from '@/lib/supabase'
 import { mustWrite, tryWrite } from '@/lib/db'
 import { getBlockedIds } from '@/lib/blocks'
+import SafetyButton from '@/components/SafetyButton'
 import SafetySheet from '@/components/SafetySheet'
 import { signModelPhotos } from '@/lib/photoUrls'
 import LoadErrorState from '@/components/LoadErrorState'
@@ -497,16 +498,10 @@ export default function ChatScreen() {
           </View>
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.menuBtn}
-          onPress={async () => {
-            await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
-            setMenuOpen(true)
-          }}
-          activeOpacity={0.75}
-        >
-          <Ionicons name="ellipsis-vertical" size={20} color={Colors.warmDark} />
-        </TouchableOpacity>
+        {/* Was `ellipsis-vertical` with no visible label. The safety pill
+            below the header explained what the app does about safety while the
+            control that acts on it was three unlabelled dots beside it. */}
+        <SafetyButton name={otherParty?.name} onPress={() => setMenuOpen(true)} />
       </View>
 
       {/* ── Safety pill ── */}
@@ -804,14 +799,6 @@ const styles = StyleSheet.create({
     marginTop: 1,
   },
   headerRight: { width: 36 },
-  menuBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: Colors.inputBg,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
 
   // Safety pill
   applicationPhotos: {

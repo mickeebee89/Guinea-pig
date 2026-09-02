@@ -22,6 +22,7 @@ import { supabase } from '@/lib/supabase'
 import { signModelPhotos } from '@/lib/photoUrls'
 import { isIdentityVerified } from '@/lib/verification'
 import ScreenDecor from '@/components/ScreenDecor'
+import SafetyButton from '@/components/SafetyButton'
 import SafetySheet from '@/components/SafetySheet'
 import { getBlockedIds } from '@/lib/blocks'
 
@@ -451,19 +452,9 @@ export default function ModelProfileViewScreen() {
         {/* Report/block, reachable without a booking and without a chat.
             Hidden on your own profile, where it would mean nothing. */}
         {viewerUserId && viewerUserId !== modelId ? (
-          <TouchableOpacity
-            style={styles.backBtn}
-            onPress={async () => {
-              await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
-              setSafetyOpen(true)
-            }}
-            activeOpacity={0.75}
-            accessibilityLabel="Safety options"
-          >
-            <Ionicons name="ellipsis-horizontal" size={20} color={Colors.roseDark} />
-          </TouchableOpacity>
+          <SafetyButton name={profile?.first_name} onPress={() => setSafetyOpen(true)} />
         ) : (
-          <View style={{ width: 36 }} />
+          <View style={{ width: 72 }} />
         )}
       </View>
 

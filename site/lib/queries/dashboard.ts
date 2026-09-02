@@ -34,6 +34,12 @@ export interface BookingCard {
   otherPic: string | null
   /** providers.id for a model's view, null for a stylist's. */
   providerId: string | null
+  /**
+   * The model's auth user id, for a stylist's view. Null for a model's.
+   * Exactly one of this and providerId is set, and which one tells you whose
+   * dashboard you are looking at.
+   */
+  modelUserId: string | null
   treatment: string | null
 }
 
@@ -109,6 +115,7 @@ function toCards(
     otherName: provMap[r.provider_id]?.name ?? 'Stylist',
     otherPic: provMap[r.provider_id]?.profile_pic_url ?? null,
     providerId: r.provider_id,
+    modelUserId: null,   // a model looking at their own dashboard; the counterparty is a stylist
     treatment: r.treatment_id ? (treatMap[r.treatment_id]?.name ?? treatMap[r.treatment_id]?.category ?? null) : null,
   }))
 }
@@ -268,7 +275,10 @@ export async function getProviderDashboard(
     status: r.status,
     otherName: displayName(modelMap[r.model_user_id]),
     otherPic: modelMap[r.model_user_id]?.profile_pic_url ?? null,
-    providerId: null,     // a stylist's counterparty is a model; no profile route yet
+    // Was `providerId: null` with "no profile route yet". There is one now
+    // (/model/[id], 24 Aug 2026); the comment outlived the gap it described.
+    providerId: null,
+    modelUserId: r.model_user_id,
     treatment: r.treatment_id ? (treatMap[r.treatment_id]?.name ?? treatMap[r.treatment_id]?.category ?? null) : null,
   }))
 

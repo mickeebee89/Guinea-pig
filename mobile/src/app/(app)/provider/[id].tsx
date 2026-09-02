@@ -19,6 +19,7 @@ import { useAuth } from '@/context/auth'
 import { supabase } from '@/lib/supabase'
 import { getBlockedIds } from '@/lib/blocks'
 import SafetySheet from '@/components/SafetySheet'
+import SafetyButton from '@/components/SafetyButton'
 import { useProfileNav } from '@/lib/profileNav'
 import AvailabilityCalendar from '@/components/AvailabilityCalendar'
 
@@ -372,17 +373,11 @@ export default function ProviderShopScreen() {
             {/* Report/block, reachable without a booking and without a chat.
                 Hidden on your own shop, where it would mean nothing. */}
             {ownShop !== '1' && (
-              <TouchableOpacity
-                style={styles.bannerIconBtn}
-                onPress={async () => {
-                  await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
-                  setSafetyOpen(true)
-                }}
-                activeOpacity={0.85}
-                accessibilityLabel="Safety options"
-              >
-                <Ionicons name="ellipsis-horizontal" size={20} color={Colors.white} />
-              </TouchableOpacity>
+              <SafetyButton
+                name={provider?.name}
+                onBanner
+                onPress={() => setSafetyOpen(true)}
+              />
             )}
           </View>
         </View>

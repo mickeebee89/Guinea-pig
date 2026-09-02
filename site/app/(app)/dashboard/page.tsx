@@ -46,6 +46,11 @@ function Panel({
 }
 
 function BookingRow({ b }: { b: BookingCard }) {
+  // Exactly one of these is ever set. A model's counterparty is a stylist
+  // (providers.id), a stylist's is a model (auth user id).
+  const href = b.providerId
+    ? `/stylist/${b.providerId}`
+    : b.modelUserId ? `/model/${b.modelUserId}` : null
   const inner = (
     <>
       <Avatar src={b.otherPic} name={b.otherName} size={36} />
@@ -62,8 +67,8 @@ function BookingRow({ b }: { b: BookingCard }) {
   )
   return (
     <li>
-      {b.providerId ? (
-        <Link href={`/stylist/${b.providerId}`} className="flex items-center gap-3 rounded-md p-2 transition-colors hover:bg-input-bg">
+      {href ? (
+        <Link href={href} className="flex items-center gap-3 rounded-md p-2 transition-colors hover:bg-input-bg">
           {inner}
         </Link>
       ) : (

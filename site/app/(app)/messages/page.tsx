@@ -41,9 +41,14 @@ export default async function MessagesPage() {
             // the same rule the thread page enforces. Linking to a locked one
             // would land on a page with nothing on it.
             const openable = c.status === 'accepted' || c.status === 'completed'
+            // The stylist's counterparty is a model (an auth user id), the
+            // model's is a stylist (a providers.id). Both now have a page.
+            const profileHref = c.otherPartyId
+              ? (c.isModel ? `/stylist/${c.otherPartyId}` : `/model/${c.otherPartyId}`)
+              : null
+
             const inner = (
-              <div className="flex items-start gap-3">
-                <Avatar src={c.otherPartyPic} name={c.otherPartyName} size={44} />
+              <div className="min-w-0 flex-1">
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <span className="truncate font-bold text-warm-dark">{c.otherPartyName}</span>
@@ -71,20 +76,44 @@ export default async function MessagesPage() {
               </div>
             )
 
-            return (
-              <li key={c.sessionId}>
+            // ── WHY THE AVATAR IS A SEPARATE LINK ──────────────────────────
+            // The card links to the thread and an anchor cannot contain another
+            // anchor, which is why this list never linked to a profile at all
+            // (commit 2e39ca1 says so in as many words). The answer is not to
+            // drop the profile route — it is to stop nesting: the avatar is its
+            // own link, a sibling of the card link, inside a shared flex row.
+            //
+            // It matters because the conversation list is where someone goes
+            // when a person is bothering them, and until now the only route to
+            // report or block them ran through opening the thread — i.e.
+            // through the conversation they are trying to get away from.
+            const row = (
+              <div className="flex items-start gap-3 rounded-lg border border-hairline bg-white p-4 shadow-soft transition-colors focus-within:border-rose/40 hover:border-rose/40">
+                {profileHref ? (
+                  <Link
+                    href={profileHref}
+                    aria-label={`${c.otherPartyName}'s profile`}
+                    className="shrink-0 rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose"
+                  >
+                    <Avatar src={c.otherPartyPic} name={c.otherPartyName} size={44} />
+                  </Link>
+                ) : (
+                  <Avatar src={c.otherPartyPic} name={c.otherPartyName} size={44} />
+                )}
                 {openable ? (
                   <Link
                     href={`/messages/${c.sessionId}`}
-                    className="block rounded-lg border border-hairline bg-white p-4 shadow-soft transition-colors hover:border-rose/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose"
+                    className="min-w-0 flex-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose"
                   >
                     {inner}
                   </Link>
                 ) : (
-                  <div className="rounded-lg border border-hairline bg-white/60 p-4">{inner}</div>
+                  <div className="min-w-0 flex-1">{inner}</div>
                 )}
-              </li>
+              </div>
             )
+
+            return <li key={c.sessionId}>{row}</li>
           })}
         </ul>
       )}

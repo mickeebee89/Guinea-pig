@@ -35,7 +35,8 @@ live money, one a child-safety commitment.
 | ✅ Closed | Item 5 — patch test copy removed, selfie orphan fixed, 31 Aug |
 | 📋 Scoped | Revocation of verification (item 8) — not built |
 | ✅ Closed | Item 7 — record reconciliation, 2 Sep |
-| ⬜ Open | Items 8, 9, 10 and 11 |
+| ✅ Closed | Items 9 + 10 — findability pass, 2 Sep |
+| ⬜ Open | Items 8 and 11 |
 
 ---
 
@@ -392,11 +393,38 @@ Nothing is proven until then.
 Original scope: the webhook, as its own scoped piece — the proper fix behind item 2, and
 what makes "renews automatically each month" and the Settings billing date true.
 
-**7. ~~Remaining record reconciliation~~** — done 2 Sep 2026. Every row of the
-drift table re-derived against the current code rather than trusted; the table was
-itself a fortnight old, which is the joke this item exists to stop being funny.
+**7. ~~Remaining record reconciliation~~** — done 2 Sep 2026.
 
-**The headline is not staleness.** `mobile/notes.md` has documented, since July,
+## ⭐ THE FINDING: A CORRECT RECORD FAILED IDENTICALLY TO AN INCORRECT ONE
+
+**This audit was scoped for records that are WRONG. The more expensive problem
+turned out to be records that are RIGHT AND UNREAD.**
+
+Both live in `mobile/notes.md`, three lines apart:
+
+| Line | Claim | Status | What it cost |
+|---|---|---|---|
+| :51 | `subscription_status` is `none/trialling/active/cancelled/cancelling`; **`'none'` NOT `'free'`** | **Correct since July** | Two migrations, three failed webhook events, a split-state repair |
+| :52 | "No Stripe webhook handler exists" | **Wrong since 25 Aug** | Reinforced a false mental model of how subscription state settles |
+
+One was right and never reached the decision. One was wrong and was trusted
+immediately. **The outcomes were the same**, because a record only has value at
+the moment someone reads it, and neither of these was read at that moment.
+
+That reframes what a drift table is for. Keeping every line true is necessary and
+is not sufficient: a repository of true statements nobody can find when it counts
+performs exactly like a repository of false ones. The fix is not more accurate
+notes — it is putting the fact where the decision happens, which is why the
+subscription vocabulary is now in `CLAUDE.md` (read at the start of every session)
+rather than only in `mobile/notes.md` (read when someone thinks to).
+
+---
+
+Every row of the drift table was re-derived against the current code rather than
+trusted; the table was itself a fortnight old, which is the joke this item exists
+to stop being funny.
+
+**The detail behind the finding.** `mobile/notes.md` has documented, since July,
 that `users.subscription_status` is constrained to
 `none | trialling | active | cancelled | cancelling` and that the value is
 **`'none'` and NOT `'free'`** — naming the exact bug, and noting it had already
@@ -468,6 +496,75 @@ looks fine right up until launch day. An explicit check with a named owner, not
 a note: before launch, each of the six must render at least one real stylist, and
 the verified tick's new "Photo checked" tooltip must be seen rendering — it has
 never been observed on live data because no card has ever displayed it.
+
+**9 + 10. ~~Findability~~** — done 2 Sep 2026, as one pass. Full rule in
+`docs/safety-surface.md`.
+
+**These were the inverse of every other finding this month.** Everything else was
+a claim with no mechanism behind it. This was a mechanism with no route to it —
+and on a safety surface, unreachable and absent are the same thing to the person
+who needs it.
+
+Report and block existed on three surfaces per client. The web had **one** route
+to a model's profile: inside a chat thread, which is the one place the controls
+already worked. So item 3 had added a control to a page almost nobody could
+reach.
+
+Four changes, in order:
+
+1. **`/sessions` and `/dashboard` link model names.** `sessions.ts` returned
+   `otherPartyId: isModel ? provider_id : null`.
+2. **The conversation-list avatar is now a link.** The row links to the thread and
+   anchors cannot nest — which is *why* it never linked — so the avatar became a
+   sibling link inside a shared flex row. This matters more than it sounds: the
+   conversation list is where someone goes when a person is bothering them, and
+   until now the only route to report them ran through opening the conversation
+   they were trying to get away from.
+3. **Mobile shows a labelled pill**, not three dots.
+4. **The word is written down** so the next surface inherits it.
+
+### The null was neither a stub nor a privacy decision
+
+Constraint 1 asked. The answer is in commit `2e39ca1` (9 Aug 2026):
+
+> "Only stylists link through: the other-party id for a model is an auth user id
+> and there is no page for it."
+
+**Correct when written.** There was no `/model/[id]` then. It stopped being true
+on 24 Aug when that route shipped, and nothing connected the two, so for nine days
+a stylist saw every model's name as dead text with a profile one route away. The
+same stale reason sat in `dashboard.ts` as `providerId: null, // no profile route
+yet`.
+
+**The reason was recorded in the right place for a reviewer and the wrong place
+for a maintainer.** A commit message is read once, at review. The ternary is read
+every time. Both reasons now live beside the code, which is the same correction
+item 7 reached from the other direction — there, a true fact in
+`mobile/notes.md` never reached the decision either.
+
+### Why `accessibilityLabel` was not enough
+
+All three mobile surfaces already had `accessibilityLabel="Safety options"` on a
+bare `ellipsis` — roseDark on one profile, **white over a banner photograph** on
+another, `ellipsis-vertical` in chat.
+
+**A screen-reader user could find the control. Nobody else could.** An
+accessibility label is announced to assistive technology and rendered to no one:
+it made the control reachable for a minority, invisible to everyone else, and
+read in code review as though labelling had been handled. It is kept — the
+visible label is an addition, not a replacement.
+
+### Two of my own errors, kept as findings
+
+**I reported that mobile's stylist profile had no safety control. It had one.** I
+grepped for `SafetyMenu`, the *web* component; mobile's is `SafetySheet`. **I
+proved the absence of a string and reported the absence of a feature** — the same
+error as everything else this month, aimed at a search instead of a check. The
+check was one file-read away.
+
+**I reported a broken link on `/sessions`.** There wasn't one: `otherPartyId` is
+null for stylists, so it rendered a span. Unreachable, not broken — and worse in
+one way, because a 404 would at least have been visible.
 
 **8. Revocation of verification** — NEW, found 24 Aug. `is_verified` is set to
 `true` in two places in the admin console and set to `false` **nowhere in the
