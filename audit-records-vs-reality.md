@@ -774,3 +774,95 @@ live defects and they outrank new payment surfaces.
 - **6** — re-read each corrected line against the code it describes.
 - **8** — revoke a test stylist: confirm reason recorded, audit row written, shop
   unpublished, and `/verify` offering the submit path again.
+
+---
+---
+
+# CLOSING SUMMARY — 2 September 2026
+
+**Items 1–11 are closed. Items 12, 13 and 14 are open and every one of them was
+found BY the audit rather than listed at its start.** That is the honest measure
+of it: the list it ended with is not the list it began with.
+
+## What the audit was scoped to find, and what it actually found
+
+It was scoped for **records that were wrong** — a drift table of stale statements.
+Two other categories turned out to be larger.
+
+**Claims with no mechanism behind them.** Eleven, by the end: Founding Provider,
+the IP clause, "we publish your shop for you", the ID-check wording, the 90-day
+selfie promise, "cancel at any time", "report anyone in one tap", "we look at
+these first", patch-test retention, the £2.99 price default, and a banner four
+render sites read that nothing can write. Each was a sentence or a column that
+described something the product did not do.
+
+**Mechanisms with no route to them — the inverse, and it only showed up late.**
+Report and block existed on three surfaces per client while the web had exactly
+one route to a model's profile. `moderation_actions` had triggers, indexes, a
+ban-evasion hash, a retention policy and a published promise, and no writer.
+Cancellation is a permitted transition with no interface. On a safety surface,
+unreachable and absent are the same thing to the person who needs it.
+
+## The pattern under all of it
+
+**A success signal that does not depend on the thing it claims to prove.**
+
+* `cron.job_run_details` recorded dispatch and was read as completion, for weeks
+* a `dryRun` flag that defaulted to destructive when its JSON failed to parse
+* `sync_subscription` returning `repaired: true` for a write that could not
+  succeed, because it never checked the error
+* `billedButNoRow: 0` answering a narrower question than the one it was used for,
+  while three people were being billed
+* a `NOT NULL` constraint asserting a state the product contradicted, so the
+  selfie purge could never complete
+* an `accessibilityLabel` that made a control findable for screen-reader users
+  and invisible to everyone else, while reading in review as though labelling was
+  handled
+* five verify blocks that could not run, or ran and proved something else — the
+  last one defeated by the comment documenting the fix it was testing
+
+The rules that came out of it live in `scripts/migration-status.mjs` (three, for
+verify blocks), `docs/safety-surface.md` (one word, one shape, reachability) and
+`CLAUDE.md` (the schema and vocabulary facts that were true in the repo and never
+read).
+
+## The one that was not a mistake at all
+
+`mobile/notes.md` documented the `subscription_status` vocabulary correctly, in
+July, including the specific warning that the value is `'none'` and not `'free'`.
+Rediscovering it cost two migrations, three failed webhook events and a
+split-state repair.
+
+**A correct record that nobody reads fails exactly like an incorrect one.** It
+sat three lines above a claim that was wrong and was trusted. That is why facts
+moved to `CLAUDE.md` and to the code, rather than being written more carefully
+where they already were.
+
+## What is open
+
+| | Item | Blocking launch? |
+|---|---|---|
+| 12 | Stylist banners cannot be set — read in four places, written nowhere | No |
+| 13 | Cancellation wording, and no cancel path exists at all | **Yes** — "I need to cancel" is inevitable |
+| 14 | Admin revoke UI — `0027` ships the mechanism, nothing calls it | No, but revocation is SQL-only until then |
+
+Carried in from before the audit, unchanged by it:
+
+| Item | State |
+|---|---|
+| **IAP — Apple's #1 rejection risk** | **UNRESOLVED.** Stripe for a digital unlock consumed in-app. Decide before iOS submit; consider asking App Review directly |
+| **Test-account teardown** | `teardown.mjs` reaches `@seed.guineapig.invalid` only, BY DESIGN. The hand-made accounts must be cleared separately |
+| **Play Console CSAE declaration** | Recorded done; **the submitted wording has never been checked against what the product does** |
+| `support@` / Resend sender | Not started; five templates never tested against a real inbox |
+| Build-fails-on-lint | site **0 errors** and could be switched on today; admin 22; mobile 73 + 6 tsc |
+| Mobile member-area layout | 2 of 12 routes checked at 375px |
+| Admin approval at scale | One at a time; no bulk path |
+| Founding-provider manual grant | No per-user grant exists; mobile signup sends no `signup_source` |
+
+## Dated
+
+* **8 October** — the diarised selfie-orphan check. The only unarranged end-to-end
+  proof the purge job will ever get.
+* **Before launch** — item 11's query must show at least one `LISTED` stylist per
+  category, and the verified tick's "Photo checked" tooltip must be SEEN, since no
+  card has ever rendered one.

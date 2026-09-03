@@ -159,18 +159,55 @@ notify pgrst, 'reload schema';
 -- Same admin-claim shape as 0027's blocks: is_admin() gates this function, so a
 -- block that does not satisfy that guard tests nothing but the guard.
 --
--- ── BLOCK A — the sentence is gone from the definition ──────────────────
+-- ── BLOCK A — the sentence is gone from the BODY, not just somewhere ──
 --
---   One statement, no impersonation needed, because it reads the stored
---   definition rather than calling the function.
+-- ⚠️ THE FIRST VERSION OF THIS BLOCK REPORTED A FALSE FAILURE, and the way it
+-- failed is worth keeping. It matched `%rather say that plainly%` against
+-- pg_get_functiondef(), which returns the WHOLE definition — including the
+-- comment above the notification explaining that the sentence was removed.
+--
+-- So the check said the sentence was still present. The cut had worked. What it
+-- had actually found was its own documentation: THE ARTEFACT OF THE FIX BROKE
+-- THE TEST FOR THE FIX.
+--
+-- Fifth block this month reporting something other than what it claims, and the
+-- cleanest example of the shape. A check must distinguish the thing from the
+-- commentary about the thing. Recorded in scripts/migration-status.mjs.
+--
+-- Two INDEPENDENT discriminators below, because either alone could be fooled:
+--
+--   code_*  strips every `--` comment line before matching. Safe here because
+--           the body contains no `--` sequence of its own (em dashes are a
+--           different character), but it would need care in a function whose
+--           strings did.
+--
+--   lit_*   matches the DOUBLED apostrophe `we''d`, which only ever appears
+--           inside a SQL string literal. A comment writes `we'd` with one. This
+--           discriminates on syntax rather than on position, so it holds even
+--           if the comment is reworded or moved.
+--
+-- One statement, no impersonation needed: it reads the stored definition rather
+-- than calling the function.
 --
 --   select
---     pg_get_functiondef(p.oid) like '%rather say that plainly%' as old_sentence_present,
---     pg_get_functiondef(p.oid) like '%not able to explain why. Nothing about%' as new_wording_present
+--     regexp_replace(pg_get_functiondef(p.oid), '--[^\n]*', '', 'g')
+--       like '%rather say that plainly%'                    as code_has_old,
+--     regexp_replace(pg_get_functiondef(p.oid), '--[^\n]*', '', 'g')
+--       like '%not able to explain why. Nothing about%'     as code_has_new,
+--     pg_get_functiondef(p.oid) like '%we''''d rather say that plainly%'
+--                                                          as lit_has_old,
+--     pg_get_functiondef(p.oid) like '%rather say that plainly%'
+--                                                          as anywhere_incl_comments
 --   from pg_proc p join pg_namespace n on n.oid = p.pronamespace
 --   where n.nspname = 'public' and p.proname = 'revoke_verification';
 --
---   Expect false, true.
+--   Expect:  code_has_old  false
+--            code_has_new  true
+--            lit_has_old   false
+--            anywhere_incl_comments  TRUE — and that is correct, not a failure.
+--                It is the comment above the body describing the removal. It is
+--                selected deliberately so the column that fooled the first
+--                version is visible beside the ones that do not.
 --
 -- ── BLOCK B — read it as the model again ────────────────────────────────
 --

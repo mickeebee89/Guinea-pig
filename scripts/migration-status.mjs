@@ -62,6 +62,15 @@
  *     and SELECT is_admin() before relying on it, so a claim that did not
  *     carry shows up as false rather than as a confusing error later.
  *
+ *   * A BLOCK MUST DISTINGUISH THE THING FROM THE COMMENTARY ABOUT THE THING.
+ *     0028's first Block A matched a removed sentence against
+ *     pg_get_functiondef(), which includes the comment explaining the removal
+ *     — so it reported the sentence as still present when the cut had worked.
+ *     The artefact of the fix broke the test for the fix. Match the code and
+ *     not the prose around it: strip comments before comparing, or match on
+ *     something only the code can contain (a doubled apostrophe inside a SQL
+ *     literal, for instance).
+ *
  *   * `begin; ... rollback;` is fine — it is the multi-statement dependencies
  *     inside that break, not the transaction.
  */
