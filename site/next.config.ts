@@ -41,6 +41,22 @@ const nextConfig: NextConfig = {
     ],
   }),
 
+  /**
+   * /sessions -> /bookings, renamed 2 Sep 2026.
+   *
+   * Nothing outside this app ever linked to /sessions - no email template, no
+   * deep link, no notification - so this is not repairing a broken inbound
+   * link. It is here because a URL that has been live is a URL somebody may
+   * have bookmarked, and a 404 is a worse answer than a redirect for a cost of
+   * three lines. Permanent so it is cached and search engines follow it.
+   */
+  async redirects() {
+    return [
+      { source: '/sessions', destination: '/bookings', permanent: true },
+      { source: '/sessions/:path*', destination: '/bookings/:path*', permanent: true },
+    ]
+  },
+
   images: {
     // Stylist avatars and banners live in the public `profile-pics` bucket.
     // Without this every image 400s at runtime with an error that reads like a

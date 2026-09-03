@@ -69,7 +69,10 @@ export const config = {
     // route quietly stop refreshing its session cookie.
     '/dashboard/:path*',
     '/account/:path*',
-    '/sessions/:path*',
+    // Literal on purpose: config.matcher must be statically analysable at
+    // build time, so it cannot import BOOKINGS_PATH from lib/routes.ts.
+    // scripts/check-route-coverage.mjs is what stops this drifting.
+    '/bookings/:path*',
     '/messages/:path*',
     '/notifications/:path*',
     '/stylist/:path*',

@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { SignOutButton } from '@/components/SignOutButton'
+import { BOOKINGS_PATH } from '@/lib/routes'
 
 /**
  * Navigation for the member area.
@@ -23,7 +24,7 @@ import { SignOutButton } from '@/components/SignOutButton'
 const LINKS = [
   // Models browse. A stylist has no use for a list of other stylists.
   { href: '/browse',        label: 'Browse', modelOnly: true },
-  { href: '/sessions',      label: 'Bookings' },
+  { href: BOOKINGS_PATH,    label: 'Bookings' },
   { href: '/shop',          label: 'Shop',         providerOnly: true },
   { href: '/availability',  label: 'Availability', providerOnly: true },
   { href: '/portfolio',     label: 'Portfolio',    providerOnly: true },

@@ -23,7 +23,13 @@ import SafetyButton from '@/components/SafetyButton'
 import { useProfileNav } from '@/lib/profileNav'
 import AvailabilityCalendar from '@/components/AvailabilityCalendar'
 
-const BANNER_HEIGHT = 165
+// Raised from 165 on 2 Sep 2026. The safety pill collided with the Cavy
+// wordmark and the mascot's ear: the control row occupies roughly
+// insets.top + 10 to + 48, and the brand block was vertically centred across
+// the whole banner, so on a notched phone both wanted the same band of pixels.
+// Height is the honest fix — shrinking the pill or fading it would undo the
+// labelling work that put it there.
+const BANNER_HEIGHT = 196
 
 const CATEGORY_COLOR: Record<string, string> = {
   Nails:      CategoryColors.nails,
@@ -359,26 +365,38 @@ export default function ProviderShopScreen() {
               <Text style={styles.bannerBrandText}>Cavy</Text>
             </View>
           )}
+          {/* A scrim, only over a photograph. The placeholder banner is soft
+              pink and a dark wash over it would look like a bug; a real
+              stylist's banner is an arbitrary photo and the back/heart icons
+              need something behind them. The pill brings its own opaque
+              background, so this is for the icons. */}
+          {provider.banner_url && <View style={styles.bannerScrim} pointerEvents="none" />}
+
           <View style={[styles.bannerControls, { paddingTop: insets.top + 10 }]}>
             <TouchableOpacity style={styles.bannerIconBtn} onPress={goBack} activeOpacity={0.85}>
               <Ionicons name="chevron-back" size={20} color={Colors.white} />
             </TouchableOpacity>
-            <TouchableOpacity style={styles.bannerIconBtn} onPress={toggleFavourite} activeOpacity={0.85}>
-              <Ionicons
-                name={isFavourite ? 'heart' : 'heart-outline'}
-                size={20}
-                color={isFavourite ? Colors.rose : Colors.white}
-              />
-            </TouchableOpacity>
-            {/* Report/block, reachable without a booking and without a chat.
-                Hidden on your own shop, where it would mean nothing. */}
-            {ownShop !== '1' && (
-              <SafetyButton
-                name={provider?.name}
-                onBanner
-                onPress={() => setSafetyOpen(true)}
-              />
-            )}
+
+            {/* Grouped right. With three children and space-between the heart
+                sat dead centre, which is exactly where the wordmark is. */}
+            <View style={styles.bannerRightControls}>
+              <TouchableOpacity style={styles.bannerIconBtn} onPress={toggleFavourite} activeOpacity={0.85}>
+                <Ionicons
+                  name={isFavourite ? 'heart' : 'heart-outline'}
+                  size={20}
+                  color={isFavourite ? Colors.rose : Colors.white}
+                />
+              </TouchableOpacity>
+              {/* Report/block, reachable without a booking and without a chat.
+                  Hidden on your own shop, where it would mean nothing. */}
+              {ownShop !== '1' && (
+                <SafetyButton
+                  name={provider?.name}
+                  onBanner
+                  onPress={() => setSafetyOpen(true)}
+                />
+              )}
+            </View>
           </View>
         </View>
 
@@ -705,6 +723,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    // Centres in the space BELOW the control row rather than across the whole
+    // banner, so the wordmark and the mascot are never under a control.
+    paddingTop: 44,
     gap: 12,
   },
   bannerLogo: { width: 104, height: 104 },
@@ -716,7 +737,18 @@ const styles = StyleSheet.create({
   },
   bannerControls: {
     position: 'absolute', top: 0, left: 0, right: 0,
-    flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 16,
+    flexDirection: 'row', justifyContent: 'space-between',
+    alignItems: 'flex-start', paddingHorizontal: 16,
+  },
+  bannerRightControls: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+  },
+  // Two stacked bands rather than a gradient: expo-linear-gradient is not a
+  // dependency and is not worth adding for this. The lower band softens what
+  // would otherwise be a visible hard edge across the photo.
+  bannerScrim: {
+    position: 'absolute', top: 0, left: 0, right: 0, height: 96,
+    backgroundColor: 'rgba(0,0,0,0.18)',
   },
   bannerIconBtn: {
     width: 38, height: 38, borderRadius: 19,

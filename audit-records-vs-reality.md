@@ -36,7 +36,7 @@ live money, one a child-safety commitment.
 | 📋 Scoped | Revocation of verification (item 8) — not built |
 | ✅ Closed | Item 7 — record reconciliation, 2 Sep |
 | ✅ Closed | Items 9 + 10 — findability pass, 2 Sep |
-| ⬜ Open | Items 8 and 11 |
+| ⬜ Open | Items 8, 11 and 12 |
 
 ---
 
@@ -565,6 +565,25 @@ check was one file-read away.
 **I reported a broken link on `/sessions`.** There wasn't one: `otherPartyId` is
 null for stylists, so it rendered a span. Unreachable, not broken — and worse in
 one way, because a 404 would at least have been visible.
+
+**12. Stylist banners cannot be set — NEW, 2 Sep 2026.** `providers.banner_url`
+is READ in four places — `mobile/provider/[id].tsx`, `site/lib/queries/stylist.ts`,
+`site/lib/supabase-public.ts` — and **written nowhere**. There is no upload in
+mobile `edit-shop`, none in the web shop editor, none in admin, and no bucket for
+it: the four are `profile-pics`, `model-photos`, `portfolio-photos`,
+`verification-selfies`.
+
+So no stylist can have a banner, and the Cavy placeholder is the only thing that
+can ever render. Same family as the rest of this audit — a field two clients
+render with nothing behind it — except this one is a missing feature rather than
+a false claim, since nothing published promises a banner.
+
+**A consequence worth naming: the banner scrim added on 2 Sep has never
+executed.** It renders only when `banner_url` is set, so it is an untested branch
+by construction — the same shape as the orphan sweep before it was forced to run
+against a moved cutoff. It becomes testable when banners become possible, and not
+before. Testing contrast against a photograph today would be testing a state the
+product cannot reach.
 
 **8. Revocation of verification** — NEW, found 24 Aug. `is_verified` is set to
 `true` in two places in the admin console and set to `false` **nowhere in the

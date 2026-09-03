@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createSupabaseServerClient, requireUser } from '@/lib/supabase-server'
+import { BOOKINGS_PATH } from '@/lib/routes'
 
 /**
  * Accept / decline / complete a booking. Ported from
@@ -69,7 +70,7 @@ async function transition(
   })
   if (noteErr) console.warn(`[sessions] ${to} notification failed`, noteErr)
 
-  revalidatePath('/sessions')
+  revalidatePath(BOOKINGS_PATH)
   revalidatePath('/dashboard')
   return { ok: true }
 }

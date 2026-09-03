@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { createSupabaseServerClient, requireUser } from '@/lib/supabase-server'
 import { reportUser, blockUser, type ReportSubject } from '@/lib/report'
 import { REPORT_REASONS, type ReportReasonCode } from '@/lib/reportReasons'
+import { BOOKINGS_PATH } from '@/lib/routes'
 
 /**
  * The two safety actions, for every surface on this site that offers them:
@@ -73,7 +74,7 @@ export async function submitBlock(input: { subject: ReportSubject }): Promise<Ac
   // user has just blocked.
   revalidatePath('/messages')
   revalidatePath('/browse')
-  revalidatePath('/sessions')
+  revalidatePath(BOOKINGS_PATH)
   revalidatePath('/settings')
   revalidatePath('/dashboard')
 

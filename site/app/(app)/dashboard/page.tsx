@@ -11,6 +11,7 @@ import { getStylistSetup } from '@/lib/queries/shop'
 import { MonthCalendar, type CalendarMark } from '@/components/MonthCalendar'
 import { StylistSetupPanel } from '@/components/StylistSetup'
 import { Avatar, StatusPill, LoadError } from '@/components/ui'
+import { BOOKINGS_PATH } from '@/lib/routes'
 
 export const metadata = { title: 'Dashboard' }
 
@@ -345,7 +346,7 @@ export default async function DashboardPage({
           {data.kind === 'model' ? (
             <>
               <Panel
-                title="Upcoming treatments" href="/sessions" isEmpty={data.upcoming.length === 0}
+                title="Upcoming treatments" href={BOOKINGS_PATH} isEmpty={data.upcoming.length === 0}
                 empty="Nothing booked in yet. Once a stylist accepts an application it’ll appear here."
               >
                 {data.upcoming.length > 0 && <ul>{data.upcoming.map(b => <BookingRow key={b.id} b={b} />)}</ul>}
@@ -392,14 +393,14 @@ export default async function DashboardPage({
           ) : (
             <>
               <Panel
-                title="Applications" href="/sessions" isEmpty={data.applications.length === 0}
+                title="Applications" href={BOOKINGS_PATH} isEmpty={data.applications.length === 0}
                 empty="No one has applied to you yet."
               >
                 {data.applications.length > 0 && (
                   <>
                     <ul>{data.applications.map(b => <BookingRow key={b.id} b={b} />)}</ul>
                     <p className="mt-3">
-                      <Link href="/sessions" className="text-sm font-bold text-rose hover:underline">
+                      <Link href={BOOKINGS_PATH} className="text-sm font-bold text-rose hover:underline">
                         Accept or decline on the bookings page →
                       </Link>
                     </p>
@@ -408,7 +409,7 @@ export default async function DashboardPage({
               </Panel>
 
               <Panel
-                title="Upcoming bookings" href="/sessions" isEmpty={data.upcoming.length === 0}
+                title="Upcoming bookings" href={BOOKINGS_PATH} isEmpty={data.upcoming.length === 0}
                 empty="Nothing booked in yet."
               >
                 {data.upcoming.length > 0 && <ul>{data.upcoming.map(b => <BookingRow key={b.id} b={b} />)}</ul>}
