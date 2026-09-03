@@ -52,6 +52,16 @@
  *   * PREFER ONE SELF-CONTAINED STATEMENT per check, with the expected result
  *     written above it.
  *
+ *   * A BLOCK MUST SATISFY THE GUARDS OF THE THING IT TESTS. This one was
+ *     missing and cost a fourth unrunnable block: 0027's blocks called an
+ *     admin-only function from the SQL editor, where auth.uid() is NULL, so
+ *     `is_admin()` was false and the gate raised before any of the behaviour
+ *     under test was reached. Proving the guard is not proving the function.
+ *     For an admin-only function, set a real admin's claim first:
+ *       set local request.jwt.claims = '{"sub":"<admin user id>","role":"authenticated"}';
+ *     and SELECT is_admin() before relying on it, so a claim that did not
+ *     carry shows up as false rather than as a confusing error later.
+ *
  *   * `begin; ... rollback;` is fine — it is the multi-statement dependencies
  *     inside that break, not the transaction.
  */

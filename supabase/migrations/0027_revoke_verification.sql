@@ -273,58 +273,130 @@ notify pgrst, 'reload schema';
 -- VERIFY — after applying. Written for the Supabase SQL editor: one
 -- self-contained statement per check, no temp tables, no session state.
 --
+-- ── BLOCKS A, C AND D NEED AN ADMIN auth.uid() ──────────────────────────
+--
+-- ⚠️ THE FIRST VERSION OF THESE BLOCKS COULD NOT BE RUN, and that is worth
+-- stating rather than quietly replacing. They called revoke_verification()
+-- directly from the SQL editor, where you are `postgres` and auth.uid() is
+-- NULL — so `is_admin()` is false and the admin gate raises before anything
+-- else in the function is reached. The guard was proven; every other line was
+-- unreachable, including the two things most worth seeing: this table's first
+-- ever row, and the wording a stranger receives.
+--
+-- Fourth unrunnable block in a month. The rule in
+-- scripts/migration-status.mjs said "must run in the Supabase SQL editor" and
+-- that was not enough: a block must also satisfy the guards of the thing it is
+-- testing. Written there now.
+--
+-- ── THIS IS NOT A WAY AROUND THE GUARD ──────────────────────────────────
+--
+--   is_admin() = exists (select 1 from admins where user_id = auth.uid())
+--
+-- Setting the JWT claim gives that check a REAL admin's id — Micky B, the
+-- break-glass admin, who genuinely has an `admins` row — so the guard runs
+-- exactly as written and returns true honestly. Going around it would be
+-- commenting out the check, or granting execute to postgres. This supplies the
+-- input, it does not bypass the test.
+--
+-- Everything below runs inside begin/rollback and writes nothing permanent.
+--
 -- ── BLOCK A — a reason is mandatory ─────────────────────────────────────
 --
 --   begin;
+--     set local request.jwt.claims = '{"sub":"ff06d568-8936-45fa-ad5f-0b88c150ec30","role":"authenticated"}';
+--     -- Prove the impersonation took BEFORE relying on it. If is_admin is
+--     -- false, your editor ran the statements in separate sessions and the
+--     -- `set local` did not carry — use the DO-block variant at the bottom.
+--     select auth.uid() as acting_as, public.is_admin() as is_admin;
 --     select public.revoke_verification(
 --       '517c2853-50bb-4e8f-87fe-d79311bc37c0'::uuid, 'too short');
 --   rollback;
 --
---   Expect: needs a reason of at least 10 characters.
---
--- ── BLOCK B — the invariant, on a hand edit rather than the RPC ─────────
---
---   This is the one enforce_publish_requires_verified could never do.
---
---   begin;
---     update public.users set is_verified = true where id = '<PROVIDER-USER-ID>';
---     update public.providers set is_published = true where user_id = '<PROVIDER-USER-ID>';
---     update public.users set is_verified = false where id = '<PROVIDER-USER-ID>';
---     select is_published from public.providers where user_id = '<PROVIDER-USER-ID>';
---   rollback;
---
---   Expect is_published false. Before 0027 it stayed true, which is the
---   published-but-invalid state the six blank providers were in.
+--   Expect is_admin = true, then:
+--     'revoke_verification needs a reason of at least 10 characters'
+--   If you get 'revoke_verification is admin-only', the claim did not take.
 --
 -- ── BLOCK C — a full revoke, rolled back ────────────────────────────────
 --
---   Paste the provider's USER id (not providers.id) in both places.
+--   Paste the PROVIDER'S USER ID (not providers.id) in all three places.
 --
 --   begin;
+--     set local request.jwt.claims = '{"sub":"ff06d568-8936-45fa-ad5f-0b88c150ec30","role":"authenticated"}';
+--     select public.is_admin() as must_be_true;
 --     select public.revoke_verification(
 --       '<PASTE-USER-ID>'::uuid, 'Verify block C - rolled back, not a real revocation');
 --     select is_verified from public.users where id = '<PASTE-USER-ID>';
---     select status, count(*) from public.sessions s
---       join public.providers p on p.id = s.provider_id
---      where p.user_id = '<PASTE-USER-ID>' group by status;
---     select action, reason, target_name, target_email_hash is not null as has_hash
+--     select p.is_published from public.providers p where p.user_id = '<PASTE-USER-ID>';
+--     select action, reason, target_name,
+--            target_email_hash is not null as has_hash
 --       from public.moderation_actions order by created_at desc limit 1;
 --   rollback;
 --
---   Expect is_verified false, future bookings cancelled, and ONE moderation row
---   with a non-null hash — the NOT NULL and the trigger that fills it working
---   together on this table's first ever row.
+--   Expect is_verified false, is_published false, and ONE moderation row with
+--   has_hash true — the NOT NULL and trg_moderation_subject working together on
+--   this table's first ever row.
 --
--- ── BLOCK D — read the notification a stranger actually gets ────────────
+-- ── BLOCK D — read what a stranger actually gets ────────────────────────
 --
---   Inside the same rolled-back transaction as Block C, before the rollback:
+--   Same shape, ending on the notification instead. Read it as the model, not
+--   as the person who wrote it.
 --
+--   begin;
+--     set local request.jwt.claims = '{"sub":"ff06d568-8936-45fa-ad5f-0b88c150ec30","role":"authenticated"}';
+--     select public.revoke_verification(
+--       '<PASTE-USER-ID>'::uuid, 'Verify block D - rolled back, not a real revocation');
 --     select title, body from public.notifications
---      where type = 'session_cancelled' order by created_at desc limit 1;
+--      where type = 'session_cancelled' order by created_at desc limit 3;
+--   rollback;
 --
---   Read it as the model, not as the person who wrote it. It should say what
---   happened, that it was our decision, that we will not explain, and how to
---   raise a concern — and nothing about the stylist's conduct either way.
+--   It should say what happened, that it was our decision, that we will not
+--   explain, and how to raise a concern — and nothing about the stylist's
+--   conduct in either direction.
+--
+--   If the provider has no future pending/accepted bookings this returns
+--   nothing, which is not a failure: it means there was nobody to tell. Check
+--   first with:
+--
+--     select s.status, s.date from public.sessions s
+--       join public.providers p on p.id = s.provider_id
+--      where p.user_id = '<PASTE-USER-ID>'
+--        and s.status in ('pending','accepted') and s.date >= current_date;
+--
+-- ── IF `set local` DOES NOT CARRY BETWEEN STATEMENTS ────────────────────
+--
+--   Some editors run each statement in its own session. Then use one DO block,
+--   which is a single statement and cannot be split. Results come back as
+--   NOTICEs rather than a result grid.
+--
+--   do $$
+--   declare v_title text; v_body text; v_cancelled int;
+--   begin
+--     perform set_config('request.jwt.claims',
+--       '{"sub":"ff06d568-8936-45fa-ad5f-0b88c150ec30","role":"authenticated"}', true);
+--     raise notice 'is_admin = %', public.is_admin();
+--     perform public.revoke_verification(
+--       '<PASTE-USER-ID>'::uuid, 'Verify DO block - rolled back, not a real revocation');
+--     select count(*) into v_cancelled from public.sessions s
+--       join public.providers p on p.id = s.provider_id
+--      where p.user_id = '<PASTE-USER-ID>'::uuid and s.status = 'cancelled';
+--     select title, body into v_title, v_body from public.notifications
+--      where type = 'session_cancelled' order by created_at desc limit 1;
+--     raise notice 'cancelled now: %', v_cancelled;
+--     raise notice 'TITLE: %', v_title;
+--     raise notice 'BODY: %', v_body;
+--     raise exception 'ROLLBACK_PROBE';
+--   exception when others then
+--     if sqlerrm <> 'ROLLBACK_PROBE' then raise; end if;
+--     raise notice 'rolled back - nothing was written';
+--   end $$;
+--
+-- ── THE HONEST LIMIT OF ALL OF THIS ─────────────────────────────────────
+--
+-- These prove the FUNCTION. They do not prove the admin console, because there
+-- is no revoke button yet — 0027 ships the mechanism, not the surface. Until
+-- that button exists, revocation is reachable only by an admin running SQL,
+-- which is better than the hand-typed UPDATE it replaces and is not the same as
+-- shipped. The UI is the next piece of item 8, not part of this migration.
 -- ===========================================================================
 
 
