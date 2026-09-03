@@ -56,6 +56,25 @@ missing view, RLS refusal, network error, empty result — degrades to an empty
 list plus a server-log warning, never a thrown error. Pre-launch, empty is the
 correct answer.
 
+## Checks (these fail the build)
+
+`npm run build` runs `npm run checks` first, so all three block a deploy:
+
+| Check | Catches |
+|---|---|
+| `eslint . --max-warnings=0` | Lint errors AND warnings. Wired in 2 Sep 2026 at zero of both |
+| `check-client-boundary.mjs` | Anything reachable from `(public)` touching cookies or the browser client |
+| `check-route-coverage.mjs` | An `(app)` route missing from the proxy matcher, so it stops refreshing its session cookie |
+
+Type errors are already build-blocking: `next build` type-checks and
+`typescript.ignoreBuildErrors` is not set.
+
+**Zero-tolerance on warnings is deliberate.** The site was at 0 errors and 0
+warnings when this was wired, so the bar costs nothing today and the first
+warning to appear is the one that gets fixed rather than the hundredth. Mobile
+(73) and admin (22) are not there yet, which is exactly why site was done first:
+a check not wired to a failure is not a check.
+
 ## Deployment (Vercel)
 
 **Done - live since 7 Aug 2026.** Kept below as the record of how it was set up.
