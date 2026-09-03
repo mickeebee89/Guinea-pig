@@ -36,7 +36,8 @@ live money, one a child-safety commitment.
 | 📋 Scoped | Revocation of verification (item 8) — not built |
 | ✅ Closed | Item 7 — record reconciliation, 2 Sep |
 | ✅ Closed | Items 9 + 10 — findability pass, 2 Sep |
-| ⬜ Open | Items 8, 11 and 12 |
+| ✅ Closed | Item 11 — diagnosed 2 Sep; a check with a named cause, not a note |
+| ⬜ Open | Items 8 and 12 |
 
 ---
 
@@ -487,7 +488,76 @@ open have had no such test. Wanted: a deliberate pass over every surface offerin
 report/block on both clients — mobile chat, mobile model and provider profiles,
 web chat, web stylist and model profiles — checked at 375px as well as desktop.
 
-**11. Pre-launch: the six treatment pages must not be empty** — NEW, 25 Aug.
+**11. ~~Pre-launch: the six treatment pages must not be empty~~** — diagnosed
+2 Sep 2026, and the cause changes the action.
+
+## The SEO pages are not empty for want of stylists
+
+`/hair-models` and the other five render zero cards. **That is not an inventory
+problem.** `public_stylists` (`supabase/public-web-views.sql:74`) has a content
+bar, and it is in the VIEW rather than the client, so nothing on the site can
+work around it:
+
+```sql
+where p.is_published is true
+  and coalesce(btrim(p.name), '') <> ''
+  and length(btrim(coalesce(p.bio, ''))) >= 40     -- <- this one
+  and cardinality(cats.categories) >= 1
+  and not exists (... seed accounts ...)
+```
+
+There are two published stylists. **Micky B's bio is 13 characters.** So the
+pages are empty because the bar excludes the stylists we have, not because there
+are none.
+
+**Those two states need different actions and must not be confused:**
+
+| Reading | Action |
+|---|---|
+| "Empty because no stylists" | Recruit. Weeks of work, nothing to do today |
+| **"Empty because the bar excludes the stylists we have"** | **One real stylist writing a longer bio populates the SEO engine.** Minutes of work |
+
+The bar is right and should stay. Its comment says why: a new domain publishing
+dozens of near-empty profiles is the thin/doorway pattern that earns a site-wide
+manual action from Google. A shopfront reaches the open web once it is actually a
+shopfront. The 40 characters are a deliberate quality gate, not an accident — and
+`0016` already established that the same number must NOT be used as a publish
+requirement, because unpublishing a working stylist over a short bio is a
+different and worse decision.
+
+## The check, before launch
+
+Run this rather than looking at the pages — it says WHICH bar each stylist fails,
+which is the difference between a five-minute fix and a recruitment problem:
+
+```sql
+select p.name,
+       p.is_published,
+       length(btrim(coalesce(p.bio, '')))                as bio_len,
+       (select count(*) from public.provider_treatments t
+         where t.provider_id = p.id)                     as treatments,
+       case
+         when p.is_published is not true                          then 'not published'
+         when coalesce(btrim(p.name), '') = ''                    then 'no name'
+         when length(btrim(coalesce(p.bio, ''))) < 40             then 'bio under 40 chars'
+         when not exists (select 1 from public.provider_treatments t
+                           where t.provider_id = p.id)            then 'no treatments'
+         else 'LISTED'
+       end                                               as blocker
+from public.providers p
+order by blocker, p.name;
+```
+
+**Passes when:** at least one row per treatment category reads `LISTED`, and each
+of the six pages renders at least one card.
+
+**Also unverified on live data:** the `is_verified` tick's tooltip now reads
+"Photo checked — a person compared their selfie to their profile photo. Not an ID
+document check." **It has never been seen rendering**, because no card has ever
+displayed. Confirm the wording on a real page before launch — it is on
+logged-out, indexable pages and it is a safety claim.
+
+**Original note:** — NEW, 25 Aug.
 `/hair-models` and the other five render zero stylist cards today. That is
 expected and not a bug — `public_stylists` needs a published stylist with a
 40-character bio and there are two published stylists in total — but these pages
