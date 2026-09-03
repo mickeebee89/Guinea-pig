@@ -60,15 +60,19 @@ function Group({
                   {s.treatmentName && ` · ${s.treatmentName}`}
                 </p>
                 {s.note && <p className="mt-2 text-sm text-warm-dark/80">{s.note}</p>}
-                {/* Only the stylist decides. A model seeing Accept on their own
-                    application would be nonsense, and RLS would refuse it. */}
-                {s.role === 'provider' && (
-                  <SessionActions
-                    sessionId={s.id}
-                    status={s.status}
-                    isPast={s.date < new Date().toISOString().slice(0, 10)}
-                  />
-                )}
+                {/* Accept/decline/complete are the stylist's alone — a model
+                    seeing Accept on their own application would be nonsense and
+                    RLS would refuse it. CANCEL is not: either party can cancel a
+                    booking that has not happened, so this renders for both and
+                    the component decides which controls to show. */}
+                <SessionActions
+                  sessionId={s.id}
+                  status={s.status}
+                  isPast={s.date < new Date().toISOString().slice(0, 10)}
+                  role={s.role}
+                  date={s.date}
+                  otherName={s.otherPartyName}
+                />
               </div>
             </div>
           </li>

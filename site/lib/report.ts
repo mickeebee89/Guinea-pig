@@ -148,43 +148,32 @@ export async function blockUser(
   }
 
   let cancelledBookings = 0
+  // ── THE BLOCK CASCADE NOW RUNS SERVER-SIDE (migration 0029) ──────────────
+  //
+  // It used to find the pair's sessions here, UPDATE them to cancelled, and
+  // then INSERT the notifications — three round trips and two writes, so a
+  // failure between them cancelled bookings and told nobody. Now one call, one
+  // transaction.
+  //
+  // THE WORDING MOVED WITH IT, and that is the more important half. The message
+  // used to be a literal in this file, duplicated in the other client. It now
+  // comes from `public.cancellation_notice('block', ...)`, alongside the two
+  // messages for an ordinary cancellation — with the constraint written beside
+  // them, because this is the one whose silence is load-bearing and the one a
+  // tidy-up would "fix" by adding a reason.
+  //
+  // What must remain true, and is worth re-testing on a device after any change
+  // here: the other party is told their booking is cancelled, is told NOTHING
+  // about why, and `sessions.cancelled_by` stays NULL — recording the blocker
+  // would put "who blocked whom" one query away from anything that renders it.
   try {
-    const me = args.blockerId
     const them = blockedId
 
-    const { data: provRows } = await supabase.from('providers')
-      .select('id, user_id').in('user_id', [me, them])
-    const rows = (provRows ?? []) as { id: string; user_id: string }[]
-    const myProviderId    = rows.find(p => p.user_id === me)?.id
-    const theirProviderId = rows.find(p => p.user_id === them)?.id
-
-    const orParts: string[] = []
-    if (myProviderId)    orParts.push(`and(model_user_id.eq.${them},provider_id.eq.${myProviderId})`)
-    if (theirProviderId) orParts.push(`and(model_user_id.eq.${me},provider_id.eq.${theirProviderId})`)
-
-    if (orParts.length > 0) {
-      const { data: pairSessions } = await supabase.from('sessions')
-        .select('id')
-        .in('status', ['pending', 'accepted'])
-        .or(orParts.join(','))
-      const ids = ((pairSessions ?? []) as { id: string }[]).map(r => r.id)
-      if (ids.length > 0) {
-        const { error: cancelErr } = await supabase
-          .from('sessions').update({ status: 'cancelled' }).in('id', ids)
-        if (cancelErr) throw cancelErr
-        cancelledBookings = ids.length
-        // Notify the other party per cancelled session — never mention blocking.
-        await supabase.from('notifications').insert(
-          ids.map(sid => ({
-            user_id:    them,
-            type:       'session_cancelled',
-            title:      'Booking cancelled',
-            body:       'Your upcoming treatment has been cancelled.',
-            session_id: sid,
-          }))
-        )
-      }
-    }
+    const { data, error } = await supabase.rpc('cancel_sessions_for_block', {
+      p_other_user_id: them,
+    })
+    if (error) throw error
+    cancelledBookings = (data as { cancelled?: number } | null)?.cancelled ?? 0
   } catch (e) {
     console.warn('[block] cancel/notify bookings failed (non-blocking):', e)
   }

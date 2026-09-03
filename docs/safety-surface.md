@@ -99,3 +99,51 @@ produced this page.
 
 Public, logged-out pages (`/[treatment]`) deliberately have no control: reporting
 requires an account, and there is nobody to attribute a report to.
+
+---
+
+## Cancelling a booking belongs on this page
+
+It is not obvious, so here is the reason.
+
+**The person cancelling under pressure is often the same person who would
+otherwise be reaching for the Safety control.** Someone who has changed their
+mind about being alone with a stranger does not always want to report them or
+block them — sometimes they just want out, quietly, and to not have to explain.
+If cancelling is hard to find, or feels like an accusation, or reads as letting
+someone down, the cheapest path becomes going anyway.
+
+So cancellation inherits this page's rules:
+
+| | |
+|---|---|
+| **Visible, not hidden** | Beside Mark complete, never inside the Safety menu |
+| **Both parties** | Either participant may cancel a booking that has not happened |
+| **No time cut-off** | A hard limit stops the person who most needs out. The UI states the consequence; it does not argue |
+| **Consequence, not discouragement** | What will happen, flatly. No "are you sure", no "please reconsider", no count of how little notice they are giving, no warning icon |
+| **The prompt is a courtesy** | "Anything you'd like them to know?", not "Reason". Optional. A field called Reason reads as an obligation to justify yourself, and the person least able to do that is the one this flow exists for |
+
+**Not in the Safety menu, deliberately.** Cancelling is not a safety action, and
+putting it there would make the safety menu the place you go for anything
+awkward — which dilutes the one control that should mean exactly one thing.
+
+## Where the cancellation wording lives
+
+**Not in either client.** All three messages are in
+`public.cancellation_notice` (migration `0029`), because they must not converge:
+
+* `block` — a block cascaded the booking away. Silent about cause, and silent
+  about *being* silent: no "we can't explain why" either, because the platform
+  decided nothing and implying otherwise invents a judgement.
+* `by_stylist` — actor named, optional reason shown.
+* `by_model` — actor named, optional reason shown.
+
+The block case is the fragile one. It already existed, its silence is
+load-bearing, and it reads as the most deficient of the three — so a shared
+helper is exactly where somebody tidies it by adding a reason for consistency.
+`0029`'s Block A passes a reason to all three kinds and asserts the block case
+ignores it.
+
+**If you change any of the three, re-test the block cascade on a device.** It is
+the only one that already worked before this feature existed, which makes it the
+one a refactor can silently break.

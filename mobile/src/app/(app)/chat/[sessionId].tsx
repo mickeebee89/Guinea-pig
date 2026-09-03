@@ -23,6 +23,8 @@ import { supabase } from '@/lib/supabase'
 import { mustWrite, tryWrite } from '@/lib/db'
 import { getBlockedIds } from '@/lib/blocks'
 import SafetyButton from '@/components/SafetyButton'
+import CancelSheet from '@/components/CancelSheet'
+import { isShortNotice } from '@/lib/cancel'
 import SafetySheet from '@/components/SafetySheet'
 import { signModelPhotos } from '@/lib/photoUrls'
 import LoadErrorState from '@/components/LoadErrorState'
@@ -124,6 +126,8 @@ export default function ChatScreen() {
   const [menuOpen,        setMenuOpen]        = useState(false)
   const [alreadyReviewed, setAlreadyReviewed] = useState(false)
   const [markingComplete, setMarkingComplete] = useState(false)
+  const [cancelOpen,      setCancelOpen]      = useState(false)
+  const [cancelShortNotice, setCancelShortNotice] = useState(false)
 
   // ── Load ───────────────────────────────────────────────────────────────────
 
@@ -539,6 +543,44 @@ export default function ChatScreen() {
           )}
         </TouchableOpacity>
       )}
+
+      {/* ── Cancel booking (either party, before it happens) ──────────────
+          Placed in the open, beside Mark complete, NOT inside the Safety menu.
+          Two reasons. It is not a safety action and hiding it there would make
+          the safety menu the place you go for anything awkward, which dilutes
+          it. And it is the control people reach for under time pressure —
+          often the same pressure that would otherwise send them to Safety — so
+          it has to be visible without hunting. docs/safety-surface.md. */}
+      {(isAccepted || chat?.status === 'pending') && (
+        <TouchableOpacity
+          style={styles.cancelBooking}
+          onPress={async () => {
+            await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+            // Computed here rather than in the sheet: Date.now() during render
+            // is impure and could flip the line under the reader.
+            setCancelShortNotice(chat?.date ? isShortNotice(chat.date) : false)
+            setCancelOpen(true)
+          }}
+          activeOpacity={0.8}
+          accessibilityRole="button"
+          accessibilityLabel="Cancel this booking"
+        >
+          <Ionicons name="close-circle-outline" size={16} color={Colors.muted} />
+          <Text style={styles.cancelBookingText}>Cancel booking</Text>
+        </TouchableOpacity>
+      )}
+
+      <CancelSheet
+        visible={cancelOpen}
+        onClose={() => setCancelOpen(false)}
+        sessionId={sessionId as string}
+        otherName={otherParty?.name ?? 'them'}
+        shortNotice={cancelShortNotice}
+        onCancelled={() => {
+          setCancelOpen(false)
+          setChat(prev => prev ? { ...prev, status: 'cancelled' } : prev)
+        }}
+      />
 
       {/* ── Review banner (completed sessions) ── */}
       {isCompleted && (
@@ -1230,6 +1272,11 @@ const styles = StyleSheet.create({
     color: Colors.warmDark,
     marginBottom: 2,
   },
+  cancelBooking: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    minHeight: 44, marginHorizontal: 16, marginTop: 8,
+  },
+  cancelBookingText: { fontFamily: Fonts.bodyBold, fontSize: 14, color: Colors.muted },
   menuItemSub: {
     fontSize: 12,
     color: Colors.muted,

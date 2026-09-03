@@ -99,3 +99,38 @@ export async function completeSession(sessionId: string): Promise<Result> {
     body: d => `Your treatment on ${fmtDate(d)} is marked complete. Leave a review?`,
   })
 }
+
+/**
+ * Cancel a booking you are party to.
+ *
+ * Unlike accept/decline/complete above, this does NOT write the status and the
+ * notification as two steps. `cancel_booking` (migration 0029) does both in one
+ * transaction, so a cancellation can never happen without the other person
+ * being told — which is the failure that matters here. It also picks the
+ * wording, because the three cancellation messages must not converge and the
+ * only way to guarantee that is for no client to hold any of them.
+ *
+ * Either participant may cancel and there is no time cut-off. That is
+ * deliberate: a hard limit stops the person who most needs out.
+ */
+export async function cancelBooking(sessionId: string, reason?: string): Promise<Result> {
+  await requireUser()
+  const supabase = await createSupabaseServerClient()
+
+  const { error } = await supabase.rpc('cancel_booking', {
+    p_session_id: sessionId,
+    p_reason: reason?.trim() ? reason.trim() : null,
+  })
+
+  if (error) {
+    console.error('[sessions] cancel failed', error)
+    // The function raises readable messages for the cases a person can hit —
+    // already cancelled, not a participant — so show them rather than replacing
+    // them with something generic.
+    return { ok: false, error: error.message || 'That didn’t go through. Nothing has changed.' }
+  }
+
+  revalidatePath(BOOKINGS_PATH)
+  revalidatePath('/dashboard')
+  return { ok: true }
+}
