@@ -37,7 +37,8 @@ live money, one a child-safety commitment.
 | ✅ Closed | Item 7 — record reconciliation, 2 Sep |
 | ✅ Closed | Items 9 + 10 — findability pass, 2 Sep |
 | ✅ Closed | Item 11 — diagnosed 2 Sep; a check with a named cause, not a note |
-| ⬜ Open | Items 8 and 12 |
+| ✅ Closed | Item 8 — revocation MECHANISM, proven 2 Sep. UI is item 14 |
+| ⬜ Open | Items 12, 13 and 14 |
 
 ---
 
@@ -655,7 +656,82 @@ against a moved cutoff. It becomes testable when banners become possible, and no
 before. Testing contrast against a photograph today would be testing a state the
 product cannot reach.
 
-**8. Revocation of verification** — NEW, found 24 Aug. `is_verified` is set to
+**8. ~~Revocation of verification~~ — MECHANISM done 2 Sep 2026, surface is
+item 14.** `0026` (enum label) + `0027` (mechanism) + `0028` (wording). Proven on
+live data inside a rolled-back transaction: `moderation_actions` took the first
+row it has ever held — `revoke_verification`, a reason, `Micky B.`, and a
+non-null `target_email_hash`, the NOT NULL and `trg_moderation_subject` working
+together on the first write.
+
+**Closed as "the mechanism exists and is correct", not as "an admin can revoke
+someone".** There is no revoke button. Until item 14 ships, revocation is
+reachable only by an admin running SQL — better than the hand-typed `UPDATE` it
+replaces, and not the same as shipped.
+
+Block B is the one that mattered most: `is_published` went false after a HAND
+EDIT clearing `is_verified`, not just through the RPC. That is the invariant
+`enforce_publish_requires_verified` has always sounded like it enforced and never
+could, being on `providers` while `is_verified` lives on `users`.
+
+**A finding that changed what this item meant:** nothing had ever written
+`moderation_actions`. Every reference in the repo is schema, triggers, retention,
+RLS, deletion handling or documentation; the admin console writes `notifications`,
+`suspensions` and `admin_audit_log` instead. So the table is append-only by
+trigger, indexed, carries a ban-evasion hash, survives account deletion by
+design, is purged at six years, and is **named in the published deletion policy**
+— and until 2 Sep it had never held a row the product created. Revocation is its
+first writer.
+
+---
+
+**13. Cancellation notifications — NEW, 2 Sep 2026. The careful wording went to
+the rare case and the common one is bare.**
+
+The revocation notice was drafted, reviewed and revised. Then the rows beneath it
+in the same query read:
+
+> **Booking cancelled** — Your upcoming treatment has been cancelled.
+
+No actor, no reason, no route, no apology. And that is the one models will
+actually receive, because revocation will be rare.
+
+**What the sweep actually found is sharper than "the wording is thin".**
+`session_cancelled` has exactly **two** writers in the whole product, and both
+are the block cascade (`mobile/src/lib/report.ts:200`, `site/lib/report.ts:181`).
+There is no stylist-cancels-a-booking path at all — a stylist can *decline* a
+pending application, and nothing anywhere sets an accepted booking to
+`cancelled`.
+
+But `enforce_session_status_transition` **permits** it: either participant may
+move a session to `cancelled`. So cancellation is a legal transition with no
+interface and no notification design — and "I need to cancel" is inevitable
+before launch. Whoever builds that button will inherit the block cascade's bare
+line unless the wording is designed first.
+
+Three things need words, and they are different events:
+
+| Event | Today | Needed |
+|---|---|---|
+| Block cascade cancels a booking | "Your upcoming treatment has been cancelled." | Must NOT mention blocking — that is deliberate and must survive any rewrite |
+| A stylist cancels an accepted booking | **Nothing. The path does not exist** | Wording designed with the button, not after |
+| A model cancels | **Nothing. The path does not exist** | Does the stylist get told? Currently nobody would be |
+
+The block-cascade constraint is the trap: its silence about *why* is correct, so
+"add a reason" is exactly the wrong instruction to give this one. The three cases
+need three answers, not one template.
+
+---
+
+**14. Admin revoke UI — NEW, 2 Sep 2026.** `0027` ships the mechanism; nothing
+calls it. Needs a control on the admin verification/provider view that takes a
+reason (≥10 characters, enforced server-side already), shows what will happen
+before it happens — how many bookings will be cancelled, and that it cannot be
+undone by re-approving alone — and reports the count afterwards.
+
+Until it exists, the reason-length validation and the admin gate are only
+exercised by SQL, which is not how an admin will hit them.
+
+**Original scope:** — NEW, found 24 Aug. `is_verified` is set to
 `true` in two places in the admin console and set to `false` **nowhere in the
 product**. Verification is one-way: a mistaken approval, a fraud finding, an
 account that later proves to be someone else, or a dispute all have no remedy
