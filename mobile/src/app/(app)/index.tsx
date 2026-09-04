@@ -24,6 +24,8 @@ import { supabase } from '@/lib/supabase'
 import { isIdentityVerified } from '@/lib/verification'
 import { getBlockedIds } from '@/lib/blocks'
 import ScreenDecor from '@/components/ScreenDecor'
+import CancelSheet from '@/components/CancelSheet'
+import { isShortNotice } from '@/lib/cancel'
 import HeaderIcons from '@/components/HeaderIcons'
 import { useAppRole } from '@/components/AppEntry'
 import LoadErrorState from '@/components/LoadErrorState'
@@ -167,6 +169,15 @@ function ModelHomeContent() {
   const [isVerified,       setIsVerified]       = useState(false)
   const [impact,           setImpact]           = useState<ImpactInfo | null>(null)
   const [toReview,         setToReview]         = useState<ReviewItem[]>([])
+
+  // ── CANCELLING, FROM THE MODEL'S SIDE ────────────────────────────────────
+  // This screen is where a model sees their own bookings — sessions.tsx is
+  // provider-only and bails without a providers row. Chat covers both parties
+  // only once a chat EXISTS, and a chat opens on confirmation, so a model who
+  // wants out of a PENDING application had no route at all. Items 9 and 10
+  // again: the mechanism was there and nothing reached it.
+  const [cancelTarget, setCancelTarget] =
+    useState<{ id: string; name: string; shortNotice: boolean } | null>(null)
 
   const fetchData = useCallback(async () => {
     if (!userId) { setLoading(false); return }
@@ -493,6 +504,26 @@ function ModelHomeContent() {
                     <View style={[styles.dashStatusBadge, styles.upcomingStatus]}>
                       <Text style={styles.dashStatusText}>Confirmed</Text>
                     </View>
+                    {/* Visible on the card, not behind a menu. See
+                        docs/safety-surface.md — the person cancelling under
+                        pressure is often the one who would otherwise be
+                        reaching for Safety. */}
+                    <TouchableOpacity
+                      style={styles.cardCancel}
+                      onPress={async () => {
+                        await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+                        setCancelTarget({
+                          id: s.id,
+                          name: s.provider_name,
+                          shortNotice: isShortNotice(s.date),
+                        })
+                      }}
+                      activeOpacity={0.8}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Cancel your booking with ${s.provider_name}`}
+                    >
+                      <Text style={styles.cardCancelText}>Cancel booking</Text>
+                    </TouchableOpacity>
                   </TouchableOpacity>
                 ))}
               </ScrollView>
@@ -585,6 +616,26 @@ function ModelHomeContent() {
                       <View style={[styles.dashStatusBadge, styles.dashStatusPending]}>
                         <Text style={[styles.dashStatusText, styles.dashStatusTextPending]}>Awaiting reply</Text>
                       </View>
+                      {/* THE ROUTE THAT DID NOT EXIST. A pending application has
+                          no readable chat — chat opens on confirmation — so
+                          until now a model who changed their mind before a
+                          stylist replied had nowhere to go. */}
+                      <TouchableOpacity
+                        style={styles.cardCancel}
+                        onPress={async () => {
+                          await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+                          setCancelTarget({
+                            id: s.id,
+                            name: s.provider_name,
+                            shortNotice: isShortNotice(s.date),
+                          })
+                        }}
+                        activeOpacity={0.8}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Cancel your application to ${s.provider_name}`}
+                      >
+                        <Text style={styles.cardCancelText}>Cancel</Text>
+                      </TouchableOpacity>
                     </TouchableOpacity>
                   ))}
                 </>
@@ -901,6 +952,15 @@ function ModelHomeContent() {
           <View style={styles.bottomPad} />
         </ScrollView>
       </SafeAreaView>
+      <CancelSheet
+        visible={cancelTarget !== null}
+        onClose={() => setCancelTarget(null)}
+        sessionId={cancelTarget?.id ?? ''}
+        otherName={cancelTarget?.name ?? 'them'}
+        shortNotice={cancelTarget?.shortNotice ?? false}
+        onCancelled={() => { setCancelTarget(null); fetchData() }}
+      />
+
     </View>
   )
 }  // end ModelHomeContent
@@ -1233,6 +1293,11 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.bodyBold,
     overflow: 'hidden',
   },
+  // Cancel, on the card rather than behind a menu. Muted so it does not
+  // compete with the primary action, labelled so it is not a guess.
+  cardCancel: { marginTop: 8, minHeight: 32, justifyContent: 'center' },
+  cardCancelText: { fontFamily: Fonts.bodyBold, fontSize: 12, color: Colors.muted },
+
   dashStatusBadge: {
     backgroundColor: Colors.softPink,
     borderRadius: 8,

@@ -21,6 +21,8 @@ import { mustWrite, tryWrite } from '@/lib/db'
 import { signModelPhotos } from '@/lib/photoUrls'
 import { useProfileNav } from '@/lib/profileNav'
 import LoadErrorState from '@/components/LoadErrorState'
+import CancelSheet from '@/components/CancelSheet'
+import { isShortNotice } from '@/lib/cancel'
 import ApplicationPhotos from '@/components/ApplicationPhotos'
 import PhotoViewerModal from '@/components/PhotoViewerModal'
 
@@ -96,6 +98,13 @@ export default function SessionsScreen() {
   const [processingIds, setProcessingIds] = useState<Set<string>>(new Set())
   // Signed url of the application photo being viewed full-screen, if any.
   const [enlargedPhoto, setEnlargedPhoto] = useState<string | null>(null)
+
+  // ── CANCELLING, FROM THE STYLIST'S SIDE ──────────────────────────────────
+  // This screen is provider-only (it bails without a providers row); a model's
+  // bookings live on index.tsx and are handled there. Both sides need a route
+  // out that does not depend on a chat existing.
+  const [cancelTarget, setCancelTarget] =
+    useState<{ id: string; name: string; shortNotice: boolean } | null>(null)
 
   // ── Load ───────────────────────────────────────────────────────────────────
 
@@ -345,6 +354,9 @@ export default function SessionsScreen() {
               processing={processingIds.has(s.id)}
               onAccept={() => acceptSession(s)}
               onDecline={() => declineSession(s)}
+              onCancel={() => setCancelTarget({
+                id: s.id, name: s.modelName, shortNotice: isShortNotice(s.date),
+              })}
               onPhotoPress={setEnlargedPhoto}
             />
           ))
@@ -368,6 +380,9 @@ export default function SessionsScreen() {
               processing={processingIds.has(s.id)}
               onChat={() => goChat(s.id)}
               onComplete={() => markComplete(s)}
+              onCancel={() => setCancelTarget({
+                id: s.id, name: s.modelName, shortNotice: isShortNotice(s.date),
+              })}
               onPhotoPress={setEnlargedPhoto}
             />
           ))
@@ -391,6 +406,14 @@ export default function SessionsScreen() {
       </ScrollView>
 
       <PhotoViewerModal uri={enlargedPhoto} onClose={() => setEnlargedPhoto(null)} />
+      <CancelSheet
+        visible={cancelTarget !== null}
+        onClose={() => setCancelTarget(null)}
+        sessionId={cancelTarget?.id ?? ''}
+        otherName={cancelTarget?.name ?? 'them'}
+        shortNotice={cancelTarget?.shortNotice ?? false}
+        onCancelled={() => { setCancelTarget(null); load() }}
+      />
     </View>
   )
 }
@@ -440,10 +463,11 @@ function SessionBase({ s }: { s: Sess }) {
 }
 
 function PendingCard({
-  s, processing, onAccept, onDecline, onPhotoPress,
+  s, processing, onAccept, onDecline, onPhotoPress, onCancel,
 }: {
   s: Sess; processing: boolean
   onAccept: () => void; onDecline: () => void; onPhotoPress: (uri: string) => void
+  onCancel: () => void
 }) {
   return (
     <View style={styles.card}>
@@ -454,6 +478,16 @@ function PendingCard({
       {/* What the model shared, so the stylist can judge the job before accepting. */}
       <ApplicationPhotos photos={s.photoUrls} onPress={onPhotoPress} />
       <View style={styles.actions}>
+        {/* Visible on the card, not behind a menu — docs/safety-surface.md. */}
+        <TouchableOpacity
+          style={styles.cardCancel}
+          onPress={onCancel}
+          activeOpacity={0.8}
+          accessibilityRole="button"
+          accessibilityLabel="Cancel this booking"
+        >
+          <Text style={styles.cardCancelText}>Cancel booking</Text>
+        </TouchableOpacity>
         <TouchableOpacity style={styles.declineBtn} onPress={onDecline} disabled={processing} activeOpacity={0.85}>
           <Text style={styles.declineBtnText}>Decline</Text>
         </TouchableOpacity>
@@ -472,10 +506,11 @@ function PendingCard({
 }
 
 function ConfirmedCard({
-  s, isPast, processing, onChat, onComplete, onPhotoPress,
+  s, isPast, processing, onChat, onComplete, onPhotoPress, onCancel,
 }: {
   s: Sess; isPast: boolean; processing: boolean
   onChat: () => void; onComplete: () => void; onPhotoPress: (uri: string) => void
+  onCancel: () => void
 }) {
   return (
     <View style={styles.card}>
@@ -492,6 +527,16 @@ function ConfirmedCard({
         <TouchableOpacity style={styles.chatBtn} onPress={onChat} activeOpacity={0.85}>
           <Ionicons name="chatbubble-outline" size={15} color={Colors.roseDark} />
           <Text style={styles.chatBtnText}>Chat</Text>
+        </TouchableOpacity>
+        {/* Visible on the card, not behind a menu — docs/safety-surface.md. */}
+        <TouchableOpacity
+          style={styles.cardCancel}
+          onPress={onCancel}
+          activeOpacity={0.8}
+          accessibilityRole="button"
+          accessibilityLabel="Cancel this booking"
+        >
+          <Text style={styles.cardCancelText}>Cancel booking</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.completeBtn, processing && { opacity: 0.6 }]}
@@ -590,6 +635,9 @@ const styles = StyleSheet.create({
   pastBannerText: { fontSize: 12, fontFamily: Fonts.bodyBold, color: Colors.roseDark, flex: 1 },
 
   actions: { flexDirection: 'row', gap: 8 },
+  cardCancel: { minHeight: 36, paddingHorizontal: 10, justifyContent: 'center' },
+  cardCancelText: { fontFamily: Fonts.bodyBold, fontSize: 12, color: Colors.muted },
+
 
   declineBtn: {
     flex: 1, height: 40, borderRadius: Radius.md, borderWidth: 1.5,
