@@ -12,6 +12,17 @@ const KEYS = [
   'founding_provider_limit',
   'founding_provider_offer_enabled',
   'image_review_enabled',
+  // ⚠️ banned_words GATES PUBLICATION as of migration 0032. It is no longer
+  // just a search term list for the moderation tab: a BEFORE INSERT trigger on
+  // status_posts screens every post against it, and a hit holds the post for
+  // review.
+  //
+  // As of 7 Sep 2026 it holds ["pretty", "hair", "make", "done"] — placeholder
+  // test values. "hair" flags nearly every legitimate post a hair stylist will
+  // write, so today the screen queues almost everything. Audit item 17.
+  //
+  // Too broad and every honest post queues; too narrow and the screen is
+  // decoration. Both failures are quiet.
   'banned_words',
 ] as const
 

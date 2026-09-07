@@ -39,7 +39,7 @@ live money, one a child-safety commitment.
 | ✅ Closed | Item 11 — diagnosed 2 Sep; a check with a named cause, not a note |
 | ✅ Closed | Item 8 — revocation MECHANISM, proven 2 Sep. UI is item 14 |
 | ✅ Closed | Item 13 — cancellation, proven on device 4 Sep |
-| ⬜ Open | Items 12, 14, 15 and 16 |
+| ⬜ Open | Items 12, 14, 15, 16 and 17 |
 
 ---
 
@@ -789,6 +789,39 @@ from the outside.
 Both statements go in the same migration, and the verify block reads
 `information_schema.role_table_grants` for `anon` rather than trusting that the
 grant line ran.
+
+**17. `banned_words` HOLDS PLACEHOLDER TEST VALUES — NEW, 7 Sep 2026. A
+DECISION, NOT A BUILD TASK.**
+
+The live list is:
+
+```json
+["pretty", "hair", "make", "done"]
+```
+
+Four placeholders, and **"hair" flags almost every legitimate post a hair
+stylist will ever write.** "Two spaces free Thursday for hair models" trips it.
+So on today's data the `0032` auto-screen queues nearly everything and the
+feature behaves as though review were manual-only — which is precisely the
+outcome shipping the screen with the feature was meant to avoid.
+
+**The mechanism is correct and the data makes it useless.** That is a distinct
+failure from the ones this audit has been full of: nothing here is
+mis-implemented, nothing claims something untrue, and no check is looking at the
+wrong thing. It is a configuration value that was never meant to survive into
+use, sitting in a table where nothing marks it as provisional.
+
+**Needed before launch:** a real list, decided by Micky. Not a build task —
+what counts as bannable in a hair-and-beauty marketplace is a judgement about
+the product, and a wrong list is worse than a short one in both directions. Too
+broad and every honest post queues; too narrow and the screen is decoration.
+
+**⚠️ AND A TESTING TRAP THAT FOLLOWS FROM IT.** Anything the screen is tested
+against today is being tested against a list built to match ordinary words. A
+post that queues proves the trigger fires; it does NOT show the screen behaving
+sensibly, because sensible behaviour cannot be observed against nonsense input.
+Re-test after the real list lands — and treat any judgement about
+false-positive rates made before then as untested.
 
 **14. Admin revoke UI — NEW, 2 Sep 2026.** `0027` ships the mechanism; nothing
 calls it. Needs a control on the admin verification/provider view that takes a
