@@ -160,6 +160,13 @@ export default function NotificationsScreen() {
     } catch {}
   }, [])
 
+  // Explicit, and separate from handleTap: marking read must not navigate.
+  const handleMarkRead = async (n: Notification) => {
+    if (n.read_at) return
+    await Haptics.selectionAsync()
+    await markRead(n.id)
+  }
+
   const markAllRead = async () => {
     const hasUnread = notifications.some(n => !n.read_at)
     if (!hasUnread) return
@@ -303,7 +310,12 @@ export default function NotificationsScreen() {
                 <>
                   <Text style={styles.groupLabel}>Today</Text>
                   {todayItems.map(n => (
-                    <NotifItem key={n.id} notif={n} onPress={() => handleTap(n)} />
+                    <NotifItem
+                      key={n.id}
+                      notif={n}
+                      onPress={() => handleTap(n)}
+                      onMarkRead={() => handleMarkRead(n)}
+                    />
                   ))}
                 </>
               )}
@@ -315,7 +327,12 @@ export default function NotificationsScreen() {
                     Earlier
                   </Text>
                   {earlierItems.map(n => (
-                    <NotifItem key={n.id} notif={n} onPress={() => handleTap(n)} />
+                    <NotifItem
+                      key={n.id}
+                      notif={n}
+                      onPress={() => handleTap(n)}
+                      onMarkRead={() => handleMarkRead(n)}
+                    />
                   ))}
                 </>
               )}
@@ -476,7 +493,22 @@ function ReviewCTA({ sessionId }: { sessionId: string }) {
 
 // ── Notification item ─────────────────────────────────────────────────────────
 
-function NotifItem({ notif: n, onPress }: { notif: Notification; onPress: () => void }) {
+function NotifItem({
+  notif: n, onPress, onMarkRead,
+}: {
+  notif: Notification
+  onPress: () => void
+  /**
+   * -- WHY THERE IS A CONTROL AND NOT JUST TAP-THROUGH ---------------------
+   * Tapping a card marks it read AND navigates, so clearing an alert meant
+   * going somewhere you had not asked to go. On web it was worse: only
+   * notifications carrying a session_id were tappable at all, so the ones with
+   * nowhere to go -- a warning, a verification result, a rejected update --
+   * could never be marked read individually. Same control on both clients now,
+   * and it does not depend on where the row leads.
+   */
+  onMarkRead: () => void
+}) {
   const c = cfg(n.type)
   const isNavigable = (
     ['session_accepted', 'new_message', 'session_applied', 'review_reminder'].includes(n.type) &&
@@ -518,9 +550,22 @@ function NotifItem({ notif: n, onPress }: { notif: Notification; onPress: () => 
           <ReviewCTA sessionId={n.session_id} />
         )}
       </View>
-      {isNavigable && (
-        <Ionicons name="chevron-forward" size={16} color={Colors.muted} style={styles.chevron} />
-      )}
+      <View style={styles.rightCol}>
+        {!n.read_at && (
+          <TouchableOpacity
+            onPress={onMarkRead}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            accessibilityLabel="Mark as read"
+            accessibilityRole="button"
+            style={styles.markReadBtn}
+          >
+            <Ionicons name="checkmark-circle-outline" size={22} color={Colors.muted} />
+          </TouchableOpacity>
+        )}
+        {isNavigable && (
+          <Ionicons name="chevron-forward" size={16} color={Colors.muted} style={styles.chevron} />
+        )}
+      </View>
     </TouchableOpacity>
   )
 }
@@ -780,6 +825,20 @@ const styles = StyleSheet.create({
   chevron: {
     marginLeft: 6,
     flexShrink: 0,
+  },
+  rightCol: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+    gap: 2,
+  },
+  // 44 square: the control sits inside a card that is itself tappable, so a
+  // small target here means clearing an alert opens it instead.
+  markReadBtn: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 
   // Fetch error banner

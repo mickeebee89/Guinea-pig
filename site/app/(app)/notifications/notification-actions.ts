@@ -34,3 +34,40 @@ export async function markAllRead(): Promise<{ ok: boolean }> {
   revalidatePath('/', 'layout')
   return { ok: true }
 }
+
+/**
+ * Mark one notification read.
+ *
+ * ── WHY PER-ROW AND NOT JUST TAP-THROUGH ──────────────────────────────────
+ * Only notifications carrying a session_id are links on this page, so a
+ * mark-on-click would have covered some rows and silently skipped the rest —
+ * and the skipped ones are the account-level messages: warnings, verification
+ * results, a rejected status post. The ones most worth being able to clear.
+ *
+ * That is the same shape as the notification-type allowlist this file's sibling
+ * comment describes: a rule correct for the rows that happened to exist when it
+ * was written. So the control is on every row, and does not depend on what the
+ * row links to.
+ *
+ * RLS confines the update to the caller's own rows; the .eq('user_id') is a
+ * second lock on the same door rather than the only one.
+ */
+export async function markOneRead(id: string): Promise<{ ok: boolean }> {
+  const user = await requireUser()
+  const supabase = await createSupabaseServerClient()
+
+  const { error } = await supabase
+    .from('notifications')
+    .update({ read_at: new Date().toISOString() })
+    .eq('id', id)
+    .eq('user_id', user.id)
+    .is('read_at', null)
+
+  if (error) {
+    console.error('[notifications] mark one read failed', error)
+    return { ok: false }
+  }
+
+  revalidatePath('/', 'layout')
+  return { ok: true }
+}

@@ -25,6 +25,20 @@ const MAX = 280
  * bypassed by calling PostgREST directly with the stylist's own token — the
  * session the app already handed them.
  *
+ * -- APPROVED IS NOT LIVE (7 Sep 2026) ------------------------------------
+ * Both composers rendered "Live now" off moderation_status === 'approved'.
+ * Approved is a moderation state; visible is something else. Three things hide
+ * an approved post -- an unpublished shop, expiry, and a block -- and neither
+ * composer knew about any of them, so a stylist whose shop was not published
+ * was told the thing they wanted had happened.
+ *
+ * isLive is READ from public_stylist_status (0033), which is the definition of
+ * publicly visible, rather than recomputed here. A second copy of that rule
+ * diverges the first time the view changes, and the view already carries a
+ * clause -- the seed-account guard -- that nobody writing this file would have
+ * thought to include. A block is the one thing the view cannot express, being
+ * per-viewer rather than a property of the post.
+ *
  * So this is a plain insert, and it reads back WHAT THE DATABASE DECIDED rather
  * than assuming publication. A composer that clears and says "posted!" while
  * the row sits pending is the exact failure the moderation queue exists to
@@ -38,8 +52,17 @@ type Post = {
   review_note: string | null
 }
 
-export default function StatusComposer({ providerId }: { providerId: string }) {
+export default function StatusComposer({
+  providerId, shopIsPublished,
+}: {
+  providerId: string
+  /** Used only to WORD the explanation, never to decide visibility -- the view
+   *  does that. Kept separate so the two cannot drift into one rule expressed
+   *  twice. */
+  shopIsPublished: boolean
+}) {
   const [current, setCurrent] = useState<Post | null>(null)
+  const [isLive, setIsLive]   = useState(false)
   const [body, setBody]       = useState('')
   const [loading, setLoading] = useState(true)
   const [busy, setBusy]       = useState(false)
@@ -57,10 +80,23 @@ export default function StatusComposer({ providerId }: { providerId: string }) {
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle()
-    setLoading(false)
-    if (err) { setError("Couldn't load your update."); return }
+    if (err) { setLoading(false); setError("Couldn't load your update."); return }
     setError(null)
-    setCurrent((data as Post | null) ?? null)
+    const post = (data as Post | null) ?? null
+    setCurrent(post)
+
+    // ASK THE VIEW. One lookup by primary key, only when there is an approved
+    // post to ask about. Fails closed: if the check errors we do not claim the
+    // post is live, because a false "live" is the bug this removes.
+    if (post && post.moderation_status === 'approved') {
+      const { data: liveRow, error: liveErr } = await supabase
+        .from('public_stylist_status').select('id').eq('id', post.id).maybeSingle()
+      if (liveErr) console.error('[status] visibility check failed', liveErr.message)
+      setIsLive(!liveErr && !!liveRow)
+    } else {
+      setIsLive(false)
+    }
+    setLoading(false)
   }, [providerId])
 
   // Reloads on focus: a decision made in the admin queue while the app sat in
@@ -128,8 +164,18 @@ export default function StatusComposer({ providerId }: { providerId: string }) {
                   and nothing here parses the body. */}
               <Text style={s.currentBody}>{current.body}</Text>
 
-              {current.moderation_status === 'approved' && (
+              {current.moderation_status === 'approved' && isLive && (
                 <Text style={s.live}>Live now &middot; disappears automatically after 48 hours</Text>
+              )}
+
+              {/* Approved, and the view still does not carry it. Saved, not
+                  rejected, and worth saying in that order. */}
+              {current.moderation_status === 'approved' && !isLive && (
+                <Text style={s.pending}>
+                  {shopIsPublished
+                    ? 'Posted, but it isn\u2019t showing to models yet. It\u2019s saved \u2014 nothing is wrong with what you wrote.'
+                    : 'Posted \u2014 it\u2019ll go out once your shop is live. Turn your shop on in Your shop, above, and models will start seeing it.'}
+                </Text>
               )}
 
               {/* HELD, not lost. */}
@@ -152,7 +198,7 @@ export default function StatusComposer({ providerId }: { providerId: string }) {
 
               <TouchableOpacity onPress={clear} disabled={busy} style={s.clearBtn}>
                 <Text style={s.clearText}>
-                  {current.moderation_status === 'approved' ? 'Take it down' : 'Clear it'}
+                  {current.moderation_status === 'approved' && isLive ? 'Take it down' : 'Clear it'}
                 </Text>
               </TouchableOpacity>
             </View>

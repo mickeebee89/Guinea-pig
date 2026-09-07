@@ -90,6 +90,19 @@ export interface ProviderDashboard {
     expiresAt: string
     moderationStatus: 'pending' | 'approved' | 'rejected'
     reviewNote: string | null
+    /**
+     * Whether models can actually see this post — READ FROM 0033'S VIEW, not
+     * worked out here.
+     *
+     * `moderation_status = 'approved'` is a moderation state and was being
+     * reported to the stylist as "live". They are different things: an approved
+     * post is invisible if the shop is unpublished, if it has expired, or if
+     * the provider is a seed account. `public_stylist_status` is the authority
+     * on all of that and the view can gain another clause tomorrow, so this
+     * asks it rather than restating it in TypeScript — which is the two-places
+     * problem that produced this bug in the first place.
+     */
+    isLive: boolean
   } | null
 }
 
@@ -333,6 +346,31 @@ export async function getProviderDashboard(
     treatment: r.treatment_id ? (treatMap[r.treatment_id]?.name ?? treatMap[r.treatment_id]?.category ?? null) : null,
   }))
 
+  // ── IS THE POST ACTUALLY VISIBLE? ASK THE VIEW. ───────────────────────
+  // One indexed lookup by primary key, and only when there is an approved post
+  // to ask about. A row in public_stylist_status IS the definition of visible
+  // (0033) — approved, unexpired, the shop published, and not a seed account.
+  // That last clause is the reason not to reimplement this: nobody writing the
+  // composer would have remembered it.
+  //
+  // A block is the one thing the view cannot express, because it is per-viewer
+  // rather than a property of the post. That is why "live" is worded as "models
+  // can see this" and not "everyone can".
+  const sp = statusRes.data as {
+    id: string; body: string; expires_at: string
+    moderation_status: 'pending' | 'approved' | 'rejected'; review_note: string | null
+  } | null
+
+  let isLive = false
+  if (sp && sp.moderation_status === 'approved') {
+    const { data: liveRow, error: liveErr } = await supabase
+      .from('public_stylist_status').select('id').eq('id', sp.id).maybeSingle()
+    // Fail closed. If we cannot tell, do not claim it is live — that is the
+    // exact false confirmation this read was added to remove.
+    if (liveErr) console.error('[dashboard] status visibility check failed', liveErr)
+    isLive = !liveErr && !!liveRow
+  }
+
   const openDates = [...new Set(
     ((availRes.data ?? []) as { date: string; is_taken: boolean | null }[])
       .filter(a => !a.is_taken).map(a => a.date),
@@ -349,13 +387,14 @@ export async function getProviderDashboard(
     upcoming: asCards(upcoming),
     openDates,
     portfolioCount: portRes.count ?? 0,
-    statusPost: statusRes.data
+    statusPost: sp
       ? {
-          id: (statusRes.data as { id: string }).id,
-          body: (statusRes.data as { body: string }).body,
-          expiresAt: (statusRes.data as { expires_at: string }).expires_at,
-          moderationStatus: (statusRes.data as { moderation_status: 'pending' | 'approved' | 'rejected' }).moderation_status,
-          reviewNote: (statusRes.data as { review_note: string | null }).review_note,
+          id: sp.id,
+          body: sp.body,
+          expiresAt: sp.expires_at,
+          moderationStatus: sp.moderation_status,
+          reviewNote: sp.review_note,
+          isLive,
         }
       : null,
   }

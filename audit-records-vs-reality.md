@@ -999,6 +999,57 @@ into view.
 a read surface with no writer (item 21) and a rule with no check. Nothing fails;
 the feature is simply absent, and the code reads as though it is present.
 
+**Extended 7 Sep 2026:** a per-row read control on both clients. "Mark all read"
+alone was not enough on web, where only notifications carrying a `session_id`
+are links — the rows with nowhere to go (a warning, a verification result, a
+rejected status post) could not be marked read individually at all. On mobile
+tapping a card marked it read AND navigated, so clearing an alert meant going
+somewhere you had not asked to go.
+
+**23. THE COMPOSER CALLED AN APPROVED POST LIVE — FOUND AND CLOSED
+7 Sep 2026.**
+
+**What broke, plainly:** a stylist whose shop was not published wrote an update,
+and the composer told them it was live. It was not. No model could see it, and
+nothing on the screen said so.
+
+Both composers rendered *"Live now · disappears automatically after 48 hours"*
+off `moderation_status === 'approved'`. **Approved is a moderation state.
+Visible is something else.** Three things hide an approved post:
+
+| Hides it | Expressed in |
+|---|---|
+| The shop is not published | `public_stylist_status` (0033) |
+| It has expired | `public_stylist_status` (0033) |
+| A block between the two people | Neither — it is per-viewer, not a property of the post |
+
+The composer knew about none of them.
+
+**The mechanism was right; only the confirmation was wrong.** Proven by
+evidence, not argument: posting from an unpublished shop produced a post no
+model could see — correct, and exactly what 0033's `is_published` clause is for
+— and after verifying the same account in admin, a second post appeared in the
+model feed. Same shape as items 18, 20 and 22, and worse than any of them,
+because here the person is told the thing they wanted has happened.
+
+**The fix reads the state; it does not recompute it.** `isLive` comes from a
+lookup in `public_stylist_status` by primary key. A TypeScript copy of that rule
+would have diverged the first time the view changed — and would have been wrong
+on the day it was written, because the view carries a fourth clause nobody
+writing a composer would think of: the seed-account `.invalid` guard. The check
+fails closed: if the lookup errors, the post is not called live.
+
+**And it says what is true rather than what is wrong.** An unpublished stylist
+has done nothing incorrect, so there is no error state. They see *"Posted —
+it'll go out once your shop is live"*, linking to the setup panel, which already
+knows which step is missing. When the post is approved, not live, and the shop
+IS published, the wording stops guessing: it says the post is saved and not
+showing yet, because the reason is one the view models and this file does not.
+
+**Block remains deliberately unmentioned to the author.** It is per-viewer, and
+telling a stylist that some particular person cannot see them is not something
+this product should do.
+
 **14. Admin revoke UI — NEW, 2 Sep 2026.** `0027` ships the mechanism; nothing
 calls it. Needs a control on the admin verification/provider view that takes a
 reason (≥10 characters, enforced server-side already), shows what will happen

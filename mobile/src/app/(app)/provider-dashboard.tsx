@@ -1036,7 +1036,7 @@ export default function ProviderDashboardScreen() {
         <View style={[styles.sectionHeader, { marginTop: 8 }]}>
           <Text style={styles.sectionTitle}>What&rsquo;s on</Text>
         </View>
-        <StatusComposer providerId={provider.id} />
+        <StatusComposer providerId={provider.id} shopIsPublished={isPublished} />
 
         {/* ── Pending applications ── */}
         <View style={styles.sectionHeader}>

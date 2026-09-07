@@ -20,9 +20,25 @@ const MAX = 280
  * result back rather than assuming publication. A composer that clears and says
  * "posted!" while the row sits pending is the failure the whole moderation
  * sequence exists to remove.
+ *
+ * ── APPROVED IS NOT LIVE, AND THIS SAID IT WAS (7 Sep 2026) ───────────────
+ * It rendered "Live now" off `moderation_status === 'approved'`. Approved is a
+ * moderation state. Three separate things hide an approved post: an unpublished
+ * shop, expiry, and a block — and the composer knew about none of them. A
+ * stylist with an unpublished shop was told the thing they wanted had happened.
+ *
+ * `isLive` now comes from `public_stylist_status` (0033), which is the
+ * definition of publicly visible. It is NOT recomputed here: a second copy of
+ * that rule in TypeScript diverges the first time the view changes, and the
+ * view already carries a clause — the seed-account guard — that nobody writing
+ * this file would have thought to include.
+ *
+ * The wording says what IS true, not what is wrong. An unpublished stylist has
+ * done nothing incorrect; their post is saved and waiting, so it says so and
+ * points at the setup panel, which already knows what is missing.
  */
 export function StatusComposer({
-  providerId, current,
+  providerId, current, shopIsPublished,
 }: {
   providerId: string
   current: {
@@ -31,7 +47,12 @@ export function StatusComposer({
     expiresAt: string
     moderationStatus: 'pending' | 'approved' | 'rejected'
     reviewNote: string | null
+    isLive: boolean
   } | null
+  /** Used only to WORD the explanation, never to decide visibility — the view
+   *  does that. Kept separate on purpose so the two cannot drift into being one
+   *  rule expressed twice. */
+  shopIsPublished: boolean
 }) {
   const [body, setBody] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -62,10 +83,33 @@ export function StatusComposer({
               nothing here parses the body. */}
           <p className="whitespace-pre-line text-sm text-warm-dark">{current.body}</p>
 
-          {current.moderationStatus === 'approved' && (
+          {current.moderationStatus === 'approved' && current.isLive && (
             <p className="mt-2 text-xs font-bold text-rose">
               Live now · disappears automatically after 48 hours
             </p>
+          )}
+
+          {/* Approved, and the view still does not carry it. Saved, not
+              rejected, and worth saying in that order. */}
+          {current.moderationStatus === 'approved' && !current.isLive && (
+            <div className="mt-2">
+              {!shopIsPublished ? (
+                <p className="text-xs font-bold text-muted">
+                  Posted — it’ll go out once your shop is live.{' '}
+                  <a href="#shop-setup" className="underline hover:text-rose">
+                    Finish setting up your shop
+                  </a>{' '}
+                  and models will start seeing it.
+                </p>
+              ) : (
+                /* The view excluded it for a reason we do not model here, and
+                   guessing would be the mistake this whole change removes. */
+                <p className="text-xs font-bold text-muted">
+                  Posted, but it isn’t showing to models yet. It’s saved — nothing
+                  is wrong with what you wrote.
+                </p>
+              )}
+            </div>
           )}
 
           {/* HELD, not lost. The stylist can see it, which is the whole reason
@@ -94,7 +138,7 @@ export function StatusComposer({
             disabled={pending}
             className="mt-3 min-h-11 text-sm font-bold text-muted hover:text-rose disabled:opacity-50"
           >
-            {current.moderationStatus === 'approved' ? 'Take it down' : 'Clear it'}
+            {current.moderationStatus === 'approved' && current.isLive ? 'Take it down' : 'Clear it'}
           </button>
         </div>
       )}

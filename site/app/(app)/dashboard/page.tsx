@@ -267,8 +267,11 @@ export default async function DashboardPage({
           before the things you cannot do yet. Dropped once the shop is live —
           the "Your shop" panel below carries it from then on, and a permanent
           checklist reading "all done" is just noise. */}
+      {/* The div carries id="shop-setup": an approved post that is not live
+          because the shop is unpublished links here, and this panel already
+          knows which step is missing. */}
       {setup && !setup.isPublished && (
-        <div className="mb-6">
+        <div id="shop-setup" className="mb-6 scroll-mt-4">
           <StylistSetupPanel setup={setup} />
         </div>
       )}
@@ -465,7 +468,11 @@ export default async function DashboardPage({
                   being cheap. */}
               {data.providerId && (
                 <Panel title="What's on" empty="">
-                  <StatusComposer providerId={data.providerId} current={data.statusPost} />
+                  <StatusComposer
+                    providerId={data.providerId}
+                    current={data.statusPost}
+                    shopIsPublished={data.isPublished}
+                  />
                 </Panel>
               )}
 

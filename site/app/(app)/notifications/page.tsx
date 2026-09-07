@@ -3,6 +3,7 @@ import { createSupabaseServerClient, requireUser } from '@/lib/supabase-server'
 import { getNotifications, type AppNotification } from '@/lib/queries/notifications'
 import { EmptyState, LoadError } from '@/components/ui'
 import { MarkAllReadButton } from './MarkAllReadButton'
+import { MarkOneReadButton } from './MarkOneReadButton'
 
 export const metadata = { title: 'Notifications' }
 
@@ -70,16 +71,31 @@ export default async function NotificationsPage() {
               </>
             )
             return (
-              <li key={n.id}>
+              <li
+                key={n.id}
+                className="overflow-hidden rounded-lg border border-hairline bg-white shadow-soft"
+              >
                 {n.session_id ? (
                   <Link
                     href={`/messages/${n.session_id}`}
-                    className="block rounded-lg border border-hairline bg-white p-4 shadow-soft transition-colors hover:border-rose/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose"
+                    className="block p-4 transition-colors hover:bg-input-bg focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-rose"
                   >
                     {body}
                   </Link>
                 ) : (
-                  <div className="rounded-lg border border-hairline bg-white p-4 shadow-soft">{body}</div>
+                  <div className="p-4">{body}</div>
+                )}
+
+                {/* The read control is a sibling of the link, not inside it: an
+                    anchor cannot contain a button, and a button inside one
+                    steals the click. It is on every row rather than only the
+                    linked ones \u2014 a notification with nowhere to go (a warning,
+                    a verification result, a rejected update) is exactly the
+                    kind you want to be able to clear. */}
+                {!n.read_at && (
+                  <div className="border-t border-hairline px-4">
+                    <MarkOneReadButton id={n.id} />
+                  </div>
                 )}
               </li>
             )
