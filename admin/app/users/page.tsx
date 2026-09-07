@@ -1,7 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { useLoader } from '@/lib/useLoader'
 import { logAction } from '@/lib/audit'
 
 interface User {
@@ -64,20 +65,18 @@ export default function UsersPage() {
   const [role, setRole]       = useState('all')
   const [verified, setVerified] = useState('all')
   const [status, setStatus]   = useState('all')
-  const [loading, setLoading] = useState(true)
 
   const [modal, setModal] = useState<{ user: User; action: string } | null>(null)
   const [reason, setReason]   = useState('')
   const [duration, setDuration] = useState('7')
 
-  async function load() {
-    setLoading(true)
+  const { loading, reload } = useLoader(`${role}|${verified}`, async stale => {
     let q = supabase.from('users').select('*').order('created_at', { ascending: false })
     if (role !== 'all') q = q.eq('role', role)
     if (verified === 'verified')   q = q.eq('is_verified', true)
     if (verified === 'unverified') q = q.eq('is_verified', false)
     const { data } = await q
-    if (!data) { setLoading(false); return }
+    if (!data) return
 
     // One batched read for the whole page rather than a per-row check — this page
     // already fires three queries per user and doesn't need a fourth.
@@ -106,11 +105,9 @@ export default function UsersPage() {
         suspension: activeSuspension(suspByUser[u.id] ?? []),
       }
     }))
+    if (stale()) return
     setUsers(enriched)
-    setLoading(false)
-  }
-
-  useEffect(() => { load() }, [role, verified])
+  })
 
   const filtered = users.filter(u => {
     const matchesSearch = !search || u.email.toLowerCase().includes(search.toLowerCase()) ||
@@ -167,7 +164,7 @@ export default function UsersPage() {
     await logAction(action, { targetUserId: user.id, adminNote: reason })
     setModal(null)
     setReason('')
-    load()
+    reload()
   }
 
   // Age from the signup date of birth (18+ is enforced at signup). Null for

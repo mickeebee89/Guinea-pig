@@ -879,10 +879,54 @@ answer is a product decision about where a signal should land.
 **19. MOBILE HAS NO LINT GATE, AND MOBILE IS THE PRIMARY CLIENT — NEW,
 7 Sep 2026.**
 
-`site` fails the build at zero eslint errors and zero warnings. `admin` and
-`mobile` are not wired, because neither is at zero: **admin 6, mobile 73 plus 6
-tsc.** The count is the reason the gate is not on, and the absent gate is the
-reason the count never falls.
+`site` fails the build at zero eslint errors and zero warnings.
+
+**⚠️ THE ADMIN FIGURE IN THE ORIGINAL VERSION OF THIS ITEM WAS WRONG.** It said
+**admin 6**. Six was `app/moderation/page.tsx` — one file, measured while
+working on that file, and written up as the whole app. The real figure was
+**22 errors and 5 warnings across ten files**, found on 7 Sep when the sweep
+actually ran.
+
+That is the same mistake as grepping for `SafetyMenu`, finding nothing, and
+reporting that mobile had no safety control — **a measurement of a part reported
+as a measurement of the whole.** The number was not a guess; it was a real
+measurement of the wrong thing, which is what makes it convincing enough to
+write down.
+
+**✅ ADMIN CLOSED 7 Sep 2026 — 22 → 0, and the gate is on.**
+`admin/package.json` now runs `eslint . --max-warnings=0 && tsc --noEmit` before
+`next build`, matching `site`. What the sweep produced:
+
+| Class | Count | Outcome |
+|---|---|---|
+| `react-hooks/static-components` | 6 | **A live silent data-loss bug.** Item 26 |
+| `@typescript-eslint/no-explicit-any` | 6 | Row shapes named from the `select()` that produces them; surfaced a supabase-js / PostgREST disagreement about embed cardinality |
+| `react-hooks/set-state-in-effect` | 9 | **Surfaced a real race.** See below |
+| `react/no-unescaped-entities` | 1 | Style |
+| `react-hooks/exhaustive-deps` | 5 warnings | Gone with the same rewrite |
+
+**The nine were not cosmetic either, and that only became clear on inspection.**
+Every one was `useEffect(() => { load() }, [filter])` with `setLoading(true)` as
+the first line. The lint objects to the synchronous setState — which on its own
+would not have been worth nine rewrites. But **none of the nine loaders cancelled
+its previous request**, and five of them refetch on a filter change. Change the
+reports filter twice quickly and the slower first response can land last: open
+reports rendered under a "resolved" heading, on a moderation console. The screen
+disagreeing with the data.
+
+Fixed by `admin/lib/useLoader.ts`, written once rather than nine times: `loading`
+is DERIVED ("the key I loaded is not the key I want"), so nothing sets it and the
+effect body contains no setState at all; the loader is handed a `stale()` it must
+call before writing; and a throw can no longer leave a page stuck on
+"Loading…".
+
+**Suppressing the rule was the alternative and was rejected.** Nine
+`eslint-disable` lines would have kept the race, and "the artefact was a rule
+rather than a check" is a failure this project has already named once.
+
+**Mobile is what remains: 73 errors, 32 warnings, 6 tsc.** The count is the
+reason the gate is not on, and the absent gate is the reason the count never
+falls.
 
 **The evidence that this is not theoretical.** In one session I wrote the same
 defect three times — `Date.now()` called during render, where a re-render can

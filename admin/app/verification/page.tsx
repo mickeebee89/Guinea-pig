@@ -1,7 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { useLoader } from '@/lib/useLoader'
 import { logAction } from '@/lib/audit'
 
 interface VerificationRequest {
@@ -28,19 +29,18 @@ export default function VerificationQueuePage() {
   const [requests, setRequests]     = useState<VerificationRequest[]>([])
   const [signedUrls, setSignedUrls] = useState<Record<string, string>>({})   // selfie signed URLs, keyed by request id
   const [lightbox, setLightbox]     = useState<string | null>(null)          // enlarged selfie (signed URL) or null
-  const [loading, setLoading]       = useState(true)
   const [filter, setFilter]     = useState<'pending' | 'approved' | 'rejected'>('pending')
   const [notes, setNotes]       = useState<Record<string, string>>({})
   const [working, setWorking]   = useState<string | null>(null)
 
-  async function load() {
-    setLoading(true)
+  const { loading, reload } = useLoader(filter, async stale => {
     const { data, error } = await supabase
       .from('verification_requests')
       .select('id, selfie_url, status, notes, created_at, user:users!user_id(id, first_name, last_name, last_initial, email, role, is_verified)')
       .eq('status', filter)
       .order('created_at', { ascending: false })
     if (error) console.error('verification requests load failed:', error)
+    if (stale()) return
     const rows = (data ?? []) as unknown as VerificationRequest[]
     setRequests(rows)
 
@@ -56,11 +56,9 @@ export default function VerificationQueuePage() {
         return [r.id, signed?.signedUrl ?? ''] as const
       }),
     )
+    if (stale()) return
     setSignedUrls(Object.fromEntries(entries))
-    setLoading(false)
-  }
-
-  useEffect(() => { load() }, [filter])
+  })
 
   async function approve(req: VerificationRequest) {
     // A joined users row hidden by RLS comes back as NULL, not an error.
@@ -116,7 +114,7 @@ export default function VerificationQueuePage() {
       })
     } finally {
       setWorking(null)
-      load()
+      reload()
     }
   }
 
@@ -154,7 +152,7 @@ export default function VerificationQueuePage() {
       })
     } finally {
       setWorking(null)
-      load()
+      reload()
     }
   }
 

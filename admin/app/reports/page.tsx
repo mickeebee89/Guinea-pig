@@ -1,7 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { useLoader } from '@/lib/useLoader'
 import { logAction } from '@/lib/audit'
 
 interface Party {
@@ -119,14 +120,12 @@ export default function ReportsPage() {
   const [reports, setReports] = useState<Report[]>([])
   const [history, setHistory] = useState<Map<string, SubjectHistory>>(new Map())
   const [statusFilter, setStatusFilter] = useState('open')
-  const [loading, setLoading] = useState(true)
   const [chat, setChat] = useState<{ report: Report; messages: Message[] } | null>(null)
   const [actionModal, setActionModal] = useState<{ report: Report; action: string } | null>(null)
   const [reason, setReason] = useState('')
   const [duration, setDuration] = useState('7')
 
-  async function load() {
-    setLoading(true)
+  const { loading, reload } = useLoader(statusFilter, async stale => {
     let q = supabase
       .from('reports')
       .select(`id, reason, reason_code, details, status, created_at, session_id,
@@ -154,6 +153,7 @@ export default function ReportsPage() {
         'is in date order only. Reload before working through it.',
       )
     }
+    if (stale()) return
     const map = new Map<string, SubjectHistory>()
     for (const h of ((hist ?? []) as SubjectHistory[])) map.set(h.reported_email_hash, h)
     setHistory(map)
@@ -169,10 +169,7 @@ export default function ReportsPage() {
       return b.created_at.localeCompare(a.created_at)
     })
     setReports(rows)
-    setLoading(false)
-  }
-
-  useEffect(() => { load() }, [statusFilter])
+  })
 
   async function viewChat(report: Report) {
     if (!report.session_id) return
@@ -238,7 +235,7 @@ export default function ReportsPage() {
     })
     setActionModal(null)
     setReason('')
-    load()
+    reload()
   }
 
   const statusColor = (s: string) =>

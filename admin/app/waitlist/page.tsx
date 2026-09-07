@@ -1,7 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { useLoader } from '@/lib/useLoader'
 
 interface WaitlistRow {
   id: string
@@ -20,18 +21,14 @@ type RoleFilter = typeof ROLE_FILTERS[number]
 export default function WaitlistPage() {
   const [rows, setRows]       = useState<WaitlistRow[]>([])
   const [roleFilter, setRole] = useState<RoleFilter>('all')
-  const [loading, setLoading] = useState(true)
 
-  async function load() {
-    setLoading(true)
+  const { loading } = useLoader(roleFilter, async stale => {
     let q = supabase.from('waitlist').select('*').order('created_at', { ascending: false })
     if (roleFilter !== 'all') q = q.eq('role', roleFilter)
     const { data } = await q
+    if (stale()) return
     setRows((data as WaitlistRow[]) ?? [])
-    setLoading(false)
-  }
-
-  useEffect(() => { load() }, [roleFilter])
+  })
 
   const stylistCount = rows.filter(r => r.role === 'stylist').length
   const modelCount   = rows.filter(r => r.role === 'model').length

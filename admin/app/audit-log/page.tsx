@@ -1,7 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { useLoader } from '@/lib/useLoader'
 
 interface AuditEntry {
   id: string
@@ -54,15 +55,15 @@ const ALL_ACTIONS = Object.keys(ACTION_COLORS)
 export default function AuditLogPage() {
   const [entries, setEntries]     = useState<AuditEntry[]>([])
   const [adminMap, setAdminMap]   = useState<Record<string, AdminInfo>>({})
-  const [loading, setLoading]     = useState(true)
   const [actionFilter, setAction] = useState('all')
   const [dateFrom, setDateFrom]   = useState('')
   const [dateTo, setDateTo]       = useState('')
   const [page, setPage]           = useState(0)
   const PAGE_SIZE = 50
 
-  async function load() {
-    setLoading(true)
+  const { loading } = useLoader(
+    JSON.stringify([page, actionFilter, dateFrom, dateTo]),
+    async stale => {
     let q = supabase
       .from('admin_audit_log')
       .select(`id, action, admin_id, admin_note, details, created_at,
@@ -76,6 +77,7 @@ export default function AuditLogPage() {
     if (dateTo)   q = q.lte('created_at', dateTo + 'T23:59:59')
 
     const { data } = await q
+    if (stale()) return
     const rows = (data as unknown as AuditEntry[]) ?? []
     setEntries(rows)
 
@@ -88,16 +90,15 @@ export default function AuditLogPage() {
         .from('users')
         .select('id, first_name, last_initial, email')
         .in('id', adminIds)
+      if (stale()) return
       const map: Record<string, AdminInfo> = {}
       ;(admins as AdminInfo[] ?? []).forEach(a => { map[a.id] = a })
       setAdminMap(map)
     } else {
+      if (stale()) return
       setAdminMap({})
     }
-    setLoading(false)
-  }
-
-  useEffect(() => { load() }, [page, actionFilter, dateFrom, dateTo])
+  })
 
   const color = (action: string) =>
     ACTION_COLORS[action] ?? 'bg-gray-100 text-gray-600'

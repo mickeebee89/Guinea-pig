@@ -1,7 +1,8 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { useLoader } from '@/lib/useLoader'
 import { logAction } from '@/lib/audit'
 
 interface Setting { key: string; value: string }
@@ -30,22 +31,19 @@ type SettingsMap = Record<typeof KEYS[number], string>
 
 export default function SettingsPage() {
   const [settings, setSettings]     = useState<SettingsMap>({} as SettingsMap)
-  const [loading, setLoading]       = useState(true)
   const [saving, setSaving]         = useState<string | null>(null)
   const [foundingCount, setFoundingCount] = useState<number>(0)
 
-  async function load() {
+  const { loading } = useLoader('', async stale => {
     const [{ data }, { count }] = await Promise.all([
       supabase.from('settings').select('key, value').in('key', KEYS as unknown as string[]),
       supabase.from('founding_providers').select('*', { count: 'exact', head: true }),
     ])
+    if (stale()) return
     const map = Object.fromEntries((data ?? []).map((r: Setting) => [r.key, r.value])) as SettingsMap
     setSettings(map)
     setFoundingCount(count ?? 0)
-    setLoading(false)
-  }
-
-  useEffect(() => { load() }, [])
+  })
 
   async function saveSetting(key: string, value: string) {
     setSaving(key)

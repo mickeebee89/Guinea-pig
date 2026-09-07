@@ -1,7 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { useLoader } from '@/lib/useLoader'
 import { logAction } from '@/lib/audit'
 import Image from 'next/image'
 
@@ -38,6 +39,9 @@ interface FlaggedContent {
  * an ARRAY — proven by deleting the `as any[]` casts on 7 Sep 2026, which
  * produced exactly two type errors saying `sender` was `{...}[]`. The cast had
  * been hiding that disagreement rather than resolving it.
+ *
+ * ⚠️ IF A NAME EVER RENDERS BLANK IN THE FLAGGED-TEXT TAB, THIS IS WHY.
+ * An array reaching fullName() gives "undefined undefined", not an error.
  *
  * Nothing here decides who is right. `one()` below accepts either and takes the
  * first element if it gets an array, so the code is correct under both, and a
@@ -113,26 +117,21 @@ export default function ModerationPage() {
   // Same lesson as the text tab: without these, "still loading" and "the query
   // failed" both render as an empty queue, which is the one state a moderation
   // queue must never fake.
-  const [postsLoading, setPostsLoading] = useState(true)
   const [postsError, setPostsError]     = useState<string | null>(null)
-  const [loading, setLoading]           = useState(true)
-  const [settingsLoading, setSettingsLoading] = useState(true)
   // The text tab had neither a loading nor an error state, so "still scanning"
   // and "scan failed" both rendered as "No flagged content".
-  const [flaggedLoading, setFlaggedLoading] = useState(true)
   const [flaggedError, setFlaggedError]     = useState<string | null>(null)
 
-  async function loadSettings() {
+  const { loading: settingsLoading } = useLoader('', async stale => {
     const { data } = await supabase.from('settings').select('key, value').in('key', ['image_review_enabled', 'banned_words'])
+    if (stale()) return
     if (data) {
       const map = Object.fromEntries(data.map(r => [r.key, r.value]))
       setImageReview(map['image_review_enabled'] === 'true')
     }
-    setSettingsLoading(false)
-  }
+  })
 
-  async function loadItems() {
-    setLoading(true)
+  const { loading, reload: reloadItems } = useLoader('', async stale => {
     const { data } = await supabase
       .from('portfolio_items')
       .select(`id, media_url, media_type, moderation_status, created_at,
@@ -140,12 +139,11 @@ export default function ModerationPage() {
         category:treatment_categories!category_id(name)`)
       .eq('moderation_status', 'pending')
       .order('created_at')
+    if (stale()) return
     setItems((data as unknown as PortfolioItem[]) ?? [])
-    setLoading(false)
-  }
+  })
 
-  async function loadFlagged() {
-    setFlaggedLoading(true)
+  const { loading: flaggedLoading, reload: reloadFlagged } = useLoader('', async stale => {
     setFlaggedError(null)
     try {
       // maybeSingle + a real error check. This used to be .single() with the error
@@ -254,16 +252,16 @@ export default function ModerationPage() {
         add(`shop-bio-${s.id}`,  'shop', s.bio,  new Date().toISOString(), s.user_id, userMap[s.user_id])
       }
 
+      if (stale()) return
       setFlagged(results)
     } catch (e) {
+      if (stale()) return
       setFlaggedError(e instanceof Error ? e.message : 'Something went wrong scanning content.')
-    } finally {
-      setFlaggedLoading(false)
     }
-  }
+  })
 
-  async function loadStatusPosts() {
-    setPostsLoading(true); setPostsError(null)
+  const { loading: postsLoading, reload: reloadStatusPosts } = useLoader('', async stale => {
+    setPostsError(null)
     // Held posts only. Expired ones are excluded: a post whose 48 hours have
     // run out cannot be published by approving it, so offering the button would
     // be offering an action with no effect.
@@ -273,14 +271,14 @@ export default function ModerationPage() {
       .eq('moderation_status', 'pending')
       .gt('expires_at', new Date().toISOString())
       .order('created_at', { ascending: true })
-    setPostsLoading(false)
+    if (stale()) return
     if (error) { setPostsError(`Couldn't read the status queue: ${error.message}`); return }
     const now = Date.now()
     setPosts(((data as unknown as StatusPost[]) ?? []).map(p => ({
       ...p,
       hoursLeft: Math.max(0, Math.round((new Date(p.expires_at).getTime() - now) / 3_600_000)),
     })))
-  }
+  })
 
   async function decidePost(post: StatusPost, decision: 'approved' | 'rejected', note: string) {
     // review_note is what the stylist is shown when a post is rejected, so a
@@ -370,10 +368,8 @@ export default function ModerationPage() {
       targetProviderId: post.provider?.id ?? undefined,
       details: { post_id: post.id, note: note.trim() || null },
     })
-    await loadStatusPosts()
+    reloadStatusPosts()
   }
-
-  useEffect(() => { loadSettings(); loadItems(); loadFlagged(); loadStatusPosts() }, [])
 
   async function toggleImageReview() {
     const next = !imageReview
@@ -423,7 +419,7 @@ export default function ModerationPage() {
         // doesn't record that N items were published.
         await logAction('image_bulk_approved', { details: { count: pendingCount, reason: 'image_review_disabled' } })
       }
-      loadItems()
+      reloadItems()
     }
   }
 
@@ -605,7 +601,7 @@ export default function ModerationPage() {
             <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-700">
               <p className="font-medium mb-1">Couldn’t scan content</p>
               <p className="mb-3 text-red-600">{flaggedError}</p>
-              <button onClick={loadFlagged} className="px-3 py-1.5 rounded-lg bg-red-600 text-white text-xs font-medium">Retry</button>
+              <button onClick={reloadFlagged} className="px-3 py-1.5 rounded-lg bg-red-600 text-white text-xs font-medium">Retry</button>
             </div>
           ) : flagged.length === 0 ? (
             <div className="text-center py-16 text-[#3D2E2E]/30 text-sm">No flagged content</div>

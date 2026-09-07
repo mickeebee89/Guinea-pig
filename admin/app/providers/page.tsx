@@ -1,7 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { useLoader } from '@/lib/useLoader'
 import { logAction } from '@/lib/audit'
 
 interface Provider {
@@ -19,7 +20,6 @@ interface Provider {
 export default function ProvidersPage() {
   const [providers, setProviders]   = useState<Provider[]>([])
   const [search, setSearch]         = useState('')
-  const [loading, setLoading]       = useState(true)
   // Distinguish "couldn't load" from "no providers" — an RLS-blocked read used to
   // render as an empty list, which reads as "you have no providers".
   const [loadError, setLoadError]   = useState<string | null>(null)
@@ -27,18 +27,18 @@ export default function ProvidersPage() {
   const [reason, setReason]         = useState('')
   const [duration, setDuration]     = useState('7')
 
-  async function load() {
-    setLoading(true)
+  const { loading, reload } = useLoader('', async stale => {
     setLoadError(null)
-    // try/finally so a throw anywhere below can never leave the page stuck
-    // showing "Loading…" with no way out.
+    // try/catch so a throw anywhere below can never leave the page stuck
+    // showing "Loading…" with no way out — useLoader clears `loading` when this
+    // function returns, however it returns.
     try {
       const { data, error } = await supabase
         .from('providers')
         .select(`id, shop_handle, level, region, location_text,
           user:users!user_id(id, first_name, last_initial, email, is_verified, fraud_flagged)`)
         .order('shop_handle')
-      if (error) { setLoadError(error.message); return }
+      if (error) { if (!stale()) setLoadError(error.message); return }
 
       const enriched = await Promise.all((data as unknown as Provider[] ?? []).map(async (p) => {
         // A joined row hidden by RLS comes back as NULL, not an error — dereferencing
@@ -55,15 +55,13 @@ export default function ProvidersPage() {
         const avg = ratings.length ? ratings.reduce((a: number, b: number) => a + b, 0) / ratings.length : null
         return { ...p, session_count: sc ?? 0, avg_rating: avg, portfolio_count: pc ?? 0 }
       }))
+      if (stale()) return
       setProviders(enriched)
     } catch (e) {
+      if (stale()) return
       setLoadError(e instanceof Error ? e.message : 'Something went wrong loading providers.')
-    } finally {
-      setLoading(false)
     }
-  }
-
-  useEffect(() => { load() }, [])
+  })
 
   const filtered = providers.filter(p =>
     !search ||
@@ -108,7 +106,7 @@ export default function ProvidersPage() {
     await logAction(`provider_${action}`, { targetUserId: ownerId ?? null, targetProviderId: provider.id, adminNote: reason })
     setModal(null)
     setReason('')
-    load()
+    reload()
   }
 
   const stars = (n: number | null) => n === null ? '—' : '★'.repeat(Math.round(n)) + '☆'.repeat(5 - Math.round(n))
@@ -129,7 +127,7 @@ export default function ProvidersPage() {
         <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-700">
           <p className="font-medium mb-1">Couldn’t load providers</p>
           <p className="mb-3 text-red-600">{loadError}</p>
-          <button onClick={load} className="px-3 py-1.5 rounded-lg bg-red-600 text-white text-xs font-medium">
+          <button onClick={reload} className="px-3 py-1.5 rounded-lg bg-red-600 text-white text-xs font-medium">
             Retry
           </button>
         </div>

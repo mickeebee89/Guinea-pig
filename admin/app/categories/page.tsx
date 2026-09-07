@@ -1,7 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { useLoader } from '@/lib/useLoader'
 import { logAction } from '@/lib/audit'
 
 interface Category {
@@ -20,19 +21,15 @@ const empty = (): Omit<Category, 'id'> => ({
 
 export default function CategoriesPage() {
   const [cats, setCats]       = useState<Category[]>([])
-  const [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState<Category | null>(null)
   const [adding, setAdding]   = useState(false)
   const [form, setForm]       = useState(empty())
 
-  async function load() {
-    setLoading(true)
+  const { loading, reload } = useLoader('', async stale => {
     const { data } = await supabase.from('treatment_categories').select('*').order('sort_order').order('name')
+    if (stale()) return
     setCats((data as Category[]) ?? [])
-    setLoading(false)
-  }
-
-  useEffect(() => { load() }, [])
+  })
 
   function startEdit(c: Category) {
     setEditing(c)
@@ -64,13 +61,13 @@ export default function CategoriesPage() {
     }
     setEditing(null)
     setAdding(false)
-    load()
+    reload()
   }
 
   async function toggleActive(c: Category) {
     await supabase.from('treatment_categories').update({ is_active: !c.is_active }).eq('id', c.id)
     await logAction('category_toggle', { details: { category_id: c.id, is_active: !c.is_active } })
-    load()
+    reload()
   }
 
   const field = (label: string, key: keyof typeof form, type = 'text') => (
