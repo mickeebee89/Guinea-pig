@@ -3,6 +3,25 @@
  * check-links — every link points at a route that exists, and every route is
  * linked from somewhere.
  *
+ * ══════════════════════════════════════════════════════════════════════════
+ *  THIS DOES NOT PROVE LINKS WORK. READ THIS BEFORE TRUSTING A GREEN RUN.
+ * ══════════════════════════════════════════════════════════════════════════
+ *
+ * It proves a link POINTS SOMEWHERE REAL. It cannot prove that clicking it
+ * goes there. Nothing static can: that needs a running browser.
+ *
+ * This was written in response to a specific bug and DOES NOT CATCH IT. On
+ * 7 Sep 2026 a dashboard link to /shop did not navigate. The href was right,
+ * the route existed, the markup was valid, the two sibling links in the same
+ * paragraph worked, and /shop rendered fine when typed into the address bar.
+ * The route was fine; the client-side TRANSITION was not. This check passes
+ * that page with zero findings, and it is correct to.
+ *
+ * So a green run means: no link points at a route that does not exist, and no
+ * route is orphaned. It does not mean the links work. If someone reports a
+ * dead-feeling link and this check is green, believe them — the check has not
+ * looked at the thing they are describing.
+ *
  * Runs in `npm run checks`, so it FAILS THE BUILD and a Vercel deploy.
  *
  * ── WHY BOTH DIRECTIONS ───────────────────────────────────────────────────
@@ -27,12 +46,6 @@
  * The `[treatment]` catch-all is expanded to its six real slugs — see below.
  * Left as a wildcard it swallowed every single-segment dead link, and the check
  * passed a deliberately broken one on its first real test.
- *
- * ── AND ONE HONEST LIMIT ──────────────────────────────────────────────────
- * It would NOT have caught the bug that prompted it. On 7 Sep a dashboard link
- * to /shop did not navigate — and the href was right, the route existed, and
- * the markup was valid. This checks that a link points somewhere real. It
- * cannot check that clicking it works.
  */
 import { readFileSync, readdirSync, statSync } from 'node:fs'
 import path from 'node:path'
@@ -259,8 +272,11 @@ if (unreachable.length) {
 
 // ALWAYS printed, pass or fail. The number this check cannot see is part of its
 // result, not a footnote: a rising count means it covers less than it appears to.
+// The summary line says what was checked, not "links ok". A green line that
+// reads like a guarantee is how the next person concludes the links work.
 console.log(
-  `link check — ${routes.size} route(s) (${matchRoutes.size} after expansion), ` +
+  `link check — no dead or orphaned routes (does NOT prove links navigate) — ` +
+  `${routes.size} route(s) (${matchRoutes.size} after expansion), ` +
   `${linked.size} linked exactly, ` +
   `${reachable.size} reachable, ` +
   `${runtimeValued} href(s) with a runtime value, ` +
