@@ -85,8 +85,10 @@ export default function UsersPage() {
       .from('suspensions')
       .select('user_id, banned, suspended_until')
       .in('user_id', data.map(u => u.id))
+    // Shape copied from the select() three lines above, not assumed.
+    type SuspRow = { user_id: string; banned: boolean | null; suspended_until: string | null }
     const suspByUser: Record<string, { banned: boolean | null; suspended_until: string | null }[]> = {}
-    for (const r of (suspRows ?? []) as any[]) {
+    for (const r of (suspRows ?? []) as unknown as SuspRow[]) {
       ;(suspByUser[r.user_id] ??= []).push(r)
     }
 

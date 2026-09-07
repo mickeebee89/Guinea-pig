@@ -28,6 +28,41 @@ interface FlaggedContent {
   user_email: string | null
 }
 
+/**
+ * Row shapes for the flagged-text scan. Each is copied from the `select()` that
+ * produces it and nothing else — the lesson of 0023, where a migration guessed
+ * at a table's columns twice and hit a NOT NULL both times.
+ *
+ * ⚠️ `sender` / `reviewer` ARE EMBEDS, AND THEIR CARDINALITY IS NOT AGREED.
+ * PostgREST returns a many-to-one embed as an OBJECT. supabase-js infers it as
+ * an ARRAY — proven by deleting the `as any[]` casts on 7 Sep 2026, which
+ * produced exactly two type errors saying `sender` was `{...}[]`. The cast had
+ * been hiding that disagreement rather than resolving it.
+ *
+ * Nothing here decides who is right. `one()` below accepts either and takes the
+ * first element if it gets an array, so the code is correct under both, and a
+ * supabase-js version that changes its mind cannot break this tab.
+ */
+type Author = {
+  first_name: string
+  last_name: string | null
+  last_initial: string | null
+  email: string | null
+}
+type Embedded<T> = T | T[] | null
+
+/** Collapse an embed to the single row PostgREST actually returns. */
+function one<T>(v: Embedded<T>): T | null {
+  if (!v) return null
+  return Array.isArray(v) ? (v[0] ?? null) : v
+}
+
+type UserRow   = Author & { id: string }
+type MsgRow    = { id: string; body: string | null; created_at: string; sender_id: string; sender: Embedded<Author> }
+type ReviewRow = { id: string; comment: string | null; created_at: string; reviewer_id: string; reviewer: Embedded<Author> }
+type BioRow    = { user_id: string; bio: string | null }
+type ShopRow   = { id: string; user_id: string; name: string | null; bio: string | null }
+
 interface StatusPost {
   id: string
   body: string
@@ -178,23 +213,23 @@ export default function ModerationPage() {
         ...((bios ?? []) as { user_id: string }[]).map(b => b.user_id),
         ...((shops ?? []) as { user_id: string }[]).map(s => s.user_id),
       ])].filter(Boolean)
-      const userMap: Record<string, { first_name: string; last_name: string | null; last_initial: string | null; email: string | null }> = {}
+      const userMap: Record<string, Author> = {}
       if (profileIds.length) {
         const { data: us } = await supabase
           .from('users').select('id, first_name, last_name, last_initial, email').in('id', profileIds)
-        for (const u of (us ?? []) as any[]) userMap[u.id] = u
+        for (const u of (us ?? []) as unknown as UserRow[]) userMap[u.id] = u
       }
 
       // Admin-only full identity: prefer the private full surname, fall back to the initial.
       // Tolerates null — an RLS-hidden author comes back as NULL, not an error.
-      const fullName = (u: { first_name: string; last_name: string | null; last_initial: string | null } | null | undefined) =>
+      const fullName = (u: Author | null | undefined) =>
         u ? `${u.first_name} ${u.last_name ?? (u.last_initial ? `${u.last_initial}.` : '')}`.trim() : 'Not visible'
 
       const results: FlaggedContent[] = []
       const add = (
         id: string, type: FlaggedContent['type'], text: string | null,
         created_at: string, userId: string,
-        u: { first_name: string; last_name: string | null; last_initial: string | null; email: string | null } | null | undefined,
+        u: Author | null | undefined,
       ) => {
         if (!text) return
         const matches = text.match(re())
@@ -204,13 +239,17 @@ export default function ModerationPage() {
         })
       }
 
-      for (const m of (msgs ?? []) as any[]) add(m.id, 'message', m.body, m.created_at, m.sender_id, m.sender)
-      for (const r of (revs ?? []) as any[]) add(r.id, 'review', r.comment, r.created_at, r.reviewer_id, r.reviewer)
-      for (const b of (bios ?? []) as any[]) {
+      for (const m of (msgs ?? []) as unknown as MsgRow[]) {
+        add(m.id, 'message', m.body, m.created_at, m.sender_id, one(m.sender))
+      }
+      for (const r of (revs ?? []) as unknown as ReviewRow[]) {
+        add(r.id, 'review', r.comment, r.created_at, r.reviewer_id, one(r.reviewer))
+      }
+      for (const b of (bios ?? []) as unknown as BioRow[]) {
         // model_attributes has no created_at we rely on — bios are current state.
         add(`bio-${b.user_id}`, 'bio', b.bio, new Date().toISOString(), b.user_id, userMap[b.user_id])
       }
-      for (const s of (shops ?? []) as any[]) {
+      for (const s of (shops ?? []) as unknown as ShopRow[]) {
         add(`shop-name-${s.id}`, 'shop', s.name, new Date().toISOString(), s.user_id, userMap[s.user_id])
         add(`shop-bio-${s.id}`,  'shop', s.bio,  new Date().toISOString(), s.user_id, userMap[s.user_id])
       }

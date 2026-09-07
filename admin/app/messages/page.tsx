@@ -155,7 +155,7 @@ export default function MessagesPage() {
         <div className="bg-[#FAF7F4] rounded-xl border border-black/5 p-5">
           <h2 className="font-semibold text-[#3D2E2E] mb-3">How this works</h2>
           <ul className="space-y-2 text-sm text-[#3D2E2E]/70">
-            <li>• Messages appear in the user's in-app notification inbox</li>
+            <li>• Messages appear in the user’s in-app notification inbox</li>
             <li>• Type is <code className="bg-black/5 px-1 rounded text-xs">admin_message</code></li>
             <li>• All sent messages are logged below and in the Audit Log</li>
             <li>• Users cannot reply to admin messages</li>
