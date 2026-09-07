@@ -20,6 +20,20 @@ async function safeList(
   try {
     const { data, error } = await build()
     if (error) {
+      // ⚠️ THIS MAKES EVERY FAILURE LOOK LIKE EMPTINESS. Audit item 18.
+      //
+      // A missing view, an RLS refusal, a REVOKED GRANT and a genuinely empty
+      // table all end here and all produce the same thing: an empty array, a
+      // 200, and the page's empty state.
+      //
+      // Degrading rather than throwing is right and stays. The problem is that
+      // nothing downstream can tell the causes apart, and the six treatment
+      // pages are ALREADY empty for an unrelated reason (the 40-char bio bar,
+      // item 11) — so a broken public site and a correct one are byte-for-byte
+      // identical, and this warn in a Vercel function log is the only signal.
+      //
+      // If you are adding a signal, add it here rather than at the call sites:
+      // this is the one place that knows the difference.
       console.warn(`[${label}] query failed, returning none:`, error.message)
       return []
     }

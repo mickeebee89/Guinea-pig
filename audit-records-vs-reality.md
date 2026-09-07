@@ -39,7 +39,7 @@ live money, one a child-safety commitment.
 | ✅ Closed | Item 11 — diagnosed 2 Sep; a check with a named cause, not a note |
 | ✅ Closed | Item 8 — revocation MECHANISM, proven 2 Sep. UI is item 14 |
 | ✅ Closed | Item 13 — cancellation, proven on device 4 Sep |
-| ⬜ Open | Items 12, 14, 15, 16 and 17 |
+| ⬜ Open | Items 12, 14, 15, 16, 17 and 18 |
 
 ---
 
@@ -845,6 +845,36 @@ post that queues proves the trigger fires; it does NOT show the screen behaving
 sensibly, because sensible behaviour cannot be observed against nonsense input.
 Re-test after the real list lands — and treat any judgement about
 false-positive rates made before then as untested.
+
+**18. EVERY PUBLIC-SITE QUERY FAILURE LOOKS LIKE "NO DATA" — NEW, 7 Sep 2026.**
+
+`site/lib/stylists.ts` wraps every read of `public_stylists`:
+
+```
+console.warn(`[${label}] query failed, returning none:`, error.message)
+return []
+```
+
+A missing view, an RLS refusal, a revoked grant, a network blip and a genuinely
+empty table all produce the identical outcome: **an empty array, a 200, and the
+page's empty state.**
+
+**This is not a `0034` problem — it is why `0034` would be invisible.** It is
+also why any future outage on those seven pages is invisible. The two facts
+compound: the catch makes every failure look like emptiness, and item 11 means
+emptiness is currently the correct answer. There is no state of that page a
+person could look at and learn anything from.
+
+**The catch itself is defensible and was written deliberately** — its own
+comment says a failure should not take a page down pre-launch, and that is
+right. The gap is that it degrades identically for causes that are not
+identical, and nothing distinguishes them afterwards. A `console.warn` in a
+Vercel function log is not a signal anybody receives.
+
+Worth fixing as: keep degrading, but make the two cases distinguishable — a
+counter, a header, an admin tile, anything that answers "is this page empty
+because there is nothing, or because something is broken". Not scoped here; the
+answer is a product decision about where a signal should land.
 
 **14. Admin revoke UI — NEW, 2 Sep 2026.** `0027` ships the mechanism; nothing
 calls it. Needs a control on the admin verification/provider view that takes a
