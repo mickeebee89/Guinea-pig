@@ -28,11 +28,36 @@ interface FlaggedContent {
   user_email: string | null
 }
 
+interface StatusPost {
+  id: string
+  body: string
+  created_at: string
+  expires_at: string
+  moderation_status: string
+  provider: { id: string; name: string | null } | null
+  /**
+   * Whole hours until expiry, computed WHEN THE QUEUE LOADS, not during render.
+   *
+   * Date.now() is impure, so calling it while rendering lets a re-render move
+   * the number under the reader — and here that number is the whole reason to
+   * act now rather than later. Third time this pattern came up in one session
+   * (the web cancel panel and the mobile CancelSheet were the others), which is
+   * why it is a field rather than a helper anyone can call from JSX.
+   */
+  hoursLeft: number
+}
+
 export default function ModerationPage() {
   const [imageReview, setImageReview]   = useState(false)
   const [items, setItems]               = useState<PortfolioItem[]>([])
   const [flagged, setFlagged]           = useState<FlaggedContent[]>([])
-  const [tab, setTab]                   = useState<'images' | 'text'>('images')
+  const [tab, setTab]                   = useState<'images' | 'text' | 'status'>('images')
+  const [posts, setPosts]               = useState<StatusPost[]>([])
+  // Same lesson as the text tab: without these, "still loading" and "the query
+  // failed" both render as an empty queue, which is the one state a moderation
+  // queue must never fake.
+  const [postsLoading, setPostsLoading] = useState(true)
+  const [postsError, setPostsError]     = useState<string | null>(null)
   const [loading, setLoading]           = useState(true)
   const [settingsLoading, setSettingsLoading] = useState(true)
   // The text tab had neither a loading nor an error state, so "still scanning"
@@ -176,7 +201,57 @@ export default function ModerationPage() {
     }
   }
 
-  useEffect(() => { loadSettings(); loadItems(); loadFlagged() }, [])
+  async function loadStatusPosts() {
+    setPostsLoading(true); setPostsError(null)
+    // Held posts only. Expired ones are excluded: a post whose 48 hours have
+    // run out cannot be published by approving it, so offering the button would
+    // be offering an action with no effect.
+    const { data, error } = await supabase
+      .from('status_posts')
+      .select('id, body, created_at, expires_at, moderation_status, provider:providers!provider_id(id, name)')
+      .eq('moderation_status', 'pending')
+      .gt('expires_at', new Date().toISOString())
+      .order('created_at', { ascending: true })
+    setPostsLoading(false)
+    if (error) { setPostsError(`Couldn't read the status queue: ${error.message}`); return }
+    const now = Date.now()
+    setPosts(((data as unknown as StatusPost[]) ?? []).map(p => ({
+      ...p,
+      hoursLeft: Math.max(0, Math.round((new Date(p.expires_at).getTime() - now) / 3_600_000)),
+    })))
+  }
+
+  async function decidePost(post: StatusPost, decision: 'approved' | 'rejected', note: string) {
+    // review_note is what the stylist is shown when a post is rejected, so a
+    // rejection without one leaves them with "not published" and no reason —
+    // the silent-failure shape this queue exists to remove.
+    if (decision === 'rejected' && !note.trim()) {
+      alert('A rejection needs a reason. The stylist is shown it, and "not published" with no explanation is why this queue exists.')
+      return
+    }
+    const { error } = await supabase
+      .from('status_posts')
+      .update({
+        moderation_status: decision,
+        reviewed_at: new Date().toISOString(),
+        reviewed_by: (await supabase.auth.getUser()).data.user?.id ?? null,
+        review_note: note.trim() || null,
+      })
+      .eq('id', post.id)
+    if (error) {
+      alert(`Couldn't ${decision === 'approved' ? 'approve' : 'reject'} this post: ${error.message}`)
+      return
+    }
+    await logAction(`status_post_${decision}`, {
+      // undefined, not null: logAction takes an optional string, and a post with
+      // no resolvable provider should omit the field rather than record a null.
+      targetProviderId: post.provider?.id ?? undefined,
+      details: { post_id: post.id, note: note.trim() || null },
+    })
+    await loadStatusPosts()
+  }
+
+  useEffect(() => { loadSettings(); loadItems(); loadFlagged(); loadStatusPosts() }, [])
 
   async function toggleImageReview() {
     const next = !imageReview
@@ -266,13 +341,17 @@ export default function ModerationPage() {
       </div>
 
       <div className="flex gap-3 mb-6">
-        {(['images', 'text'] as const).map(t => (
+        {(['images', 'text', 'status'] as const).map(t => (
           <button key={t} onClick={() => setTab(t)}
             className={`px-4 py-2 rounded-lg text-sm font-medium capitalize transition-colors ${
               tab === t ? 'text-white' : 'bg-white border border-black/10 text-[#3D2E2E]/60'
             }`}
             style={tab === t ? { backgroundColor: '#8C4A58' } : {}}>
-            {t === 'images' ? `Images (${items.length})` : `Flagged Text (${flagged.length})`}
+            {t === 'images'
+              ? `Images (${items.length})`
+              : t === 'text'
+              ? `Flagged Text (${flagged.length})`
+              : `Status Posts (${posts.length})`}
           </button>
         ))}
       </div>
@@ -320,6 +399,32 @@ export default function ModerationPage() {
         </>
       )}
 
+      {/* ── STATUS POSTS ────────────────────────────────────────────────────
+          The queue that makes `pending` mean something. Without it, 0032's
+          fail-closed default is fail-SILENT: a flagged post sits invisible
+          until its 48 hours run out and the stylist is never told why.
+
+          ⚠️ AUDIT ITEM 17. banned_words currently holds placeholder values
+          including "hair", which flags nearly every legitimate post a hair
+          stylist writes. Expect this queue to be full of ordinary posts until a
+          real list is set. That is the list being wrong, not the screen. */}
+      {tab === 'status' && (
+        <div className="space-y-3">
+          {postsLoading ? (
+            <div className="text-[#3D2E2E]/40 text-sm">Loading the queue…</div>
+          ) : postsError ? (
+            <div className="text-sm font-medium text-red-700">{postsError}</div>
+          ) : posts.length === 0 ? (
+            <div className="text-[#3D2E2E]/40 text-sm">
+              Nothing held for review. Posts that pass the word screen publish
+              immediately and never appear here.
+            </div>
+          ) : (
+            posts.map(post => <StatusPostRow key={post.id} post={post} onDecide={decidePost} />)
+          )}
+        </div>
+      )}
+
       {tab === 'text' && (
         <div className="space-y-3">
           {flaggedLoading ? (
@@ -356,6 +461,72 @@ export default function ModerationPage() {
           ))}
         </div>
       )}
+    </div>
+  )
+}
+
+/**
+ * One held post, with the note field beside the buttons rather than behind a
+ * prompt() — because a rejection without a reason is refused, and a field the
+ * admin has to go looking for is a field that gets left empty.
+ */
+function StatusPostRow({
+  post, onDecide,
+}: {
+  post: StatusPost
+  onDecide: (p: StatusPost, d: 'approved' | 'rejected', note: string) => Promise<void>
+}) {
+  const [note, setNote] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  const run = async (decision: 'approved' | 'rejected') => {
+    setBusy(true)
+    await onDecide(post, decision, note)
+    setBusy(false)
+  }
+
+  return (
+    <div className="bg-white rounded-xl border border-black/5 shadow-sm p-4">
+      <div className="flex items-baseline justify-between gap-3">
+        <div className="text-sm font-semibold text-[#3D2E2E]">
+          {post.provider?.name ?? 'Unknown stylist'}
+        </div>
+        {/* Time pressure is the whole point of a 48-hour post: an approval that
+            lands after expiry publishes nothing. */}
+        <div className={`text-xs ${post.hoursLeft <= 6 ? 'text-red-700 font-semibold' : 'text-[#3D2E2E]/40'}`}>
+          {post.hoursLeft === 0 ? 'expires within the hour' : `${post.hoursLeft}h left`}
+        </div>
+      </div>
+
+      {/* Rendered as text. The body has already had links stripped by trigger
+          (0032), and nothing here parses it. */}
+      <p className="mt-2 whitespace-pre-line text-sm text-[#3D2E2E]">{post.body}</p>
+
+      <input
+        value={note}
+        onChange={e => setNote(e.target.value.slice(0, 280))}
+        placeholder="Reason — shown to the stylist. Required to reject."
+        className="mt-3 w-full rounded-lg border border-black/10 px-3 py-2 text-sm"
+        disabled={busy}
+      />
+
+      <div className="mt-3 flex gap-2">
+        <button
+          onClick={() => run('approved')}
+          disabled={busy}
+          className="px-4 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-50"
+          style={{ backgroundColor: '#2F7A4F' }}
+        >
+          {busy ? 'Working…' : 'Approve'}
+        </button>
+        <button
+          onClick={() => run('rejected')}
+          disabled={busy}
+          className="px-4 py-2 rounded-lg text-sm font-medium bg-red-100 text-red-700 disabled:opacity-50"
+        >
+          Reject
+        </button>
+      </div>
     </div>
   )
 }
