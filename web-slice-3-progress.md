@@ -1,5 +1,9 @@
 # Cavy Web — slices 2 and 3, working record
 
+> **Slice 3 is done. For where the product stands now, see `HANDOVER.md` at the
+> repo root** — this file is the slice's working record, not the current state.
+
+
 _Written 10 Aug 2026. Supersedes the scratch plan at `~/.claude/plans/`, which is
 NOT version controlled — anything that mattered has been copied here._
 

@@ -838,6 +838,34 @@ sat three lines above a claim that was wrong and was trusted. That is why facts
 moved to `CLAUDE.md` and to the code, rather than being written more carefully
 where they already were.
 
+## Two shapes worth naming, found at the very end
+
+**A check that was correct for the cases present when it was written.** Not a bug
+— it never fails. It quietly stops covering. Three instances here:
+
+| Mechanism | Correct for | Silently excluded |
+|---|---|---|
+| `check-client-boundary.mjs` | Direct imports | Anything reached transitively |
+| The notification-type allowlist | `admin_warning`, `admin_message` | Every type added after, including all three cancellation messages |
+| `otherPartyId: isModel ? provider_id : null` | A world with no model profile route | The model profile route, from the day it shipped |
+
+All three read as diligence. None of them raised anything. The tell is a list of
+cases written by hand, and the question to ask it is: **what joins this list
+later, and who adds it?**
+
+**A content defect on one client is usually on the other for a different
+reason.** The cancellation wording was unreadable on mobile — the row clamps the
+body to two lines and nothing opened it — and unreadable on the web, where the
+blank lines between paragraphs collapsed and four paragraphs became one block.
+Same content, two unrelated causes, and only mobile was reported.
+
+So: **when a content defect appears on one client, check the other before
+concluding it is platform-specific.** The instinct is that a rendering bug
+belongs to the platform that showed it. Here it belonged to the content, and the
+platforms each failed it differently.
+
+---
+
 ## What is open
 
 | | Item | Blocking launch? |

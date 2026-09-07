@@ -11,6 +11,8 @@
 > keeps the phrase "guinea pig" deliberately, and the mascot is still a guinea pig
 > (a cavy *is* a guinea pig). So never blanket find-and-replace this repo.
 
+**Where things stand right now — what blocks launch, what does not, what is dated — is in `HANDOVER.md` at the repo root.** This file holds only what does not change.
+
 _This file is read automatically at the start of every Claude Code session. It holds durable context only — how I work, the stack, identifiers, and schema truths. Session state (what's done, what's next) lives in chat, not here._
 
 ---

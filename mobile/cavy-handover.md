@@ -1,5 +1,13 @@
 # Cavy — Session Handover
 
+> **⚠️ NOT THE CURRENT PICTURE. See `HANDOVER.md` at the repo root.**
+>
+> This file is mobile's parked launch state and the record of how it got there.
+> It is history, kept because the detail is still true of the code it describes.
+> Where things stand today — what blocks launch, what does not, what is dated —
+> lives in one place at the root, so a new session starts from the present
+> rather than reconstructing it.
+
 _Rebranded from "Guinea Pig App" to **Cavy**. Entries below predate the rename and keep
 their original wording — they're a record of what happened, not current copy._
 
