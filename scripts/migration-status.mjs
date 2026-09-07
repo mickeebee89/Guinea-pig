@@ -29,6 +29,23 @@
  *   looks authoritative and is wrong — which is how supabase/ came to document
  *   about a third of the live schema while reading like a complete record.
  *
+ * ── THE WHOLE MIGRATION RUNS IN THE SUPABASE SQL EDITOR, NOT JUST ITS ─────
+ * ── VERIFY BLOCKS ─────────────────────────────────────────────────────────
+ *
+ *   Every migration here is pasted into that editor by hand — twenty-five times
+ *   and counting. Statements do not reliably share a session, so THE BODY has
+ *   the same constraint the verify blocks do:
+ *
+ *     * NO TEMP TABLES, and nothing that carries state from one statement to
+ *       the next. 0034 built a temp table and read it in the next statement:
+ *         ERROR: 42P01: relation "migrated_status" does not exist
+ *       Anything multi-step goes in a single `do $$` block, which cannot be
+ *       split and whose commands do see each other's effects.
+ *
+ *   This rule existed for verify blocks after three instances and was written
+ *   as though only verify blocks ran in the editor. The migration body runs
+ *   there too. 0034 was simply the first migration whose body needed state.
+ *
  * ── WRITING VERIFY BLOCKS: THEY RUN IN THE SUPABASE SQL EDITOR ─────────────
  *
  *   That is the only tool these are ever pasted into, and four blocks this

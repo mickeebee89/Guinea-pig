@@ -117,63 +117,73 @@ end $$;
 
 -- ---------------------------------------------------------------------------
 -- 1. Migrate live status values into status_posts.
---
--- Only unexpired ones: an expired status_text was already invisible, and
--- migrating it would resurrect it for 48 hours.
---
--- VISIBILITY IS PRESERVED, NOT RE-DECIDED. These values were already published
--- under the old mechanism, so they are set 'approved' after insert rather than
--- being left to the 0032 screen. Two reasons: re-screening would silently
--- unpublish content that is already public, and the word list is currently
--- placeholder values where "hair" flags almost any legitimate post (item 17) —
--- so the screen would flag them for the wrong reason.
---
--- What the screen WOULD have said is recorded, so a human can look.
 -- ---------------------------------------------------------------------------
-create temporary table migrated_status on commit drop as
-select p.id as provider_id,
-       btrim(p.status_text) as body,
-       p.status_expires_at
-from public.providers p
-where nullif(btrim(coalesce(p.status_text, '')), '') is not null
-  and (p.status_expires_at is null or p.status_expires_at > now());
-
--- ⚠️ THE INSERTED ROWS ARE IDENTIFIED BY ID, NOT BY BODY.
+-- ⚠️ ONE do $$ BLOCK, NOT A TEMP TABLE. THIS MIGRATION FAILED ONCE FOR THIS.
 --
--- The first draft joined back on (provider_id, body) to find what it had just
--- inserted. That is wrong: 0032's strip-links trigger REWRITES new.body on
--- insert, so any migrated value containing a link is stored with different text
--- than it was selected with. The join would have missed exactly those rows,
--- silently leaving them unapproved — a partial migration reporting success,
--- with the failures being the posts that had links in them.
+-- The first version built a temporary table in one statement and read it in the
+-- next:
 --
--- `returning` gives the real ids and cannot drift from what the trigger did.
-create temporary table migrated_ids on commit drop as
-with ins as (
-  insert into public.status_posts (provider_id, body, expires_at)
-  select m.provider_id, m.body,
-         coalesce(m.status_expires_at, now() + interval '48 hours')
-  from migrated_status m
-  returning id, moderation_status
-)
-select id, moderation_status from ins;
+--   ERROR: 42P01: relation "migrated_status" does not exist
+--
+-- Every migration in this project is pasted into the Supabase SQL editor by
+-- hand, and statements there do not reliably share a session — the same thing
+-- that broke 0004's Block 3 and 0024's Block E. The rule written after those
+-- covered VERIFY BLOCKS and stopped there. 0034 is the first migration whose
+-- BODY carries state between statements, and it could not.
+--
+-- A `do $$` block is a single statement, so it cannot be split, and inside it
+-- each command sees the effects of the ones before it. The rule now says so:
+-- scripts/migration-status.mjs.
+--
+-- The ids are captured in an array rather than matched back by body, because
+-- 0032's strip-links trigger REWRITES new.body on insert — so any migrated
+-- value containing a link is stored with different text than it was selected
+-- with, and a body-based match would miss exactly those rows.
+do $$
+declare
+  v_ids   uuid[];
+  v_count int;
+begin
+  -- Only unexpired values: an expired status_text was already invisible, and
+  -- migrating it would resurrect it for 48 hours.
+  with ins as (
+    insert into public.status_posts (provider_id, body, expires_at)
+    select p.id,
+           btrim(p.status_text),
+           coalesce(p.status_expires_at, now() + interval '48 hours')
+    from public.providers p
+    where nullif(btrim(coalesce(p.status_text, '')), '') is not null
+      and (p.status_expires_at is null or p.status_expires_at > now())
+    returning id
+  )
+  select coalesce(array_agg(id), '{}') into v_ids from ins;
 
--- What the screen decided, before it is overridden.
-insert into public.migration_findings (version, item, value)
-select '0034', 'migrated_screen_' || moderation_status, count(*)::text
-from migrated_ids
-group by moderation_status;
+  v_count := coalesce(array_length(v_ids, 1), 0);
 
-insert into public.migration_findings (version, item, value)
-select '0034', 'migrated_rows', count(*)::text from migrated_ids;
+  insert into public.migration_findings (version, item, value)
+  values ('0034', 'migrated_rows', v_count::text);
 
-update public.status_posts sp
-set moderation_status = 'approved',
-    review_note = 'Migrated from providers.status_text by 0034 — already public '
-                  'under the previous mechanism, so visibility was preserved '
-                  'rather than re-decided.'
-from migrated_ids mi
-where sp.id = mi.id;
+  -- What the screen decided, recorded BEFORE it is overridden below.
+  insert into public.migration_findings (version, item, value)
+  select '0034', 'migrated_screen_' || sp.moderation_status, count(*)::text
+  from public.status_posts sp
+  where sp.id = any(v_ids)
+  group by sp.moderation_status;
+
+  -- VISIBILITY IS PRESERVED, NOT RE-DECIDED. These values were already
+  -- published under the old mechanism. Re-screening would silently unpublish
+  -- content that is already public — and the word list is currently placeholder
+  -- values where "hair" flags almost any legitimate post (item 17), so the
+  -- screen would flag them for the wrong reason.
+  update public.status_posts sp
+  set moderation_status = 'approved',
+      review_note = 'Migrated from providers.status_text by 0034 - already public '
+                    'under the previous mechanism, so visibility was preserved '
+                    'rather than re-decided.'
+  where sp.id = any(v_ids);
+
+  raise notice '0034: migrated % status_text value(s) into status_posts', v_count;
+end $$;
 
 -- ---------------------------------------------------------------------------
 -- 2. The view, rebuilt without status_text.
@@ -296,7 +306,7 @@ end $$;
 
 -- MIGRATION FOOTER
 insert into public.schema_migrations (version, name, checksum)
-values ('0034', 'public_stylists_without_status_text', '93756323b035fa104e6b5d6ba4b0bb427d2b9ede4af596123ec3677aa4188bec');
+values ('0034', 'public_stylists_without_status_text', 'bac0b940c5e31213a6ca42eeef529b96cbe79abb04431cd6adfb9f0062541a33');
 
 commit;
 
