@@ -42,7 +42,16 @@ export default async function NotificationsPage() {
                     <p className={`text-sm ${n.read_at ? 'font-bold text-warm-dark/70' : 'font-bold text-warm-dark'}`}>
                       {n.title}
                     </p>
-                    {n.body && <p className="mt-0.5 text-sm text-muted">{n.body}</p>}
+                    {/* whitespace-pre-line, because the bodies are written with
+                        blank lines between paragraphs and HTML collapses them.
+                        Without it the cancellation and revocation messages —
+                        four paragraphs each — render as one run-on block. The
+                        text was not truncated here; it was unreadable for a
+                        different reason, which is why both clients needed
+                        checking rather than just the one that reported it. */}
+                    {n.body && (
+                      <p className="mt-0.5 whitespace-pre-line text-sm text-muted">{n.body}</p>
+                    )}
                     <p className="mt-1 text-xs text-muted">
                       {new Date(n.created_at).toLocaleString('en-GB', {
                         day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',

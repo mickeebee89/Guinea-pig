@@ -8,6 +8,7 @@ import {
   RefreshControl,
   ActivityIndicator,
   Modal,
+  Dimensions,
 } from 'react-native'
 import { useRouter } from 'expo-router'
 import * as Haptics from 'expo-haptics'
@@ -181,12 +182,23 @@ export default function NotificationsScreen() {
   const handleTap = async (n: Notification) => {
     await Haptics.selectionAsync()
     if (!n.read_at) await markRead(n.id)
-    // Anything from the team — a warning or a plain message — opens in full
-    // rather than deep-linking. routeForNotification has no case for these, so
-    // without this branch tapping an admin message did nothing at all.
-    if (n.type === 'admin_warning' || n.type === 'admin_message') { setDetailNotif(n); return }
-    // Shared with push-notification taps (lib/notificationRouting).
-    routeForNotification({ type: n.type, session_id: n.session_id, provider_id: n.data?.provider_id })
+    // ── EVERY NOTIFICATION MUST BE READABLE ────────────────────────────────
+    //
+    // This used to be a hard-coded list — admin_warning and admin_message — of
+    // the types allowed to open in full. That is an allowlist a new type never
+    // joins, and the cancellation messages (0029/0030) landed straight into the
+    // gap: the row clamps the body to two lines, session_cancelled has four
+    // paragraphs, and tapping it did nothing. Carefully written wording that
+    // could not be read on the device it was written for.
+    //
+    // The rule is now structural rather than per-type: if a notification has
+    // somewhere to go, go there; otherwise open it in full. Nothing can be
+    // unreadable, and a type added tomorrow inherits that without anyone
+    // remembering to add it here.
+    const route = routeForNotification({
+      type: n.type, session_id: n.session_id, provider_id: n.data?.provider_id,
+    })
+    if (!route) setDetailNotif(n)
   }
 
   // ── Derived ────────────────────────────────────────────────────────────────
@@ -325,6 +337,16 @@ export default function NotificationsScreen() {
           onPress={() => setDetailNotif(null)}
         >
           <TouchableOpacity style={styles.modalCard} activeOpacity={1}>
+            {/* ── THREE CASES, NOT TWO ────────────────────────────────────
+                This modal was built for admin notifications, and its `else`
+                branch asserted "A message from the Cavy team." Now that ANY
+                notification without a destination opens here, that sentence
+                would be printed over a cancellation — which came from another
+                user's action, not from us. A false attribution in a message
+                someone reads about a stranger.
+                So: warnings keep their framing, team messages keep theirs, and
+                everything else shows its own icon and title and claims nothing
+                about where it came from. */}
             {detailNotif?.type === 'admin_warning' ? (
               <>
                 <View style={[styles.iconCircle, { backgroundColor: '#FEF2F2', alignSelf: 'center' }]}>
@@ -336,7 +358,7 @@ export default function NotificationsScreen() {
                   for content or behaviour that breached our community guidelines.
                 </Text>
               </>
-            ) : (
+            ) : detailNotif?.type === 'admin_message' ? (
               <>
                 {/* A plain message from the team — no disciplinary framing. */}
                 <View style={[styles.iconCircle, { backgroundColor: Colors.softPink, alignSelf: 'center' }]}>
@@ -345,14 +367,33 @@ export default function NotificationsScreen() {
                 <Text style={styles.modalTitle}>{detailNotif?.title ?? 'Message'}</Text>
                 <Text style={styles.modalText}>A message from the Cavy team.</Text>
               </>
+            ) : (
+              <>
+                <View style={[styles.iconCircle, {
+                  backgroundColor: cfg(detailNotif?.type ?? '').bg, alignSelf: 'center',
+                }]}>
+                  <Ionicons
+                    name={cfg(detailNotif?.type ?? '').icon as any}
+                    size={24}
+                    color={cfg(detailNotif?.type ?? '').color}
+                  />
+                </View>
+                <Text style={styles.modalTitle}>{detailNotif?.title ?? ''}</Text>
+              </>
             )}
             {!!detailNotif?.body && (
-              <View style={styles.modalReasonBox}>
-                <Text style={styles.modalReasonLabel}>
-                  {detailNotif?.type === 'admin_warning' ? 'Note from the team' : 'Message'}
-                </Text>
+              /* Scrolls, capped at 40% of the screen. The cancellation and
+                 revocation bodies are four paragraphs; in a fixed card the last
+                 one fell off the bottom of a small phone, which is the same
+                 failure as the two-line clamp one level up. */
+              <ScrollView style={styles.modalReasonBox} contentContainerStyle={{ padding: 12 }}>
+                {(detailNotif?.type === 'admin_warning' || detailNotif?.type === 'admin_message') && (
+                  <Text style={styles.modalReasonLabel}>
+                    {detailNotif?.type === 'admin_warning' ? 'Note from the team' : 'Message'}
+                  </Text>
+                )}
                 <Text style={styles.modalReasonText}>{detailNotif.body}</Text>
-              </View>
+              </ScrollView>
             )}
             <TouchableOpacity
               style={styles.modalCloseBtn}
@@ -467,9 +508,11 @@ function NotifItem({ notif: n, onPress }: { notif: Notification; onPress: () => 
             A formal notice that your account was flagged for breaching our community guidelines. Tap for details.
           </Text>
         )}
-        {/* The body above is clamped to 2 lines, so say that there's more. */}
-        {n.type === 'admin_message' && (
-          <Text style={styles.readMoreHint}>Tap to read the full message</Text>
+        {/* The body is clamped to 2 lines, so say when there is more. Measured
+            rather than listed by type: the previous version named
+            admin_message alone and every other long body was silently cut. */}
+        {!isNavigable && (n.body.length > 110 || n.body.includes('\n')) && (
+          <Text style={styles.readMoreHint}>Tap to read in full</Text>
         )}
         {n.type === 'session_completed' && n.session_id && (
           <ReviewCTA sessionId={n.session_id} />
@@ -551,8 +594,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.inputBg,
     borderRadius: 12,
     padding: 12,
-    gap: 4,
-  },
+    gap: 4, maxHeight: Dimensions.get('window').height * 0.4,},
   modalReasonLabel: {
     fontFamily: Fonts.bodyBold,
     fontSize: 11,
