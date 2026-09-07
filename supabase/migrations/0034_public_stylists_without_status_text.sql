@@ -296,7 +296,7 @@ end $$;
 
 -- MIGRATION FOOTER
 insert into public.schema_migrations (version, name, checksum)
-values ('0034', 'public_stylists_without_status_text', '963dab28b68b2c55a8dabd62b7afb51b2bd43ac6c2dcbd613915b014468952c6');
+values ('0034', 'public_stylists_without_status_text', '93756323b035fa104e6b5d6ba4b0bb427d2b9ede4af596123ec3677aa4188bec');
 
 commit;
 
