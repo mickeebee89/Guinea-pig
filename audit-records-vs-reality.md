@@ -1061,35 +1061,40 @@ update that expired without ever having been visible to anyone — and the
 composer, since item 23, correctly told them it was saved and waiting the whole
 time.
 
-**Reported alongside it, and NOT established:** that an update fails to
-republish when the shop goes live. What the code says is the opposite —
+**Shape of a fix.** Either stamp `expires_at` when a post first becomes visible
+rather than when it is written — which needs a trigger on
+`providers.is_published` and is not a small change — or leave it and say so in
+the composer, which is a sentence. Neither is scoped here.
+
+**24b. “A POST DOES NOT REPUBLISH WHEN THE SHOP GOES LIVE” — REPORTED
+7 Sep, CLOSED SAME DAY. NOT A DEFECT.**
+
+Kept as its own entry rather than folded into 24, because they are different
+claims and only one of them is true.
+
+**Reported:** an update written while the shop was unpublished stayed invisible
+after the account was verified. **Contradicted by the code** —
 `public_stylist_status` (0033) is a plain view, not a materialised one, so it is
 evaluated at query time and a row becomes visible the instant `is_published`
-flips, provided it is still approved and unexpired. The observation and the code
-disagree, and nothing here settles which is right: a stale dashboard render, a
-post that had already expired, and a genuine gap all look the same from the
-outside. **Do not act on either half of this until one query has been run**, with
-the post already in place and the shop already published:
+flips, provided it is still approved and unexpired.
 
-    select sp.id, sp.moderation_status, sp.expires_at > now() as unexpired,
-           p.is_published,
-           exists (select 1 from public.public_stylist_status v where v.id = sp.id)
-             as in_public_view
-    from public.status_posts sp
-    join public.providers p on p.id = sp.provider_id
-    where sp.provider_id = '<PROVIDERS-ID>'
-    order by sp.created_at desc
-    limit 5;
+**Settled by one query**, run against provider `c42537d1` (Jojo B — not the id
+first suggested, which was Micky B's, and the post in question was hers):
 
-`in_public_view = true` means the data republished and what was seen was a
-display that had not been re-read. `false` with the other three columns healthy
-is a real defect and a much bigger one.
+    9d430e20 · approved · unexpired true · is_published true · in_public_view TRUE
 
-**Shape of the fix if the clock is the only problem:** the honest options are to
-stamp `expires_at` when a post first becomes visible rather than when it is
-written, or to leave it and say so in the composer. The first needs a trigger on
-`providers.is_published` and is not a small change; the second is a sentence.
-Neither is scoped here.
+The post had republished. What was being looked at was a render that had not
+been re-read.
+
+**Why this entry exists at all.** It was logged as UNVERIFIED rather than as
+fact, and that is the only reason a wrong entry is not now sitting in this file
+permanently. Second time in one day: the same restraint on `0034` stopped
+“nothing was written, the transaction aborted cleanly” becoming the record, when
+the transaction had in fact committed in full. Both times the reporting error
+was Micky's and the check that caught it was mine — which is the arrangement
+working, not a fault on either side. See [[next-fact-not-next-theory]]: an
+account of what happened is evidence about a person's screen, not about the
+system, and durability raises the bar.
 
 **25. THE REJECTION NOTE IS UNMEDIATED FREE TEXT — MITIGATED, NOT CLOSED,
 7 Sep 2026.**
