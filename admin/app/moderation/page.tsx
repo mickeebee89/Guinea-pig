@@ -69,6 +69,39 @@ export default function ModerationPage() {
       // maybeSingle + a real error check. This used to be .single() with the error
       // discarded, so an unreadable settings row silently disabled the whole tab —
       // indistinguishable from "nothing matched".
+      // ══════════════════════════════════════════════════════════════════
+      //  THIS MATCHING IS ADVISORY. THE AUTHORITATIVE COPY IS IN THE DATABASE.
+      // ══════════════════════════════════════════════════════════════════
+      //
+      // The same word list is matched in two places, on purpose:
+      //
+      //   public.screen_status_post()          migration 0032. AUTHORITATIVE.
+      //     A BEFORE INSERT/UPDATE trigger on status_posts. Gates publication
+      //     and cannot be bypassed — not even by calling PostgREST directly
+      //     with an author's own token.
+      //
+      //   here                                  ADVISORY.
+      //     A retrospective search over rows that are ALREADY PUBLISHED, run
+      //     when a human opens this tab. It flags; it has never blocked
+      //     anything and cannot.
+      //
+      // THE LIST ITSELF IS SINGLE-SOURCE — settings.banned_words, edited in
+      // admin Settings. Only the matching is duplicated.
+      //
+      // If you change the semantics here, change 0032 too, and vice versa. They
+      // must agree on: CASE-INSENSITIVE SUBSTRING, NO WORD BOUNDARIES. "cash"
+      // matches "cashmere". A word that flags in one must flag in the other or
+      // the queue and the search disagree about the same post.
+      //
+      // The implementations differ deliberately. This one builds a regex and so
+      // must escape metacharacters — see below; a stray "(" once threw inside an
+      // un-awaited call and left this tab silently empty. The trigger uses
+      // strpos(), which takes no pattern at all, so that class of bug cannot
+      // occur there. Copying this approach into SQL would have copied the hazard.
+      //
+      // Written in BOTH files on purpose: a note in one does not reach the
+      // person editing the other, which is how location and location_text
+      // drifted apart for months.
       const { data: bannedRow, error: bannedErr } = await supabase
         .from('settings').select('value').eq('key', 'banned_words').maybeSingle()
       if (bannedErr) { setFlaggedError(`Couldn't read the banned-words list: ${bannedErr.message}`); return }
