@@ -780,11 +780,34 @@ site. Recreate the view without reissuing:
 grant select on public.public_stylists to anon, authenticated;
 ```
 
-…and the six treatment pages, every stylist page and the whole SEO surface
-return nothing to anyone not signed in. **It fails silently** — the view exists,
-the query returns zero rows, and the pages render their empty state, which is
-exactly what they already do today for a different reason. Nobody would notice
-from the outside.
+…and the public pages return nothing to anyone not signed in.
+
+**Corrected 7 Sep 2026: the blast radius is smaller than first written here.**
+It said "every stylist page and the whole SEO surface". There is no public
+stylist page — `/stylist/[id]` is behind auth and reads base tables, not this
+view, and a public `/stylist/[slug]` is phase 2 and does not exist. The actual
+readers are:
+
+| Page | Reads via | ISR |
+|---|---|---|
+| `/` homepage | `FeaturedStylists`, `countByCategory` | `revalidate = 3600` |
+| The six `/[treatment]` pages | `stylistsByCategory`, `countByCategory` | `revalidate = 900` |
+
+Seven pages, one query path (`lib/stylists.ts`).
+
+**It fails silently, and worse than "silently" suggests.** `lib/stylists.ts`
+catches every failure — missing view, RLS refusal, network error — logs
+`query failed, returning none` and returns `[]`. So the pages render 200 with
+their empty state. **That is byte-for-byte what they render today** for an
+unrelated reason (item 11's bio bar), so the broken state and the current
+correct state are indistinguishable by looking.
+
+**It is also not immediate.** These are statically generated with ISR, so a
+cached page keeps serving correct content until its window lapses: up to 15
+minutes for a treatment page, up to an hour for the homepage. A deploy
+regenerates everything at build and makes it instant.
+
+Full recovery procedure: `docs/public-view-recovery.md`.
 
 Both statements go in the same migration, and the verify block reads
 `information_schema.role_table_grants` for `anon` rather than trusting that the

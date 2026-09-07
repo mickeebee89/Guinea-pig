@@ -134,7 +134,13 @@ notify pgrst, 'reload schema';
 --   where table_schema = 'public' and table_name = 'public_stylist_status'
 --   order by grantee;
 --
---   Expect SELECT for anon and for authenticated, and nothing else.
+--   Expect SELECT for anon and for authenticated.
+--
+--   You will also see rows for `postgres` and `service_role` with the full
+--   privilege set — those are Supabase's standard ownership grants, present on
+--   every object, and they are not something this migration created. Roughly
+--   fourteen rows in total. "and nothing else" was the original wording here
+--   and it reads as a failure the first time you run it.
 --
 -- ── BLOCK B — only approved, unexpired, published rows are visible ──────
 --
