@@ -1050,6 +1050,71 @@ showing yet, because the reason is one the view models and this file does not.
 telling a stylist that some particular person cannot see them is not something
 this product should do.
 
+**24. THE 48-HOUR CLOCK RUNS WHILE A POST CANNOT BE SEEN — LOGGED
+7 Sep 2026, NOT FIXED.**
+
+**Confirmed from the schema.** `status_posts.expires_at` is
+`default now() + interval '48 hours'` (0031:120), stamped at INSERT and never
+touched afterwards. Nothing about publication state moves it. So a stylist who
+posts while their shop is unpublished and is verified two days later has an
+update that expired without ever having been visible to anyone — and the
+composer, since item 23, correctly told them it was saved and waiting the whole
+time.
+
+**Reported alongside it, and NOT established:** that an update fails to
+republish when the shop goes live. What the code says is the opposite —
+`public_stylist_status` (0033) is a plain view, not a materialised one, so it is
+evaluated at query time and a row becomes visible the instant `is_published`
+flips, provided it is still approved and unexpired. The observation and the code
+disagree, and nothing here settles which is right: a stale dashboard render, a
+post that had already expired, and a genuine gap all look the same from the
+outside. **Do not act on either half of this until one query has been run**, with
+the post already in place and the shop already published:
+
+    select sp.id, sp.moderation_status, sp.expires_at > now() as unexpired,
+           p.is_published,
+           exists (select 1 from public.public_stylist_status v where v.id = sp.id)
+             as in_public_view
+    from public.status_posts sp
+    join public.providers p on p.id = sp.provider_id
+    where sp.provider_id = '<PROVIDERS-ID>'
+    order by sp.created_at desc
+    limit 5;
+
+`in_public_view = true` means the data republished and what was seen was a
+display that had not been re-read. `false` with the other three columns healthy
+is a real defect and a much bigger one.
+
+**Shape of the fix if the clock is the only problem:** the honest options are to
+stamp `expires_at` when a post first becomes visible rather than when it is
+written, or to leave it and say so in the composer. The first needs a trigger on
+`providers.is_published` and is not a small change; the second is a sentence.
+Neither is scoped here.
+
+**25. THE REJECTION NOTE IS UNMEDIATED FREE TEXT — MITIGATED, NOT CLOSED,
+7 Sep 2026.**
+
+An admin types a reason into the queue and it reaches a stylist's notifications
+verbatim, with nothing between the box and them. On 7 Sep one went out reading
+*"cointained a banned word"* — a typo, in the only sentence a stylist gets about
+why their update was refused.
+
+**Mitigated:** rejecting now shows the admin the complete message as the stylist
+will read it and asks them to confirm. The string is built once and reused for
+the insert, so the preview cannot drift from what is sent. Same argument as the
+image-review toggle's confirm: a one-way action gets a look at what it will do
+first.
+
+**Not closed, and the gap is real.** A preview is a second look by the same
+person, and the same person wrote the typo. It also does not constrain content:
+nothing stops a note naming the banned word, which the composer's placeholder
+warns against and no mechanism enforces. This is tolerable while there is one
+admin who knows the rules and would not survive a second. **Options when it
+matters:** a short set of canned reasons with free text as the exception, which
+is also the only version that could be translated or kept consistent; or a
+second admin's approval on outbound text, which is heavier than this product
+needs.
+
 **14. Admin revoke UI — NEW, 2 Sep 2026.** `0027` ships the mechanism; nothing
 calls it. Needs a control on the admin verification/provider view that takes a
 reason (≥10 characters, enforced server-side already), shows what will happen

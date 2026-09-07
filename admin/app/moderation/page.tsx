@@ -251,6 +251,35 @@ export default function ModerationPage() {
       alert('A rejection needs a reason. The stylist is shown it, and "not published" with no explanation is why this queue exists.')
       return
     }
+
+    // ── SHOW THE ADMIN WHAT THE STYLIST WILL READ ──────────────────────
+    //
+    // The note goes to a real person's notifications verbatim, with nothing
+    // between the box and them. On 7 Sep a rejection went out reading
+    // "cointained a banned word" — a typo, in the only sentence a stylist gets
+    // about why their update was refused.
+    //
+    // This is not a spell-check and does not pretend to be one. It is the step
+    // that makes the admin READ the message as the stylist will, in full, before
+    // it is sent — the same argument as the image-review toggle's confirm: a
+    // one-way action gets a look at what it will do first. The message is built
+    // ONCE here and reused for the insert below, so what is previewed cannot
+    // drift from what is sent.
+    const stylistMessage = decision === 'rejected'
+      ? 'We didn\u2019t publish your recent shop update.'
+        + (note.trim() ? '\n\n' + note.trim() : '')
+        + '\n\nYou can post a new one from your dashboard.'
+      : null
+
+    if (stylistMessage) {
+      const ok = window.confirm(
+        'This goes to ' + (post.provider?.name ?? 'the stylist')
+        + ' exactly as written:\n\n\u2014\n'
+        + stylistMessage
+        + '\n\u2014\n\nSend it?',
+      )
+      if (!ok) return
+    }
     const { error } = await supabase
       .from('status_posts')
       .update({
@@ -286,9 +315,9 @@ export default function ModerationPage() {
           user_id: uid,
           type: 'admin_message',
           title: 'Your update wasn\u2019t published',
-          body: 'We didn\u2019t publish your recent shop update.'
-            + (note.trim() ? '\n\n' + note.trim() : '')
-            + '\n\nYou can post a new one from your dashboard.',
+          // The previewed string itself. Rebuilding it here is how a preview
+          // stops describing what is actually sent.
+          body: stylistMessage ?? '',
         })
         // Logged, not fatal: the decision has already been written and undoing
         // it because a notification failed would be worse than a quiet one.

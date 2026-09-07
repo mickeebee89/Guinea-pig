@@ -551,6 +551,20 @@ function NotifItem({
         )}
       </View>
       <View style={styles.rightCol}>
+        {/* READ IS A LOOK, NOT AN ABSENCE. A read row differed from an unread
+            one only by what it did NOT show, so 'read' and 'the control was
+            never built' render identically. That ambiguity was reported as a
+            missing feature on web on 7 Sep and it was not one. The card tint
+            already says unread; this says read, which is the half that was
+            being inferred from nothing. */}
+        {!!n.read_at && (
+          <Ionicons
+            name="checkmark-done"
+            size={16}
+            color={Colors.muted + "66"}
+            accessibilityLabel="Read"
+          />
+        )}
         {!n.read_at && (
           <TouchableOpacity
             onPress={onMarkRead}

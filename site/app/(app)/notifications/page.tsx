@@ -73,7 +73,15 @@ export default async function NotificationsPage() {
             return (
               <li
                 key={n.id}
-                className="overflow-hidden rounded-lg border border-hairline bg-white shadow-soft"
+                /* READ IS A LOOK, NOT AN ABSENCE. A read row used to differ only
+                   by what it did NOT show — no dot, no button — so "read" and
+                   "the control was never built" rendered identically. That
+                   ambiguity was reported as a missing feature on 7 Sep and it
+                   was not one. Same signature as items 18, 20 and 23, in
+                   miniature: an empty state that could mean two things. */
+                className={`overflow-hidden rounded-lg border shadow-soft ${
+                  n.read_at ? 'border-hairline/60 bg-cream' : 'border-hairline bg-white'
+                }`}
               >
                 {n.session_id ? (
                   <Link
@@ -86,22 +94,40 @@ export default async function NotificationsPage() {
                   <div className="p-4">{body}</div>
                 )}
 
-                {/* The read control is a sibling of the link, not inside it: an
-                    anchor cannot contain a button, and a button inside one
+                {/* The footer is ALWAYS here, and says which state the row is in.
+                    The control inside it is a sibling of the link, never a child:
+                    an anchor cannot contain a button, and a button inside one
                     steals the click. It is on every row rather than only the
-                    linked ones \u2014 a notification with nowhere to go (a warning,
-                    a verification result, a rejected update) is exactly the
-                    kind you want to be able to clear. */}
-                {!n.read_at && (
-                  <div className="border-t border-hairline px-4">
+                    linked ones — a notification with nowhere to go (a warning, a
+                    verification result, a rejected update) is exactly the kind you
+                    want to be able to clear. */}
+                <div className="flex justify-end border-t border-hairline/70 px-3 py-1">
+                  {n.read_at ? (
+                    <span className="inline-flex items-center gap-1.5 py-2 text-xs font-bold text-muted/70">
+                      <CheckIcon /> Read
+                    </span>
+                  ) : (
                     <MarkOneReadButton id={n.id} />
-                  </div>
-                )}
+                  )}
+                </div>
               </li>
             )
           })}
         </ul>
       )}
     </>
+  )
+}
+
+/** Small tick. Inline rather than an icon dependency — the site has none. */
+function CheckIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"
+      strokeLinecap="round" strokeLinejoin="round"
+      className="h-3 w-3" aria-hidden="true"
+    >
+      <path d="M20 6 9 17l-5-5" />
+    </svg>
   )
 }
