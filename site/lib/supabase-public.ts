@@ -51,7 +51,11 @@ export interface PublicStylist {
   banner_url: string | null
   is_verified: boolean
   level: string | null
-  status_text: string | null
+  // status_text removed by 0034: public_stylists no longer exposes it, and
+  // stylist updates live in public_stylist_status (approved + unexpired) with
+  // their own view. Leaving the field here would have described a column the
+  // view had stopped returning - a type asserting something the database no
+  // longer says.
   categories: string[]
   category_slugs: string[]
   rating: number | null

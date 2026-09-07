@@ -175,16 +175,28 @@ export async function getModelDashboard(
   )]
   const completedIds = completed.map(s => s.id)
 
-  const [provRes, treatRes, myReviewsRes] = await Promise.all([
+  const [provRes, statusRes, treatRes, myReviewsRes] = await Promise.all([
     providerIds.length > 0
-      // status_text is fetched here rather than in a separate feed query: these
-      // are stylists this model already has a booking or a favourite with, so
-      // nothing new is exposed. An aggregated cross-stylist feed is explicitly
-      // out of bounds — see web-phase-1-handover §6a, "a live map of who is
-      // free where".
       ? supabase.from('providers')
-          .select('id, user_id, name, profile_pic_url, status_text, status_expires_at')
+          .select('id, user_id, name, profile_pic_url')
           .in('id', providerIds)
+      : Promise.resolve({ data: [], error: null }),
+    // Statuses come from status_posts now, not providers.status_text (0031-0034).
+    // Separate query rather than an embed because the filters differ: APPROVED
+    // and unexpired, which the old column could not express — it had no
+    // moderation state at all, so anything written was live immediately.
+    //
+    // Still only stylists this model already has a booking or a favourite with,
+    // so nothing new is exposed. An aggregated cross-stylist feed is out of
+    // bounds on the anon surface — web-phase-1-handover §6a, "a live map of who
+    // is free where".
+    providerIds.length > 0
+      ? supabase.from('status_posts')
+          .select('provider_id, body, expires_at')
+          .in('provider_id', providerIds)
+          .eq('moderation_status', 'approved')
+          .gt('expires_at', new Date().toISOString())
+          .order('created_at', { ascending: false })
       : Promise.resolve({ data: [], error: null }),
     treatIds.length > 0
       ? supabase.from('provider_treatments').select('id, name, category').in('id', treatIds)
@@ -194,20 +206,31 @@ export async function getModelDashboard(
       : Promise.resolve({ data: [], error: null }),
   ])
 
-  type ProvRow = ProviderRef & { status_text: string | null; status_expires_at: string | null }
-  const provMap  = indexById<ProvRow>(provRes.data)
+  const provMap  = indexById<ProviderRef>(provRes.data)
   const treatMap = indexById<TreatmentRef>(treatRes.data)
   const reviewed = new Set(((myReviewsRes.data ?? []) as { session_id: string }[]).map(r => r.session_id))
 
-  const now = Date.now()
-  const updates: StylistUpdate[] = Object.values(provMap)
-    .filter(p => p.status_text && (!p.status_expires_at || new Date(p.status_expires_at).getTime() > now))
-    .map(p => ({
-      providerId: p.id,
-      name: p.name ?? 'Stylist',
-      picUrl: p.profile_pic_url,
-      text: p.status_text as string,
-      expiresAt: p.status_expires_at,
+  // One update per stylist. The query is ordered newest-first, so the first row
+  // seen for a provider wins — a stylist posting Thursday and then Friday means
+  // the second supersedes, and two live updates from one shop would read as a
+  // feed rather than a status. The composer enforces the same rule by clearing
+  // the previous post; this is the reader-side half, so an old row surviving a
+  // failed delete cannot produce a double entry.
+  const seen = new Set<string>()
+  const updates: StylistUpdate[] = ((statusRes.data ?? []) as {
+    provider_id: string; body: string; expires_at: string
+  }[])
+    .filter(sp => {
+      if (seen.has(sp.provider_id) || !provMap[sp.provider_id]) return false
+      seen.add(sp.provider_id)
+      return true
+    })
+    .map(sp => ({
+      providerId: sp.provider_id,
+      name: provMap[sp.provider_id]?.name ?? 'Stylist',
+      picUrl: provMap[sp.provider_id]?.profile_pic_url ?? null,
+      text: sp.body,
+      expiresAt: sp.expires_at,
     }))
 
   return {
@@ -379,12 +402,19 @@ export async function getStylistUpdates(
   userId: string,
   radiusMiles: number | null,
 ): Promise<UpdateFeed> {
-  const [meRes, provRes, blockRes] = await Promise.all([
+  const [meRes, provRes, statusRes, blockRes] = await Promise.all([
     supabase.from('users').select('latitude, longitude').eq('id', userId).maybeSingle(),
     supabase.from('providers')
-      .select('id, user_id, name, profile_pic_url, status_text, status_expires_at, latitude, longitude, location_lat, location_lng')
-      .eq('is_published', true)
-      .not('status_text', 'is', null),
+      .select('id, user_id, name, profile_pic_url, latitude, longitude, location_lat, location_lng')
+      .eq('is_published', true),
+    // status_posts, not providers.status_text (0031-0034). APPROVED and
+    // unexpired — the old column had no moderation state, so anything written
+    // was live the instant it was written.
+    supabase.from('status_posts')
+      .select('provider_id, body, expires_at')
+      .eq('moderation_status', 'approved')
+      .gt('expires_at', new Date().toISOString())
+      .order('created_at', { ascending: false }),
     supabase.from('blocks').select('blocker_id, blocked_id')
       .or(`blocker_id.eq.${userId},blocked_id.eq.${userId}`),
   ])
@@ -397,20 +427,32 @@ export async function getStylistUpdates(
       .map(b => (b.blocker_id === userId ? b.blocked_id : b.blocker_id)),
   )
 
-  const now = Date.now()
   const rows = (provRes.data ?? []) as {
     id: string; user_id: string | null; name: string | null; profile_pic_url: string | null
-    status_text: string | null; status_expires_at: string | null
     latitude: number | null; longitude: number | null
     location_lat: number | null; location_lng: number | null
   }[]
+  const provById = Object.fromEntries(rows.map(r => [r.id, r]))
 
-  const updates = rows
-    .filter(p => p.status_text)
-    // An expired status is gone even though the column still holds the text.
-    .filter(p => !p.status_expires_at || new Date(p.status_expires_at).getTime() > now)
-    .filter(p => !(p.user_id && blocked.has(p.user_id)))
-    .map(p => {
+  // Newest post per stylist. Expiry and moderation are already filtered in the
+  // query, so nothing here re-checks them — the old code had to, because the
+  // column carried expired text indefinitely.
+  const seen = new Set<string>()
+  const updates = ((statusRes.data ?? []) as {
+    provider_id: string; body: string; expires_at: string
+  }[])
+    .filter(sp => {
+      if (seen.has(sp.provider_id)) return false
+      seen.add(sp.provider_id)
+      return true
+    })
+    .map(sp => ({ sp, p: provById[sp.provider_id] }))
+    // A post whose stylist is not in rows is one whose shop is unpublished, and
+    // an unpublished shop is invisible in the app — a status update must not be
+    // a way around that.
+    .filter(({ p }) => !!p)
+    .filter(({ p }) => !(p.user_id && blocked.has(p.user_id)))
+    .map(({ sp, p }) => {
       // providers carries lat/lng twice, the same duplication as
       // location/location_text. Prefer whichever is populated rather than
       // picking one and showing nothing for half the rows.
@@ -424,8 +466,8 @@ export async function getStylistUpdates(
         providerId: p.id,
         name: p.name ?? 'Stylist',
         picUrl: p.profile_pic_url,
-        text: p.status_text as string,
-        expiresAt: p.status_expires_at,
+        text: sp.body,
+        expiresAt: sp.expires_at,
         distanceMiles,
       }
     })

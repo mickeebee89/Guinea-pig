@@ -52,8 +52,10 @@ type Provider = {
   review_count: number | null
   profile_pic_url: string | null
   banner_url: string | null
-  status_text: string | null
-  status_expires_at: string | null
+  // status_text / status_expires_at were here. Migrations 0031-0034 moved
+  // stylist updates to the status_posts table, and 0035 drops the columns.
+  // Read separately below: the new source has moderation state, which the old
+  // column could not express — anything written to it was live immediately.
 }
 
 // No Treatment type: the shop only ever shows the CATEGORIES a stylist ticked in
@@ -132,6 +134,11 @@ export default function ProviderShopScreen() {
   const userId = session?.user?.id
 
   const [provider,      setProvider]      = useState<Provider | null>(null)
+  // Separate from `provider` because it comes from a different table now
+  // (status_posts, migrations 0031-0034) with its own moderation and expiry
+  // rules. Keeping it on the provider object would have implied it is a
+  // property of the shop, which is how it ended up as an unwritable column.
+  const [statusPost,    setStatusPost]    = useState<{ body: string; expires_at: string } | null>(null)
   const [treatmentCategories, setTreatmentCategories] = useState<string[]>([])
   const [portfolio,     setPortfolio]     = useState<PortfolioItem[]>([])
   const [reviews,       setReviews]       = useState<Review[]>([])
@@ -150,6 +157,7 @@ export default function ProviderShopScreen() {
       const today = todayKey()
       const [
         { data: provData },
+        { data: statusData },
         { data: treatData, error: treatErr },
         { data: portData },
         { data: avData },
@@ -157,9 +165,21 @@ export default function ProviderShopScreen() {
       ] = await Promise.all([
         supabase
           .from('providers')
-          .select('id, name, location, bio, is_verified, rating, review_count, profile_pic_url, banner_url, status_text, status_expires_at, user_id')
+          .select('id, name, location, bio, is_verified, rating, review_count, profile_pic_url, banner_url, user_id')
           .eq('id', id)
           .single(),
+        // APPROVED and unexpired only. A held post is invisible here even to a
+        // model who is looking at the shop; the author sees their own on the
+        // web dashboard, which is the surface that can explain why.
+        supabase
+          .from('status_posts')
+          .select('body, expires_at')
+          .eq('provider_id', id)
+          .eq('moderation_status', 'approved')
+          .gt('expires_at', new Date().toISOString())
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle(),
         supabase
           .from('provider_treatments')
           // Category is the only column the app ever fills. `name` holds a copy of
@@ -185,6 +205,7 @@ export default function ProviderShopScreen() {
       ])
 
       if (provData)  setProvider(provData as Provider)
+      setStatusPost((statusData as { body: string; expires_at: string } | null) ?? null)
       // Log the failure. Discarding it is what let a bad column name masquerade
       // as "this stylist hasn't listed any treatments" for every shop.
       if (treatErr) console.warn('provider/[id] treatments →', treatErr.message)
@@ -442,14 +463,16 @@ export default function ProviderShopScreen() {
         </View>
 
         <View style={styles.body}>
-          {/* ── Status bar ── */}
-          {provider.status_text ? (
+          {/* ── Status bar ──
+              Reads status_posts now, not providers.status_text. The query
+              already filtered to approved + unexpired, so there is nothing to
+              re-check here — the old column carried expired text indefinitely
+              and every reader had to remember to filter it. */}
+          {statusPost ? (
             <View style={styles.statusBar}>
               <PulsingDot />
-              <Text style={styles.statusText} numberOfLines={2}>{provider.status_text}</Text>
-              {provider.status_expires_at ? (
-                <Text style={styles.statusExpiry}>{formatExpiry(provider.status_expires_at)}</Text>
-              ) : null}
+              <Text style={styles.statusText} numberOfLines={2}>{statusPost.body}</Text>
+              <Text style={styles.statusExpiry}>{formatExpiry(statusPost.expires_at)}</Text>
             </View>
           ) : null}
 
