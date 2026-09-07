@@ -1096,6 +1096,54 @@ working, not a fault on either side. See [[next-fact-not-next-theory]]: an
 account of what happened is evidence about a person's screen, not about the
 system, and durability raises the bar.
 
+**26. ADMIN SETTINGS SILENTLY DISCARDED UNSAVED EDITS — FOUND AND FIXED
+7 Sep 2026. FOUND ONLY BECAUSE LINT WAS TURNED ON.**
+
+**What broke, plainly:** an admin pastes a banned-words list into Settings,
+flips the Image Review toggle before saving, and the list is gone. No error, no
+warning, nothing on screen. Just an empty box where the work was.
+
+`Toggle`, `PriceField` and `BannedWords` were all declared **inside**
+`SettingsPage`'s render body. A component created during render gets a new
+function identity every render, so React does not re-render it — it unmounts
+the old one and mounts a new one, and the new one's `useState` starts from its
+initial value again.
+
+`SettingsPage` re-renders whenever `settings`, `saving` or `foundingCount`
+change. So every one of these threw away every unsaved edit in every other
+field:
+
+| Action | What it did |
+|---|---|
+| Flip either toggle | `setSettings` → all three fields remount, unsaved text lost |
+| Press Save on any price field | `setSaving(key)` then `setSaving(null)` — twice over |
+| The founding-provider count arriving after load | same |
+
+**The stored value was never at risk.** The upsert closes over its own string,
+so nothing in the database was ever wrong. It was the editing that was broken,
+which is why it could sit there unnoticed.
+
+**The list it loses matters.** Since 0032, `settings.banned_words` is not a
+search-term list — it is a BEFORE INSERT trigger's input, and it gates
+publication. Item 17 is the open work to give it real content, and this is the
+control you would do that work in.
+
+**Fixed** by moving all three to module scope and passing `settings` /
+`saving` / a single `onSave` as props. No behaviour change beyond the bug.
+
+**── WHY THIS IS ITEM 19'S ARGUMENT IN ONE EXAMPLE ─────────────────────**
+
+Nothing else would have found this. It throws no error, logs nothing, writes no
+wrong data, and produces no visible failure — only work quietly disappearing at
+a moment when the person is looking at something else. It is not the kind of
+thing a person finds by using the product, because the way you find it is by
+losing something and not knowing you did.
+
+It was found by `react-hooks/static-components`, on the first run of a lint gate
+that had never been switched on for this app. **Item 19 says mobile is the
+client with no net and no gate. This is what one turned-on gate produced on its
+first run, in the smaller app.** Read the two together.
+
 **25. THE REJECTION NOTE IS UNMEDIATED FREE TEXT — MITIGATED, NOT CLOSED,
 7 Sep 2026.**
 
