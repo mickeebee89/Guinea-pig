@@ -118,22 +118,30 @@ end $$;
 -- ---------------------------------------------------------------------------
 -- 1. Migrate live status values into status_posts.
 -- ---------------------------------------------------------------------------
--- ⚠️ ONE do $$ BLOCK, NOT A TEMP TABLE. THIS MIGRATION FAILED ONCE FOR THIS.
+-- ── ONE do $$ BLOCK, AND THE REASON IS NOT THE ONE FIRST WRITTEN HERE ───
 --
--- The first version built a temporary table in one statement and read it in the
--- next:
+-- This said "THIS MIGRATION FAILED ONCE FOR THIS", describing a temp table that
+-- vanished between statements. THAT ACCOUNT WAS WRONG, and the correction is
+-- worth keeping because it was written into the framework's rules before anyone
+-- checked it.
+--
+-- What actually happened, established from migration_findings.recorded_at:
+-- every finding this migration wrote shares one timestamp to the microsecond,
+-- so the version WITH the temp tables applied end to end, in one transaction,
+-- successfully. Temp tables work fine when the whole file is pasted as one
+-- unit, and `begin;` is atomic. The
 --
 --   ERROR: 42P01: relation "migrated_status" does not exist
 --
--- Every migration in this project is pasted into the Supabase SQL editor by
--- hand, and statements there do not reliably share a session — the same thing
--- that broke 0004's Block 3 and 0024's Block E. The rule written after those
--- covered VERIFY BLOCKS and stopped there. 0034 is the first migration whose
--- BODY carries state between statements, and it could not.
+-- came from a SEPARATE, PARTIAL paste — a selection that included the statement
+-- reading the temp table but not the one creating it. Which is ordinary SQL
+-- behaviour and says nothing about the editor.
 --
--- A `do $$` block is a single statement, so it cannot be split, and inside it
--- each command sees the effects of the ones before it. The rule now says so:
--- scripts/migration-status.mjs.
+-- The do $$ block STAYS, on a smaller and true claim: it is self-contained, so
+-- it survives being re-run on its own while debugging, which a pair of
+-- statements sharing a temp table does not. That is a real convenience. It is
+-- not a correctness requirement, and pretending it was put a false rule into
+-- scripts/migration-status.mjs for three turns.
 --
 -- The ids are captured in an array rather than matched back by body, because
 -- 0032's strip-links trigger REWRITES new.body on insert — so any migrated
@@ -306,7 +314,7 @@ end $$;
 
 -- MIGRATION FOOTER
 insert into public.schema_migrations (version, name, checksum)
-values ('0034', 'public_stylists_without_status_text', 'bac0b940c5e31213a6ca42eeef529b96cbe79abb04431cd6adfb9f0062541a33');
+values ('0034', 'public_stylists_without_status_text', 'a5715336264ed422685331cc48d21ba4088090f64993e7199eb7e38ec82b54e4');
 
 commit;
 

@@ -29,22 +29,33 @@
  *   looks authoritative and is wrong — which is how supabase/ came to document
  *   about a third of the live schema while reading like a complete record.
  *
- * ── THE WHOLE MIGRATION RUNS IN THE SUPABASE SQL EDITOR, NOT JUST ITS ─────
- * ── VERIFY BLOCKS ─────────────────────────────────────────────────────────
+ * ── A RULE THAT WAS HERE FOR THREE TURNS AND WAS FALSE ────────────────────
  *
- *   Every migration here is pasted into that editor by hand — twenty-five times
- *   and counting. Statements do not reliably share a session, so THE BODY has
- *   the same constraint the verify blocks do:
+ *   This said: statements in the Supabase editor do not reliably share a
+ *   session, so a migration BODY must never use a temp table, because 0034
+ *   failed that way.
  *
- *     * NO TEMP TABLES, and nothing that carries state from one statement to
- *       the next. 0034 built a temp table and read it in the next statement:
- *         ERROR: 42P01: relation "migrated_status" does not exist
- *       Anything multi-step goes in a single `do $$` block, which cannot be
- *       split and whose commands do see each other's effects.
+ *   0034 did not fail that way. It applied end to end, temp tables and all, in
+ *   one transaction — proven by every one of its migration_findings rows
+ *   sharing a single timestamp to the microsecond. `begin;` IS atomic here and
+ *   a whole-file paste IS one unit. The 42P01 came from a separate partial
+ *   paste, which is ordinary SQL behaviour.
  *
- *   This rule existed for verify blocks after three instances and was written
- *   as though only verify blocks ran in the editor. The migration body runs
- *   there too. 0034 was simply the first migration whose body needed state.
+ *   The rule was written from an error message plus an assumption, and it went
+ *   into this file — the one place every future migration author reads — before
+ *   anyone checked it. A false rule here is worse than no rule: it is a
+ *   constraint people design around for reasons that do not exist.
+ *
+ *   WHAT IS ACTUALLY TRUE, and worth keeping:
+ *
+ *     * Prefer a single `do $$` block for anything multi-step. Not for
+ *       correctness — because it is self-contained, so it survives being
+ *       re-run on its own while debugging, which two statements sharing a temp
+ *       table do not.
+ *
+ *     * Re-running PART of a migration is not the same as running it. If you
+ *       select a fragment and get a "does not exist" error, suspect the
+ *       selection before the editor.
  *
  * ── WRITING VERIFY BLOCKS: THEY RUN IN THE SUPABASE SQL EDITOR ─────────────
  *
