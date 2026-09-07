@@ -909,6 +909,66 @@ The route is to fix the 73, then wire it — the same order `site` took, where t
 gate was free because the count was already zero and it caught a real bug within
 the hour.
 
+**20. A FILTERED FEED AND A BROKEN FEED LOOK IDENTICAL — NEW, 7 Sep 2026.**
+
+Item 18 is the same defect on the public pages. This one is inside the signed-in
+app, where the filters are deliberate and correct, which makes it harder rather
+than easier.
+
+`getStylistUpdates` drops a status post for any of three reasons, each of them
+right:
+
+| Filter | Why it exists |
+|---|---|
+| `blocked.has(p.user_id)` | You blocked them, or they blocked you |
+| stylist absent from the `is_published = true` set | An unpublished shop is invisible; a status must not be a way round that |
+| `distanceMiles > radiusMiles` | The distance pill the model chose |
+
+All three produce the same screen: **"No stylists have posted an update right
+now."** That sentence is a claim about the world. In every one of the three cases
+it is false — someone did post, and we chose not to show it.
+
+**The evidence.** On 7 Sep a post that was approved, unexpired, published and
+within range did not appear. The cause was a `blocks` row left over from the
+4 September cascade test, doing exactly what it was built to do. It took two
+rounds of diagnosis, and the next step after that would have been to go looking
+in RLS — for a feature that was working.
+
+**The shape, which this project keeps meeting:** a success signal that does not
+depend on the thing it claims to prove, and here its mirror — *a failure signal
+that does not depend on there being a failure.* Empty is empty. The retention
+tile, the cron rows and the SEO pages were all the same.
+
+**Worth fixing as:** the block case is the one worth naming, because it is the
+only one the model can act on and the only one where "nothing here" is actively
+misleading — something along the lines of *"You've blocked one or more stylists
+near you"*, which needs no count and leaks nothing about who. The unpublished and
+distance cases are already explicable by the distance pill and the browse page.
+Cheap; not scoped here.
+
+**21. MOBILE CAN READ STATUS POSTS AND CANNOT WRITE ONE — NEW, 7 Sep 2026.**
+
+After the 0031–0034 repoints, the surfaces are:
+
+| Surface | Reads | Writes |
+|---|---|---|
+| Web stylist dashboard — `StatusComposer` | yes | **yes — the only writer in the product** |
+| Web model dashboard — "Stylist updates" | yes | — |
+| Mobile stylist profile — `provider/[id].tsx` status bar | yes | — |
+| Mobile, anywhere else | **no feed exists** | **no composer exists** |
+
+So a stylist who only ever opens the app on their phone — which is the primary
+client — cannot post an update at all, and will see other stylists' updates only
+by opening a specific profile. There is no mobile equivalent of the feed, which
+is why the 7 Sep rename and speech-bubble restyle landed on web only: there was
+nothing on mobile to keep in step with.
+
+This is the read-surface-with-no-writer pattern in its plainest form. Two pieces,
+and they are separable: **(a)** a composer on `provider-dashboard.tsx`, which is
+the one that unblocks mobile-only stylists and is the more valuable half; **(b)**
+an updates feed on the mobile model home, which is a new surface rather than a
+port. Haptics on both when they are built — `expo-haptics`, per CLAUDE.md.
+
 **14. Admin revoke UI — NEW, 2 Sep 2026.** `0027` ships the mechanism; nothing
 calls it. Needs a control on the admin verification/provider view that takes a
 reason (≥10 characters, enforced server-side already), shows what will happen

@@ -283,7 +283,7 @@ export default async function DashboardPage({
       {feed && (
         <section className="mb-6 rounded-lg border border-hairline bg-white p-5 shadow-card">
           <div className="mb-3 flex flex-wrap items-baseline justify-between gap-3">
-            <h2 className="font-display text-xl text-warm-dark">What’s on near you</h2>
+            <h2 className="font-display text-xl text-warm-dark">Stylist updates</h2>
             <nav aria-label="Distance" className="flex flex-wrap gap-1.5">
               {RADII.map(r => (
                 <Link
@@ -315,26 +315,49 @@ export default async function DashboardPage({
               now. Updates last 48 hours, so this changes through the week.
             </p>
           ) : (
-            <ul className="space-y-2">
+            <ul className="space-y-4">
               {feed.updates.map(u => (
-                <li key={u.providerId}>
+                <li key={u.providerId} className="flex items-start gap-3">
+                  {/* The link is on the avatar and the name, not on the bubble.
+                      Wrapping the whole row made it one anonymous target and
+                      read as a system notice rather than as a person saying
+                      something — which is the thing this feed is for. */}
                   <Link
                     href={`/stylist/${u.providerId}`}
-                    className="flex items-start gap-3 rounded-md p-2 transition-colors hover:bg-input-bg"
+                    aria-label={`${u.name}’s profile`}
+                    className="shrink-0 rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose"
                   >
-                    <Avatar src={u.picUrl} name={u.name} size={40} />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-bold text-warm-dark">
-                        {u.name}
-                        {u.distanceMiles != null && (
-                          <span className="ml-2 font-normal text-muted">
-                            {u.distanceMiles < 1 ? 'under a mile' : `${u.distanceMiles.toFixed(1)} miles`}
-                          </span>
-                        )}
-                      </p>
-                      <p className="text-sm text-muted">{u.text}</p>
-                    </div>
+                    <Avatar src={u.picUrl} name={u.name} size={44} />
                   </Link>
+
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm">
+                      <Link
+                        href={`/stylist/${u.providerId}`}
+                        className="font-bold text-warm-dark hover:text-rose"
+                      >
+                        {u.name}
+                      </Link>
+                      {u.distanceMiles != null && (
+                        <span className="ml-2 text-muted">
+                          {u.distanceMiles < 1 ? 'under a mile' : `${u.distanceMiles.toFixed(1)} miles`}
+                        </span>
+                      )}
+                    </p>
+
+                    {/* Speech bubble. Translucent so it sits on the card rather
+                        than becoming a second panel inside it. The tail is drawn
+                        entirely outside the bubble's own box: two overlapping
+                        translucent shapes would show a darker seam where they
+                        cross, which is what a rotated square would have done. */}
+                    <div className="relative mt-1 inline-block max-w-full rounded-xl rounded-tl-none bg-soft-pink/70 px-3 py-2">
+                      <span
+                        aria-hidden
+                        className="absolute -left-2 top-0 h-0 w-0 border-t-0 border-r-8 border-b-8 border-r-soft-pink/70 border-b-transparent"
+                      />
+                      <p className="whitespace-pre-line text-sm text-warm-dark">{u.text}</p>
+                    </div>
+                  </div>
                 </li>
               ))}
             </ul>
