@@ -7,7 +7,7 @@
     "build": "npm run checks && next build",
     "start": "next start",
     "lint": "eslint",
-    "checks": "eslint . --max-warnings=0 && node scripts/check-client-boundary.mjs && node scripts/check-route-coverage.mjs",
+    "checks": "eslint . --max-warnings=0 && node scripts/check-client-boundary.mjs && node scripts/check-route-coverage.mjs && node scripts/check-links.mjs",
     "check-boundary": "node scripts/check-client-boundary.mjs"
   },
   "dependencies": {
