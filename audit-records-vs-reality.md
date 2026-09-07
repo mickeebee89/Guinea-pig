@@ -1188,6 +1188,51 @@ that had never been switched on for this app. **Item 19 says mobile is the
 client with no net and no gate. This is what one turned-on gate produced on its
 first run, in the smaller app.** Read the two together.
 
+**26b. THE SAME SCREEN, FROM THE OTHER SIDE: A SAVE THAT SAID NOTHING — FOUND
+AND FIXED 7 Sep 2026.**
+
+Found by clicking through the console after the 26 fix. Item 26 was **silent
+loss** — work disappeared and nothing said so. This is **silent success**: press
+Save Banned Words and there is no spinner, no confirmation and no state change.
+It works. You cannot tell. The only way to know is to reload the page and look.
+
+Both leave the admin guessing, on the setting that gates publication.
+
+**Three defects, and the third is the serious one.**
+
+| | Before |
+|---|---|
+| Banned Words | No feedback of any kind — not even a disabled button |
+| Price fields | A transient `…` on the button while `saving` was set, and nothing after. The sub-label reads from the typed value, so nothing visibly changed either way |
+| **`saveSetting`** | **`await supabase.from('settings').upsert(...)` with the result discarded** |
+
+The third means a **refused write reported success**. supabase-js does not
+reject when the database refuses a write — it resolves with `{ error }` — so
+nothing in this file could ever fail. `mobile/lib/db.ts` exists to prevent
+exactly this and its lesson had not reached the admin console. Worse, the page
+then called `updateLocal` regardless, so **a toggle showed a state the database
+had refused**: the screen reporting the request rather than the outcome, which is
+item 23 in a different room.
+
+**Fixed:**
+
+* `handleSave` returns `{ ok }` or `{ ok: false, error }`, and reflects into
+  local state ONLY on success — so a refused toggle stays where it was and says
+  why.
+* One `useSave` hook gives every control the same four states: idle, saving,
+  saved, failed. `saved` persists until the field is edited again rather than
+  fading on a timer — a timer is a second thing that can be wrong, and "Saved"
+  beside text you have since changed is a lie.
+* Banned Words confirms with the **count**: *"Saved — 12 words now screened"*.
+  "Saved" alone does not tell you the list was read the way you meant it, and
+  this list is a trigger's input.
+
+**Worth noting how it was found.** Not by lint — no rule fires on a button that
+says nothing. It was found by a person using the console and noticing the
+absence. That is the counterpart to item 26, which no person would have found
+and a rule caught on its first run. Neither method would have found the other's
+defect.
+
 **25. THE REJECTION NOTE IS UNMEDIATED FREE TEXT — MITIGATED, NOT CLOSED,
 7 Sep 2026.**
 

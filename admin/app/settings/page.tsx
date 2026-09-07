@@ -31,7 +31,6 @@ type SettingsMap = Record<typeof KEYS[number], string>
 
 export default function SettingsPage() {
   const [settings, setSettings]     = useState<SettingsMap>({} as SettingsMap)
-  const [saving, setSaving]         = useState<string | null>(null)
   const [foundingCount, setFoundingCount] = useState<number>(0)
 
   const { loading } = useLoader('', async stale => {
@@ -45,24 +44,32 @@ export default function SettingsPage() {
     setFoundingCount(count ?? 0)
   })
 
-  async function saveSetting(key: string, value: string) {
-    setSaving(key)
-    await supabase.from('settings').upsert({ key, value, updated_at: new Date().toISOString() })
+  /**
+   * ── THE WRITE NOW REPORTS WHAT THE DATABASE SAID ───────────────────────
+   *
+   * This used to be `await supabase.from('settings').upsert(...)` with the
+   * result thrown away. supabase-js does NOT reject when the database refuses a
+   * write — it resolves with `{ error }` — so a rejected upsert was
+   * indistinguishable from a successful one, and the page then showed the new
+   * value regardless. The same defect `mobile/lib/db.ts` exists to prevent,
+   * on the setting that gates publication.
+   *
+   * `updateLocal` is now called ONLY on success, so a toggle cannot show a
+   * state the database refused.
+   */
+  const handleSave = useCallback(async (
+    key: keyof SettingsMap, value: string,
+  ): Promise<SaveResult> => {
+    const { error } = await supabase
+      .from('settings')
+      .upsert({ key, value, updated_at: new Date().toISOString() })
+    if (error) {
+      console.error('[settings] save failed', key, error)
+      return { ok: false, error: error.message }
+    }
     await logAction('settings_update', { details: { key, value } })
-    setSaving(null)
-  }
-
-  function updateLocal(key: keyof SettingsMap, value: string) {
     setSettings(s => ({ ...s, [key]: value }))
-  }
-
-  // One handler for all three children: write, then reflect. useCallback with
-  // no deps is safe because everything it reaches is stable — the two setState
-  // functions and the module-level supabase client. It captures no props and no
-  // state, so there is nothing here to go stale.
-  const handleSave = useCallback(async (key: keyof SettingsMap, value: string) => {
-    await saveSetting(key, value)
-    updateLocal(key, value)
+    return { ok: true }
   }, [])
 
   if (loading) return <div className="text-[#3D2E2E]/40 text-sm">Loading…</div>
@@ -78,16 +85,13 @@ export default function SettingsPage() {
             That is the fix; the prop only supplies the starting text. */}
         <PriceField
           label="Provider Verification Price" settingKey="verification_price_pence"
-          initial={settings['verification_price_pence'] ?? ''} saving={saving}
-          onSave={handleSave} />
+          initial={settings['verification_price_pence'] ?? ''} onSave={handleSave} />
         <PriceField
           label="Model Subscription Price" settingKey="subscription_price_pence"
-          initial={settings['subscription_price_pence'] ?? ''} saving={saving}
-          onSave={handleSave} />
+          initial={settings['subscription_price_pence'] ?? ''} onSave={handleSave} />
         <PriceField
           label="Founding Provider Slot Limit" settingKey="founding_provider_limit" unit="slots"
-          initial={settings['founding_provider_limit'] ?? ''} saving={saving}
-          onSave={handleSave} />
+          initial={settings['founding_provider_limit'] ?? ''} onSave={handleSave} />
 
         <div className="flex items-center justify-between py-4 border-b border-black/5">
           <div>
@@ -144,32 +148,88 @@ export default function SettingsPage() {
    and no wrong data — only work quietly disappearing.
    =========================================================================== */
 
+type SaveResult = { ok: true } | { ok: false; error: string }
+type OnSave = (key: keyof SettingsMap, value: string) => Promise<SaveResult>
+
+/**
+ * Every control's save state, in one place.
+ *
+ * ── A SAVE THAT SAYS NOTHING IS THE OTHER HALF OF ITEM 26 ──────────────
+ * Item 26 was silent loss: work disappeared and nothing said so. This is silent
+ * success: the write lands and nothing says so either, so the only way to know
+ * is to reload the page and look. Both leave the admin guessing, and Banned
+ * Words — which had no feedback at all, not even a disabled button — is the
+ * setting that gates publication.
+ *
+ * `saved` persists until the field is edited again rather than fading on a
+ * timer: a timer would be a second thing that can be wrong, and "Saved" next to
+ * text you have since changed is worse than no message.
+ */
+function useSave(onSave: OnSave) {
+  const [state, setState] = useState<'idle' | 'saving' | 'saved' | 'failed'>('idle')
+  const [error, setError] = useState<string | null>(null)
+
+  return {
+    state,
+    error,
+    /** Call from onChange — a stale "Saved" beside edited text is a lie. */
+    touch: () => { setState('idle'); setError(null) },
+    save: async (key: keyof SettingsMap, value: string) => {
+      setState('saving'); setError(null)
+      const res = await onSave(key, value)
+      if (res.ok) setState('saved')
+      else { setState('failed'); setError(res.error) }
+    },
+  }
+}
+
+/** The one-line answer under a control. Says which of the four states it is in. */
+function SaveNote({ state, error }: { state: string; error: string | null }) {
+  if (state === 'saving') return <span className="text-xs text-[#3D2E2E]/40">Saving…</span>
+  if (state === 'saved')  return <span className="text-xs font-medium text-green-700">Saved</span>
+  if (state === 'failed') return (
+    <span className="text-xs font-medium text-red-700">
+      Not saved{error ? ` — ${error}` : ''}. Nothing has changed.
+    </span>
+  )
+  return null
+}
+
 function Toggle({
   settingKey, on, onSave,
 }: {
   settingKey: 'founding_provider_offer_enabled' | 'image_review_enabled'
   on: boolean
-  onSave: (key: keyof SettingsMap, value: string) => Promise<void>
+  onSave: OnSave
 }) {
+  const { state, error, save } = useSave(onSave)
   return (
-    <button onClick={() => onSave(settingKey, String(!on))}
-      className={`relative w-12 h-6 rounded-full transition-colors ${on ? 'bg-[#8C4A58]' : 'bg-gray-300'}`}>
-      <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${on ? 'translate-x-6' : ''}`} />
-    </button>
+    <div className="flex flex-col items-end gap-1">
+      <button
+        onClick={() => save(settingKey, String(!on))}
+        disabled={state === 'saving'}
+        className={`relative w-12 h-6 rounded-full transition-colors disabled:opacity-50 ${on ? 'bg-[#8C4A58]' : 'bg-gray-300'}`}>
+        <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${on ? 'translate-x-6' : ''}`} />
+      </button>
+      {/* `on` comes from the parent and the parent only updates on success, so
+          a refused write leaves the switch where it was AND says why. */}
+      {state !== 'saved' && <SaveNote state={state} error={error} />}
+    </div>
   )
 }
 
 function PriceField({
-  label, settingKey, unit = 'pence', initial, saving, onSave,
+  label, settingKey, unit = 'pence', initial, onSave,
 }: {
   label: string
   settingKey: 'verification_price_pence' | 'subscription_price_pence' | 'founding_provider_limit'
   unit?: string
   initial: string
-  saving: string | null
-  onSave: (key: keyof SettingsMap, value: string) => Promise<void>
+  onSave: OnSave
 }) {
   const [local, setLocal] = useState(initial)
+  const { state, error, touch, save } = useSave(onSave)
+
   return (
     <div className="flex items-center justify-between py-4 border-b border-black/5 last:border-0">
       <div>
@@ -177,21 +237,22 @@ function PriceField({
         <div className="text-xs text-[#3D2E2E]/40">
           {unit === 'pence' && local ? `£${(parseInt(local) / 100).toFixed(2)}` : `${local} slots`}
         </div>
+        <SaveNote state={state} error={error} />
       </div>
       <div className="flex items-center gap-2">
         <input
           type="number"
           value={local}
-          onChange={e => setLocal(e.target.value)}
+          onChange={e => { setLocal(e.target.value); touch() }}
           className="border border-black/10 rounded-lg px-3 py-2 text-sm w-28 text-right"
         />
         <span className="text-xs text-[#3D2E2E]/40">{unit}</span>
         <button
-          onClick={() => onSave(settingKey, local)}
-          disabled={saving === settingKey}
+          onClick={() => save(settingKey, local)}
+          disabled={state === 'saving'}
           className="px-3 py-2 text-xs font-medium text-white rounded-lg disabled:opacity-50"
           style={{ backgroundColor: '#8C4A58' }}>
-          {saving === settingKey ? '…' : 'Save'}
+          {state === 'saving' ? '…' : 'Save'}
         </button>
       </div>
     </div>
@@ -203,11 +264,14 @@ function BannedWords({
 }: {
   /** The raw JSON string from settings. Parsed here, once, into the textarea. */
   initial: string
-  onSave: (key: keyof SettingsMap, value: string) => Promise<void>
+  onSave: OnSave
 }) {
   const [text, setText] = useState(() => {
     try { return (JSON.parse(initial || '[]') as string[]).join('\n') } catch { return '' }
   })
+  const { state, error, touch, save } = useSave(onSave)
+  const words = text.split('\n').map(w => w.trim()).filter(Boolean)
+
   return (
     <div className="py-4 border-b border-black/5">
       <div className="font-medium text-[#3D2E2E] mb-1">Banned Words</div>
@@ -217,21 +281,30 @@ function BannedWords({
       </div>
       <textarea
         value={text}
-        onChange={e => setText(e.target.value)}
+        onChange={e => { setText(e.target.value); touch() }}
         rows={8}
         placeholder="Enter one word per line…"
         className="border border-black/10 rounded-lg px-3 py-2 text-sm w-full resize-none font-mono"
       />
-      <button
-        onClick={async () => {
-          const words = text.split('\n').map(w => w.trim()).filter(Boolean)
-          setText(words.join('\n'))
-          await onSave('banned_words', JSON.stringify(words))
-        }}
-        className="mt-2 px-4 py-2 text-sm font-medium text-white rounded-lg"
-        style={{ backgroundColor: '#8C4A58' }}>
-        Save Banned Words
-      </button>
+      <div className="mt-2 flex items-center gap-3">
+        <button
+          onClick={async () => {
+            setText(words.join('\n'))
+            await save('banned_words', JSON.stringify(words))
+          }}
+          disabled={state === 'saving'}
+          className="px-4 py-2 text-sm font-medium text-white rounded-lg disabled:opacity-50"
+          style={{ backgroundColor: '#8C4A58' }}>
+          {state === 'saving' ? 'Saving…' : 'Save Banned Words'}
+        </button>
+        {/* The count is the confirmation that carries information: "Saved" alone
+            does not tell you the list was read the way you meant it. */}
+        {state === 'saved'
+          ? <span className="text-xs font-medium text-green-700">
+              Saved — {words.length} {words.length === 1 ? 'word' : 'words'} now screened
+            </span>
+          : <SaveNote state={state} error={error} />}
+      </div>
     </div>
   )
 }
