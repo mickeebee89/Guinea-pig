@@ -76,6 +76,21 @@ export interface ProviderDashboard {
   /** Dates in the next 30 days with at least one untaken slot. */
   openDates: string[]
   portfolioCount: number
+  /**
+   * The stylist's most recent unexpired status post, whatever its state.
+   *
+   * NOT filtered to 'approved': a post held for review must be visible to its
+   * author or the composer clears on submit and leaves them with no evidence
+   * they wrote anything. 0031's RLS is what makes reading it possible; this is
+   * where it reaches the screen.
+   */
+  statusPost: {
+    id: string
+    body: string
+    expiresAt: string
+    moderationStatus: 'pending' | 'approved' | 'rejected'
+    reviewNote: string | null
+  } | null
 }
 
 /** Who is looking, and which dashboard they get. */
@@ -228,13 +243,14 @@ export async function getProviderDashboard(
     return {
       kind: 'provider', providerId: null, isPublished: false, rating: null,
       reviewCount: 0, isFoundingProvider: false, applications: [], upcoming: [],
+      statusPost: null,
       openDates: [], portfolioCount: 0,
     }
   }
 
   const in30 = new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10)
 
-  const [appsRes, upcomingRes, availRes, portRes, userRes] = await Promise.all([
+  const [appsRes, upcomingRes, availRes, portRes, userRes, statusRes] = await Promise.all([
     supabase.from('sessions')
       .select('id, provider_id, model_user_id, date, start_time, status, treatment_id')
       .eq('provider_id', prov.id).eq('status', 'pending')
@@ -248,6 +264,18 @@ export async function getProviderDashboard(
       .gte('date', today).lte('date', in30),
     supabase.from('portfolio_items').select('id', { count: 'exact', head: true }).eq('provider_id', prov.id),
     supabase.from('users').select('is_founding_provider').eq('id', userId).maybeSingle(),
+    // The most recent unexpired status post, in ANY moderation state. Not
+    // filtered to 'approved': a post held for review has to be visible to its
+    // author, or the composer clears on submit and leaves them unable to tell a
+    // held post from one that failed to save. 0031's RLS permits this read for
+    // the owner only.
+    supabase.from('status_posts')
+      .select('id, body, expires_at, moderation_status, review_note')
+      .eq('provider_id', prov.id)
+      .gt('expires_at', new Date().toISOString())
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
   ])
 
   type SessRow = { id: string; provider_id: string; model_user_id: string; date: string; start_time: string | null; status: string; treatment_id: string | null }
@@ -298,6 +326,15 @@ export async function getProviderDashboard(
     upcoming: asCards(upcoming),
     openDates,
     portfolioCount: portRes.count ?? 0,
+    statusPost: statusRes.data
+      ? {
+          id: (statusRes.data as { id: string }).id,
+          body: (statusRes.data as { body: string }).body,
+          expiresAt: (statusRes.data as { expires_at: string }).expires_at,
+          moderationStatus: (statusRes.data as { moderation_status: 'pending' | 'approved' | 'rejected' }).moderation_status,
+          reviewNote: (statusRes.data as { review_note: string | null }).review_note,
+        }
+      : null,
   }
 }
 

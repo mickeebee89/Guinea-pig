@@ -242,6 +242,38 @@ export default function ModerationPage() {
       alert(`Couldn't ${decision === 'approved' ? 'approve' : 'reject'} this post: ${error.message}`)
       return
     }
+    // ── TELL THEM, RATHER THAN LETTING IT EXPIRE ─────────────────────────
+    //
+    // A rejected post is visible to its author as 'rejected' (0031's RLS) but
+    // only if they go and look. Without this they watch an update never appear
+    // and learn nothing — the silent failure this queue was added to remove.
+    //
+    // ⚠️ THE NOTE MUST NOT QUOTE THE FLAGGED WORD. Telling someone which term
+    // tripped the screen hands them the way around it, and the list is not
+    // public. The composer's own note field says so; this only forwards what
+    // the admin wrote.
+    //
+    // Approval is deliberately silent: the post simply appears, which is what
+    // the stylist expected when they wrote it.
+    if (decision === 'rejected' && post.provider?.id) {
+      const { data: prov } = await supabase
+        .from('providers').select('user_id').eq('id', post.provider.id).maybeSingle()
+      const uid = (prov as { user_id?: string } | null)?.user_id
+      if (uid) {
+        const { error: noteErr } = await supabase.from('notifications').insert({
+          user_id: uid,
+          type: 'admin_message',
+          title: 'Your update wasn\u2019t published',
+          body: 'We didn\u2019t publish your recent shop update.'
+            + (note.trim() ? '\n\n' + note.trim() : '')
+            + '\n\nYou can post a new one from your dashboard.',
+        })
+        // Logged, not fatal: the decision has already been written and undoing
+        // it because a notification failed would be worse than a quiet one.
+        if (noteErr) console.error('[moderation] rejection notice failed', noteErr)
+      }
+    }
+
     await logAction(`status_post_${decision}`, {
       // undefined, not null: logAction takes an optional string, and a post with
       // no resolvable provider should omit the field rather than record a null.
@@ -505,7 +537,7 @@ function StatusPostRow({
       <input
         value={note}
         onChange={e => setNote(e.target.value.slice(0, 280))}
-        placeholder="Reason — shown to the stylist. Required to reject."
+        placeholder="Reason \u2014 sent to the stylist. Don\u2019t name the flagged word."
         className="mt-3 w-full rounded-lg border border-black/10 px-3 py-2 text-sm"
         disabled={busy}
       />

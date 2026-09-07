@@ -68,9 +68,12 @@ call or an afternoon.
 - **Admin approval at scale** — one at a time, no bulk path.
 - **Founding-provider grant** — no per-user grant; mobile signup sends no
   `signup_source`, so no app signup can qualify.
-- **Lint gates.** `site` fails the build at zero errors and zero warnings, and
-  caught a real bug within the hour. `admin` (22) and `mobile` (73 + 6 tsc) are
-  not wired and are not at zero.
+- **Lint gates — mobile has no net (item 19).** `site` fails the build at zero
+  errors and zero warnings, and caught a real bug within the hour. `admin` (6)
+  and `mobile` (73 + 6 tsc) are not wired. In one session the same defect was
+  written three times; the two in gated apps were caught by the gate, the
+  mobile one by chance. Every class of thing lint catches is landing in mobile
+  unchecked, and mobile is the primary client.
 
 ---
 

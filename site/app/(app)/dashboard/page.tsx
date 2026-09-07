@@ -12,6 +12,7 @@ import { MonthCalendar, type CalendarMark } from '@/components/MonthCalendar'
 import { StylistSetupPanel } from '@/components/StylistSetup'
 import { Avatar, StatusPill, LoadError } from '@/components/ui'
 import { BOOKINGS_PATH } from '@/lib/routes'
+import { StatusComposer } from './StatusComposer'
 
 export const metadata = { title: 'Dashboard' }
 
@@ -434,6 +435,16 @@ export default async function DashboardPage({
                   </Link>
                 </p>
               </Panel>
+
+              {/* Above the shop panel on purpose: this is the frequent act.
+                  docs/safety-surface.md makes the same argument about the
+                  cancel control — a cheap action put behind a rare one stops
+                  being cheap. */}
+              {data.providerId && (
+                <Panel title="What's on" empty="">
+                  <StatusComposer providerId={data.providerId} current={data.statusPost} />
+                </Panel>
+              )}
 
               <Panel title="Your shop" empty="">
                 <dl className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-4">

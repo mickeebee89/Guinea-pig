@@ -39,7 +39,7 @@ live money, one a child-safety commitment.
 | ✅ Closed | Item 11 — diagnosed 2 Sep; a check with a named cause, not a note |
 | ✅ Closed | Item 8 — revocation MECHANISM, proven 2 Sep. UI is item 14 |
 | ✅ Closed | Item 13 — cancellation, proven on device 4 Sep |
-| ⬜ Open | Items 12, 14, 15, 16, 17 and 18 |
+| ⬜ Open | Items 12, 14, 15, 16, 17, 18 and 19 |
 
 ---
 
@@ -875,6 +875,39 @@ Worth fixing as: keep degrading, but make the two cases distinguishable — a
 counter, a header, an admin tile, anything that answers "is this page empty
 because there is nothing, or because something is broken". Not scoped here; the
 answer is a product decision about where a signal should land.
+
+**19. MOBILE HAS NO LINT GATE, AND MOBILE IS THE PRIMARY CLIENT — NEW,
+7 Sep 2026.**
+
+`site` fails the build at zero eslint errors and zero warnings. `admin` and
+`mobile` are not wired, because neither is at zero: **admin 6, mobile 73 plus 6
+tsc.** The count is the reason the gate is not on, and the absent gate is the
+reason the count never falls.
+
+**The evidence that this is not theoretical.** In one session I wrote the same
+defect three times — `Date.now()` called during render, where a re-render can
+change the value under the reader mid-decision:
+
+| Where | Caught by |
+|---|---|
+| Web cancel panel | `site` lint gate, before commit |
+| Admin status queue | `admin` lint run, before commit |
+| **Mobile `CancelSheet`** | **Chance.** I happened to run eslint by hand |
+
+Two of three were caught by a mechanism. The third was caught because I looked.
+On mobile there is nothing that would have stopped it.
+
+**The reframing matters more than the habit.** "I keep making this mistake" is a
+small statement. The real one is: **every class of thing lint catches is landing
+in mobile unchecked** — impure calls during render, unescaped entities, unused
+bindings, exhaustive-deps, and whatever the next rule catches. Mobile is
+Android-first and the client most users will actually hold.
+
+**Why it stays open rather than being fixed here:** 73 errors is a session of
+work, and a gate switched on over a failing codebase gets switched off again.
+The route is to fix the 73, then wire it — the same order `site` took, where the
+gate was free because the count was already zero and it caught a real bug within
+the hour.
 
 **14. Admin revoke UI — NEW, 2 Sep 2026.** `0027` ships the mechanism; nothing
 calls it. Needs a control on the admin verification/provider view that takes a
