@@ -38,7 +38,8 @@ live money, one a child-safety commitment.
 | ✅ Closed | Items 9 + 10 — findability pass, 2 Sep |
 | ✅ Closed | Item 11 — diagnosed 2 Sep; a check with a named cause, not a note |
 | ✅ Closed | Item 8 — revocation MECHANISM, proven 2 Sep. UI is item 14 |
-| ⬜ Open | Items 12, 13 and 14 |
+| ✅ Closed | Item 13 — cancellation, proven on device 4 Sep |
+| ⬜ Open | Items 12, 14, 15 and 16 |
 
 ---
 
@@ -721,6 +722,73 @@ The block-cascade constraint is the trap: its silence about *why* is correct, so
 need three answers, not one template.
 
 ---
+
+**15. NO TEXT IN THIS PRODUCT IS SCREENED BEFORE PUBLICATION — NEW, 7 Sep 2026.**
+
+Found while scoping the status composer, and larger than that feature, so it is
+its own item rather than folded into it.
+
+**`banned_words` looks like moderation in the admin console and is not.** It is a
+list an admin can edit, used by exactly one thing: a retrospective search in the
+moderation tab that runs when somebody opens it, scans `.limit(500)` rows of
+messages, reviews, bios and shop copy, and highlights matches. It screens
+nothing, blocks nothing, and runs on nobody's schedule.
+
+| Content | Before publication |
+|---|---|
+| Portfolio **images** | Real queue — `portfolio_items.moderation_status = 'pending'`, an admin approves |
+| **Every kind of text** — bios, reviews, shop copy, messages | **Nothing.** Published instantly |
+
+**The shape is the one this audit keeps finding:** a mechanism that reads as
+coverage to the person looking at it. An admin who sees a banned-words list in
+Settings reasonably concludes words are being screened. Same as
+`accessibilityLabel` reading in code review as though labelling had been handled,
+and the same as `enforce_publish_requires_verified` promising an invariant it
+never enforced. In each case the thing exists, is named accurately for what it
+does, and is read as doing more.
+
+Not scoped here. The decision it needs is what to screen and when: a write-time
+screen on messages is a different product question from one on a public bio, and
+"screen everything" is how a filter gets switched off.
+
+**16. Stylist status posts — the composer, and `status_posts` — NEW, 7 Sep 2026.**
+
+`providers.status_text` and `status_expires_at` are read in four places — both
+web dashboard feeds, the mobile shop page's pulsing status bar, and the
+`public_stylists` view — and **written nowhere**. So "What's on near you" has been
+empty since it shipped and always would have been. Third instance of a
+render-site with no writer, after `banner_url` and `patch_tests`.
+
+Building it as designed: `web-phase-1-handover.md:309-380` holds the full spec,
+decided in August and deferred, not invented now.
+
+### ⚠️ THE ONE STEP THAT CAN TAKE THE PUBLIC SITE DOWN
+
+Written here BEFORE the work starts, because it is the only part of this that
+breaks something already live.
+
+`status_posts` supersedes `status_text`, and leaving both would recreate the
+`location` / `location_text` split exactly. So `status_text` must be removed from
+the `public_stylists` view — and **`create or replace view` cannot drop a
+column.** It requires `drop view` + `create view`.
+
+**A dropped view loses its grants.** `public_stylists` is granted to `anon`, and
+anon is how every logged-out visitor and every search engine reads the public
+site. Recreate the view without reissuing:
+
+```sql
+grant select on public.public_stylists to anon, authenticated;
+```
+
+…and the six treatment pages, every stylist page and the whole SEO surface
+return nothing to anyone not signed in. **It fails silently** — the view exists,
+the query returns zero rows, and the pages render their empty state, which is
+exactly what they already do today for a different reason. Nobody would notice
+from the outside.
+
+Both statements go in the same migration, and the verify block reads
+`information_schema.role_table_grants` for `anon` rather than trusting that the
+grant line ran.
 
 **14. Admin revoke UI — NEW, 2 Sep 2026.** `0027` ships the mechanism; nothing
 calls it. Needs a control on the admin verification/provider view that takes a

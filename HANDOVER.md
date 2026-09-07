@@ -51,6 +51,17 @@ call or an afternoon.
 - **Banners cannot be set.** `providers.banner_url` is read in four places,
   written in none, with no bucket. The scrim added on 2 Sep has therefore never
   executed — untested by construction until banners exist.
+- **No text is screened before publication (item 15).** `banned_words` is an
+  admin-initiated retrospective search over 500 rows, not a filter. Portfolio
+  images have a real pre-publication queue; bios, reviews, shop copy and
+  messages publish instantly. It reads as moderation in the admin console and
+  is not.
+- **Stylist status posts (item 16).** `providers.status_text` is read in four
+  places and written nowhere, so "What's on near you" has been empty since it
+  shipped. Building `status_posts` as designed in
+  `web-phase-1-handover.md:309-380`. **Read the grant trap in audit item 16
+  before touching `public_stylists`** — it is the only step that can take the
+  public site down, and it fails silently.
 - **Admin revoke UI.** `revoke_verification` is proven; nothing calls it, so
   revocation is SQL-only.
 - **Mobile member-area layout** — 2 of 12 routes checked at 375px.
