@@ -20,6 +20,23 @@ import { BOOKINGS_PATH } from '@/lib/routes'
  *
  * The links keep min-h-11 (44px) throughout: that is the minimum comfortable
  * tap target, and it is why they look over-padded on a desktop.
+ *
+ * ── WHY NOTIFICATIONS IS A BELL AND NOT A PILL ────────────────────────
+ * It used to be an "Alerts" pill in the strip below. On a phone that strip
+ * scrolls sideways, so for a stylist with six links the pill could be off the
+ * right-hand edge — and the only other place notifications appear is a panel
+ * partway down the dashboard, below the fold. Someone who does not scroll,
+ * either direction, is never told an application came in.
+ *
+ * So it moved to the top row, which never scrolls and is on every (app) page.
+ * The pill was removed rather than kept alongside: two entry points to one
+ * screen is a second thing to keep in step, and the dot would have to be drawn
+ * twice.
+ *
+ * A DOT, NOT A COUNT. The number is not the point — whether to look is. A
+ * count also has to be right, and "3" next to a list of four is a bug report;
+ * a dot is true as long as anything is unread. The count is still announced to
+ * screen readers, where there is no glance to save.
  */
 const LINKS = [
   // Models browse. A stylist has no use for a list of other stylists.
@@ -29,11 +46,16 @@ const LINKS = [
   { href: '/availability',  label: 'Availability', providerOnly: true },
   { href: '/portfolio',     label: 'Portfolio',    providerOnly: true },
   { href: '/messages',      label: 'Messages', badgeKey: 'unread' as const },
-  { href: '/notifications', label: 'Alerts', longLabel: 'Notifications' },
   { href: '/settings',      label: 'Settings' },
 ]
 
-export function AppNav({ unread = 0, isProvider = false }: { unread?: number; isProvider?: boolean }) {
+export function AppNav({
+  unread = 0, unreadNotifications = 0, isProvider = false,
+}: {
+  unread?: number
+  unreadNotifications?: number
+  isProvider?: boolean
+}) {
   const links = LINKS.filter(
     l => (!l.providerOnly || isProvider) && (!l.modelOnly || !isProvider),
   )
@@ -52,9 +74,11 @@ export function AppNav({ unread = 0, isProvider = false }: { unread?: number; is
           {/* From sm up the links sit inline; below that they get their own row. */}
           <nav aria-label="Member area" className="hidden flex-1 sm:block">
             <ul className="flex flex-wrap items-center gap-1">
-              {links.map(l => <NavLink key={l.href} {...l} unread={unread} wide />)}
+              {links.map(l => <NavLink key={l.href} {...l} unread={unread} />)}
             </ul>
           </nav>
+
+          <NotificationBell unread={unreadNotifications} />
 
           <SignOutButton />
         </div>
@@ -71,15 +95,43 @@ export function AppNav({ unread = 0, isProvider = false }: { unread?: number; is
   )
 }
 
+/**
+ * The bell. `relative` on the link so the dot can be positioned against it;
+ * the ring is the nav's own white, so the dot reads as a separate mark rather
+ * than as part of the bell outline.
+ */
+function NotificationBell({ unread }: { unread: number }) {
+  return (
+    <Link
+      href="/notifications"
+      aria-label={unread > 0 ? `Notifications, ${unread} unread` : 'Notifications'}
+      className="relative inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-[999px] text-muted transition-colors hover:bg-soft-pink hover:text-rose focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose"
+    >
+      <svg
+        viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+        strokeLinecap="round" strokeLinejoin="round"
+        className="h-5 w-5" aria-hidden="true"
+      >
+        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+        <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+      </svg>
+      {unread > 0 && (
+        <span
+          className="absolute right-2 top-2 h-2.5 w-2.5 rounded-[999px] bg-rose ring-2 ring-white"
+          aria-hidden="true"
+        />
+      )}
+    </Link>
+  )
+}
+
 function NavLink({
-  href, label, longLabel, badgeKey, unread, wide = false,
+  href, label, badgeKey, unread,
 }: {
   href: string
   label: string
-  longLabel?: string
   badgeKey?: 'unread'
   unread: number
-  wide?: boolean
 }) {
   return (
     <li className="shrink-0">
@@ -87,9 +139,7 @@ function NavLink({
         href={href}
         className="inline-flex min-h-11 items-center gap-2 whitespace-nowrap rounded-[999px] px-3 text-sm font-bold text-muted transition-colors hover:bg-soft-pink hover:text-rose focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose"
       >
-        {/* "Notifications" is the longest label by some way and the least
-            informative per character. It is shortened on the narrow strip only. */}
-        {wide ? (longLabel ?? label) : label}
+        {label}
         {badgeKey === 'unread' && unread > 0 && (
           <>
             <span

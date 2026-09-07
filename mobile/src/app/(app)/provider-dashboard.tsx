@@ -29,6 +29,7 @@ import LoadErrorState from '@/components/LoadErrorState'
 import HeaderIcons from '@/components/HeaderIcons'
 import ApplicationPhotos from '@/components/ApplicationPhotos'
 import PhotoViewerModal from '@/components/PhotoViewerModal'
+import StatusComposer from '@/components/StatusComposer'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -1021,6 +1022,21 @@ export default function ProviderDashboardScreen() {
             />
           </TouchableOpacity>
         </View>
+
+        {/* ── What's on ──
+            High on the page and above Applications on purpose: posting "two
+            spaces free Thursday" is the frequent act, and putting a cheap
+            action below a rare one stops it being cheap (docs/safety-surface.md
+            makes the same argument about the cancel control).
+
+            Until now this existed only on the web dashboard — audit item 21.
+            Mobile could read a stylist's status on their profile and could not
+            write one, so a stylist who only uses their phone could not post at
+            all. */}
+        <View style={[styles.sectionHeader, { marginTop: 8 }]}>
+          <Text style={styles.sectionTitle}>What&rsquo;s on</Text>
+        </View>
+        <StatusComposer providerId={provider.id} />
 
         {/* ── Pending applications ── */}
         <View style={styles.sectionHeader}>

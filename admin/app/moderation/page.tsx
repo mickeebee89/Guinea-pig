@@ -47,11 +47,33 @@ interface StatusPost {
   hoursLeft: number
 }
 
+type Kind = 'images' | 'text' | 'status'
+
+const KINDS: { key: Kind; label: string }[] = [
+  { key: 'images', label: 'Images' },
+  { key: 'status', label: 'Status posts' },
+  { key: 'text',   label: 'Flagged text' },
+]
+
 export default function ModerationPage() {
   const [imageReview, setImageReview]   = useState(false)
   const [items, setItems]               = useState<PortfolioItem[]>([])
   const [flagged, setFlagged]           = useState<FlaggedContent[]>([])
-  const [tab, setTab]                   = useState<'images' | 'text' | 'status'>('images')
+  /**
+   * -- EVERYTHING SHOWS BY DEFAULT; THE FILTER SUBTRACTS --------------------
+   *
+   * This was three tabs, and the default view was whichever one happened to be
+   * first. A moderator opening the page saw one category. An empty tab reads as
+   * "nothing to do" while another holds a queue, and nothing on the screen
+   * prompts anyone to check the others -- the same shape as the
+   * notification-type allowlist: correct for the cases present when it was
+   * written, silent about the rest.
+   *
+   * So the honest view is the default one, and hiding a type is a deliberate
+   * act. `hidden` rather than `shown` on purpose: a type added later is visible
+   * unless somebody hides it, which is the safe direction for a queue.
+   */
+  const [hidden, setHidden]             = useState<Set<Kind>>(new Set())
   const [posts, setPosts]               = useState<StatusPost[]>([])
   // Same lesson as the text tab: without these, "still loading" and "the query
   // failed" both render as an empty queue, which is the one state a moderation
@@ -352,10 +374,36 @@ export default function ModerationPage() {
     setItems(prev => prev.filter(i => i.id !== item.id))
   }
 
+  const counts: Record<Kind, number> = {
+    images: items.length, text: flagged.length, status: posts.length,
+  }
+  const anyLoading   = loading || flaggedLoading || postsLoading
+  const totalWaiting = counts.images + counts.text + counts.status
+  const hiddenCount  = [...hidden].reduce((n, k) => n + counts[k], 0)
+  const show = (k: Kind) => !hidden.has(k)
+  const toggle = (k: Kind) => setHidden(prev => {
+    const next = new Set(prev)
+    if (next.has(k)) next.delete(k)
+    else next.add(k)
+    return next
+  })
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-[#3D2E2E]">Moderation Queue</h1>
+        <div>
+          <h1 className="text-2xl font-bold text-[#3D2E2E]">Moderation Queue</h1>
+          {/* The total is deliberately NOT filtered. It is the one number on
+              this page that always answers "is there anything waiting", so
+              hiding a type must not be able to change it. */}
+          <p className="text-sm text-[#3D2E2E]/50">
+            {anyLoading
+              ? 'Counting the queues\u2026'
+              : totalWaiting === 0
+              ? 'Nothing waiting'
+              : totalWaiting + ' item' + (totalWaiting === 1 ? '' : 's') + ' waiting across all types'}
+          </p>
+        </div>
         <div className="flex items-center gap-3">
           <span className="text-sm text-[#3D2E2E]/60">Image review required</span>
           {settingsLoading ? (
@@ -372,24 +420,39 @@ export default function ModerationPage() {
         </div>
       </div>
 
-      <div className="flex gap-3 mb-6">
-        {(['images', 'text', 'status'] as const).map(t => (
-          <button key={t} onClick={() => setTab(t)}
-            className={`px-4 py-2 rounded-lg text-sm font-medium capitalize transition-colors ${
-              tab === t ? 'text-white' : 'bg-white border border-black/10 text-[#3D2E2E]/60'
-            }`}
-            style={tab === t ? { backgroundColor: '#8C4A58' } : {}}>
-            {t === 'images'
-              ? `Images (${items.length})`
-              : t === 'text'
-              ? `Flagged Text (${flagged.length})`
-              : `Status Posts (${posts.length})`}
-          </button>
-        ))}
+      <div className="mb-6">
+        <div className="flex flex-wrap gap-3">
+          {KINDS.map(k => {
+            const on = show(k.key)
+            return (
+              <button key={k.key} onClick={() => toggle(k.key)}
+                aria-pressed={on}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  on ? 'text-white' : 'bg-white border border-black/10 text-[#3D2E2E]/40'
+                }`}
+                style={on ? { backgroundColor: '#8C4A58' } : {}}>
+                {k.label} ({counts[k.key]}){on ? '' : ' - hidden'}
+              </button>
+            )
+          })}
+        </div>
+        {hidden.size > 0 && (
+          <p className="mt-2 text-sm text-amber-800">
+            {hiddenCount === 0
+              ? 'A filter is on. Nothing is hidden by it right now.'
+              : 'A filter is on - ' + hiddenCount + ' item' + (hiddenCount === 1 ? '' : 's') + ' not shown.'}{' '}
+            <button onClick={() => setHidden(new Set())} className="underline font-medium">
+              Show everything
+            </button>
+          </p>
+        )}
       </div>
 
-      {tab === 'images' && (
-        <>
+      {show('images') && (
+        <section className="mb-8">
+          <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-[#3D2E2E]/50">
+            Images ({items.length})
+          </h2>
           {!imageReview && (
             <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-5 text-sm text-amber-800">
               Image review is OFF — new uploads go live immediately without review.
@@ -428,7 +491,7 @@ export default function ModerationPage() {
               ))}
             </div>
           )}
-        </>
+        </section>
       )}
 
       {/* ── STATUS POSTS ────────────────────────────────────────────────────
@@ -440,8 +503,12 @@ export default function ModerationPage() {
           including "hair", which flags nearly every legitimate post a hair
           stylist writes. Expect this queue to be full of ordinary posts until a
           real list is set. That is the list being wrong, not the screen. */}
-      {tab === 'status' && (
-        <div className="space-y-3">
+      {show('status') && (
+        <section className="mb-8">
+          <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-[#3D2E2E]/50">
+            Status posts ({posts.length})
+          </h2>
+          <div className="space-y-3">
           {postsLoading ? (
             <div className="text-[#3D2E2E]/40 text-sm">Loading the queue…</div>
           ) : postsError ? (
@@ -454,11 +521,16 @@ export default function ModerationPage() {
           ) : (
             posts.map(post => <StatusPostRow key={post.id} post={post} onDecide={decidePost} />)
           )}
-        </div>
+          </div>
+        </section>
       )}
 
-      {tab === 'text' && (
-        <div className="space-y-3">
+      {show('text') && (
+        <section className="mb-8">
+          <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-[#3D2E2E]/50">
+            Flagged text ({flagged.length})
+          </h2>
+          <div className="space-y-3">
           {flaggedLoading ? (
             <div className="text-center py-16 text-[#3D2E2E]/40 text-sm">Scanning…</div>
           ) : flaggedError ? (
@@ -491,7 +563,15 @@ export default function ModerationPage() {
               </div>
             </div>
           ))}
-        </div>
+          </div>
+        </section>
+      )}
+
+      {hidden.size === KINDS.length && (
+        <p className="text-sm text-[#3D2E2E]/50">
+          Every type is filtered out. {totalWaiting} item{totalWaiting === 1 ? '' : 's'}{' '}
+          {totalWaiting === 1 ? 'is' : 'are'} waiting and none are shown.
+        </p>
       )}
     </div>
   )

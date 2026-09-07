@@ -1,6 +1,7 @@
 import { createSupabaseServerClient, requireUser } from '@/lib/supabase-server'
 import { getConversations } from '@/lib/queries/conversations'
 import { getDashboardUser } from '@/lib/queries/dashboard'
+import { getUnreadNotificationCount } from '@/lib/queries/notifications'
 import { AppNav } from '@/components/AppNav'
 
 /**
@@ -29,28 +30,37 @@ import { AppNav } from '@/components/AppNav'
  * it ever is, the fix is ONE database function returning the count, called from
  * both places — not a second copy of the rule here.
  *
+ * The notification dot beside it is cheap by comparison — one count(*) on an
+ * indexed pair of columns, no rows returned. It is in the nav rather than only
+ * in the panel halfway down the dashboard because a stylist who does not scroll
+ * never learns an application came in, and the panel is below the fold on a
+ * phone.
+ *
  * It fails soft: a badge is not worth a 500 on every page.
  */
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await requireUser()
 
   let unread = 0
+  let unreadNotifications = 0
   let isProvider = false
   try {
     const supabase = await createSupabaseServerClient()
-    const [convs, me] = await Promise.all([
+    const [convs, me, notes] = await Promise.all([
       getConversations(supabase, user.id),
       getDashboardUser(supabase, user.id),
+      getUnreadNotificationCount(supabase, user.id),
     ])
     unread = convs.reduce((n, c) => n + c.unreadCount, 0)
     isProvider = me.role === 'provider'
+    unreadNotifications = notes
   } catch (e) {
     console.error('[app layout] unread count failed', e)
   }
 
   return (
     <div className="min-h-dvh bg-cream">
-      <AppNav unread={unread} isProvider={isProvider} />
+      <AppNav unread={unread} unreadNotifications={unreadNotifications} isProvider={isProvider} />
       <main className="mx-auto max-w-4xl px-4 py-8 sm:px-6">{children}</main>
     </div>
   )

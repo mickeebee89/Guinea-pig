@@ -30,6 +30,28 @@ export async function getNotifications(
   return (data ?? []) as AppNotification[]
 }
 
+/**
+ * How many notifications this user has not read.
+ *
+ * A real count(*) with head:true — no rows come back. Unlike the unread-message
+ * badge it CAN be a single count, because "unread" here is one nullable column
+ * and not a rule about which sessions are openable. See the note in
+ * app/(app)/layout.tsx for why that difference matters.
+ */
+export async function getUnreadNotificationCount(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<number> {
+  const { count, error } = await supabase
+    .from('notifications')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', userId)
+    .is('read_at', null)
+
+  if (error) throw error
+  return count ?? 0
+}
+
 export async function markAllNotificationsRead(
   supabase: SupabaseClient,
   userId: string,

@@ -967,7 +967,37 @@ This is the read-surface-with-no-writer pattern in its plainest form. Two pieces
 and they are separable: **(a)** a composer on `provider-dashboard.tsx`, which is
 the one that unblocks mobile-only stylists and is the more valuable half; **(b)**
 an updates feed on the mobile model home, which is a new surface rather than a
-port. Haptics on both when they are built — `expo-haptics`, per CLAUDE.md.
+port.
+
+**(a) CLOSED 7 Sep 2026.** `mobile/src/components/StatusComposer.tsx`, mounted on
+`provider-dashboard.tsx` above Applications. Same shape as the web composer and
+deliberately so: it enforces nothing — screening, link-stripping and the
+moderation decision are all triggers from 0032 — and it reads back what the
+database decided rather than reporting success. Writes go through `mustWrite`, so
+an RLS refusal throws instead of resolving quietly. Haptics on post, clear and
+failure. **Not yet run on a device.**
+
+**(b) still open.** A model on mobile still sees a stylist's update only by
+opening that stylist's profile; there is no equivalent of the web feed. Haptics
+when it is built — `expo-haptics`, per CLAUDE.md.
+
+**22. THE NOTIFICATION DOT HAD NO WAY TO CLEAR — FOUND AND CLOSED 7 Sep 2026.**
+
+Found while putting the bell in the web nav. `markAllNotificationsRead` had been
+exported from `site/lib/queries/notifications.ts` since the page was written and
+**called from nowhere** — so on web a notification was never marked read. The
+list's unread marks were permanent, and a dot driven off that count would have
+been lit for ever, which is a signal that stops meaning anything within a day.
+
+Closed with a "Mark all read" button, matching what mobile already had. It is a
+deliberate press rather than mark-on-view on purpose: Next prefetches routes on
+hover and on viewport entry, and a prefetch runs the page's server component —
+so marking read during render would clear notifications because a link scrolled
+into view.
+
+**The shape:** an exported function with no caller is the same class of thing as
+a read surface with no writer (item 21) and a rule with no check. Nothing fails;
+the feature is simply absent, and the code reads as though it is present.
 
 **14. Admin revoke UI — NEW, 2 Sep 2026.** `0027` ships the mechanism; nothing
 calls it. Needs a control on the admin verification/provider view that takes a

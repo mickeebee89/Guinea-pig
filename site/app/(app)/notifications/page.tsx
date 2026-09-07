@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { createSupabaseServerClient, requireUser } from '@/lib/supabase-server'
 import { getNotifications, type AppNotification } from '@/lib/queries/notifications'
 import { EmptyState, LoadError } from '@/components/ui'
+import { MarkAllReadButton } from './MarkAllReadButton'
 
 export const metadata = { title: 'Notifications' }
 
@@ -18,7 +19,14 @@ export default async function NotificationsPage() {
 
   return (
     <>
-      <h1 className="mb-6 font-display text-3xl text-warm-dark">Notifications</h1>
+      {/* The bell in the nav shows a dot while anything here is unread, and
+          this is the only thing that clears it. Without it the dot would be
+          permanent — markAllNotificationsRead had been exported and called from
+          nowhere since the page was written. */}
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+        <h1 className="font-display text-3xl text-warm-dark">Notifications</h1>
+        <MarkAllReadButton unread={(items ?? []).filter(n => !n.read_at).length} />
+      </div>
 
       {items === null ? (
         <LoadError what="notifications" />

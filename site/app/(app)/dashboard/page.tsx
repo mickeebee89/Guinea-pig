@@ -355,7 +355,7 @@ export default async function DashboardPage({
                         aria-hidden
                         className="absolute -left-2 top-0 h-0 w-0 border-t-0 border-r-8 border-b-8 border-r-soft-pink/70 border-b-transparent"
                       />
-                      <p className="whitespace-pre-line text-sm text-warm-dark">{u.text}</p>
+                      <p className="whitespace-pre-line text-sm font-bold text-warm-dark">{u.text}</p>
                     </div>
                   </div>
                 </li>
