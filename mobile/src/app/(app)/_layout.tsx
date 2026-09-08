@@ -13,8 +13,17 @@ export default function AppLayout() {
       {/* A suspended/banned user gets an explanation instead of the app. The DB
          blocks their actions regardless; this stops silent failures. */}
       <SuspensionGate>
+      {/* ── THE STYLE WAS ON THE WRONG ELEMENT AND DID NOTHING ───────────
+          `<Stack style={...}>` was a type error, and the reason it mattered is
+          that Expo Router's Stack takes no `style` prop at all — React Navigation
+          ignores it. So `flex: 1, backgroundColor: 'transparent'` has never been
+          applied to anything since it was written.
+
+          A View around it is where that style belongs, and it is also why this
+          was invisible: the layout happened to look right without it. A type
+          error that changes nothing on screen is the easiest kind to leave. */}
+      <View style={styles.stack}>
       <Stack
-        style={styles.stack}
         screenOptions={{
           headerShown: false,
           contentStyle: {
@@ -33,6 +42,7 @@ export default function AppLayout() {
           },
         }}
       />
+      </View>
       </SuspensionGate>
     </View>
   )

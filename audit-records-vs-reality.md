@@ -225,6 +225,41 @@ human-only moderation decisions.
 
 ---
 
+**── CORRECTION, 8 Sep 2026: ITEM 27 WAS BROADER IN THE TELLING THAN IN THE
+EVIDENCE ────────────────────────────────────────────────────────────────**
+
+Recorded here as a correction rather than quietly edited into item 27, because
+the wrong version was accepted and acted on.
+
+**What was said:** that the audit trail was unreliable — stated as a property of
+the admin console.
+
+**What is true:** the false-entry defect existed on **one surface out of five**.
+`app/users/page.tsx` logged unconditionally. `providers`, `reports` and
+`verification` all check their write's error before logging, and
+`providers/page.tsx:101` carries the comment *"Don't write an audit entry
+claiming an action that didn't happen."* Someone had already found this and
+fixed it in three places.
+
+The 25 discarded-result sites were real and counted. The generalisation from
+them was not.
+
+**⚠️ SECOND TIME IN A WEEK, AND THE SHAPE IS THE SAME.** The other was item 19's
+"admin 6", which was `moderation/page.tsx` measured while working in that file
+and written up as the whole app; the real figure was 22 across ten files.
+
+| | Measured | Reported as |
+|---|---|---|
+| Item 19 | One file's lint count | The app's lint count |
+| Item 27 | One surface's logging defect | The console's audit trail |
+
+Neither was a guess. Both were real measurements of something narrower than the
+claim built on them, which is exactly what makes them convincing. **A finding is
+only as wide as what was checked**, and the check has to be stated next to the
+finding or the scope is lost in one retelling. See [[next-fact-not-next-theory]]
+— same family, one step later: that one is about evidence that was never taken,
+this one is about evidence that was taken and then over-read.
+
 ## Where the record was wrong
 
 All of these were corrected on 24 Aug unless marked open.
@@ -1380,12 +1415,34 @@ would wrap a transaction around a write nobody checks.
 
 **⚠️ THE STRONGEST CASE IS `verification` APPROVE, AND IT IS WORSE THAN A PAIR.**
 It is FIVE sequential writes: `users.is_verified`, `providers.is_published`,
-`verification_requests.status`, a notification, then the audit row. Three of its
-own alerts already describe partial-failure states in prose — *"This user is
-verified and published, but the request could not be closed… it will still show
-as pending"*. Those sentences are the design admitting it cannot be consistent.
-It is the surface that most needs one transaction and the one where a naive pair
-would move the seam rather than close it.
+`verification_requests.status`, a notification, then the audit row.
+
+**→ THESE THREE SENTENCES MUST BE QUOTED IN THE MIGRATION HEADER, VERBATIM.**
+They are already in the product, written by someone who understood the shape of
+the problem exactly and mitigated it in copy because there was nowhere else to
+put it:
+
+    admin/app/verification/page.tsx:81
+      "Couldn't verify this user: {err}\n\nNothing else was changed."
+
+    admin/app/verification/page.tsx:87
+      "The user was verified, but their shop could not be published: {err}
+       \n\nThe request has been left pending — try again."
+
+    admin/app/verification/page.tsx:97
+      "This user is verified{ and published}, but the request could not be
+       closed: {err}\n\nIt will still show as pending — approve it again to
+       clear it."
+
+Only the first describes a clean failure. The second and third describe states
+where the system is **half-changed**, and they exist because the code cannot
+prevent them. That is the design admitting in prose that it cannot be
+consistent, and it is the argument for the migration in the plainest form
+anyone is going to find. A fourth, on the reject path (`:136`), warns that the
+user has NOT been notified.
+
+This is the surface that most needs one transaction and the one where a naive
+pair would move the seam rather than close it.
 
 **The precedent is exact.** `apply_subscription_state` (0023–0025) exists so
 `users.subscription_status` and `subscriptions` cannot disagree, and every caller
@@ -1405,21 +1462,21 @@ the state change, insert the `admin_audit_log` row, commit or roll back as one.
 The client calls `supabase.rpc(...)` and gets a single error or a single success
 — there is no partial state left for it to describe in an alert.
 
-**Three things to decide before writing it, not during:**
+**✅ THREE DECISIONS, SETTLED 8 Sep 2026 — do not reopen these while writing it:**
 
-1. **Notifications: inside or outside?** They are a side effect, not evidence.
-   A failed notification should not roll back a ban. Proposed: OUTSIDE the
-   transaction, fired after it returns, and its failure reported to the admin
-   rather than silently logged — which is what `moderation`'s rejection notice
-   already does deliberately.
-2. **What happens to the direct writes?** `apply_subscription_state`'s rule is
-   *never write either table directly*. The same rule here means the client can
-   no longer touch `suspensions` or `admin_audit_log` — which is enforceable
-   with RLS, and that is a second migration and a real decision, not a detail.
-3. **The toggles.** `flag`, `waive` and `comp` compute `!current` in the client
-   from a row that may be stale. Inside a function they can read the current
-   value and flip it atomically, which removes a race nobody has hit yet. Worth
-   doing while the code is open.
+1. **Notifications sit OUTSIDE the transaction.** They are a side effect, not
+   evidence, and a failed notification must not roll back a ban. Fired after the
+   function returns, with failure reported to the admin rather than silently
+   logged — which is what `moderation`'s rejection notice already does.
+2. **RLS forbids direct client writes to `suspensions` and `admin_audit_log`.**
+   `apply_subscription_state`'s rule is *never write either table directly*, and
+   the same rule applies here. A second migration, and the thing that makes the
+   first one more than a convention.
+3. **The toggles read and flip inside the function.** `flag`, `waive` and `comp`
+   currently compute `!current` in the client from a row fetched earlier.
+   **Same class as the `current_period_end` near-miss: computing from a value
+   you read a moment ago is computing from a guess.** Inside the function the
+   current value is read and flipped in the same transaction.
 
 **Not scoped: the mobile and site equivalents.** They pair writes with
 notifications rather than with audit rows, so they are item 27's problem, not

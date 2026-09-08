@@ -190,7 +190,10 @@ export default function LeaveReviewScreen() {
       setSessionData(s)
 
       // Fetch reviewee info + treatment + existing review in parallel
-      const promises: Promise<any>[] = [
+      // PromiseLike, not Promise. A supabase-js query builder is a THENABLE —
+      // `await` works on it, but it has no .catch/.finally, so typing the array
+      // as Promise<any>[] was a lie the compiler caught four times.
+      const promises: PromiseLike<any>[] = [
         // existing review check
         supabase
           .from('reviews')

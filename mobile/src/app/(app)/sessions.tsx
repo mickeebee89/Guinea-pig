@@ -216,7 +216,10 @@ export default function SessionsScreen() {
       }), 'accept notification')
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
       setPending(prev => prev.filter(x => x.id !== s.id))
-      setConfirmed(prev => [...prev, { ...s, status: 'accepted' }].sort((a, b) => a.date.localeCompare(b.date)))
+      // `as const` so the literal stays 'accepted' rather than widening to
+      // string — SessionStatus is a union of three, and widening it here is what
+      // would let a typo like 'acepted' through unnoticed.
+      setConfirmed(prev => [...prev, { ...s, status: 'accepted' as const }].sort((a, b) => a.date.localeCompare(b.date)))
     } catch {
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)
       Alert.alert('Error', 'Could not accept treatment.')
