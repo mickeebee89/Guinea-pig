@@ -1,0 +1,59 @@
+# ==========================================================================
+#  mobile — checks on push
+#
+#  ⚠️ THIS IS A SIGNAL, NOT A GATE.
+#
+#  It runs AFTER the commit is on main. Nothing here can stop a bad commit
+#  landing; it can only tell you one did. Branch protection requiring this
+#  check is what would make it a gate, and that is deliberately NOT on —
+#  commit-direct-to-main is a considered choice for a solo project, and
+#  requiring pull requests to enforce a check that already arrives as a
+#  notification would change how the work is done to buy nothing.
+#
+#  Do not let "CI is wired" get read later as "commits are checked".
+#  Audit item 28 says the same thing in more words.
+#
+#  ── WHY THREE WORKFLOWS AND NOT ONE ──────────────────────────────────────
+#  `on.push.paths` is a workflow-level filter, not a job-level one. One
+#  workflow would either run all three apps on every push or need a
+#  change-detection job that itself runs every time. The three apps share no
+#  code — separate package.json, separate lockfiles, no workspace linkage —
+#  so a per-app workflow means a mobile-only commit runs only mobile, and
+#  each app gets its own status rather than hiding behind another's failure.
+# ==========================================================================
+name: mobile
+
+on:
+  push:
+    paths:
+      - 'mobile/**'
+      - '.github/workflows/mobile.yml'
+  pull_request:
+    paths:
+      - 'mobile/**'
+      - '.github/workflows/mobile.yml'
+  # So it can be run by hand without touching a file.
+  workflow_dispatch:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          # Three lockfiles in this repo, so the cache has to be told which.
+          cache-dependency-path: mobile/package-lock.json
+
+      - run: npm ci
+
+      # The same script eas-build-post-install runs on a real build, so CI and
+      # the build-time gate cannot drift into checking different things.
+      - run: npm run checks

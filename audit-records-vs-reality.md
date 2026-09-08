@@ -1005,11 +1005,41 @@ in mobile unchecked** — impure calls during render, unescaped entities, unused
 bindings, exhaustive-deps, and whatever the next rule catches. Mobile is
 Android-first and the client most users will actually hold.
 
-**Why it stays open rather than being fixed here:** 73 errors is a session of
-work, and a gate switched on over a failing codebase gets switched off again.
-The route is to fix the 73, then wire it — the same order `site` took, where the
-gate was free because the count was already zero and it caught a real bug within
-the hour.
+**✅ CLOSED 8 Sep 2026. ALL THREE APPS ARE GATED.**
+
+| App | Gate | Runs on |
+|---|---|---|
+| `site` | `eslint . --max-warnings=0` + three custom checks | `next build` |
+| `admin` | `eslint . --max-warnings=0 && tsc --noEmit` | `next build` |
+| `mobile` | `eslint . --max-warnings=0 && tsc --noEmit` | `eas-build-post-install` |
+
+Mobile went **73 errors, 32 warnings, 6 tsc → 0, 0, 0.** The route was the one
+this item predicted: fix the count first, then wire the gate, because a gate
+switched on over a failing codebase gets switched off again.
+
+**Two are documented exceptions, not fixes** — `AppEntry`'s reset-on-sign-out
+effect and Expo's own `use-color-scheme.web.ts`. Both carry an
+`eslint-disable-next-line` **with the reasoning beside it**, and in the AppEntry
+case an explicit note that the honest fix is a restructure and that it was NOT
+hidden behind a ref, because a ref would leave the anti-pattern in place while
+making it invisible. A clean report with a judgement inside it is worth more
+than a clean report.
+
+**What the gates actually produced on their first runs**, which is the argument
+this item was making:
+
+* `admin` — a live silent data-loss bug on the setting that gates publication
+  (item 26). Nothing else would have found it.
+* `mobile` — `<Stack style={...}>`, a prop React Navigation ignores, so a style
+  had never applied to anything. **Found by tsc, not lint**, and it is a
+  different argument: lint caught behaviour that would eventually have been
+  noticed; tsc caught something that was never going to announce itself. It sat
+  inside this item's own baseline number, counted rather than read.
+
+**And the counter-example, kept deliberately:** the dead portfolio photo tap on
+the stylist page — a haptic and nothing else — was found by a person tapping a
+picture, in about a minute, and no static check would ever have found it. See
+26/26b.
 
 **20. A FILTERED FEED AND A BROKEN FEED LOOK IDENTICAL — NEW, 7 Sep 2026.**
 
@@ -1614,9 +1644,46 @@ That is the same shape as everything else in this file: **a check that exists an
 is not reached.** Items 9 and 10 were a findability pass over features; this is
 findability for the checks themselves.
 
-Not scoped here. It covers all three apps, it is the natural home for the mobile
-gate that `eas build` makes awkward, and it is a decision about the project
-rather than a line in a lint sweep.
+**✅ WIRED 8 Sep 2026 — AND IT IS A SIGNAL, NOT A GATE.**
+
+`.github/workflows/{site,admin,mobile}.yml`, `ubuntu-latest`, each filtered to
+its own directory, each running that app's own `npm run checks`.
+
+**⚠️ READ THIS BEFORE RECORDING "CI IS WIRED" ANYWHERE ELSE.**
+
+**These run AFTER the commit is on `main`.** Nothing in them can stop a bad
+commit landing. They can only tell you one did. "CI is wired" and "commits are
+checked" are different statements, and letting the first be read as the second
+is precisely the class of wrong record this file exists to catch — see the
+correction section, where the same shape has now happened three times.
+
+**Branch protection requiring these checks is AVAILABLE AND NOT RECOMMENDED.**
+It is what would make them a gate. It also requires pull requests, and
+commit-direct-to-main is a considered choice for a solo project (`CLAUDE.md`).
+Micky's reasoning, recorded because it is the reason rather than an omission:
+*"requiring PRs to gate a check I'd see in a notification anyway changes how I
+work to enforce something I'd already know."* Revisit if a second person ever
+commits here.
+
+**Three workflows, not one.** `on.push.paths` is a workflow-level filter, not a
+job-level one, so a single workflow would either run all three apps on every
+push or need a change-detection job that itself runs every time. The apps share
+no code — separate `package.json`, separate lockfiles, no workspace linkage —
+so per-app workflows mean a mobile-only commit runs only mobile, and each app
+gets its own status rather than hiding behind another's failure.
+
+**Cost is not a consideration:** the repo is public, and Actions is free and
+unlimited on public repositories. That was checked before wiring rather than
+after a month of runs.
+
+**What is still true after this.** The build-time gates remain the only thing
+that can actually stop something shipping:
+
+| | Stops a bad commit landing | Stops a bad build shipping |
+|---|---|---|
+| GitHub Actions on push | **no** | no |
+| `npm run checks` in `next build` / `eas-build-post-install` | no | **yes** |
+| Branch protection (not enabled) | yes | no |
 
 **25. THE REJECTION NOTE IS UNMEDIATED FREE TEXT — MITIGATED, NOT CLOSED,
 7 Sep 2026.**
