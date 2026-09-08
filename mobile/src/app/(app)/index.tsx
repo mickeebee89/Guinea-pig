@@ -519,8 +519,7 @@ function ModelHomeContent() {
               It renders even when empty, and the empty text says WHICH empty —
               see the note below. It was hidden when empty for about an hour on
               8 Sep, which was wrong for the reason recorded in audit item 20. */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Stylist updates</Text>
+          <Section title="Stylist updates" boxed>
             {updates.length === 0 ? (
               /* ── AN EMPTY FEED STILL HAS TO SAY WHICH EMPTY IT IS ──────────
                  This section was hidden entirely when empty, which made audit
@@ -551,12 +550,11 @@ function ModelHomeContent() {
                 </Text>
               </TouchableOpacity>
             )}
-          </View>
+          </Section>
 
           {/* ── Upcoming sessions ── */}
           {upcomingSessions.length > 0 && (
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Upcoming treatments ({upcomingSessions.length})</Text>
+            <Section title={`Upcoming treatments (${upcomingSessions.length})`}>
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
@@ -624,13 +622,12 @@ function ModelHomeContent() {
                   </TouchableOpacity>
                 ))}
               </ScrollView>
-            </View>
+            </Section>
           )}
 
           {/* ── Needs your attention ── */}
           {(pendingApps.length > 0 || invites.length > 0 || toReview.length > 0) && (
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Needs your attention</Text>
+            <Section title="Needs your attention">
 
               {toReview.length > 0 && (
                 <>
@@ -769,12 +766,11 @@ function ModelHomeContent() {
                   })}
                 </>
               )}
-            </View>
+            </Section>
           )}
 
           {/* ── Favourites ── */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Favourites</Text>
+          <Section title="Favourites">
             {favouriteProviders.length === 0 ? (
               <View style={styles.emptyFavs}>
                 <Text style={styles.emptyFavsEmoji}>🤍</Text>
@@ -793,18 +789,18 @@ function ModelHomeContent() {
                 ))}
               </ScrollView>
             )}
-          </View>
+          </Section>
 
           {/* ── Nearby stylists ── */}
-          <View style={styles.section}>
-            {/* Header: title left + Filter pill right */}
-            <View style={styles.nearbyHeader}>
-              {/* "Nearby" only when we can actually measure it. Someone browsing
-                 from abroad, or with location off, is shown the whole list — so
-                 promising proximity would be a plain untruth. */}
-              <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>
-                {knowsLocation ? 'Nearby stylists' : 'Stylists'}
-              </Text>
+          {/* "Nearby" only when we can actually measure it. Someone browsing
+             from abroad, or with location off, is shown the whole list — so
+             promising proximity would be a plain untruth. */}
+          <Section
+            title={knowsLocation ? 'Nearby stylists' : 'Stylists'}
+            right={
+              /* The Filter pill sits in the header row but OUTSIDE the collapse
+                 toggle: a control there must not be swallowed by the tap that
+                 opens and closes the section. */
               <TouchableOpacity
                 style={[styles.filterBtn, (showFilters || hasActiveFilter) && styles.filterBtnActive]}
                 onPress={async () => {
@@ -816,7 +812,8 @@ function ModelHomeContent() {
                 <Ionicons name="options-outline" size={14} color={(showFilters || hasActiveFilter) ? Colors.white : Colors.roseDark} />
                 <Text style={[styles.filterBtnText, (showFilters || hasActiveFilter) && { color: Colors.white }]}>Filter</Text>
               </TouchableOpacity>
-            </View>
+            }
+          >
 
             {/* Search bar below */}
             <View style={styles.nearbySearchBar}>
@@ -1000,12 +997,11 @@ function ModelHomeContent() {
                 )}
               />
             )}
-          </View>
+          </Section>
 
           {/* ── Subscription status ── */}
           {isVerified && (
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Subscription</Text>
+            <Section title="Subscription">
               <View style={styles.subCard}>
                 <View style={styles.subIconWrap}>
                   <Ionicons name="diamond-outline" size={22} color={Colors.roseDark} />
@@ -1020,13 +1016,12 @@ function ModelHomeContent() {
                   <Text style={styles.subBadgeText}>Verified</Text>
                 </View>
               </View>
-            </View>
+            </Section>
           )}
 
           {/* ── Your impact ── */}
           {impact != null && impact.completed > 0 && (
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Your impact</Text>
+            <Section title="Your impact">
               <View style={styles.impactRow}>
                 <View style={styles.impactStat}>
                   <Text style={styles.impactNum}>{impact.completed}</Text>
@@ -1043,7 +1038,7 @@ function ModelHomeContent() {
                   </View>
                 )}
               </View>
-            </View>
+            </Section>
           )}
 
           <View style={styles.bottomPad} />
@@ -1063,6 +1058,59 @@ function ModelHomeContent() {
 }  // end ModelHomeContent
 
 // ── Favourite strip card ─────────────────────────────────────────────────────
+
+/**
+ * A dashboard section with a collapsible body.
+ *
+ * ⚠️ MODULE SCOPE, NOT INSIDE THE SCREEN. A component declared during render
+ * gets a new identity every render, so React unmounts and remounts it and its
+ * useState starts over — here that would collapse every open section the moment
+ * anything else on the dashboard changed. That is audit item 26, which cost a
+ * banned-words list in the admin console on 7 Sep. Same mistake, different app.
+ *
+ * `boxed` gives the section a border and a card background. The updates feed
+ * uses it so it reads as a feed rather than as one more heading with things
+ * under it.
+ */
+function Section({
+  title, children, boxed = false, right, defaultOpen = true,
+}: {
+  title: string
+  children: React.ReactNode
+  boxed?: boolean
+  /** Rendered at the right of the header, inside the row but outside the
+   *  collapse toggle — a control there must not swallow the tap. */
+  right?: React.ReactNode
+  defaultOpen?: boolean
+}) {
+  const [open, setOpen] = useState(defaultOpen)
+  return (
+    <View style={boxed ? styles.sectionBoxed : styles.section}>
+      <View style={styles.sectionHeaderRow}>
+        <TouchableOpacity
+          style={styles.sectionHeaderBtn}
+          onPress={async () => {
+            await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+            setOpen(v => !v)
+          }}
+          activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityState={{ expanded: open }}
+          accessibilityLabel={`${title}, ${open ? 'collapse' : 'expand'}`}
+        >
+          <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>{title}</Text>
+          <Ionicons
+            name={open ? 'chevron-up' : 'chevron-down'}
+            size={16}
+            color={Colors.muted}
+          />
+        </TouchableOpacity>
+        {right}
+      </View>
+      {open ? children : null}
+    </View>
+  )
+}
 
 /**
  * One stylist update, as a message rather than a notice.
@@ -1156,12 +1204,6 @@ const styles = StyleSheet.create({
     letterSpacing: -0.3,
   },
   // Nearby stylists — header (title + Filter), search bar (mirrors provider dashboard)
-  nearbyHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 10,
-  },
   nearbySearchBar: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
     backgroundColor: Colors.white, borderRadius: 12,
@@ -1260,6 +1302,25 @@ const styles = StyleSheet.create({
   section: {
     marginTop: 20,
     paddingHorizontal: 16,
+  },
+
+  sectionBoxed: {
+    marginTop: 20,
+    marginHorizontal: 16,
+    paddingHorizontal: 14,
+    paddingTop: 12,
+    paddingBottom: 14,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: Radius.lg,
+    backgroundColor: Colors.white,
+  },
+  sectionHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
+  // min-height 44 so the whole header is a comfortable tap target, not just
+  // the chevron.
+  sectionHeaderBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    minHeight: 44, flexShrink: 1,
   },
 
   // ── Stylist updates ──
