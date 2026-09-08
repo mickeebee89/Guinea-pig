@@ -1233,6 +1233,98 @@ absence. That is the counterpart to item 26, which no person would have found
 and a rule caught on its first run. Neither method would have found the other's
 defect.
 
+**✅ KEEP 26 AND 26b TOGETHER.** They are one screen, found two ways, and the
+temptation is always to pick one:
+
+| | Found by | Would the other method have found it? |
+|---|---|---|
+| **26** silent loss | `react-hooks/static-components`, first run of a new gate | **No.** It produces no error and no wrong data — you find it by losing something and not knowing |
+| **26b** silent success | A person clicking Save and seeing nothing happen | **No.** No rule fires on a button that says nothing |
+
+The argument is for both, not for whichever is cheaper.
+
+**27. A REFUSED WRITE REPORTS SUCCESS — IN ALL THREE APPS. NEW, 8 Sep 2026.
+25 SITES. NOT FIXED.**
+
+supabase-js does not reject when the database refuses a write. It resolves with
+`{ data: null, error }`. So this, which appears throughout the repo, cannot fail:
+
+    await supabase.from('suspensions').insert({ ... })   // result discarded
+    await logAction('ban', { ... })                      // recorded regardless
+
+**This is not the two-places family.** There is exactly ONE solution and it was
+written eleven months ago: `mobile/src/lib/db.ts`, whose header explains the
+whole problem and gives `mustWrite` (throw on refusal) and `tryWrite` (log, never
+throw — so "we don't care" is a decision in the code rather than an accident).
+
+**It never travelled.** It exists in mobile only, is used in six mobile files,
+and site and admin have no equivalent at all. The knowledge did travel —
+`site/app/(app)/bookings/actions.ts:17` has a comment reading *"Mobile handles
+this with mustWrite() and says exactly why"* — so someone read it, understood
+it, and wrote a note instead of the helper. **Same problem, one solution, and it
+didn't travel.**
+
+**⚠️ THE WORST SITE IS THE MODERATION EVIDENCE TRAIL.**
+`admin/app/users/page.tsx` `doAction()` runs warn, suspend, ban, reinstate,
+verify, fraud-flag, waive and comp — **every one discarding its result** — and
+then calls `logAction(action, ...)` unconditionally. So a suspension RLS refused
+is written into `admin_audit_log` as having happened, and the list refreshes as
+if it did.
+
+`admin_audit_log` is retained for six years as moderation evidence (0005, 0006).
+It can currently record a ban that never landed, and there is nothing in the row
+to say so.
+
+Compounding it: **`admin/lib/audit.ts` discards its own insert result**, so an
+audit row that failed to write is also silent. The record of the action and the
+action itself can each fail without a word.
+
+**The 25 sites** (auth calls like `signOut` excluded — discarding those is fine):
+
+| App | Sites | Notable |
+|---|---|---|
+| `admin` | 14 | `users/page.tsx` × 8 moderation actions; `lib/audit.ts`; `verification` × 2 notifications; `categories` × 2; `messages` × 1 |
+| `mobile` | 9 | favourites × 4, portfolio deletes × 2, verify-payment delete, notification read, push token |
+| `site` | 2 | `verify/actions.ts` delete, `availability.ts` notification fan-out |
+
+Several are genuinely "don't care" — marking a notification read, saving a push
+token. Those want `tryWrite`, not no check at all: the point is that the decision
+is visible.
+
+**Why this outranks the six swallowed READS found in mobile's lint sweep.** Those
+six make a failed read look like empty data — bad, and item 18's shape. These 25
+make a failed WRITE look like a completed one, on suspensions, bans, verification
+and the audit log. **The six are a sample of a smaller problem; this is the set
+of a larger one.**
+
+**Shape of the fix:** lift `db.ts` to a place all three apps can use — there is
+no workspace linkage, so that means three copies or a shared package, and that
+choice is itself the decision. Then convert the 25, choosing `mustWrite` or
+`tryWrite` at each one deliberately. `admin/app/users/page.tsx` first, and
+`logAction` must not run when the action it describes was refused.
+
+**28. THE REPO HAS NO CI. NEW, 8 Sep 2026. NOT FIXED.**
+
+Every gate built so far runs only where somebody happens to trigger it:
+
+| Gate | Runs when |
+|---|---|
+| `site` `npm run checks` | `next build` — so on a Vercel deploy, and locally if you remember |
+| `admin` `npm run checks` | same, added 7 Sep |
+| `mobile` | nothing yet; and mobile has no build step to hang one on, since builds go through `eas build` |
+
+There is no `.github/workflows` directory. Nothing runs on push, nothing runs on
+a pull request, and commits go direct to `main` — so the first thing that would
+catch a bad commit is a deploy.
+
+That is the same shape as everything else in this file: **a check that exists and
+is not reached.** Items 9 and 10 were a findability pass over features; this is
+findability for the checks themselves.
+
+Not scoped here. It covers all three apps, it is the natural home for the mobile
+gate that `eas build` makes awkward, and it is a decision about the project
+rather than a line in a lint sweep.
+
 **25. THE REJECTION NOTE IS UNMEDIATED FREE TEXT — MITIGATED, NOT CLOSED,
 7 Sep 2026.**
 
