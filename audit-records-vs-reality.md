@@ -244,7 +244,7 @@ fixed it in three places.
 The 25 discarded-result sites were real and counted. The generalisation from
 them was not.
 
-**⚠️ SECOND TIME IN A WEEK, AND THE SHAPE IS THE SAME.** The other was item 19's
+**⚠️ THREE TIMES IN A WEEK, AND THE SHAPE IS THE SAME.** The other was item 19's
 "admin 6", which was `moderation/page.tsx` measured while working in that file
 and written up as the whole app; the real figure was 22 across ten files.
 
@@ -252,6 +252,29 @@ and written up as the whole app; the real figure was 22 across ten files.
 |---|---|---|
 | Item 19 | One file's lint count | The app's lint count |
 | Item 27 | One surface's logging defect | The console's audit trail |
+| The admin lint rewrite | That it fixed a real race | That it satisfied the RULE by removing the synchronous setState |
+
+**⚠️ MAKE THAT THREE, 8 Sep 2026.** `react-hooks/set-state-in-effect` flags any
+call to a function it can see contains setState, wherever that setState sits —
+proven by `mobile/src/app/(app)/verify-payment.tsx`, which has none synchronously
+and is flagged anyway. And `admin/lib/useLoader.ts` passes the rule **even when
+it calls `run` directly**, because `run` is a parameter and the analyser cannot
+see into it.
+
+**So the rule went quiet because the loader became opaque, not because the defect
+was removed.** The race was real. The cancellation fix was real. The claim about
+*why the rule stopped firing* was never checked.
+
+**The rule was a prompt to look. The race was found by reading the sites it
+pointed at.** Those are different things and only one of them was tested.
+
+**This third instance is the hardest of the three to catch,** and Micky named
+why: *"I approved admin's rewrite on a reason that wasn't the real one. The work
+was right and the justification was wrong, which is harder to catch than a wrong
+decision, because the outcome looks like vindication."*
+
+A wrong decision announces itself. A right decision taken for a wrong reason does
+not — and the reason is what gets reused on the next one.
 
 Neither was a guess. Both were real measurements of something narrower than the
 claim built on them, which is exactly what makes them convincing. **A finding is
