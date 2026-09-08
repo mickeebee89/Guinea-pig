@@ -60,12 +60,21 @@ export default function MessagesPage() {
   async function send() {
     if (!selected || !title.trim() || !body.trim()) return
     setSending(true)
-    await supabase.from('notifications').insert({
+    // ⚠️ THIS SCREEN'S WHOLE JOB IS TO SEND SOMETHING TO A PERSON.
+    // The insert result was discarded, so a refused write cleared the form,
+    // flipped the "sent" confirmation and wrote an audit row saying it went.
+    // Audit item 27, on the one surface where silence is the entire failure.
+    const { error } = await supabase.from('notifications').insert({
       user_id: selected.id,
       type: 'admin_message',
       title: title.trim(),
       body: body.trim(),
     })
+    if (error) {
+      setSending(false)
+      alert(`Couldn't send this message: ${error.message}\n\nIt has NOT been sent, and nothing has been recorded.`)
+      return
+    }
     await logAction('admin_message_sent', {
       targetUserId: selected.id,
       details: { title, body },

@@ -1443,7 +1443,28 @@ for something that never ran.
 still ignore it — that is the remaining work, not something the function can
 force.
 
-**23 sites remain.**
+**✅ GROUP B CLOSED IN admin, 8 Sep 2026 — 6 more sites, and the list was
+re-measured rather than trusted.**
+
+The earlier scope named moderation's image toggle and bulk-approve as group B.
+Re-grepping showed **both already check their errors**, and turned up two sites
+the scope had missed. A list written once and reused is the item-19 shape, so
+this one was rebuilt from a fresh grep before anything was touched.
+
+| Site | What a refused write did |
+|---|---|
+| `messages` send | Cleared the form, flipped the "sent" confirmation and wrote an audit row. **On the one screen whose entire job is to send something to a person** |
+| `categories` update / create / toggle | Closed the form and logged the change as done |
+| `verification` approve → notify | User verified and never told |
+| `verification` reject → notify | User rejected and never told |
+| `Sidebar` signOut | Navigated to /login with a live admin session still open, on the console that can ban people |
+
+The two verification notifications are **warnings, not rollbacks**: the decision
+stands and only the message failed, which is the distinction an admin needs in
+order to act. The others refuse and say nothing has changed.
+
+**admin now has no discarded write results at all.** What remains of the original
+25 is mobile 9 and site 2; the rest were re-counted as already checked.
 
 **── A CATEGORY OF ITS OWN: KNOWLEDGE THAT TRAVELLED WITHOUT THE MECHANISM ──**
 

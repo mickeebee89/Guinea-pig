@@ -98,8 +98,11 @@ export default function VerificationQueuePage() {
         return
       }
 
-      // Only tell them once the state change actually stuck.
-      await supabase.from('notifications').insert({
+      // Only tell them once the state change actually stuck — and check that
+      // the telling worked. The state change stands either way, so this is a
+      // warning, not a rollback: the person IS verified and only the message
+      // failed, which is exactly the distinction they need in order to act.
+      const { error: notifyErr } = await supabase.from('notifications').insert({
         user_id: req.user.id,
         type: 'verification',
         title: isModel ? 'You\'re verified! ✅' : 'You\'re verified! 🎉',
@@ -107,6 +110,12 @@ export default function VerificationQueuePage() {
           ? 'Your Cavy profile is now verified. Your badge is live!'
           : 'Your identity check passed — your verified badge and profile are now live.',
       })
+      if (notifyErr) {
+        alert(
+          `${req.user.email ?? 'This user'} IS verified, but could not be notified: ${notifyErr.message}\n\n`
+          + 'Nothing needs re-approving. Tell them by hand if it matters.',
+        )
+      }
 
       await logAction('verification_approve', {
         targetUserId: req.user.id,
@@ -137,7 +146,7 @@ export default function VerificationQueuePage() {
         return
       }
 
-      await supabase.from('notifications').insert({
+      const { error: notifyErr } = await supabase.from('notifications').insert({
         user_id: req.user.id,
         type: 'verification',
         title: 'Verification not approved',
@@ -145,6 +154,15 @@ export default function VerificationQueuePage() {
           ? `Your verification was not approved: ${note}`
           : 'Your verification was not approved. Please resubmit with a clearer photo.',
       })
+      // The rejection stands; only the message failed. Said plainly because a
+      // rejected person who is never told is the silent failure this console
+      // exists to remove.
+      if (notifyErr) {
+        alert(
+          `The request is rejected, but the user could not be notified: ${notifyErr.message}\n\n`
+          + 'They have NOT been told. Contact them by hand.',
+        )
+      }
 
       await logAction('verification_reject', {
         targetUserId: req.user.id,

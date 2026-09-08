@@ -27,7 +27,14 @@ export default function Sidebar() {
   if (pathname === '/login') return null
 
   async function handleSignOut() {
-    await supabase.auth.signOut()
+    // Navigating to /login on a failed signOut leaves a live admin session
+    // behind a screen that says you are signed out — on the console that can
+    // ban people. Say it instead.
+    const { error } = await supabase.auth.signOut()
+    if (error) {
+      alert(`Couldn't sign out: ${error.message}\n\nYou are STILL SIGNED IN. Close the browser if you cannot retry.`)
+      return
+    }
     router.replace('/login')
   }
 

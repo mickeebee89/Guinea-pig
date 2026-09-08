@@ -52,11 +52,24 @@ export default function CategoriesPage() {
       is_active: form.is_active,
       sort_order: Number(form.sort_order),
     }
+    // Audit item 27: the write result was discarded, so a refused update or
+    // insert closed the form and wrote an audit row as if it had happened.
+    // Same order as app/users: do it, check it, then record it.
     if (editing) {
-      await supabase.from('treatment_categories').update(payload).eq('id', editing.id)
+      const { error } = await supabase
+        .from('treatment_categories').update(payload).eq('id', editing.id)
+      if (error) {
+        alert(`Couldn't save this category: ${error.message}\n\nNothing has changed.`)
+        return
+      }
       await logAction('category_update', { details: { category_id: editing.id, ...payload } })
     } else {
-      const { data } = await supabase.from('treatment_categories').insert(payload).select().single()
+      const { data, error } = await supabase
+        .from('treatment_categories').insert(payload).select().single()
+      if (error) {
+        alert(`Couldn't create this category: ${error.message}\n\nNothing has been added.`)
+        return
+      }
       await logAction('category_create', { details: { category_id: (data as Category)?.id, ...payload } })
     }
     setEditing(null)
@@ -65,7 +78,12 @@ export default function CategoriesPage() {
   }
 
   async function toggleActive(c: Category) {
-    await supabase.from('treatment_categories').update({ is_active: !c.is_active }).eq('id', c.id)
+    const { error } = await supabase
+      .from('treatment_categories').update({ is_active: !c.is_active }).eq('id', c.id)
+    if (error) {
+      alert(`Couldn't change this category: ${error.message}\n\nIt is unchanged.`)
+      return
+    }
     await logAction('category_toggle', { details: { category_id: c.id, is_active: !c.is_active } })
     reload()
   }
