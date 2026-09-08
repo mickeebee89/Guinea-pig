@@ -22,6 +22,7 @@ import SafetySheet from '@/components/SafetySheet'
 import SafetyButton from '@/components/SafetyButton'
 import { useProfileNav } from '@/lib/profileNav'
 import AvailabilityCalendar from '@/components/AvailabilityCalendar'
+import PhotoViewerModal from '@/components/PhotoViewerModal'
 
 // Raised from 165 on 2 Sep 2026. The safety pill collided with the Cavy
 // wordmark and the mascot's ear: the control row occupies roughly
@@ -142,6 +143,7 @@ export default function ProviderShopScreen() {
   const [safetyOpen,    setSafetyOpen]    = useState(false)
   const [isFavourite,   setIsFavourite]   = useState(false)
   const [refreshing,    setRefreshing]    = useState(false)
+  const [enlargedPhoto, setEnlargedPhoto] = useState<string | null>(null)
   const [shopDate,      setShopDate]      = useState<string | null>(null)
 
   const { loading, reload } = useLoader(`${id ?? ''}|${userId ?? ''}`, async stale => {
@@ -558,10 +560,26 @@ export default function ProviderShopScreen() {
                     contentContainerStyle={styles.portfolioRow}
                   >
                     {group.items.map(item => (
+                      /* ── THIS USED TO BE A HAPTIC AND NOTHING ELSE ────────────
+                         onPress fired the buzz and stopped there, so a tap felt
+                         like it had worked and no photo ever opened. A
+                         confirmation signal that does not depend on the thing it
+                         confirms — the same shape as this project's other
+                         findings, at its smallest, on the photos a model is
+                         actually choosing between.
+
+                         The viewer is image-only, so a video keeps its play
+                         overlay and does not respond to a tap AT ALL. Silence is
+                         honest; a buzz that opens nothing is not. Playing them
+                         is its own piece of work. */
                       <TouchableOpacity
                         key={item.id}
                         style={styles.portfolioThumb}
-                        onPress={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)}
+                        disabled={item.media_type === 'video'}
+                        onPress={async () => {
+                          await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+                          setEnlargedPhoto(item.media_url)
+                        }}
                         activeOpacity={0.85}
                       >
                         <Image source={{ uri: item.media_url }} style={styles.portfolioImg} resizeMode="cover" />
@@ -641,6 +659,8 @@ export default function ProviderShopScreen() {
           alreadyBlocked={isBlocked}
         />
       )}
+
+      <PhotoViewerModal uri={enlargedPhoto} onClose={() => setEnlargedPhoto(null)} />
     </View>
   )
 }
