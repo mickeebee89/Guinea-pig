@@ -65,7 +65,11 @@ export default async function Image() {
             border: '3px solid #F6E1EA',
           }}
         >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
+          {/* next/og renders this, not a browser — next/image does not work
+              here. no-img-element is switched off for these routes in
+              eslint.config.mjs rather than inline: an inline directive is a
+              warning wherever the rule happens not to fire, which is what broke
+              CI on 8 Sep. */}
           <img src={logoSrc} width={168} height={168} alt="" />
         </div>
 
