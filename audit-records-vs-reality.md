@@ -1355,9 +1355,85 @@ same argument this project already accepted for `apply_subscription_state`
 (0023–0025), which exists so `users.subscription_status` and `subscriptions`
 cannot drift apart. The precedent is set; this is the same shape.
 
-It is a migration plus a rewrite of `doAction`, and it should cover the other
-admin surfaces that pair a write with a log — verification approve/reject,
-moderation decisions, category edits — or it just moves the seam.
+**── SCOPE, 8 Sep 2026 ─────────────────────────────────────────**
+
+**First, a correction to item 27's framing.** Surveying all fourteen `logAction`
+call sites shows `app/providers`, `app/reports` and `app/verification` **already**
+check their write's error before logging — `providers/page.tsx:101` even carries
+the comment *"Don't write an audit entry claiming an action that didn't happen."*
+So the **false-entry** defect was specific to `app/users/page.tsx`. The other
+surfaces have the weaker problem: a **gap**, not a lie.
+
+That narrows this item and is worth stating plainly, because item 27 implied the
+false entry was everywhere and it was not.
+
+**What remains is atomicity, and the surfaces divide into three groups.**
+
+| Group | Surfaces | State today |
+|---|---|---|
+| **A — decision + evidence** | `users` (8 actions), `reports` (5), `providers` (4), `verification` (approve/reject), `moderation` (status-post approve/reject) | Error checked, order correct, **not atomic**: the action can land and the log fail |
+| **B — write result discarded** | `categories` × 3, `settings`, `messages`, moderation image toggle + bulk-approve | Item 27's remaining work. Fix that first — atomicity on an unchecked write is meaningless |
+| **C — already fine** | — | Nothing yet |
+
+**Group A is this item. Group B is item 27.** Doing them in the other order
+would wrap a transaction around a write nobody checks.
+
+**⚠️ THE STRONGEST CASE IS `verification` APPROVE, AND IT IS WORSE THAN A PAIR.**
+It is FIVE sequential writes: `users.is_verified`, `providers.is_published`,
+`verification_requests.status`, a notification, then the audit row. Three of its
+own alerts already describe partial-failure states in prose — *"This user is
+verified and published, but the request could not be closed… it will still show
+as pending"*. Those sentences are the design admitting it cannot be consistent.
+It is the surface that most needs one transaction and the one where a naive pair
+would move the seam rather than close it.
+
+**The precedent is exact.** `apply_subscription_state` (0023–0025) exists so
+`users.subscription_status` and `subscriptions` cannot disagree, and every caller
+is forbidden from writing either table directly. Same argument, on a record kept
+six years as the evidence for a ban.
+
+**Proposed shape — one migration, five `SECURITY DEFINER` functions:**
+
+    admin_act_on_user(p_user_id, p_action, p_reason, p_duration_days)
+    admin_act_on_report(p_report_id, p_action, p_reason, p_duration_days)
+    admin_act_on_provider(p_provider_id, p_action, p_reason)
+    admin_decide_verification(p_request_id, p_decision, p_note)
+    admin_decide_status_post(p_post_id, p_decision, p_note)
+
+Each one: assert the caller is an admin (`is_admin()`, not a client claim), do
+the state change, insert the `admin_audit_log` row, commit or roll back as one.
+The client calls `supabase.rpc(...)` and gets a single error or a single success
+— there is no partial state left for it to describe in an alert.
+
+**Three things to decide before writing it, not during:**
+
+1. **Notifications: inside or outside?** They are a side effect, not evidence.
+   A failed notification should not roll back a ban. Proposed: OUTSIDE the
+   transaction, fired after it returns, and its failure reported to the admin
+   rather than silently logged — which is what `moderation`'s rejection notice
+   already does deliberately.
+2. **What happens to the direct writes?** `apply_subscription_state`'s rule is
+   *never write either table directly*. The same rule here means the client can
+   no longer touch `suspensions` or `admin_audit_log` — which is enforceable
+   with RLS, and that is a second migration and a real decision, not a detail.
+3. **The toggles.** `flag`, `waive` and `comp` compute `!current` in the client
+   from a row that may be stale. Inside a function they can read the current
+   value and flip it atomically, which removes a race nobody has hit yet. Worth
+   doing while the code is open.
+
+**Not scoped: the mobile and site equivalents.** They pair writes with
+notifications rather than with audit rows, so they are item 27's problem, not
+this one.
+
+**Why the fall-out from the `users` rewrite is the better finding.** Collapsing
+eight `if` branches into one `switch` forced an exhaustive case, and the default
+now returns an error. Before, an action string added to a menu but not to the
+branch chain would have fallen straight through to `logAction` and written an
+audit row for something that never ran — a false entry through a door nobody was
+watching, in the surface where a false entry matters most. It was not found by
+looking for it; it was found because the rewrite made the missing case
+impossible to leave implicit. **A structure that cannot omit a case beats a
+review that has to notice one.**
 
 **── ARE THE ROWS ALREADY IN admin_audit_log TRUSTWORTHY? ───────────────**
 
