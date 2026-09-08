@@ -108,6 +108,14 @@ type Invite = {
   created_at: string
 }
 
+/** A stylist's live 48-hour update, as it appears in the model's feed. */
+type StylistUpdate = {
+  providerId: string
+  name:       string
+  picUrl:     string | null
+  body:       string
+}
+
 type SubscriptionInfo = { status: string; periodEnd: string | null }
 type ImpactInfo      = { completed: number; distinctProviders: number }
 
@@ -149,6 +157,8 @@ function ModelHomeContent() {
   const userId = session?.user?.id
 
   const [providers, setProviders]               = useState<Provider[]>([])
+  const [updates,   setUpdates]                 = useState<StylistUpdate[]>([])
+  const [allUpdates, setAllUpdates]             = useState(false)
   const [favouriteIds, setFavouriteIds]         = useState<Set<string>>(new Set())
   const [selectedCategory, setSelectedCategory] = useState('All')
   const [search, setSearch]                     = useState('')
@@ -210,7 +220,7 @@ function ModelHomeContent() {
         }
       }).catch(() => {})
 
-      const [{ data: provData }, { data: favData }, blockedIds] = await Promise.all([
+      const [{ data: provData }, { data: favData }, blockedIds, { data: statusData }] = await Promise.all([
         supabase
           .from('providers')
           .select('id, user_id, name, profile_pic_url, is_verified, rating, location_text, latitude, longitude, provider_treatments(category)')
@@ -220,12 +230,25 @@ function ModelHomeContent() {
           .select('provider_id')
           .eq('user_id', userId),
         getBlockedIds(userId).catch(() => new Set<string>()),
+        // APPROVED and unexpired only. Same filters as the web feed
+        // (site/lib/queries/dashboard.ts) — the moderation state and the expiry
+        // are the database's business, not this screen's.
+        supabase
+          .from('status_posts')
+          .select('provider_id, body, created_at')
+          .eq('moderation_status', 'approved')
+          .gt('expires_at', new Date().toISOString())
+          .order('created_at', { ascending: false }),
       ])
 
+      // Mutual block: hide any stylist whose owning user is blocked either
+      // direction. Held in a local so the update feed can join against exactly
+      // the same set — see below for why that matters.
+      const visibleProviders = (provData as any[] ?? [])
+        .filter(p => !blockedIds.has(p.user_id as string))
+
       if (provData) {
-        // Mutual block: hide any stylist whose owning user is blocked either direction.
-        setProviders((provData as any[])
-          .filter(p => !blockedIds.has(p.user_id as string))
+        setProviders(visibleProviders
           .map(p => ({
           id:                  p.id,
           name:                (p.name as string) || 'Stylist',
@@ -239,6 +262,37 @@ function ModelHomeContent() {
           distance:            null,
         })))
       }
+
+      // ── THE FEED JOINS AGAINST THE VISIBLE PROVIDER SET, NOT status_posts ──
+      //
+      // A post whose stylist is not in that set is dropped, and the two reasons
+      // that happens are both deliberate: the shop is unpublished (an
+      // unpublished shop is invisible, and an update must not be a way round
+      // that) or the pair is blocked. It is the same rule the web feed applies
+      // and the same one that made a post look missing on 7 Sep when a test
+      // block was still in place — audit item 20.
+      //
+      // ONE UPDATE PER STYLIST. The query is newest-first, so the first row seen
+      // for a provider wins. Two live posts from one shop would read as a feed
+      // rather than as a status, and the composer enforces the same rule by
+      // clearing the previous post; this is the reader-side half.
+      const provById: Record<string, any> = {}
+      for (const p of visibleProviders) provById[p.id as string] = p
+      const seen = new Set<string>()
+      setUpdates(((statusData as any[]) ?? [])
+        .filter(sp => {
+          const pid = sp.provider_id as string
+          if (seen.has(pid) || !provById[pid]) return false
+          seen.add(pid)
+          return true
+        })
+        .map(sp => ({
+          providerId: sp.provider_id as string,
+          name:       (provById[sp.provider_id]?.name as string) || 'Stylist',
+          picUrl:     (provById[sp.provider_id]?.profile_pic_url as string | null) ?? null,
+          body:       sp.body as string,
+        })))
+
       if (favData) {
         setFavouriteIds(new Set((favData as { provider_id: string }[]).map(f => f.provider_id)))
       }
@@ -442,6 +496,38 @@ function ModelHomeContent() {
               </TouchableOpacity>
             </View>
           </View>
+
+          {/* ── Stylist updates ──
+              TOP OF THE PAGE, and capped at five. These are perishable — 48
+              hours — so they are worth seeing first, but an uncapped feed on a
+              busy week would push a model's own bookings off the screen. Five
+              fit without scrolling; the rest are one tap away.
+
+              Hidden entirely when empty rather than showing "nothing yet": at
+              the top of a dashboard that is a permanent empty box, and there is
+              no filter here whose absence needs explaining. */}
+          {updates.length > 0 && (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Stylist updates</Text>
+              {(allUpdates ? updates : updates.slice(0, 5)).map(u => (
+                <UpdateRow key={u.providerId} update={u} onOpen={() => openProvider(u.providerId)} />
+              ))}
+              {updates.length > 5 && (
+                <TouchableOpacity
+                  onPress={async () => {
+                    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+                    setAllUpdates(v => !v)
+                  }}
+                  style={styles.updatesMoreBtn}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.updatesMoreText}>
+                    {allUpdates ? 'Show fewer' : `Show all ${updates.length}`}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
 
           {/* ── Upcoming sessions ── */}
           {upcomingSessions.length > 0 && (
@@ -954,6 +1040,48 @@ function ModelHomeContent() {
 
 // ── Favourite strip card ─────────────────────────────────────────────────────
 
+/**
+ * One stylist update, as a message rather than a notice.
+ *
+ * The avatar and the name are the link to the profile; the bubble is not
+ * tappable. Making the whole row one target read as a system notice rather than
+ * as a person saying something — the same decision as the web feed, and the
+ * reason that one was restyled on 7 Sep.
+ *
+ * The bubble is translucent so it sits on the page rather than becoming a second
+ * card, and its tail is drawn OUTSIDE the bubble's own box: two overlapping
+ * translucent shapes show a darker seam where they cross.
+ */
+function UpdateRow({ update, onOpen }: { update: StylistUpdate; onOpen: () => void }) {
+  return (
+    <View style={styles.updateRow}>
+      <TouchableOpacity onPress={onOpen} activeOpacity={0.8} style={styles.updateAvatarBtn}>
+        {update.picUrl ? (
+          <Image source={{ uri: update.picUrl }} style={styles.updateAvatar} />
+        ) : (
+          <View style={styles.updateAvatarPlaceholder}>
+            <Text style={styles.updateAvatarInitial}>
+              {update.name[0]?.toUpperCase() ?? '?'}
+            </Text>
+          </View>
+        )}
+      </TouchableOpacity>
+
+      <View style={styles.updateBody}>
+        <TouchableOpacity onPress={onOpen} activeOpacity={0.7}>
+          <Text style={styles.updateName} numberOfLines={1}>{update.name}</Text>
+        </TouchableOpacity>
+        <View style={styles.updateBubbleWrap}>
+          <View style={styles.updateTail} />
+          <View style={styles.updateBubble}>
+            <Text style={styles.updateText}>{update.body}</Text>
+          </View>
+        </View>
+      </View>
+    </View>
+  )
+}
+
 function FavouriteCard({ provider, onPress }: { provider: Provider; onPress: () => void }) {
   const cats = provider.provider_treatments.map(t => t.category).slice(0, 2)
   return (
@@ -1109,6 +1237,39 @@ const styles = StyleSheet.create({
     marginTop: 20,
     paddingHorizontal: 16,
   },
+
+  // ── Stylist updates ──
+  updateRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginTop: 12 },
+  updateAvatarBtn: { width: 44, height: 44, borderRadius: 22, overflow: 'hidden' },
+  updateAvatar: { width: 44, height: 44, borderRadius: 22 },
+  updateAvatarPlaceholder: {
+    width: 44, height: 44, borderRadius: 22,
+    backgroundColor: Colors.softPink,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  updateAvatarInitial: { fontFamily: Fonts.bodyBold, fontSize: 16, color: Colors.roseDark },
+  updateBody: { flex: 1, minWidth: 0 },
+  updateName: { fontFamily: Fonts.bodyBold, fontSize: 13, color: Colors.warmDark },
+  updateBubbleWrap: { flexDirection: 'row', alignItems: 'flex-start', marginTop: 3 },
+  // Drawn as a triangle to the LEFT of the bubble, never overlapping it.
+  updateTail: {
+    width: 0, height: 0,
+    borderTopWidth: 0,
+    borderRightWidth: 8, borderRightColor: Colors.softPink + 'B3',
+    borderBottomWidth: 8, borderBottomColor: 'transparent',
+  },
+  updateBubble: {
+    flex: 1,
+    backgroundColor: Colors.softPink + 'B3',
+    borderTopRightRadius: 14,
+    borderBottomLeftRadius: 14,
+    borderBottomRightRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+  },
+  updateText: { fontFamily: Fonts.bodyBold, fontSize: 14, color: Colors.warmDark, lineHeight: 19 },
+  updatesMoreBtn: { minHeight: 44, justifyContent: 'center', marginTop: 4 },
+  updatesMoreText: { fontFamily: Fonts.bodyBold, fontSize: 13, color: Colors.roseDark },
   sectionTitle: {
     fontFamily: Fonts.heading,
     fontSize: 18,
