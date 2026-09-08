@@ -601,10 +601,11 @@ export default function ProviderDashboardScreen() {
     // Once location is DENIED the coords will never come, so fetch anyway with
     // nulls: nearby_models treats a null radius as "everyone", so a stylist who
     // declines the permission still gets a full list instead of an empty screen.
-    if ((providerLat == null || providerLng == null) && !locationDenied) {
-      setNearbyLoading(true)
-      return
-    }
+    // No setNearbyLoading(true) here: the flag STARTS true and this branch can
+    // only run before the first successful fetch — coords null and permission
+    // not yet denied. Setting it was a no-op that happened to look like the
+    // thing holding the spinner on.
+    if ((providerLat == null || providerLng == null) && !locationDenied) return
     let cancelled = false
     ;(async () => {
       const { data, error } = await supabase.rpc('nearby_models', {

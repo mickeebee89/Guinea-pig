@@ -35,6 +35,9 @@ const CATEGORY_COLOR: Record<string, string> = {
   'Spray Tan': CategoryColors.sprayTan,
 }
 
+/** Stable identity so the derived reading does not change every render. */
+const EMPTY_SLOT_KEYS: Set<string> = new Set()
+
 const TOTAL_STEPS = 7
 const NOTE_MAX    = 300
 
@@ -135,8 +138,19 @@ export default function ApplySessionScreen() {
   // Taken slots for the selected date, from the server-side taken_slots RPC
   // (pending/accepted sessions only) — so we never read other users' sessions on the
   // client. Keyed by normalised `start|end`. takenError → conservative: treat all taken.
-  const [takenSlotKeys,   setTakenSlotKeys]   = useState<Set<string>>(new Set())
-  const [takenError,      setTakenError]      = useState<string | null>(null)
+  /**
+   * The answer is stored WITH the date it is for, and the two readings below are
+   * derived from that. Previously the effect cleared both pieces of state
+   * synchronously whenever the date changed — an effect whose job was to undo
+   * state, which is also the shape react-hooks/set-state-in-effect objects to.
+   * Same fix as SuspensionGate: a comparison, not a flag.
+   */
+  const [taken, setTaken] = useState<{
+    forDate: string | null
+    keys: Set<string>
+    error: string | null
+  }>({ forDate: null, keys: new Set(), error: null })
+
   // Bumped to force a taken_slots re-fetch for the same date (e.g. after a booking
   // conflict) so the just-taken slot flips to "Booked" without changing selectedDate.
   const [takenNonce,      setTakenNonce]      = useState(0)
@@ -149,6 +163,9 @@ export default function ApplySessionScreen() {
   const [consent,       setConsent]      = useState<AcceptedConsent | null>(null)
   const [step,          setStep]         = useState<1|2|3|4|5|6|7>(preDate ? 2 : 1)
   const [selectedDate,  setSelectedDate] = useState<string | null>(preDate || null)
+
+  const takenSlotKeys = taken.forDate === selectedDate ? taken.keys : EMPTY_SLOT_KEYS
+  const takenError    = taken.forDate === selectedDate ? taken.error : null
   const [selectedSlot,  setSelectedSlot] = useState<AvailabilitySlot | null>(null)
   const [selectedTreatId,setSelectedTreatId]= useState<string | null>(null)
   const [note,          setNote]         = useState('')
@@ -173,8 +190,15 @@ export default function ApplySessionScreen() {
 
   useEffect(() => {
     if (!providerId || !userId) return
-    setLoadFailed(false)
-    async function load() {
+    // ── THE BODY IS INLINE, AND IT CANCELS ─────────────────────────
+    // This was a named load() called from the effect, with no cancellation and
+    // a synchronous setLoadFailed(false) before it. Both mattered: the gate
+    // below calls router.replace(), so a superseded run could route a model
+    // somewhere they had already navigated away from.
+    let cancelled = false
+    const stale = () => cancelled
+    ;(async () => {
+      if (!stale()) setLoadFailed(false)
       // Gate: models must have BOTH an active subscription AND identity verification.
       // Route to whichever step is missing (subscribe-first): no sub → subscribe;
       // subscribed but unverified → verify-payment; both → proceed.
@@ -264,22 +288,20 @@ export default function ApplySessionScreen() {
         }
       } catch {}
 
+      if (stale()) return
       setLoading(false)
-    }
-    load()
-  }, [providerId, userId, todayKey, reloadNonce])
+    })()
+    return () => { cancelled = true }
+  }, [providerId, userId, todayKey, reloadNonce, providerName, router])
 
   // Which of this provider's slots are already taken on the selected date. Uses the
   // server-side taken_slots RPC (pending/accepted only) instead of reading others'
   // sessions, so the sessions table can be locked down to participants.
   useEffect(() => {
-    if (!providerId || !selectedDate) {
-      setTakenSlotKeys(new Set())
-      setTakenError(null)
-      return
-    }
+    // No clearing here any more — with no date selected the derived readings
+    // above are already empty.
+    if (!providerId || !selectedDate) return
     let cancelled = false
-    setTakenError(null)
     ;(async () => {
       const { data, error } = await supabase.rpc('taken_slots', {
         p_provider_id: providerId,
@@ -290,12 +312,19 @@ export default function ApplySessionScreen() {
         // Surface, don't swallow. Conservative: with availability unverifiable, flag
         // every slot taken so a booked slot can never be shown as free.
         console.error('taken_slots RPC failed:', error)
-        setTakenError(error.message ?? 'Could not check slot availability')
-        setTakenSlotKeys(new Set())
+        setTaken({
+          forDate: selectedDate,
+          keys: new Set(),
+          error: error.message ?? 'Could not check slot availability',
+        })
         return
       }
       const rows = (data ?? []) as { start_time: string; end_time: string }[]
-      setTakenSlotKeys(new Set(rows.map(r => slotKey(r.start_time, r.end_time))))
+      setTaken({
+        forDate: selectedDate,
+        keys: new Set(rows.map(r => slotKey(r.start_time, r.end_time))),
+        error: null,
+      })
     })()
     return () => { cancelled = true }
   }, [providerId, selectedDate, takenNonce])

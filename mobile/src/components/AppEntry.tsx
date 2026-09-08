@@ -35,18 +35,22 @@ export default function AppEntry() {
   const [confirmParams,  setConfirmParams]  = useState<ConfirmParams | null>(null)
   const [forgotEmail,    setForgotEmail]    = useState('')
 
-  // Role for the authenticated app
-  const [role,        setRole]        = useState<string | null>(null)
-  const [roleLoading, setRoleLoading] = useState(false)
+  // Role for the authenticated app.
+  //
+  // ── THE ANSWER IS STORED WITH THE USER IT IS FOR ───────────────────
+  // `roleLoading` used to be a flag set true synchronously in the effect and
+  // cleared in two places, which meant the flag and the answer could disagree
+  // for a render — and on sign-out the effect existed only to undo state. It is
+  // a comparison instead: the role I hold is not for the user I am looking at.
+  // Same fix as SuspensionGate, and the same one admin's useLoader is built on.
+  const uid = session?.user.id ?? null
+  const [roleAnswer, setRoleAnswer] =
+    useState<{ forUser: string; role: string | null } | null>(null)
+  const roleLoading = uid !== null && roleAnswer?.forUser !== uid
+  const role = roleLoading ? null : (roleAnswer?.role ?? null)
 
   useEffect(() => {
-    if (!session) {
-      setRole(null)
-      setRoleLoading(false)
-      return
-    }
-
-    setRoleLoading(true)
+    if (!session) return
 
     // Resolve the role AND self-heal any half-created account in one pass: this
     // checks whether the users (and providers) row exists and recreates only the
@@ -62,16 +66,39 @@ export default function AppEntry() {
           "We couldn't finish loading your account, please try again.",
         )
       }
-      setRole(resolvedRole)
-      setRoleLoading(false)
+      setRoleAnswer({ forUser: session.user.id, role: resolvedRole })
     })
 
     return () => { cancelled = true }
+    // Keyed on the user id, not the session object: the session identity changes
+    // on every token refresh (roughly hourly) and re-running ensureProfile then
+    // would be pointless work. The closure's session is stale only in its token,
+    // which is not what ensureProfile reads.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.user.id])
 
-  // Reset auth flow to welcome when session disappears (sign-out)
+  /**
+   * ⚠️ DOCUMENTED EXCEPTION — react-hooks/set-state-in-effect, 8 Sep 2026.
+   *
+   * Reset the auth flow to welcome when the session disappears (sign-out).
+   * Without it, signing out of an account you reached via the login screen
+   * drops you back on that login screen with stale confirm params.
+   *
+   * THE HONEST FIX IS A RESTRUCTURE, NOT A REWORDING. `authView`,
+   * `confirmParams` and `forgotEmail` all live in this component and are read
+   * only in the signed-out branch. Moving them into a child keyed on
+   * `session?.user.id` would make the reset a remount and remove this effect
+   * entirely — which is the correct answer and is a refactor of the component
+   * that gates the whole app.
+   *
+   * It is NOT done here, and NOT silenced by hiding the call behind a ref: the
+   * rule is right, and a ref would leave the anti-pattern in place while making
+   * it invisible. Recorded as an exception so the next person sees a judgement
+   * rather than a clean report.
+   */
   useEffect(() => {
     if (!session) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setAuthView('welcome')
       setConfirmParams(null)
     }

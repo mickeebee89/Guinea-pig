@@ -59,9 +59,23 @@ export function ConsentGate({ onAccept }: Props) {
   const [loadError, setLoadError] = useState<string | null>(null)
   const [ticked, setTicked] = useState<Record<string, boolean>>({})
 
-  const load = async () => {
-    setLoading(true)
-    setLoadError(null)
+  /**
+   * ── THE FETCH LIVES IN THE EFFECT, AND THE RETRY RE-TRIGGERS IT ──────
+   *
+   * This was a named `load()` called from the effect and again from the retry
+   * button. Two entry points to one fetch, no cancellation, and the effect's
+   * first act was a synchronous setLoading(true).
+   *
+   * Inlined: every setState now happens after an await, on a run that has not
+   * been superseded. The retry bumps a nonce, which is a plain event-handler
+   * write, and the same effect runs again. One entry point, and the analyser can
+   * see the ordering rather than having to assume the worst across a call.
+   */
+  const [retryNonce, setRetryNonce] = useState(0)
+
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
     const { data, error } = await supabase
       .from('consent_documents')
       .select('id, version, title, body, content_hash, acknowledgements')
@@ -70,6 +84,7 @@ export function ConsentGate({ onAccept }: Props) {
       .limit(1)
       .maybeSingle()
 
+    if (cancelled) return
     if (error) {
       setLoadError('We couldn’t load the consent terms. Please check your connection and try again.')
     } else if (!data) {
@@ -83,9 +98,9 @@ export function ConsentGate({ onAccept }: Props) {
       setTicked({})   // never pre-ticked
     }
     setLoading(false)
-  }
-
-  useEffect(() => { load() }, [])
+    })()
+    return () => { cancelled = true }
+  }, [retryNonce])
 
   const ticks   = (doc?.acknowledgements ?? []).filter(a => a.requires_tick)
   const notices = (doc?.acknowledgements ?? []).filter(a => !a.requires_tick)
@@ -130,7 +145,11 @@ export function ConsentGate({ onAccept }: Props) {
         </View>
         <Text style={styles.stateTitle}>Can’t continue just yet</Text>
         <Text style={styles.stateText}>{loadError}</Text>
-        <TouchableOpacity style={styles.retryBtn} onPress={load} activeOpacity={0.9}>
+        <TouchableOpacity
+          style={styles.retryBtn}
+          onPress={() => setRetryNonce(n => n + 1)}
+          activeOpacity={0.9}
+        >
           <Ionicons name="refresh" size={16} color={Colors.white} />
           <Text style={styles.retryBtnText}>Try again</Text>
         </TouchableOpacity>

@@ -61,7 +61,9 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "checks": "eslint . --max-warnings=0 && tsc --noEmit",
+    "eas-build-post-install": "npm run checks"
   },
   "private": true
 }
