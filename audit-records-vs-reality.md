@@ -1676,6 +1676,63 @@ gets its own status rather than hiding behind another's failure.
 unlimited on public repositories. That was checked before wiring rather than
 after a month of runs.
 
+**✅ AND IT EARNED ITS KEEP ON THE FIRST RUN — SEE ITEM 30.**
+
+**30. TWO GATES HAD NEVER PASSED ANYWHERE EXCEPT A MACHINE THAT ALREADY HAD THE
+ANSWER — FOUND BY CI'S FIRST RUN, 8 Sep 2026.**
+
+`admin` passed. `site` and `mobile` failed on `npm run checks`, not on
+`npm ci` — and both passed in the working tree. Something generated and
+gitignored was satisfying them, and **locally-satisfied had been treated as
+passing** for as long as either gate has existed.
+
+**⚠️ MOBILE IS THE SERIOUS ONE, AND IT IS NOT REALLY A CI PROBLEM.**
+`mobile/tsconfig.json` includes `expo-env.d.ts` and `.expo/types/**`. Both are
+gitignored — Expo generates the first on `expo start` and its own header says to
+keep it out of git. On a clean checkout neither exists, `expo/types` is never
+referenced, `declare module '*.css'` is therefore absent, and the side-effect
+import of `src/global.css` fails: **TS2307, exit 2.**
+
+`eas-build-post-install` runs that same script in exactly that kind of clean
+environment. **The mobile build gate wired that morning would have failed on its
+first real build.** It had never passed anywhere but a tree that already held the
+generated files. CI found it before a build did, which is the whole argument for
+item 28 arriving as evidence rather than as a claim.
+
+Fixed by committing the one line that matters, `src/types/expo.d.ts`:
+`/// <reference types="expo/types" />`.
+
+**⚠️ AND THE FIRST ATTEMPT AT THAT FIX WAS ITSELF GITIGNORED.** It was called
+`src/types/expo-env.d.ts`. `mobile/.gitignore` line 14 is `expo-env.d.ts` with no
+leading slash, which git matches as a **basename at any depth** — so the fix was
+silently not committed and the next fresh clone failed identically. Found by
+re-cloning, not by looking at the working tree. Same lesson twice in an hour.
+
+**SITE — FIXED, CAUSE NOT KNOWN, AND RECORDED THAT WAY.**
+`app/opengraph-image.tsx` carried an inline
+`// eslint-disable-next-line @next/next/no-img-element`. On the Linux runner the
+rule did not fire, so the directive was **unused** — which is a warning, which
+`--max-warnings=0` turns into a failure.
+
+**It was not reproduced here.** A fresh clone on this machine still fires the
+rule, so the difference is the environment (Windows/Node 24 vs Linux/Node 22) and
+no Linux runner was available to bisect it. That is written into
+`site/eslint.config.mjs` as an open question rather than dressed up as a
+diagnosis.
+
+The fix does not depend on the answer: the suppression moved from an inline
+directive to a **config-level rule override** for the OG image routes, and a
+config override is never reported as an unused directive. It is also correct on
+the merits — next/og is not a browser and cannot use `next/image`.
+
+**⚠️ STILL UNVERIFIED ON LINUX.** All three now pass `npm ci && npm run checks`
+from a fresh clone on this machine. The next CI run is what proves site.
+
+**The shape, and it is the one this file keeps recording.** A check that has only
+ever run where its inputs were already satisfied is not a check that passes — it
+is a check nobody has run. `npm run checks` was green on every machine it had
+touched, and both greens were an artefact of the machine.
+
 **What is still true after this.** The build-time gates remain the only thing
 that can actually stop something shipping:
 
