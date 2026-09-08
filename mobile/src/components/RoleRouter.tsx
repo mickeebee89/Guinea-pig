@@ -9,26 +9,36 @@ const RoleContext = createContext<string>('model')
 export const useAppRole = () => useContext(RoleContext)
 
 export default function RoleRouter({ session }: { session: Session }) {
-  const [role, setRole] = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
+  /**
+   * ── THE COMMON CASE IS NOT A FETCH, SO IT IS NOT STATE ───────────────
+   *
+   * The role is usually sitting in the session metadata we were handed, and
+   * copying it into state through an effect meant one guaranteed extra render
+   * with `loading` true — a spinner flashed for a value we already had.
+   *
+   * Derived here instead. The effect now runs ONLY in the case that genuinely
+   * needs a query: metadata with no role on it.
+   */
+  const metaRole = session.user.user_metadata?.role as string | undefined
+  const [fetchedRole, setFetchedRole] = useState<string | null>(null)
+  const role = metaRole ?? fetchedRole
+  const loading = !role
 
   useEffect(() => {
-    const metaRole = session.user.user_metadata?.role as string | undefined
-    if (metaRole) {
-      setRole(metaRole)
-      setLoading(false)
-      return
-    }
+    if (metaRole) return
+    let cancelled = false
     supabase
       .from('users')
       .select('role')
       .eq('id', session.user.id)
       .single()
       .then(({ data }) => {
-        setRole(data?.role ?? 'model')
-        setLoading(false)
+        // Cancellation added with the rewrite: without it a fast sign-out and
+        // sign-in as the other role could land the first answer last.
+        if (!cancelled) setFetchedRole(data?.role ?? 'model')
       })
-  }, [session.user.id])
+    return () => { cancelled = true }
+  }, [session.user.id, metaRole])
 
   if (loading) {
     return (

@@ -438,7 +438,9 @@ function ReviewCTA({ sessionId }: { sessionId: string }) {
   const [revieweeType, setRevieweeType] = useState<'provider' | 'model'>('provider')
 
   useEffect(() => {
-    if (!userId) { setState('hidden'); return }
+    // No user means nothing to resolve, and 'hidden' is already the outcome —
+    // rendering null below says so without a state write during the effect.
+    if (!userId) return
     let cancelled = false
     ;(async () => {
       // Derive direction from the session (mirror chat launcher: isModel = model_user_id === uid)

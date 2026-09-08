@@ -13,18 +13,30 @@ import { getMySuspension, Suspension } from '@/lib/suspension'
 
 export default function SuspensionGate({ children }: { children: ReactNode }) {
   const { session } = useAuth()
-  const [checking, setChecking] = useState(true)
-  const [suspension, setSuspension] = useState<Suspension | null>(null)
+  const userId = session?.user?.id ?? null
+  /**
+   * ── "CHECKING" IS A COMPARISON, NOT A FLAG ───────────────────────
+   *
+   * It is "the answer I hold is not for the user I am looking at". Storing it
+   * meant setting it true synchronously inside the effect, and meant the flag
+   * and the answer could disagree for a render. Same shape as admin's
+   * useLoader, which was written for the same rule.
+   */
+  const [answer, setAnswer] = useState<{ forUser: string | null; suspension: Suspension | null } | null>(null)
+  // No user: nothing to check and nothing to gate, so this is false without a
+  // write. Writing an 'answer' for the signed-out case was still a setState in
+  // the effect body, which is the thing being removed.
+  const checking = userId !== null && answer?.forUser !== userId
+  const suspension = checking ? null : (answer?.suspension ?? null)
 
   useEffect(() => {
+    if (!userId) return
     let cancelled = false
-    if (!session?.user?.id) { setSuspension(null); setChecking(false); return }
-    setChecking(true)
     getMySuspension().then(s => {
-      if (!cancelled) { setSuspension(s); setChecking(false) }
+      if (!cancelled) setAnswer({ forUser: userId, suspension: s })
     })
     return () => { cancelled = true }
-  }, [session?.user?.id])
+  }, [userId])
 
   // Don't flash the gate while we're still checking.
   if (checking) {
