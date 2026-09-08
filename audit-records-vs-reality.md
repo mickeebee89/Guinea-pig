@@ -1708,6 +1708,27 @@ was the reason for three workflows rather than one.
 It remains a signal and not a gate. Everything above about branch protection
 still stands.
 
+**31. `providers` HAS TWO COLUMNS FOR ONE COORDINATE PAIR — LOGGED
+8 Sep 2026, NOT FIXED.**
+
+Confirmed from `information_schema`, not from a file: `providers` carries
+`location_lat` / `location_lng` (positions 7–8) **and** `latitude` / `longitude`
+(positions 20–21). Both nullable, both `double precision`, no constraint tying
+them together.
+
+`site/lib/queries/dashboard.ts` already selects all four and coalesces, which is
+the reader-side symptom of exactly this.
+
+**The fifth instance of one thing with two columns**, after `location` /
+`location_text` (same table, positions 6 and 14), `plan` on `subscriptions`, the
+Stripe key case-twin, and `sessions` / `bookings`. That is now a pattern in this
+schema rather than a series of accidents.
+
+Not fixed here and deliberately not in 0035: consolidating a column pair means
+finding every reader across three apps, and a migration that renames or drops
+one while a client still reads it is the failure mode this project has already
+paid for. Its own item, when someone has the appetite.
+
 **30. A CHECK THAT HAS ONLY EVER RUN WHERE ITS INPUTS WERE ALREADY SATISFIED IS
 NOT A CHECK THAT PASSES — IT IS A CHECK NOBODY HAS RUN.**
 
