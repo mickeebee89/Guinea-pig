@@ -145,7 +145,8 @@ export default function ProviderShopScreen() {
   const [shopDate,      setShopDate]      = useState<string | null>(null)
 
   const { loading, reload } = useLoader(`${id ?? ''}|${userId ?? ''}`, async stale => {
-    if (!id || stale()) return
+    if (!id) { setRefreshing(false); return }
+    if (stale()) return
     try {
       const today = todayKey()
       const [
@@ -279,10 +280,16 @@ export default function ProviderShopScreen() {
       } catch {}
     }
 
+    // ── THE PULL-TO-REFRESH SPINNER IS CLEARED HERE, NOT IN onRefresh ─────
+    // onRefresh used to `await fetchAll()` and then clear it. reload() returns
+    // immediately — it only bumps a key — so the clear has to live where the
+    // work actually finishes. Getting that wrong left the spinner turning for
+    // ever, which is exactly what a device caught on the first pull.
+    if (!stale()) setRefreshing(false)
   })
 
-  // silent: the RefreshControl has its own spinner. setRefreshing is cleared by
-  // the load itself now, since reload() returns before the fetch finishes.
+  // silent: the RefreshControl has its own spinner, so the full-screen one must
+  // not also appear. The clear is inside the loader above.
   const onRefresh = useCallback(() => {
     setRefreshing(true)
     reload({ silent: true })
