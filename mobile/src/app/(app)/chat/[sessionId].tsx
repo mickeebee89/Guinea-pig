@@ -119,6 +119,8 @@ export default function ChatScreen() {
   const [applicationPhotos, setApplicationPhotos] = useState<string[]>([])
   const [enlargedPhoto,     setEnlargedPhoto]     = useState<string | null>(null)
   const [messages,   setMessages]   = useState<Message[]>([])
+  /** True when the message read FAILED, as opposed to returning nothing. */
+  const [loadFailed, setLoadFailed] = useState(false)
   const [inputText,  setInputText]  = useState('')
   const [sending,    setSending]    = useState(false)
   const [loading,    setLoading]    = useState(true)
@@ -215,7 +217,19 @@ export default function ChatScreen() {
           .eq('session_id', sessionId)
           .order('created_at', { ascending: false })  // newest first → inverted FlatList
 
-        setMessages((msgData ?? []) as Message[])
+        // ── AN EMPTY THREAD IS A CLAIM ABOUT THE CONVERSATION ───────────
+        // msgFetchErr was destructured and never read, so a failed read
+        // rendered as "no messages yet" — indistinguishable from a thread
+        // nobody has written in. This is also the surface where reporting and
+        // blocking live, so a person could conclude a conversation had been
+        // wiped. Leave what is on screen alone and say the load failed.
+        if (msgFetchErr) {
+          console.error('[chat] message load failed', msgFetchErr)
+          setLoadFailed(true)
+        } else {
+          setLoadFailed(false)
+          setMessages((msgData ?? []) as Message[])
+        }
 
         // Mark incoming messages as read
         await supabase
@@ -608,10 +622,22 @@ export default function ChatScreen() {
          when there's something to show. */}
       {messages.length === 0 ? (
         <View style={styles.emptyThread}>
-          <Ionicons name="chatbubble-ellipses-outline" size={34} color={Colors.muted} />
-          <Text style={styles.emptyThreadTitle}>No messages yet</Text>
+          <Ionicons
+            name={loadFailed ? 'warning-outline' : 'chatbubble-ellipses-outline'}
+            size={34}
+            color={loadFailed ? Colors.error : Colors.muted}
+          />
+          <Text style={styles.emptyThreadTitle}>
+            {loadFailed ? 'Couldn\u2019t load messages' : 'No messages yet'}
+          </Text>
           <Text style={styles.emptyThreadSub}>
-            {isAccepted
+            {loadFailed
+              /* NOT "no messages yet". We could not read the thread, so we do
+                 not know what is in it — and on the screen where reporting and
+                 blocking live, "no messages" could read as a conversation
+                 having been wiped. */
+              ? 'Something went wrong reading this conversation. Nothing has been deleted \u2014 pull down or reopen the chat to try again.'
+              : isAccepted
               ? 'Say hello and share any details about the look you have in mind.'
               : 'Messages will appear here.'}
           </Text>

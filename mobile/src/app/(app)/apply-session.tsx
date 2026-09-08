@@ -155,11 +155,25 @@ export default function ApplySessionScreen() {
   const [submitting,    setSubmitting]   = useState(false)
   const [submitted,     setSubmitted]    = useState(false)
   const [patchTestAgreed, setPatchTestAgreed] = useState(false)
+  /**
+   * ── A FAILED READ IS NOT AN EMPTY DIARY ────────────────────────────
+   *
+   * `availError` and `treatError` were destructured and never read, and the
+   * whole block sat in `try {} catch {}`. So a refused or failed availability
+   * read left `availRows` empty and the screen said, in as many words:
+   * "This stylist hasn't added any availability yet. Check back soon!"
+   *
+   * That is a false statement about another person, on the screen where a model
+   * books. Audit item 18's shape, inside the app.
+   */
+  const [loadFailed,    setLoadFailed]   = useState(false)
+  const [reloadNonce,   setReloadNonce]  = useState(0)
 
   // ── Load data ──────────────────────────────────────────────────────────────
 
   useEffect(() => {
     if (!providerId || !userId) return
+    setLoadFailed(false)
     async function load() {
       // Gate: models must have BOTH an active subscription AND identity verification.
       // Route to whichever step is missing (subscribe-first): no sub → subscribe;
@@ -211,6 +225,15 @@ export default function ApplySessionScreen() {
             .eq('id', providerId)
             .single(),
         ])
+        // Checked, not discarded. Either failing means we do not KNOW the
+        // stylist's availability, which is a different thing from knowing they
+        // have none.
+        if (availError || treatError) {
+          console.error('[apply] availability/treatments load failed', availError ?? treatError)
+          setLoadFailed(true)
+          setLoading(false)
+          return
+        }
         if (availData) setAvailRows((availData as any[]).map(r => ({
           id:           r.id,
           date:         r.date,
@@ -221,7 +244,12 @@ export default function ApplySessionScreen() {
         })))
         if (treatData) setTreatments(treatData as Treatment[])
         if (provData)  setProviderUserId((provData as any).user_id ?? null)
-      } catch {}
+      } catch (e) {
+        console.error('[apply] availability load threw', e)
+        setLoadFailed(true)
+        setLoading(false)
+        return
+      }
 
       try {
         const { data: photoData } = await supabase
@@ -239,7 +267,7 @@ export default function ApplySessionScreen() {
       setLoading(false)
     }
     load()
-  }, [providerId, userId, todayKey])
+  }, [providerId, userId, todayKey, reloadNonce])
 
   // Which of this provider's slots are already taken on the selected date. Uses the
   // server-side taken_slots RPC (pending/accepted only) instead of reading others'
@@ -547,7 +575,6 @@ export default function ApplySessionScreen() {
         return
       }
 
-      let consentErr: any = null
       if (providerUserId && sessionData) {
         const notifPayload = {
           user_id:    providerUserId,
@@ -562,7 +589,6 @@ export default function ApplySessionScreen() {
         }
         const { error: notifErr } = await supabase.from('notifications').insert(notifPayload)
         if (notifErr) console.error('session_applied notification insert failed:', notifErr)
-        consentErr = notifErr
       }
       if (sessionErr) throw sessionErr
 
@@ -643,12 +669,33 @@ export default function ApplySessionScreen() {
             <View style={[styles.card, styles.centred]}>
               <Text style={styles.loadingText}>Loading availability…</Text>
             </View>
+          ) : loadFailed ? (
+            /* Deliberately NOT the empty state. We could not read the diary, so
+               we do not know what is in it. */
+            <View style={[styles.card, styles.centred, { paddingVertical: 32 }]}>
+              <Text style={styles.emptyEmoji}>⚠️</Text>
+              <Text style={styles.emptyTitle}>Couldn&rsquo;t load availability</Text>
+              <Text style={styles.emptySub}>
+                Something went wrong reading this stylist&rsquo;s diary — this is not the same
+                as them having no dates. Check your connection and try again.
+              </Text>
+              <TouchableOpacity
+                onPress={async () => {
+                  await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+                  setLoading(true)
+                  setReloadNonce(n => n + 1)
+                }}
+                style={styles.retryBtn}
+              >
+                <Text style={styles.retryText}>Try again</Text>
+              </TouchableOpacity>
+            </View>
           ) : availRows.length === 0 ? (
             <View style={[styles.card, styles.centred, { paddingVertical: 32 }]}>
               <Text style={styles.emptyEmoji}>📅</Text>
               <Text style={styles.emptyTitle}>No availability yet</Text>
               <Text style={styles.emptySub}>
-                This stylist hasn't added any availability yet. Check back soon!
+                This stylist hasn&rsquo;t added any availability yet. Check back soon!
               </Text>
             </View>
           ) : (
@@ -1164,6 +1211,15 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     maxWidth: 260,
   },
+  retryBtn: {
+    marginTop: 16,
+    minHeight: 44,
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+    borderRadius: 999,
+    backgroundColor: Colors.rose,
+  },
+  retryText: { fontFamily: Fonts.bodyBold, fontSize: 14, color: Colors.white },
   emptyHint: {
     fontSize: 14,
     color: Colors.muted,

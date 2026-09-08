@@ -245,6 +245,9 @@ export default function ProviderShopScreen() {
             .eq('reviewee_id', providerUserId)
             .order('created_at', { ascending: false })
 
+          // A failed reviews read used to render as "no reviews yet", which is
+          // a statement about the person rather than about the request.
+          if (revErr) console.error('[reviews] load failed', revErr.message)
           if (revData && (revData as any[]).length > 0) {
             const reviewerIds = [...new Set((revData as any[]).map((r: any) => r.reviewer_id))]
             const { data: reviewerUsers, error: reviewerErr } = await supabase
