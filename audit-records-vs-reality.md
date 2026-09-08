@@ -1079,9 +1079,21 @@ database decided rather than reporting success. Writes go through `mustWrite`, s
 an RLS refusal throws instead of resolving quietly. Haptics on post, clear and
 failure. **Not yet run on a device.**
 
-**(b) still open.** A model on mobile still sees a stylist's update only by
-opening that stylist's profile; there is no equivalent of the web feed. Haptics
-when it is built — `expo-haptics`, per CLAUDE.md.
+**(b) CLOSED 8 Sep 2026.** "Stylist updates" on the model home
+(`src/app/(app)/index.tsx`), top of the page above upcoming treatments, capped at
+five with a "Show all N" toggle. Before this a model could only see an update by
+opening that stylist's profile — findable only by accident.
+
+The join is against the visible provider set rather than `status_posts`, so an
+unpublished or blocked stylist's post is dropped, matching the web feed exactly.
+One update per stylist, newest wins — the reader-side half of the composer's
+replace-not-stack rule. Rendered as messages: the avatar and name link to the
+profile, the bubble does not. Hidden when empty, because at the top of a
+dashboard a permanent empty box is noise and, unlike web, there is no distance
+filter here whose absence needs explaining. Haptic on the toggle.
+
+**ITEM 21 IS NOW CLOSED IN FULL.** status_posts has a writer and a reader on both
+clients.
 
 **22. THE NOTIFICATION DOT HAD NO WAY TO CLEAR — FOUND AND CLOSED 7 Sep 2026.**
 
