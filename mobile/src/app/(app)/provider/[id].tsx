@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import {
   View,
   Text,
@@ -8,7 +8,6 @@ import {
   Image,
   RefreshControl,
   Animated,
-  Platform,
 } from 'react-native'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import * as Haptics from 'expo-haptics'
@@ -98,12 +97,6 @@ function formatExpiry(iso: string): string {
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
-}
-
-function formatTime12(t: string): string {
-  const [h, min] = t.split(':')
-  const hour = parseInt(h, 10)
-  return `${hour % 12 || 12}:${min}${hour >= 12 ? 'pm' : 'am'}`
 }
 
 function todayKey(): string {
@@ -343,7 +336,7 @@ export default function ProviderShopScreen() {
         <Text style={styles.errorEmoji}>🐹</Text>
         {ownShop === '1' ? (
           <>
-            <Text style={styles.errorTitle}>Your shop isn't set up yet</Text>
+            <Text style={styles.errorTitle}>Your shop isn’t set up yet</Text>
             <Text style={styles.errorSub}>Add your bio, treatments and photos to get started</Text>
           </>
         ) : (
@@ -538,10 +531,10 @@ export default function ProviderShopScreen() {
               <Ionicons name="chatbubble-ellipses-outline" size={15} color={Colors.roseDark} />
               <Text style={styles.costNoticeText}>
                 Any cost is agreed directly with your stylist in the chat and paid in person.
-                Cavy doesn't handle payments for treatments.
+                Cavy doesn’t handle payments for treatments.
                 {'\n\n'}
                 Most stylists are building a portfolio and will ask to photograph their work —
-                that's usually why a treatment is free or discounted. It's your choice, and
+                that’s usually why a treatment is free or discounted. It’s your choice, and
                 worth agreeing in the chat first.
               </Text>
             </View>
@@ -650,7 +643,19 @@ export default function ProviderShopScreen() {
 // ── Sub-components ────────────────────────────────────────────────────────────
 
 function PulsingDot() {
-  const anim = useRef(new Animated.Value(1)).current
+  /**
+   * ── useState's LAZY INITIALISER, NOT useRef(new ...) ────────────────
+   *
+   * `useRef(new Animated.Value(1))` evaluates `new Animated.Value(1)` on EVERY
+   * render and throws the result away every time after the first — the ref only
+   * keeps the original. Harmless, and wasteful in a component that re-renders
+   * behind a pulsing animation.
+   *
+   * useState with a function initialiser runs it once, which is what was meant.
+   * `react-hooks/refs` flagged the `.current` read during render; this removes
+   * the reason for it rather than silencing it.
+   */
+  const [anim] = useState(() => new Animated.Value(1))
   useEffect(() => {
     const loop = Animated.loop(
       Animated.sequence([

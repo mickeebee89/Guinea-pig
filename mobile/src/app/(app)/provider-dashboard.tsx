@@ -216,7 +216,7 @@ function ProviderNotFound({ onRetry }: { onRetry: () => void }) {
         Setting up your profile…
       </Text>
       <Text style={[styles.emptyLabel, { fontSize: 14, color: Colors.muted, marginTop: 8, textAlign: 'center', paddingHorizontal: 32 }]}>
-        Your stylist profile couldn't be created yet. Pull to refresh or tap below to try again.
+        Your stylist profile couldn’t be created yet. Pull to refresh or tap below to try again.
       </Text>
       <TouchableOpacity
         style={[styles.goBackBtn, { marginTop: 20 }]}
@@ -648,7 +648,8 @@ export default function ProviderDashboardScreen() {
   const setProcessing = (id: string, on: boolean) => {
     setProcessingIds(prev => {
       const next = new Set(prev)
-      on ? next.add(id) : next.delete(id)
+      if (on) next.add(id)
+      else next.delete(id)
       return next
     })
   }
@@ -1034,7 +1035,7 @@ export default function ProviderDashboardScreen() {
             write one, so a stylist who only uses their phone could not post at
             all. */}
         <View style={[styles.sectionHeader, { marginTop: 8 }]}>
-          <Text style={styles.sectionTitle}>What&rsquo;s on</Text>
+          <Text style={styles.sectionTitle}>What’s on</Text>
         </View>
         <StatusComposer providerId={provider.id} shopIsPublished={isPublished} />
 
@@ -1393,7 +1394,7 @@ function PendingCard({
             </Text>
           </View>
           {s.note ? (
-            <Text style={styles.sessionNote} numberOfLines={2}>"{s.note}"</Text>
+            <Text style={styles.sessionNote} numberOfLines={2}>“{s.note}”</Text>
           ) : null}
         </View>
       </View>

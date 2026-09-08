@@ -165,7 +165,7 @@ export default function StatusComposer({
               <Text style={s.currentBody}>{current.body}</Text>
 
               {current.moderation_status === 'approved' && isLive && (
-                <Text style={s.live}>Live now &middot; disappears automatically after 48 hours</Text>
+                <Text style={s.live}>Live now · disappears automatically after 48 hours</Text>
               )}
 
               {/* Approved, and the view still does not carry it. Saved, not
@@ -181,14 +181,14 @@ export default function StatusComposer({
               {/* HELD, not lost. */}
               {current.moderation_status === 'pending' && (
                 <Text style={s.pending}>
-                  Waiting on a quick review before it goes out. It isn&rsquo;t visible to anyone
-                  yet &mdash; we&rsquo;ll let you know either way.
+                  Waiting on a quick review before it goes out. It isn’t visible to anyone
+                  yet — we’ll let you know either way.
                 </Text>
               )}
 
               {current.moderation_status === 'rejected' && (
                 <>
-                  <Text style={s.rejected}>This one wasn&rsquo;t published.</Text>
+                  <Text style={s.rejected}>This one wasn’t published.</Text>
                   {/* The admin's note, when they left one. It deliberately never
                       names the term that tripped the screen. */}
                   {!!current.review_note && <Text style={s.note}>{current.review_note}</Text>}

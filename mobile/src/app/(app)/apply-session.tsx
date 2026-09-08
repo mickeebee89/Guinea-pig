@@ -402,7 +402,8 @@ export default function ApplySessionScreen() {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
     setSelectedPhotoIds(prev => {
       const next = new Set(prev)
-      next.has(id) ? next.delete(id) : next.add(id)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
       return next
     })
   }
@@ -614,7 +615,7 @@ export default function ApplySessionScreen() {
           <Text style={styles.successTitle}>Application sent!</Text>
           <Text style={styles.successSub}>
             Your application has been sent to {providerName ? providerName : 'the provider'}.{'\n'}
-            You'll be notified when they respond.
+            You’ll be notified when they respond.
           </Text>
           <TouchableOpacity
             style={styles.doneBtn}
@@ -674,9 +675,9 @@ export default function ApplySessionScreen() {
                we do not know what is in it. */
             <View style={[styles.card, styles.centred, { paddingVertical: 32 }]}>
               <Text style={styles.emptyEmoji}>⚠️</Text>
-              <Text style={styles.emptyTitle}>Couldn&rsquo;t load availability</Text>
+              <Text style={styles.emptyTitle}>Couldn’t load availability</Text>
               <Text style={styles.emptySub}>
-                Something went wrong reading this stylist&rsquo;s diary — this is not the same
+                Something went wrong reading this stylist’s diary — this is not the same
                 as them having no dates. Check your connection and try again.
               </Text>
               <TouchableOpacity
@@ -695,7 +696,7 @@ export default function ApplySessionScreen() {
               <Text style={styles.emptyEmoji}>📅</Text>
               <Text style={styles.emptyTitle}>No availability yet</Text>
               <Text style={styles.emptySub}>
-                This stylist hasn&rsquo;t added any availability yet. Check back soon!
+                This stylist hasn’t added any availability yet. Check back soon!
               </Text>
             </View>
           ) : (
@@ -721,7 +722,7 @@ export default function ApplySessionScreen() {
           <View style={styles.card}>
             {takenError && (
               <Text style={styles.slotErrorHint}>
-                Couldn't check slot availability. To avoid double-booking, slots are shown as
+                Couldn’t check slot availability. To avoid double-booking, slots are shown as
                 unavailable — go back and try again.
               </Text>
             )}
@@ -957,7 +958,7 @@ export default function ApplySessionScreen() {
            behind a permanently-disabled Confirm button — give a way back instead. */}
         {step === 7 && !(selectedDate && selectedSlot && selectedTreatment) && (
           <View style={styles.card}>
-            <Text style={styles.emptyTitle}>Something's missing</Text>
+            <Text style={styles.emptyTitle}>Something’s missing</Text>
             <Text style={styles.emptySub}>
               We lost part of your booking details. Go back and pick your date, time and treatment again.
             </Text>

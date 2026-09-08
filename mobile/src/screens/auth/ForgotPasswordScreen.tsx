@@ -103,7 +103,7 @@ export default function ForgotPasswordScreen({ onBack, onGoLogin, initialEmail }
               <View style={styles.form}>
                 <View style={styles.sentBox}>
                   <Text style={styles.sentText}>
-                    We've sent a password reset link to{' '}
+                    We’ve sent a password reset link to{' '}
                     <Text style={styles.sentEmail}>{email.trim().toLowerCase()}</Text>.
                     Open it to choose a new password.
                   </Text>

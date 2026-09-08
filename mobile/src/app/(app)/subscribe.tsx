@@ -238,7 +238,7 @@ export default function SubscribeScreen() {
           </View>
 
           {/* What's included */}
-          <Text style={styles.sectionLabel}>What's included</Text>
+          <Text style={styles.sectionLabel}>What’s included</Text>
           <View style={styles.benefitsCard}>
             {BENEFITS.map(b => (
               <View key={b.title} style={styles.benefitRow}>
@@ -267,7 +267,7 @@ export default function SubscribeScreen() {
              so price, renewal frequency, auto-renewal and cancellation are all clear
              BEFORE purchase. */}
           <Text style={styles.renewalNote}>
-            You'll be charged <Text style={styles.renewalStrong}>£4.99 today</Text>, then{' '}
+            You’ll be charged <Text style={styles.renewalStrong}>£4.99 today</Text>, then{' '}
             <Text style={styles.renewalStrong}>£4.99 every month</Text> until you cancel.
           </Text>
           <Text style={styles.refundNote}>
@@ -277,7 +277,7 @@ export default function SubscribeScreen() {
           </Text>
           <Text style={styles.refundNote}>
             Cancel anytime in Settings — your membership runs to the end of the month
-            you've paid for. See{' '}
+            you’ve paid for. See{' '}
             <Text style={styles.termsLink} onPress={() => Linking.openURL(TERMS_URL)}>Terms</Text>
             {' '}for our full refund policy.
           </Text>

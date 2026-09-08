@@ -176,7 +176,6 @@ export default function SessionsScreen() {
       }
 
       const enriched = rows.map(enrich)
-      const today = todayKey()
 
       setPending(enriched.filter(s => s.status === 'pending').sort((a, b) => b.created_at.localeCompare(a.created_at)))
       setConfirmed(enriched.filter(s => s.status === 'accepted').sort((a, b) => a.date.localeCompare(b.date)))
@@ -196,7 +195,12 @@ export default function SessionsScreen() {
   // ── Actions ────────────────────────────────────────────────────────────────
 
   const setProcessing = (id: string, on: boolean) =>
-    setProcessingIds(prev => { const n = new Set(prev); on ? n.add(id) : n.delete(id); return n })
+    setProcessingIds(prev => {
+      const n = new Set(prev)
+      if (on) n.add(id)
+      else n.delete(id)
+      return n
+    })
 
   const acceptSession = async (s: Sess) => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
@@ -459,7 +463,7 @@ function SessionBase({ s }: { s: Sess }) {
           )}
           <Text style={styles.metaText}>{fmtDate(s.date)} · {fmtTime(s.start_time)}</Text>
         </View>
-        {s.note ? <Text style={styles.note} numberOfLines={1}>"{s.note}"</Text> : null}
+        {s.note ? <Text style={styles.note} numberOfLines={1}>“{s.note}”</Text> : null}
       </View>
     </View>
   )

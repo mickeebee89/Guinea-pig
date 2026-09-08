@@ -122,7 +122,8 @@ export default function AddAvailabilityScreen() {
     const key = dateKey(date)
     setSelectedDates(prev => {
       const next = new Set(prev)
-      next.has(key) ? next.delete(key) : next.add(key)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
       return next
     })
   }
@@ -378,7 +379,7 @@ export default function AddAvailabilityScreen() {
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.linkTitle}>Edit existing days</Text>
-                <Text style={styles.linkSub}>Change treatments or times on a day you've set up</Text>
+                <Text style={styles.linkSub}>Change treatments or times on a day you’ve set up</Text>
               </View>
               <Ionicons name="chevron-forward" size={18} color={Colors.muted} />
             </TouchableOpacity>
@@ -457,7 +458,7 @@ export default function AddAvailabilityScreen() {
             </View>
 
             <Text style={styles.footnote}>
-              Days you've already set up keep their existing slots — these are added on top.
+              Days you’ve already set up keep their existing slots — these are added on top.
             </Text>
           </>
         )}

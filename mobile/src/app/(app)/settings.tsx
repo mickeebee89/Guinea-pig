@@ -557,10 +557,6 @@ export default function SettingsScreen() {
     ? { text: '✨ Complimentary', color: Colors.roseDark }
     : subscriptionLabel(userData?.subscription_status)
 
-  const displayName = userData
-    ? `${userData.first_name}${userData.last_initial ? ` ${userData.last_initial}.` : ''}`
-    : ''
-
   const avatarSourceUri = userData?.profile_pic_url ?? null
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -650,7 +646,7 @@ export default function SettingsScreen() {
           {!isProvider && <View style={{ height: 1 }} />}
         </View>
         <Text style={styles.picCaption}>
-          Use a clear photo of your face — it's compared to your verification selfie.
+          Use a clear photo of your face — it’s compared to your verification selfie.
         </Text>
 
         {/* ─────────────── SUBSCRIPTION (models only) ─────────────── */}
@@ -1003,7 +999,7 @@ export default function SettingsScreen() {
               </View>
 
               {confirmPwd.length > 0 && newPwd !== confirmPwd && (
-                <Text style={styles.pwdError}>Passwords don't match</Text>
+                <Text style={styles.pwdError}>Passwords don’t match</Text>
               )}
 
               <View style={[styles.modalActions, { marginTop: 20 }]}>

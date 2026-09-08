@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback } from 'react'
 import {
   View,
   Text,
@@ -10,7 +10,6 @@ import {
   Image,
   RefreshControl,
   Platform,
-  ActivityIndicator,
   Switch,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
@@ -355,18 +354,6 @@ function ModelHomeContent() {
     await fetchData()
     setRefreshing(false)
   }, [fetchData])
-
-  const toggleFavourite = async (providerId: string) => {
-    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
-    const isFav = favouriteIds.has(providerId)
-    if (isFav) {
-      setFavouriteIds(prev => { const s = new Set(prev); s.delete(providerId); return s })
-      await supabase.from('favourites').delete().eq('user_id', userId).eq('provider_id', providerId)
-    } else {
-      setFavouriteIds(prev => new Set([...prev, providerId]))
-      await supabase.from('favourites').insert({ user_id: userId, provider_id: providerId })
-    }
-  }
 
   const openProvider = async (id: string) => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
@@ -825,7 +812,7 @@ function ModelHomeContent() {
                   <Text style={styles.emptyStateEmoji}>🐹</Text>
                   <Text style={styles.emptyStateTitle}>No stylists yet</Text>
                   <Text style={styles.emptyStateText}>
-                    We're growing! Check back soon — new stylists join every week.
+                    We’re growing! Check back soon — new stylists join every week.
                   </Text>
                 </View>
               ) : (

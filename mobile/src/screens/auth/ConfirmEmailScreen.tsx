@@ -118,7 +118,7 @@ export default function ConfirmEmailScreen({ email, role, first, initial, onBack
 
           <Text style={styles.title}>Check your email</Text>
           <Text style={styles.body}>
-            We've sent a confirmation link to{'\n'}
+            We’ve sent a confirmation link to{'\n'}
             <Text style={styles.emailHighlight}>{email}</Text>
           </Text>
           <Text style={styles.hint}>
@@ -165,7 +165,7 @@ export default function ConfirmEmailScreen({ email, role, first, initial, onBack
           >
             {checking
               ? <ActivityIndicator color={Colors.white} />
-              : <Text style={styles.primaryBtnText}>I've confirmed my email — sign in</Text>
+              : <Text style={styles.primaryBtnText}>I’ve confirmed my email — sign in</Text>
             }
           </TouchableOpacity>
 

@@ -343,7 +343,7 @@ export default function SignupScreen({ role, onBack, onGoLogin, onNeedConfirmati
               </View>
               {errors.dob && <Text style={styles.dobError}>{errors.dob}</Text>}
               <Text style={styles.nameHint}>
-                We use this to confirm you're 18 or over. It's never shown publicly.
+                We use this to confirm you’re 18 or over. It’s never shown publicly.
               </Text>
 
               {/* 18+ age confirmation — required (store compliance gate) */}

@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native'
 import { useRouter, useFocusEffect } from 'expo-router'
 import * as Haptics from 'expo-haptics'
@@ -78,17 +78,24 @@ export default function HeaderIcons() {
   // (RLS-scoped) so the unread dot appears/clears in realtime. Unique channel per mount —
   // HeaderIcons renders on both the model home and the provider dashboard, so a shared
   // channel name could collide.
-  const instanceRef = useRef(Math.random().toString(36).slice(2))
+  // Same shape as PulsingDot, and the rule here is `purity`: Math.random() is
+  // impure and was being called on every render to build a value only the first
+  // one survives. The lazy initialiser calls it once.
+  //
+  // This is the rule family that caught Date.now()-during-render three times in
+  // one session (audit item 19). It is quiet here only because the extra values
+  // are discarded.
+  const [instanceId] = useState(() => Math.random().toString(36).slice(2))
   useEffect(() => {
     if (!userId) return
     let t: ReturnType<typeof setTimeout> | null = null
     const bump = () => { if (t) clearTimeout(t); t = setTimeout(() => { refresh() }, 300) }
     const channel = supabase
-      .channel(`hdr-unread-${userId}-${instanceRef.current}`)
+      .channel(`hdr-unread-${userId}-${instanceId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, bump)
       .subscribe()
     return () => { if (t) clearTimeout(t); supabase.removeChannel(channel) }
-  }, [userId, refresh])
+  }, [userId, refresh, instanceId])
 
   return (
     <>

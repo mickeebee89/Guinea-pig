@@ -285,7 +285,8 @@ export default function LeaveReviewScreen() {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
     setSelectedTags(prev => {
       const next = new Set(prev)
-      next.has(tag) ? next.delete(tag) : next.add(tag)
+      if (next.has(tag)) next.delete(tag)
+      else next.add(tag)
       return next
     })
   }
@@ -311,7 +312,7 @@ export default function LeaveReviewScreen() {
         ...(subRatings.punctuality  != null ? { punctuality_rating:  subRatings.punctuality  || overallRating } : {}),
       }
 
-      const { data, error: insertErr } = await supabase.from('reviews').insert(payload)
+      const { error: insertErr } = await supabase.from('reviews').insert(payload)
 
       if (insertErr) throw insertErr
 
@@ -362,7 +363,7 @@ export default function LeaveReviewScreen() {
             <Ionicons name="checkmark-circle" size={48} color={Colors.white} />
           </View>
           <Text style={styles.successTitle}>Already reviewed</Text>
-          <Text style={styles.successSub}>You've already left a review for this treatment.</Text>
+          <Text style={styles.successSub}>You’ve already left a review for this treatment.</Text>
           <TouchableOpacity style={styles.doneBtn} onPress={goBack} activeOpacity={0.9}>
             <Text style={styles.doneBtnText}>Back</Text>
           </TouchableOpacity>

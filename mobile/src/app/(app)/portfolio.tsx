@@ -433,7 +433,7 @@ export default function PortfolioScreen() {
           <View style={styles.modalSheet}>
             <View style={styles.modalHandle} />
             <Text style={styles.modalTitle}>Create category</Text>
-            <Text style={styles.modalSub}>Group your photos under a heading, e.g. "Nail Art" or "Lash Sets"</Text>
+            <Text style={styles.modalSub}>Group your photos under a heading, e.g. “Nail Art” or “Lash Sets”</Text>
             <TextInput
               style={styles.catInput}
               value={newCatName}

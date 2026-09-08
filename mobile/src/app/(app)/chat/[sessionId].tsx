@@ -8,7 +8,6 @@ import {
   TextInput,
   Image,
   Alert,
-  Modal,
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
@@ -17,7 +16,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router'
 import * as Haptics from 'expo-haptics'
 import { Ionicons } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { Colors, CategoryColors, Fonts, Radius, Shadow } from '@/constants/Colors'
+import { Colors, CategoryColors, Fonts } from '@/constants/Colors'
 import { useAuth } from '@/context/auth'
 import { supabase } from '@/lib/supabase'
 import { mustWrite, tryWrite } from '@/lib/db'
@@ -654,7 +653,6 @@ export default function ChatScreen() {
         keyboardShouldPersistTaps="handled"
         renderItem={({ item, index }) => {
           const isMine  = item.sender_id === userId
-          const isFirst = index === messages.length - 1  // oldest visible = top
           const prevMsg = index < messages.length - 1 ? messages[index + 1] : null
           const showDate =
             !prevMsg ||
@@ -733,11 +731,11 @@ export default function ChatScreen() {
                  reminder to a stylist that portfolio photos need asking for. */}
               <Text style={styles.costNoticeText}>
                 Agree any cost{treatment ? ` for your ${treatment.category.toLowerCase()} appointment` : ''} here
-                beforehand and settle it in person. Cavy doesn't take payment for treatments
+                beforehand and settle it in person. Cavy doesn’t take payment for treatments
                 or handle disputes about them.
                 {'\n\n'}
                 Portfolio photos are common — often the reason a treatment is free or discounted.
-                Agree here whether photos can be taken and where they'll be shared.
+                Agree here whether photos can be taken and where they’ll be shared.
               </Text>
             </View>
           ) : null

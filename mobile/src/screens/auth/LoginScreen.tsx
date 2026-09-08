@@ -139,7 +139,7 @@ export default function LoginScreen({ onBack, onGoSignup, onGoForgot }: Props) {
               />
 
               <View style={styles.switchRow}>
-                <Text style={styles.switchText}>Don't have an account? </Text>
+                <Text style={styles.switchText}>Don’t have an account? </Text>
                 <Text style={styles.switchLink} onPress={goSignup}>Sign up</Text>
               </View>
             </View>

@@ -680,7 +680,7 @@ export default function ModelProfileScreen() {
     const urlMatch = raw.match(/instagram\.com\/([^/?#]+)/)
     const handle = urlMatch ? urlMatch[1] : raw.replace(/^@/, '')
     setInstagramHandle(handle)
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from('users')
       .update({ instagram_handle: handle || null })
       .eq('id', userId)
@@ -1058,7 +1058,7 @@ export default function ModelProfileScreen() {
           </View>
           {!isVerified && (
             <Text style={styles.sectionSub}>
-              You'll verify your identity and start your membership when you apply for a treatment.
+              You’ll verify your identity and start your membership when you apply for a treatment.
             </Text>
           )}
         </View>
@@ -1082,7 +1082,7 @@ export default function ModelProfileScreen() {
           <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 24) }]}>
             <View style={styles.sheetHandle} />
             <Text style={styles.catModalTitle}>Create category</Text>
-            <Text style={styles.catModalSub}>Group your photos under a heading, e.g. "Nails" or "Hair"</Text>
+            <Text style={styles.catModalSub}>Group your photos under a heading, e.g. “Nails” or “Hair”</Text>
             <TextInput
               style={styles.catModalInput}
               value={newCatName}

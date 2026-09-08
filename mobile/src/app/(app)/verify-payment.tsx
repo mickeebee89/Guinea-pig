@@ -378,7 +378,7 @@ export default function VerifyPaymentScreen() {
             <Text style={styles.heroSub}>
               {feeOnly
                 ? 'You\'re already identity-verified. Pay the one-off £14.99 fee to make your shop live — no selfie needed.'
-                : <>Take a selfie holding a piece of paper with your first name and <Text style={{ fontFamily: Fonts.bodyBold, color: Colors.warmDark }}>"Cavy"</Text> written on it. A person compares it to your profile picture, usually within 24 hours. It isn’t an identity check — nobody sees a passport or a driving licence, and no document is kept.</>}
+                : <>Take a selfie holding a piece of paper with your first name and <Text style={{ fontFamily: Fonts.bodyBold, color: Colors.warmDark }}>“Cavy”</Text> written on it. A person compares it to your profile picture, usually within 24 hours. It isn’t an identity check — nobody sees a passport or a driving licence, and no document is kept.</>}
             </Text>
             {isProvider && !feeSettled && (
               <View style={styles.priceTag}>
@@ -454,7 +454,7 @@ export default function VerifyPaymentScreen() {
           </View>
           <Text style={styles.centredTitle}>Take your selfie</Text>
           <Text style={styles.centredSub}>
-            Hold up the paper with your first name and "Cavy" written on it — face and writing both clearly visible.
+            Hold up the paper with your first name and “Cavy” written on it — face and writing both clearly visible.
           </Text>
           <TouchableOpacity style={styles.primaryBtn} onPress={takeSelfie} activeOpacity={0.9}>
             <Ionicons name="camera" size={20} color={Colors.white} />
@@ -504,7 +504,7 @@ export default function VerifyPaymentScreen() {
           {providerId ? (
             <>
               <Text style={styles.centredSub}>
-                Add {providerName || 'this stylist'} to your favourites so you can apply as soon as you're approved.
+                Add {providerName || 'this stylist'} to your favourites so you can apply as soon as you’re approved.
               </Text>
               <TouchableOpacity
                 style={[styles.primaryBtn, (favourited || favLoading) && { opacity: 0.7 }]}
@@ -555,7 +555,7 @@ export default function VerifyPaymentScreen() {
           </View>
           <Text style={styles.centredTitle}>Payment received</Text>
           <Text style={styles.centredSub}>
-            We&apos;ve taken your payment but couldn&apos;t finish setting up your verification. Tap retry — you won&apos;t be charged again.
+            We’ve taken your payment but couldn’t finish setting up your verification. Tap retry — you won’t be charged again.
           </Text>
           <TouchableOpacity
             style={styles.primaryBtn}
@@ -575,7 +575,7 @@ export default function VerifyPaymentScreen() {
           <View style={[styles.bigIcon, { backgroundColor: Colors.softPink + '50', width: 100, height: 100, borderRadius: 50 }]}>
             <Ionicons name="shield-checkmark" size={52} color={Colors.roseDark} />
           </View>
-          <Text style={styles.centredTitle}>You're verified! 🎉</Text>
+          <Text style={styles.centredTitle}>You’re verified! 🎉</Text>
           <Text style={styles.centredSub}>
             Your verified badge is now active on your profile.
           </Text>
