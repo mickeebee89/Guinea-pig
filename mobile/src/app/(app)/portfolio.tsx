@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState } from 'react'
 import {
   View,
   Text,
@@ -21,6 +21,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { Colors, Fonts, Radius, Shadow } from '@/constants/Colors'
 import { useAuth } from '@/context/auth'
 import { supabase } from '@/lib/supabase'
+import { useLoader } from '@/hooks/useLoader'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -71,7 +72,6 @@ export default function PortfolioScreen() {
   const [providerId,   setProviderId]   = useState<string | null>(null)
   const [categories,   setCategories]   = useState<Category[]>([])
   const [items,        setItems]        = useState<PortfolioItem[]>([])
-  const [loading,      setLoading]      = useState(true)
   const [refreshing,   setRefreshing]   = useState(false)
   const [uploading,    setUploading]    = useState(false)
 
@@ -88,9 +88,8 @@ export default function PortfolioScreen() {
 
   // ── Load ───────────────────────────────────────────────────────────────────
 
-  const load = useCallback(async (isRefresh = false) => {
+  const { loading, reload } = useLoader(userId ?? '', async stale => {
     if (!userId) return
-    if (!isRefresh) setLoading(true)
     try {
       const { data: prov } = await supabase
         .from('providers')
@@ -115,17 +114,16 @@ export default function PortfolioScreen() {
             .order('created_at', { ascending: false }),
         ])
 
+        if (stale()) return
         setCategories((catData ?? []) as Category[])
         setItems((itemData ?? []) as PortfolioItem[])
       }
     } catch {}
-    setLoading(false)
+    if (stale()) return
     setRefreshing(false)
-  }, [userId])
+  })
 
-  useEffect(() => { load() }, [load])
-
-  const onRefresh = () => { setRefreshing(true); load(true) }
+  const onRefresh = () => { setRefreshing(true); reload({ silent: true }) }
 
   // ── Create category ────────────────────────────────────────────────────────
 

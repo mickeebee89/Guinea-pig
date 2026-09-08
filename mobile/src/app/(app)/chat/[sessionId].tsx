@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import {
   View,
   Text,
@@ -19,6 +19,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Colors, CategoryColors, Fonts } from '@/constants/Colors'
 import { useAuth } from '@/context/auth'
 import { supabase } from '@/lib/supabase'
+import { useLoader } from '@/hooks/useLoader'
 import { mustWrite, tryWrite } from '@/lib/db'
 import { getBlockedIds } from '@/lib/blocks'
 import SafetyButton from '@/components/SafetyButton'
@@ -122,7 +123,6 @@ export default function ChatScreen() {
   const [loadFailed, setLoadFailed] = useState(false)
   const [inputText,  setInputText]  = useState('')
   const [sending,    setSending]    = useState(false)
-  const [loading,    setLoading]    = useState(true)
   const [loadError,  setLoadError]  = useState(false)
   const [menuOpen,        setMenuOpen]        = useState(false)
   const [alreadyReviewed, setAlreadyReviewed] = useState(false)
@@ -132,10 +132,10 @@ export default function ChatScreen() {
 
   // ── Load ───────────────────────────────────────────────────────────────────
 
-  const loadData = useCallback(async () => {
+  const { loading, reload: reloadData } = useLoader(`${sessionId ?? ''}|${userId ?? ''}`, async stale => {
     if (!sessionId || !userId) return
-    setLoadError(false)
     try {
+      if (!stale()) setLoadError(false)
       // Session
       const { data: sessionData } = await supabase
         .from('sessions')
@@ -251,13 +251,9 @@ export default function ChatScreen() {
       }
     } catch (e) {
       console.error('chat load failed:', e)
-      setLoadError(true)
-    } finally {
-      setLoading(false)
+      if (!stale()) setLoadError(true)
     }
-  }, [sessionId, userId])
-
-  useEffect(() => { loadData() }, [loadData])
+  })
 
   // ── Realtime ───────────────────────────────────────────────────────────────
 
@@ -423,7 +419,7 @@ export default function ChatScreen() {
   if (loadError) {
     return (
       <View style={[styles.container, styles.centred]}>
-        <LoadErrorState onRetry={() => loadData()} />
+        <LoadErrorState onRetry={() => reloadData({ silent: true })} />
       </View>
     )
   }

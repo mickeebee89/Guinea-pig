@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState } from 'react'
 import {
   View,
   Text,
@@ -11,6 +11,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Colors, Fonts, Radius, Shadow, Spacing } from '@/constants/Colors'
 import { supabase } from '@/lib/supabase'
+import { useLoader } from '@/hooks/useLoader'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -87,10 +88,9 @@ export default function ReviewsScreen() {
   const insets = useSafeAreaInsets()
 
   const [reviews,  setReviews]  = useState<Review[]>([])
-  const [loading,  setLoading]  = useState(true)
 
-  const load = useCallback(async () => {
-    if (!userId) { setLoading(false); return }
+  const { loading } = useLoader(userId ?? '', async stale => {
+    if (!userId) return
     try {
       const { data: revData, error: revErr } = await supabase
         .from('reviews')
@@ -98,7 +98,7 @@ export default function ReviewsScreen() {
         .eq('reviewee_id', userId)
         .order('created_at', { ascending: false })
 
-      if (revErr) { console.error('reviews fetch failed:', revErr); setLoading(false); return }
+      if (revErr) { console.error('reviews fetch failed:', revErr); return }
 
       if (revData && (revData as any[]).length > 0) {
         const reviewerIds = [...new Set((revData as any[]).map((r: any) => r.reviewer_id))]
@@ -114,6 +114,7 @@ export default function ReviewsScreen() {
           userMap[u.id] = name || 'Anonymous'
         })
 
+        if (stale()) return
         setReviews((revData as any[]).map((r: any) => ({
           id:            r.id,
           rating:        r.rating,
@@ -125,10 +126,7 @@ export default function ReviewsScreen() {
         })))
       }
     } catch (e) { console.error('reviews screen load failed:', e) }
-    setLoading(false)
-  }, [userId])
-
-  useEffect(() => { load() }, [load])
+  })
 
   const avg = reviews.length > 0
     ? (reviews.reduce((s, r) => s + r.rating, 0) / reviews.length).toFixed(1)

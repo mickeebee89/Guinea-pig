@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState } from 'react'
 import {
   View,
   Text,
@@ -24,6 +24,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Colors, Fonts, Radius, Shadow } from '@/constants/Colors'
 import { useAuth } from '@/context/auth'
 import { supabase } from '@/lib/supabase'
+import { useLoader } from '@/hooks/useLoader'
 import ScreenDecor from '@/components/ScreenDecor'
 import LoadErrorState from '@/components/LoadErrorState'
 
@@ -173,7 +174,6 @@ export default function SettingsScreen() {
   const [providerId,   setProviderId]   = useState<string | null>(null)
   const [providerBio,  setProviderBio]  = useState<string>('')
   const [verifStatus,  setVerifStatus]  = useState<VerifStatus>('none')
-  const [loading,      setLoading]      = useState(true)
   const [loadError,    setLoadError]    = useState(false)
   const [uploadingPic, setUploadingPic] = useState(false)
   const [blockedUsers, setBlockedUsers] = useState<{ id: string; name: string; picUrl: string | null }[]>([])
@@ -197,9 +197,8 @@ export default function SettingsScreen() {
 
   // ── Load ───────────────────────────────────────────────────────────────────
 
-  const load = useCallback(async () => {
-    setLoadError(false)
-    if (!userId) { setLoading(false); return }
+  const { loading, reload } = useLoader(userId ?? '', async stale => {
+    if (!userId) return
     try {
       const { data: ud } = await supabase
         .from('users')
@@ -268,14 +267,12 @@ export default function SettingsScreen() {
       } else {
         setBlockedUsers([])
       }
+      if (!stale()) setLoadError(false)
     } catch (e) {
       console.error('settings load failed:', e)
-      setLoadError(true)
+      if (!stale()) setLoadError(true)
     }
-    setLoading(false)
-  }, [userId, session])
-
-  useEffect(() => { load() }, [load])
+  })
 
   // ── Profile picture ────────────────────────────────────────────────────────
 
@@ -539,7 +536,7 @@ export default function SettingsScreen() {
   if (loadError) {
     return (
       <View style={styles.container}>
-        <LoadErrorState onRetry={() => load()} />
+        <LoadErrorState onRetry={() => reload()} />
       </View>
     )
   }

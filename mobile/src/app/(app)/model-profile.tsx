@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   View,
   Text,
@@ -23,6 +23,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Colors, Fonts } from '@/constants/Colors'
 import { useAuth } from '@/context/auth'
 import { supabase } from '@/lib/supabase'
+import { useLoader } from '@/hooks/useLoader'
 import { mustWrite } from '@/lib/db'
 import { isIdentityVerified } from '@/lib/verification'
 import { signModelPhotos, signModelPhoto } from '@/lib/photoUrls'
@@ -160,7 +161,6 @@ export default function ModelProfileScreen() {
   const [savingBio,        setSavingBio]        = useState(false)
   const [instagramHandle,  setInstagramHandle]  = useState('')
   const [savingInstagram,  setSavingInstagram]  = useState(false)
-  const [loading,          setLoading]          = useState(true)
   const [loadError,        setLoadError]        = useState(false)
   const [uploading,        setUploading]        = useState(false)
   const [addingPhotos,     setAddingPhotos]     = useState(false)
@@ -212,9 +212,8 @@ export default function ModelProfileScreen() {
 
   // ── Load ───────────────────────────────────────────────────────────────────
 
-  const load = useCallback(async () => {
+  const { loading, reload } = useLoader(userId ?? '', async stale => {
     if (!userId) return
-    setLoadError(false)
     try {
       const [{ data: userData }, { data: photoData }, { data: attrData }, { data: catData }, verified] = await Promise.all([
         supabase
@@ -298,11 +297,7 @@ export default function ModelProfileScreen() {
         })))
       }
     } catch {}
-
-    setLoading(false)
-  }, [userId])
-
-  useEffect(() => { load() }, [load])
+  })
 
   // ── Profile picture ────────────────────────────────────────────────────────
 
@@ -733,7 +728,7 @@ export default function ModelProfileScreen() {
   if (loadError) {
     return (
       <View style={[styles.container, styles.centred]}>
-        <LoadErrorState onRetry={() => load()} />
+        <LoadErrorState onRetry={() => reload()} />
       </View>
     )
   }

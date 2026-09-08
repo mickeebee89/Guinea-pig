@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState } from 'react'
 import {
   View,
   Text,
@@ -21,6 +21,7 @@ import { useStripe } from '@stripe/stripe-react-native'
 import { Colors, Fonts, Radius, Shadow } from '@/constants/Colors'
 import { useAuth } from '@/context/auth'
 import { supabase } from '@/lib/supabase'
+import { useLoader } from '@/hooks/useLoader'
 import { mustWrite } from '@/lib/db'
 
 // Full refund policy lives in Terms section 9.
@@ -56,8 +57,8 @@ export default function VerifyPaymentScreen() {
 
   // ── Check existing request ─────────────────────────────────────────────────
 
-  const load = useCallback(async () => {
-    if (!userId) return
+  useLoader(`${userId ?? ''}|${isProvider}`, async stale => {
+    if (!userId || stale()) return
     try {
       const { data: ud } = await supabase
         .from('users')
@@ -139,9 +140,7 @@ export default function VerifyPaymentScreen() {
     } catch {
       setStep('instructions')
     }
-  }, [userId, isProvider, router])
-
-  useEffect(() => { load() }, [load])
+  })
 
   // ── Take selfie ────────────────────────────────────────────────────────────
 

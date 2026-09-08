@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import {
   View,
   Text,
@@ -17,6 +17,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Colors, Fonts, Radius, Shadow } from '@/constants/Colors'
 import { useAuth } from '@/context/auth'
 import { supabase } from '@/lib/supabase'
+import { useLoader } from '@/hooks/useLoader'
 import { routeForNotification } from '@/lib/notificationRouting'
 import ScreenDecor from '@/components/ScreenDecor'
 
@@ -114,7 +115,6 @@ export default function NotificationsScreen() {
 
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [filter,        setFilter]        = useState<Filter>('All')
-  const [loading,       setLoading]       = useState(true)
   const [refreshing,    setRefreshing]    = useState(false)
   const [markingAll,    setMarkingAll]    = useState(false)
   const [fetchError,    setFetchError]    = useState<string | null>(null)
@@ -126,15 +126,15 @@ export default function NotificationsScreen() {
 
   // ── Load ───────────────────────────────────────────────────────────────────
 
-  const load = useCallback(async (isRefresh = false) => {
-    if (!userId) { setLoading(false); return }
-    if (!isRefresh) setLoading(true)
+  const { loading, reload } = useLoader(userId ?? '', async stale => {
+    if (!userId) return
     const { data, error } = await supabase
       .from('notifications')
       .select('id, type, title, body, session_id, data, read_at, created_at')
       .eq('user_id', userId)
       .order('created_at', { ascending: false })
       .limit(100)
+    if (stale()) return
     if (error) {
       console.error('[notifications] fetch error:', error.message)
       setFetchError(error.message)
@@ -142,13 +142,12 @@ export default function NotificationsScreen() {
       setFetchError(null)
       setNotifications((data ?? []) as Notification[])
     }
-    setLoading(false)
     setRefreshing(false)
-  }, [userId])
+  })
 
-  useEffect(() => { load() }, [load])
-
-  const onRefresh = () => { setRefreshing(true); load(true) }
+  // silent: the RefreshControl has its own spinner, and showing the full-screen
+  // one as well replaces the list the person is pulling on.
+  const onRefresh = () => { setRefreshing(true); reload({ silent: true }) }
 
   // ── Mark as read ───────────────────────────────────────────────────────────
 

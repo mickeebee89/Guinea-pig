@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState } from 'react'
 import {
   View,
   Text,
@@ -19,6 +19,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Colors, CategoryColors, Fonts, Radius, Shadow } from '@/constants/Colors'
 import { useAuth } from '@/context/auth'
 import { supabase } from '@/lib/supabase'
+import { useLoader } from '@/hooks/useLoader'
 import { useProfileNav } from '@/lib/profileNav'
 import LoadErrorState from '@/components/LoadErrorState'
 
@@ -161,7 +162,6 @@ export default function LeaveReviewScreen() {
   const [revieweeUserId,   setRevieweeUserId]   = useState<string | null>(null)
   const [treatmentName,    setTreatmentName]    = useState<string | null>(null)
   const [treatmentCat,     setTreatmentCat]     = useState<string | null>(null)
-  const [loading,          setLoading]          = useState(true)
   const [loadError,        setLoadError]        = useState(false)
   const [alreadyReviewed,  setAlreadyReviewed]  = useState(false)
   const [posting,          setPosting]          = useState(false)
@@ -175,17 +175,17 @@ export default function LeaveReviewScreen() {
 
   // ── Load ───────────────────────────────────────────────────────────────────
 
-  const load = useCallback(async () => {
-    if (!sessionId || !userId) { setLoading(false); return }
-    setLoadError(false)
+  const { loading, reload } = useLoader(`${sessionId ?? ''}|${userId ?? ''}|${isReviewingModel}`, async stale => {
+    if (!sessionId || !userId) return
     try {
+      if (!stale()) setLoadError(false)
       const { data: sd } = await supabase
         .from('sessions')
         .select('id, provider_id, model_user_id, date, start_time, end_time, treatment_id')
         .eq('id', sessionId)
         .single()
 
-      if (!sd) { setLoading(false); return }
+      if (!sd || stale()) return
       const s = sd as SessionData
       setSessionData(s)
 
@@ -253,12 +253,9 @@ export default function LeaveReviewScreen() {
       }
     } catch (e) {
       console.error('leave-review load failed:', e)
-      setLoadError(true)
+      if (!stale()) setLoadError(true)
     }
-    setLoading(false)
-  }, [sessionId, userId, isReviewingModel])
-
-  useEffect(() => { load() }, [load])
+  })
 
   // ── Interactions ───────────────────────────────────────────────────────────
 
@@ -338,7 +335,7 @@ export default function LeaveReviewScreen() {
   if (loadError) {
     return (
       <View style={styles.container}>
-        <LoadErrorState onRetry={() => load()} />
+        <LoadErrorState onRetry={() => reload()} />
       </View>
     )
   }

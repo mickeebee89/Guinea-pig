@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   View,
   Text,
@@ -16,6 +16,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Colors, CategoryColors, Fonts, Radius, Shadow } from '@/constants/Colors'
 import { useAuth } from '@/context/auth'
 import { supabase } from '@/lib/supabase'
+import { useLoader } from '@/hooks/useLoader'
 import { getBlockedIds } from '@/lib/blocks'
 import SafetySheet from '@/components/SafetySheet'
 import SafetyButton from '@/components/SafetyButton'
@@ -141,11 +142,10 @@ export default function ProviderShopScreen() {
   const [safetyOpen,    setSafetyOpen]    = useState(false)
   const [isFavourite,   setIsFavourite]   = useState(false)
   const [refreshing,    setRefreshing]    = useState(false)
-  const [loading,       setLoading]       = useState(true)
   const [shopDate,      setShopDate]      = useState<string | null>(null)
 
-  const fetchAll = useCallback(async () => {
-    if (!id) return
+  const { loading, reload } = useLoader(`${id ?? ''}|${userId ?? ''}`, async stale => {
+    if (!id || stale()) return
     try {
       const today = todayKey()
       const [
@@ -279,16 +279,14 @@ export default function ProviderShopScreen() {
       } catch {}
     }
 
-    setLoading(false)
-  }, [id, userId])
+  })
 
-  useEffect(() => { fetchAll() }, [fetchAll])
-
-  const onRefresh = useCallback(async () => {
+  // silent: the RefreshControl has its own spinner. setRefreshing is cleared by
+  // the load itself now, since reload() returns before the fetch finishes.
+  const onRefresh = useCallback(() => {
     setRefreshing(true)
-    await fetchAll()
-    setRefreshing(false)
-  }, [fetchAll])
+    reload({ silent: true })
+  }, [reload])
 
   const goBack = async () => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)

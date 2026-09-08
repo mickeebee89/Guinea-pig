@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   ActivityIndicator, Alert,
@@ -9,6 +9,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Colors, Fonts, Radius, Shadow } from '@/constants/Colors'
 import { useAuth } from '@/context/auth'
+import { useLoader } from '@/hooks/useLoader'
 import ScreenDecor from '@/components/ScreenDecor'
 import LoadErrorState from '@/components/LoadErrorState'
 import SlotPickerModal from '@/components/SlotPickerModal'
@@ -36,7 +37,6 @@ export default function EditDayScreen() {
   const [providerId, setProviderId] = useState<string | null>(null)
   const [treatments, setTreatments] = useState<Treatment[]>([])
   const [slots,      setSlots]      = useState<TimeSlot[]>([])
-  const [loading,    setLoading]    = useState(true)
   const [loadError,  setLoadError]  = useState(false)
   const [saving,     setSaving]     = useState(false)
   const [dirty,      setDirty]      = useState(false)
@@ -47,27 +47,24 @@ export default function EditDayScreen() {
   const [modalEnd,      setModalEnd]      = useState('10:00')
   const [modalTreatIds, setModalTreatIds] = useState<string[]>([])
 
-  const load = useCallback(async () => {
-    if (!userId || !date) { setLoading(false); return }
-    setLoading(true)
-    setLoadError(false)
+  const { loading, reload } = useLoader(`${userId ?? ''}|${date ?? ''}`, async stale => {
+    if (!userId || !date) return
     try {
       const pid = await loadProviderId(userId)
+      if (stale()) return
       if (!pid) { setLoadError(true); return }
+      setLoadError(false)
       setProviderId(pid)
       const [treats, daySlots] = await Promise.all([loadTreatments(pid), loadDay(pid, date)])
+      if (stale()) return
       setTreatments(treats)
       setSlots(daySlots)
       setDirty(false)
     } catch (e) {
       console.warn('edit day: load failed', e)
-      setLoadError(true)
-    } finally {
-      setLoading(false)
+      if (!stale()) setLoadError(true)
     }
-  }, [userId, date])
-
-  useEffect(() => { load() }, [load])
+  })
 
   // ── Slot handlers ───────────────────────────────────────────────────────────
 
@@ -224,7 +221,7 @@ export default function EditDayScreen() {
       {loading ? (
         <View style={styles.centre}><ActivityIndicator color={Colors.rose} /></View>
       ) : loadError ? (
-        <LoadErrorState onRetry={load} />
+        <LoadErrorState onRetry={() => reload()} />
       ) : (
         <>
           <ScrollView

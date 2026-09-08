@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useRef } from 'react'
 import {
   View,
   Text,
@@ -18,6 +18,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { Colors, CategoryColors, Fonts, Radius, Shadow } from '@/constants/Colors'
 import { useAuth } from '@/context/auth'
 import { supabase } from '@/lib/supabase'
+import { useLoader } from '@/hooks/useLoader'
 import LoadErrorState from '@/components/LoadErrorState'
 
 const TREATMENT_CATEGORIES = [
@@ -39,7 +40,6 @@ export default function EditShopScreen() {
   const [bio,                setBio]                = useState('')
   const [locationText,       setLocationText]       = useState('')
   const [selectedCategories, setSelectedCategories] = useState<Set<string>>(new Set())
-  const [loading,            setLoading]            = useState(true)
   const [loadError,          setLoadError]          = useState(false)
   const [saving,             setSaving]             = useState(false)
 
@@ -52,10 +52,8 @@ export default function EditShopScreen() {
    */
   const existingRows = useRef<Map<string, string>>(new Map())
 
-  const load = useCallback(async () => {
+  const { loading, reload } = useLoader(userId ?? '', async stale => {
     if (!userId) return
-    setLoading(true)
-    setLoadError(false)
     try {
       const { data: prov } = await supabase
         .from('providers')
@@ -89,14 +87,12 @@ export default function EditShopScreen() {
         existingRows.current = byCategory
         if (byCategory.size > 0) setSelectedCategories(new Set(byCategory.keys()))
       }
+      if (!stale()) setLoadError(false)
     } catch (e) {
       console.error('edit-shop load failed:', e)
-      setLoadError(true)
+      if (!stale()) setLoadError(true)
     }
-    setLoading(false)
-  }, [userId])
-
-  useEffect(() => { load() }, [load])
+  })
 
   const toggleCategory = async (cat: string) => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
@@ -224,7 +220,7 @@ export default function EditShopScreen() {
         await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning)
         Alert.alert('Saved, mostly', `Everything else saved.\n\n${blocked.join('\n\n')}`)
         setSaving(false)
-        load()
+        reload()
         return
       }
 
@@ -248,7 +244,7 @@ export default function EditShopScreen() {
   if (loadError) {
     return (
       <View style={[styles.container, { alignItems: 'center', justifyContent: 'center' }]}>
-        <LoadErrorState onRetry={() => load()} />
+        <LoadErrorState onRetry={() => reload()} />
       </View>
     )
   }

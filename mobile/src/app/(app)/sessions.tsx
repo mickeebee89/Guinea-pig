@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState } from 'react'
 import {
   View,
   Text,
@@ -17,6 +17,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Colors, Fonts, Radius, Shadow } from '@/constants/Colors'
 import { useAuth } from '@/context/auth'
 import { supabase } from '@/lib/supabase'
+import { useLoader } from '@/hooks/useLoader'
 import { mustWrite, tryWrite } from '@/lib/db'
 import { signModelPhotos } from '@/lib/photoUrls'
 import { useProfileNav } from '@/lib/profileNav'
@@ -92,7 +93,6 @@ export default function SessionsScreen() {
   const [pending,       setPending]       = useState<Sess[]>([])
   const [confirmed,     setConfirmed]     = useState<Sess[]>([])
   const [completed,     setCompleted]     = useState<Sess[]>([])
-  const [loading,       setLoading]       = useState(true)
   const [loadError,     setLoadError]     = useState(false)
   const [refreshing,    setRefreshing]    = useState(false)
   const [processingIds, setProcessingIds] = useState<Set<string>>(new Set())
@@ -108,15 +108,15 @@ export default function SessionsScreen() {
 
   // ── Load ───────────────────────────────────────────────────────────────────
 
-  const load = useCallback(async (isRefresh = false) => {
+  const { loading, reload } = useLoader(userId ?? '', async stale => {
     if (!userId) return
-    if (!isRefresh) setLoading(true)
-    setLoadError(false)
     try {
       const { data: provRow } = await supabase
         .from('providers').select('id').eq('user_id', userId).maybeSingle()
       const providerId = (provRow as any)?.id
-      if (!providerId) { setLoading(false); setRefreshing(false); return }
+      if (stale()) return
+      setLoadError(false)
+      if (!providerId) { setRefreshing(false); return }
 
       const { data: rawSessions } = await supabase
         .from('sessions')
@@ -127,8 +127,9 @@ export default function SessionsScreen() {
 
       const rows = (rawSessions ?? []) as any[]
       if (rows.length === 0) {
+        if (stale()) return
         setPending([]); setConfirmed([]); setCompleted([])
-        setLoading(false); setRefreshing(false)
+        setRefreshing(false)
         return
       }
 
@@ -182,15 +183,14 @@ export default function SessionsScreen() {
       setCompleted(enriched.filter(s => s.status === 'completed').sort((a, b) => b.date.localeCompare(a.date)))
     } catch (e) {
       console.error('sessions load failed:', e)
-      setLoadError(true)
+      if (!stale()) setLoadError(true)
     }
-    setLoading(false)
+    if (stale()) return
     setRefreshing(false)
-  }, [userId])
+  })
 
-  useEffect(() => { load() }, [load])
-
-  const onRefresh = () => { setRefreshing(true); load(true) }
+  // silent: the RefreshControl has its own spinner.
+  const onRefresh = () => { setRefreshing(true); reload({ silent: true }) }
 
   // ── Actions ────────────────────────────────────────────────────────────────
 
@@ -316,7 +316,7 @@ export default function SessionsScreen() {
   if (loadError) {
     return (
       <View style={styles.container}>
-        <LoadErrorState onRetry={() => load()} />
+        <LoadErrorState onRetry={() => reload()} />
       </View>
     )
   }
@@ -419,7 +419,7 @@ export default function SessionsScreen() {
         sessionId={cancelTarget?.id ?? ''}
         otherName={cancelTarget?.name ?? 'them'}
         shortNotice={cancelTarget?.shortNotice ?? false}
-        onCancelled={() => { setCancelTarget(null); load() }}
+        onCancelled={() => { setCancelTarget(null); reload({ silent: true }) }}
       />
     </View>
   )
