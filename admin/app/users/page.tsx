@@ -122,46 +122,94 @@ export default function UsersPage() {
     return true
   })
 
+  /**
+   * ── THE AUDIT ROW IS ONLY WRITTEN IF THE ACTION SUCCEEDED ─────────────
+   *
+   * Every branch below used to discard its result and then `logAction` ran
+   * unconditionally. supabase-js resolves with `{ error }` rather than
+   * rejecting, so a suspension RLS refused was written into `admin_audit_log`
+   * as having happened, and the list refreshed as though it had.
+   *
+   * That is not a missing record. It is a FALSE one, in a table kept six years
+   * as the evidence for a ban (0005, 0006). Every other site in audit item 27
+   * fails as "nothing happened"; this one failed as "something happened that
+   * did not".
+   *
+   * So the fix is the ORDER, not error handling bolted around it: do the thing,
+   * check it, and only then write the record.
+   *
+   * ⚠️ THE TWO WRITES ARE STILL NOT ATOMIC. If the action lands and the audit
+   * insert then fails, the action stands and the admin is told, loudly, to
+   * record it by hand — see below for why that is the right way round, and
+   * audit item 29 for the version where they cannot disagree at all.
+   */
   async function doAction() {
     if (!modal) return
     const { user, action } = modal
     const now = new Date()
 
-    if (action === 'warn') {
-      await supabase.from('notifications').insert({
-        user_id: user.id, type: 'admin_warning',
-        title: 'Warning from Cavy',
-        body: reason || 'You have received an official warning.',
-      })
+    // The one write this action consists of. Returned rather than performed
+    // inline so there is a single place that decides whether it worked.
+    const perform = (): PromiseLike<{ error: { message: string } | null }> => {
+      switch (action) {
+        case 'warn':
+          return supabase.from('notifications').insert({
+            user_id: user.id, type: 'admin_warning',
+            title: 'Warning from Cavy',
+            body: reason || 'You have received an official warning.',
+          })
+        case 'suspend': {
+          const until = new Date(now.getTime() + parseInt(duration) * 24 * 60 * 60 * 1000)
+          return supabase.from('suspensions').insert({ user_id: user.id, suspended_until: until.toISOString(), banned: false, reason })
+        }
+        case 'ban':
+          return supabase.from('suspensions').insert({ user_id: user.id, banned: true, reason })
+        case 'reinstate':
+          return supabase.from('suspensions').delete().eq('user_id', user.id)
+        case 'verify':
+          return supabase.from('users').update({ is_verified: true }).eq('id', user.id)
+        case 'flag':
+          return supabase.from('users').update({ fraud_flagged: !user.fraud_flagged }).eq('id', user.id)
+        case 'waive':
+          // Free access: waive the £14.99 provider fee (or revoke it). The mobile publish
+          // gate treats a waived provider as fee-settled, so they can make their shop live.
+          return supabase.from('users').update({ provider_fee_waived: !user.provider_fee_waived }).eq('id', user.id)
+        case 'comp':
+          // Free membership: grant/revoke a comped model subscription (no Stripe charge). The
+          // mobile apply-gate (hasActiveSubscription) treats a waived member as subscribed —
+          // for App-Review demo accounts, comps and promos.
+          return supabase.from('users').update({ subscription_waived: !user.subscription_waived }).eq('id', user.id)
+        default:
+          // An action with no write is a bug, not a no-op to be logged. Refusing
+          // here is what stops a new action silently producing audit rows for
+          // something that never ran.
+          return Promise.resolve({ error: { message: `Unknown action "${action}" — nothing was attempted.` } })
+      }
     }
-    if (action === 'suspend') {
-      const until = new Date(now.getTime() + parseInt(duration) * 24 * 60 * 60 * 1000)
-      await supabase.from('suspensions').insert({ user_id: user.id, suspended_until: until.toISOString(), banned: false, reason })
+
+    const { error } = await perform()
+    if (error) {
+      alert(
+        `Could not ${action} this user: ${error.message}\n\n` +
+        'Nothing has changed, and nothing has been written to the audit log.',
+      )
+      return
     }
-    if (action === 'ban') {
-      await supabase.from('suspensions').insert({ user_id: user.id, banned: true, reason })
+
+    const logged = await logAction(action, { targetUserId: user.id, adminNote: reason })
+    if (!logged.ok) {
+      // THE ACTION STANDS. Undoing it because the record failed would leave an
+      // unrecorded reversal on top of an unrecorded action — two gaps instead of
+      // one — and the rollback can fail too. So the action holds and a person is
+      // told, which is the only part of this that cannot fail silently.
+      alert(
+        `The ${action} was applied, but it could NOT be recorded in the audit log:\n` +
+        `${logged.error}\n\n` +
+        'The action is in force. Record it by hand — this log is kept as evidence ' +
+        'for six years and there is now a gap in it.',
+      )
     }
-    if (action === 'reinstate') {
-      await supabase.from('suspensions').delete().eq('user_id', user.id)
-    }
-    if (action === 'verify') {
-      await supabase.from('users').update({ is_verified: true }).eq('id', user.id)
-    }
-    if (action === 'flag') {
-      await supabase.from('users').update({ fraud_flagged: !user.fraud_flagged }).eq('id', user.id)
-    }
-    if (action === 'waive') {
-      // Free access: waive the £14.99 provider fee (or revoke it). The mobile publish
-      // gate treats a waived provider as fee-settled, so they can make their shop live.
-      await supabase.from('users').update({ provider_fee_waived: !user.provider_fee_waived }).eq('id', user.id)
-    }
-    if (action === 'comp') {
-      // Free membership: grant/revoke a comped model subscription (no Stripe charge). The
-      // mobile apply-gate (hasActiveSubscription) treats a waived member as subscribed —
-      // for App-Review demo accounts, comps and promos.
-      await supabase.from('users').update({ subscription_waived: !user.subscription_waived }).eq('id', user.id)
-    }
-    await logAction(action, { targetUserId: user.id, adminNote: reason })
+
     setModal(null)
     setReason('')
     reload()

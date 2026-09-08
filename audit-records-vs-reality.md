@@ -1299,9 +1299,109 @@ of a larger one.**
 
 **Shape of the fix:** lift `db.ts` to a place all three apps can use — there is
 no workspace linkage, so that means three copies or a shared package, and that
-choice is itself the decision. Then convert the 25, choosing `mustWrite` or
-`tryWrite` at each one deliberately. `admin/app/users/page.tsx` first, and
-`logAction` must not run when the action it describes was refused.
+choice is itself the decision. **Deliberately NOT decided yet:** three copies is
+the two-places problem and a shared package is a build-system change, and
+neither should be settled as a side effect of fixing one screen. Then convert
+the remaining sites, choosing `mustWrite` or `tryWrite` at each one deliberately.
+
+**✅ 2 of 25 CLOSED, 8 Sep 2026 — the moderation evidence trail.**
+`admin/app/users/page.tsx` and `admin/lib/audit.ts`. Done with plain inline
+checks and no new abstraction, precisely so the sharing question stays open.
+
+**The fix was the ORDER, not error handling bolted around it.** The eight
+branches of `doAction()` became one `perform()` that returns its write; the
+result is checked; and only then is the audit row written. An action with no
+matching branch now returns an error rather than falling through to a log entry
+for something that never ran.
+
+`logAction` returns `{ ok }` / `{ ok: false, error }`. The other 13 call sites
+still ignore it — that is the remaining work, not something the function can
+force.
+
+**23 sites remain.**
+
+**── A CATEGORY OF ITS OWN: KNOWLEDGE THAT TRAVELLED WITHOUT THE MECHANISM ──**
+
+This is not the two-places family, where one rule ends up written twice and the
+copies drift. Here there is **one** solution, it is **correct**, and it simply
+did not move.
+
+`site/app/(app)/bookings/actions.ts:17` carries a comment reading *"Mobile
+handles this with mustWrite() and says exactly why"*. Somebody read `db.ts`,
+understood it, judged it worth referencing — and wrote a note instead of the
+helper. The understanding arrived; the enforcement did not.
+
+That is the same failure as item 19's "the artefact was a rule rather than a
+check", one level up: here the artefact was a *citation* of a check. Worth
+watching for, because it looks like diligence.
+
+**29. THE ACTION AND ITS AUDIT ROW ARE STILL NOT ATOMIC — NEW, 8 Sep 2026.
+NOT FIXED. THE ANSWER IS DELIBERATE AND SHOULD BE CHALLENGED IF IT IS WRONG.**
+
+Item 27's fix removed the false entry: no audit row is written unless the action
+succeeded. It does not make the two writes one. If the suspension lands and the
+audit insert then fails, there is a **gap** in the record — an action in force
+with nothing saying who did it or why.
+
+**What was chosen, and why.** The action stands and the admin is told, loudly,
+to record it by hand. Rolling the action back was the alternative and is worse:
+an unrecorded reversal on top of an unrecorded action is two gaps rather than
+one, and the rollback can fail in exactly the same way. A gap that a person has
+been told about is the least bad of the three states.
+
+**What would actually fix it:** a `SECURITY DEFINER` function that writes the
+suspension and the audit row in ONE transaction, so they cannot disagree — the
+same argument this project already accepted for `apply_subscription_state`
+(0023–0025), which exists so `users.subscription_status` and `subscriptions`
+cannot drift apart. The precedent is set; this is the same shape.
+
+It is a migration plus a rewrite of `doAction`, and it should cover the other
+admin surfaces that pair a write with a log — verification approve/reject,
+moderation decisions, category edits — or it just moves the seam.
+
+**── ARE THE ROWS ALREADY IN admin_audit_log TRUSTWORTHY? ───────────────**
+
+Unknown until checked. Probably none are false — one admin, who would have
+noticed — but "probably none" is what was said about the subscriptions.
+
+**⚠️ WHAT THESE QUERIES CAN AND CANNOT SHOW.** They compare the log against the
+state NOW. A ban that was refused and later re-applied successfully looks
+consistent, because the end state is right. So a clean result means *no
+surviving disagreement*, not *no false entry was ever written*.
+
+    -- BLOCK A: the latest state-changing action per user vs the state now.
+    with acts as (
+      select distinct on (target_user_id) target_user_id, action, created_at
+      from public.admin_audit_log
+      where action in ('suspend', 'ban', 'reinstate', 'verify')
+        and target_user_id is not null
+      order by target_user_id, created_at desc
+    )
+    select a.target_user_id, a.action, a.created_at,
+           exists (select 1 from public.suspensions s
+                    where s.user_id = a.target_user_id) as has_suspension,
+           u.is_verified
+    from acts a
+    left join public.users u on u.id = a.target_user_id
+    order by a.created_at desc;
+
+    -- Read it as: suspend/ban -> has_suspension should be true.
+    --             reinstate   -> has_suspension should be false.
+    --             verify      -> is_verified should be true.
+    -- Any row failing its expectation is a candidate false entry.
+
+    -- BLOCK B: warnings. Every logged 'warn' should have delivered a
+    -- notification, and this one does not depend on ordering.
+    select
+      (select count(*) from public.admin_audit_log where action = 'warn')     as warns_logged,
+      (select count(*) from public.notifications where type = 'admin_warning') as warnings_delivered;
+
+    -- warns_logged > warnings_delivered means a warning was recorded as sent
+    -- and never reached anyone. (The reverse is fine: notifications can be
+    -- created by other paths.)
+
+    -- flag / waive / comp are TOGGLES, so the current value cannot be checked
+    -- against a single log row. They are not covered by either block.
 
 **28. THE REPO HAS NO CI. NEW, 8 Sep 2026. NOT FIXED.**
 
