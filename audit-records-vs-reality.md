@@ -1041,12 +1041,37 @@ depend on the thing it claims to prove, and here its mirror — *a failure signa
 that does not depend on there being a failure.* Empty is empty. The retention
 tile, the cron rows and the SEO pages were all the same.
 
-**Worth fixing as:** the block case is the one worth naming, because it is the
-only one the model can act on and the only one where "nothing here" is actively
-misleading — something along the lines of *"You've blocked one or more stylists
-near you"*, which needs no count and leaks nothing about who. The unpublished and
-distance cases are already explicable by the distance pill and the browse page.
-Cheap; not scoped here.
+**✅ CLOSED 8 Sep 2026, ON BOTH CLIENTS.** The block case is named, and only the
+block case — it is the only one the model can act on and the only one where
+"nothing here" is actively misleading. The unpublished and distance cases stay
+unexplained because the distance pill and the browse page already account for
+them.
+
+    web     getStylistUpdates returns hiddenByBlock: boolean
+    mobile  the same, computed against the blocked provider ids
+
+*"Nothing to show right now. You've blocked one or more stylists, so their
+updates don't appear here."*
+
+**A BOOLEAN, NOT A COUNT, AND THAT IS THE WHOLE DESIGN.** A count of one tells a
+model who blocked exactly one stylist that that stylist posted today. That is
+more than they need and more than this product should say, and it is the reason
+the original note asked for wording that "needs no count and leaks nothing about
+who".
+
+**⚠️ AND A DETOUR WORTH RECORDING.** The mobile feed shipped a few hours earlier
+with the section HIDDEN when empty — chosen on the grounds that a permanent empty
+box at the top of a dashboard is noise. That is true and it was still wrong: it
+made this item worse rather than neutral. A model who had blocked the stylists
+posting nearby saw no section at all, which reads as *a feature that does not
+exist* rather than *a feed that is filtered* — the same ambiguity one layer
+further down.
+
+Micky's second point on it is the one to keep: **the call was made unprompted.**
+It was defensible, and it was exactly the kind of decision to put up rather than
+absorb — in the same hour a much smaller question, about what a video thumbnail
+should do, was brought to him. The wrong one was checked. Defensibility is what
+makes an unprompted call hard to notice afterwards.
 
 **21. MOBILE CAN READ STATUS POSTS AND CANNOT WRITE ONE — NEW, 7 Sep 2026.**
 

@@ -159,6 +159,8 @@ function ModelHomeContent() {
   const [providers, setProviders]               = useState<Provider[]>([])
   const [updates,   setUpdates]                 = useState<StylistUpdate[]>([])
   const [allUpdates, setAllUpdates]             = useState(false)
+  /** At least one live update withheld by a block — audit item 20. */
+  const [updatesBlocked, setUpdatesBlocked]     = useState(false)
   const [favouriteIds, setFavouriteIds]         = useState<Set<string>>(new Set())
   const [selectedCategory, setSelectedCategory] = useState('All')
   const [search, setSearch]                     = useState('')
@@ -278,6 +280,17 @@ function ModelHomeContent() {
       // clearing the previous post; this is the reader-side half.
       const provById: Record<string, any> = {}
       for (const p of visibleProviders) provById[p.id as string] = p
+
+      // Blocked stylists are removed from visibleProviders above, so their
+      // posts would simply vanish. Note that it happened, without recording who
+      // — audit item 20 wants the reason named, not the person.
+      const blockedProviderIds = new Set(
+        (provData as any[] ?? [])
+          .filter(p => blockedIds.has(p.user_id as string))
+          .map(p => p.id as string),
+      )
+      setUpdatesBlocked(((statusData as any[]) ?? [])
+        .some(sp => blockedProviderIds.has(sp.provider_id as string)))
       const seen = new Set<string>()
       setUpdates(((statusData as any[]) ?? [])
         .filter(sp => {
@@ -503,31 +516,42 @@ function ModelHomeContent() {
               busy week would push a model's own bookings off the screen. Five
               fit without scrolling; the rest are one tap away.
 
-              Hidden entirely when empty rather than showing "nothing yet": at
-              the top of a dashboard that is a permanent empty box, and there is
-              no filter here whose absence needs explaining. */}
-          {updates.length > 0 && (
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Stylist updates</Text>
-              {(allUpdates ? updates : updates.slice(0, 5)).map(u => (
+              It renders even when empty, and the empty text says WHICH empty —
+              see the note below. It was hidden when empty for about an hour on
+              8 Sep, which was wrong for the reason recorded in audit item 20. */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Stylist updates</Text>
+            {updates.length === 0 ? (
+              /* ── AN EMPTY FEED STILL HAS TO SAY WHICH EMPTY IT IS ──────────
+                 This section was hidden entirely when empty, which made audit
+                 item 20 worse rather than neutral: a model who had blocked the
+                 stylists posting nearby saw no section at all, which reads as a
+                 feature that does not exist rather than a feed that is
+                 filtered. Web words its empty state; so does this now. */
+              <Text style={styles.updatesEmpty}>
+                {updatesBlocked
+                  ? 'Nothing to show right now. You\u2019ve blocked one or more stylists, so their updates don\u2019t appear here.'
+                  : 'No stylist has posted an update right now. Updates last 48 hours, so this changes through the week.'}
+              </Text>
+            ) : null}
+            {(allUpdates ? updates : updates.slice(0, 5)).map(u => (
                 <UpdateRow key={u.providerId} update={u} onOpen={() => openProvider(u.providerId)} />
               ))}
-              {updates.length > 5 && (
-                <TouchableOpacity
-                  onPress={async () => {
-                    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
-                    setAllUpdates(v => !v)
-                  }}
-                  style={styles.updatesMoreBtn}
-                  activeOpacity={0.8}
-                >
-                  <Text style={styles.updatesMoreText}>
-                    {allUpdates ? 'Show fewer' : `Show all ${updates.length}`}
-                  </Text>
-                </TouchableOpacity>
-              )}
-            </View>
-          )}
+            {updates.length > 5 && (
+              <TouchableOpacity
+                onPress={async () => {
+                  await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+                  setAllUpdates(v => !v)
+                }}
+                style={styles.updatesMoreBtn}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.updatesMoreText}>
+                  {allUpdates ? 'Show fewer' : `Show all ${updates.length}`}
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
 
           {/* ── Upcoming sessions ── */}
           {upcomingSessions.length > 0 && (
@@ -1252,15 +1276,18 @@ const styles = StyleSheet.create({
   updateName: { fontFamily: Fonts.bodyBold, fontSize: 13, color: Colors.warmDark },
   updateBubbleWrap: { flexDirection: 'row', alignItems: 'flex-start', marginTop: 3 },
   // Drawn as a triangle to the LEFT of the bubble, never overlapping it.
+  // Full-strength softPink, not 70%. At 0.7 on the cream page background the
+  // bubble washed out and the message read as loose text rather than as
+  // something somebody said.
   updateTail: {
     width: 0, height: 0,
     borderTopWidth: 0,
-    borderRightWidth: 8, borderRightColor: Colors.softPink + 'B3',
+    borderRightWidth: 8, borderRightColor: Colors.softPink,
     borderBottomWidth: 8, borderBottomColor: 'transparent',
   },
   updateBubble: {
     flex: 1,
-    backgroundColor: Colors.softPink + 'B3',
+    backgroundColor: Colors.softPink,
     borderTopRightRadius: 14,
     borderBottomLeftRadius: 14,
     borderBottomRightRadius: 14,
@@ -1268,6 +1295,10 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
   },
   updateText: { fontFamily: Fonts.bodyBold, fontSize: 14, color: Colors.warmDark, lineHeight: 19 },
+  updatesEmpty: {
+    fontFamily: Fonts.body, fontSize: 13, color: Colors.muted,
+    lineHeight: 18, marginTop: 6,
+  },
   updatesMoreBtn: { minHeight: 44, justifyContent: 'center', marginTop: 4 },
   updatesMoreText: { fontFamily: Fonts.bodyBold, fontSize: 13, color: Colors.roseDark },
   sectionTitle: {

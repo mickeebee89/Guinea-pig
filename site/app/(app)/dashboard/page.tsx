@@ -313,10 +313,19 @@ export default async function DashboardPage({
           )}
 
           {feed.updates.length === 0 ? (
-            <p className="text-sm text-muted">
-              No stylists have posted an update{radius.miles ? ` within ${radius.miles} miles` : ''} right
-              now. Updates last 48 hours, so this changes through the week.
-            </p>
+            /* Audit item 20: an empty feed is not the same claim as "nobody
+               posted". Say which it is when we know. */
+            feed.hiddenByBlock ? (
+              <p className="text-sm text-muted">
+                Nothing to show right now. You’ve blocked one or more stylists, so their
+                updates don’t appear here. Everything else you’d see is up to date.
+              </p>
+            ) : (
+              <p className="text-sm text-muted">
+                No stylists have posted an update{radius.miles ? ` within ${radius.miles} miles` : ''} right
+                now. Updates last 48 hours, so this changes through the week.
+              </p>
+            )
           ) : (
             <ul className="space-y-4">
               {feed.updates.map(u => (

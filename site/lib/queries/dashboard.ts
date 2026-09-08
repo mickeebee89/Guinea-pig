@@ -417,6 +417,20 @@ export interface UpdateFeed {
   updates: (StylistUpdate & { distanceMiles: number | null })[]
   /** Null when the account has no stored location, which disables filtering. */
   viewerHasLocation: boolean
+  /**
+   * True when at least one live update was withheld because of a block — audit
+   * item 20.
+   *
+   * An empty feed used to say "no stylists have posted an update right now",
+   * which is a claim about the world. Three things make it false: a block, an
+   * unpublished shop, and the distance filter. The block is the only one the
+   * reader can act on, so it is the only one named.
+   *
+   * DELIBERATELY A BOOLEAN, NOT A COUNT. A count of one tells a model who
+   * blocked exactly one stylist that that stylist posted today, which is more
+   * than they need and more than we should say.
+   */
+  hiddenByBlock: boolean
 }
 
 /**
@@ -461,6 +475,8 @@ export async function getStylistUpdates(
   const me = meRes.data as { latitude: number | null; longitude: number | null } | null
   const hasLoc = me?.latitude != null && me?.longitude != null
 
+  let hiddenByBlock = false
+  let hiddenByBlock = false
   const blocked = new Set(
     ((blockRes.data ?? []) as { blocker_id: string; blocked_id: string }[])
       .map(b => (b.blocker_id === userId ? b.blocked_id : b.blocker_id)),
@@ -490,7 +506,10 @@ export async function getStylistUpdates(
     // an unpublished shop is invisible in the app — a status update must not be
     // a way around that.
     .filter(({ p }) => !!p)
-    .filter(({ p }) => !(p.user_id && blocked.has(p.user_id)))
+    .filter(({ p }) => {
+      if (p.user_id && blocked.has(p.user_id)) { hiddenByBlock = true; return false }
+      return true
+    })
     .map(({ sp, p }) => {
       // providers carries lat/lng twice, the same duplication as
       // location/location_text. Prefer whichever is populated rather than
@@ -515,5 +534,5 @@ export async function getStylistUpdates(
     .filter(u => radiusMiles == null || (u.distanceMiles != null && u.distanceMiles <= radiusMiles))
     .sort((a, b) => (a.distanceMiles ?? Infinity) - (b.distanceMiles ?? Infinity))
 
-  return { updates, viewerHasLocation: !!hasLoc }
+  return { updates, viewerHasLocation: !!hasLoc, hiddenByBlock }
 }
