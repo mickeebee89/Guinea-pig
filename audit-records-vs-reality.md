@@ -1676,10 +1676,21 @@ gets its own status rather than hiding behind another's failure.
 unlimited on public repositories. That was checked before wiring rather than
 after a month of runs.
 
-**✅ AND IT EARNED ITS KEEP ON THE FIRST RUN — SEE ITEM 30.**
+**✅ CLOSED 8 Sep 2026, AND IT EARNED ITS KEEP ON THE FIRST RUN.**
 
-**30. TWO GATES HAD NEVER PASSED ANYWHERE EXCEPT A MACHINE THAT ALREADY HAD THE
-ANSWER — FOUND BY CI'S FIRST RUN, 8 Sep 2026.**
+First push: `admin` green, `site` and `mobile` **red** — see item 30. Both had
+passed on every machine they had ever run on. After the fixes, on `2e2bd5f`:
+site green in 30s, mobile green in 1m 07s, and **admin did not re-run at all**
+because the commit touched no file under `admin/`. The path filters work, which
+was the reason for three workflows rather than one.
+
+It remains a signal and not a gate. Everything above about branch protection
+still stands.
+
+**30. A CHECK THAT HAS ONLY EVER RUN WHERE ITS INPUTS WERE ALREADY SATISFIED IS
+NOT A CHECK THAT PASSES — IT IS A CHECK NOBODY HAS RUN.**
+
+*Found by CI's first run, 8 Sep 2026. This is the headline of this file.*
 
 `admin` passed. `site` and `mobile` failed on `npm run checks`, not on
 `npm ci` — and both passed in the working tree. Something generated and
@@ -1728,10 +1739,27 @@ the merits — next/og is not a browser and cannot use `next/image`.
 **⚠️ STILL UNVERIFIED ON LINUX.** All three now pass `npm ci && npm run checks`
 from a fresh clone on this machine. The next CI run is what proves site.
 
-**The shape, and it is the one this file keeps recording.** A check that has only
-ever run where its inputs were already satisfied is not a check that passes — it
-is a check nobody has run. `npm run checks` was green on every machine it had
-touched, and both greens were an artefact of the machine.
+**── TWO THINGS TO KEEP ALONGSIDE THE HEADLINE ───────────────────────**
+
+**1. A FIX THAT IS NOT IN THE REPO IS INDISTINGUISHABLE FROM A FIX THAT DID NOT
+WORK.** `src/types/expo-env.d.ts` was written, verified in the working tree, and
+never committed — `.gitignore` matched its basename at any depth. Only
+re-cloning caught it. **`.gitignore` patterns without a leading slash match a
+basename anywhere in the tree, and this will happen again**: check
+`git check-ignore -v <path>` when a new file is meant to be committed and the
+symptom does not move.
+
+**2. SITE IS FIXED WITHOUT BEING UNDERSTOOD, AND THE RECORD MUST NOT SETTLE.**
+The directive is *used* on Windows/Node 24 and was *unused* on Linux/Node 22.
+The config override is correct either way, which is why it was chosen — but
+**the green run on `2e2bd5f` proves the symptom is gone, not that anyone knows
+why the environments disagreed.** Do not let this shorten to "fixed" in a later
+retelling; that is the item-19/27 shape, and it has already happened three times
+in this file.
+
+**The shape, and it is the one this file keeps recording.** `npm run checks` was
+green on every machine it had touched, and both greens were an artefact of the
+machine.
 
 **What is still true after this.** The build-time gates remain the only thing
 that can actually stop something shipping:
