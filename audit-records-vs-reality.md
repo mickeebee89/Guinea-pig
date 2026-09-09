@@ -1708,6 +1708,90 @@ was the reason for three workflows rather than one.
 It remains a signal and not a gate. Everything above about branch protection
 still stands.
 
+**32. ⚠️ THE IMAGE REVIEW QUEUE MAY NEVER RECEIVE ANYTHING — OPEN,
+9 Sep 2026. ONE QUERY SETTLES IT.**
+
+`portfolio_items.moderation_status` defaults to **`'approved'`**;
+`status_posts.moderation_status` defaults to `'pending'`. Same column name, same
+CHECK vocabulary, opposite defaults — one fails open, one fails closed.
+
+**Confirmed from the code:** NEITHER upload path sets the column.
+
+    site/app/(app)/portfolio/PortfolioManager.tsx:82   provider_id, media_url, media_type
+    mobile/src/app/(app)/portfolio.tsx:226             provider_id, media_url, media_type, category_id
+
+So the default decides, and the default is `'approved'`. Meanwhile
+`admin/app/moderation/page.tsx` fills the Images tab with
+`.eq('moderation_status', 'pending')`.
+
+**If nothing else writes `'pending'`, then:**
+
+* the Images queue is permanently empty, and has been;
+* the `image_review_enabled` toggle governs nothing on the write path — its own
+  confirm dialog offers to "immediately publish all N images waiting in the
+  queue", a queue that cannot fill;
+* and `PortfolioManager.tsx:89` tells the stylist *"It'll appear on your profile
+  once it's been reviewed."* A published promise with no mechanism behind it,
+  which is the category this whole audit opened with.
+
+**⚠️ NOT ASSERTED, BECAUSE THE REPO CANNOT ANSWER IT.** `portfolio_items`
+predates the migration framework — no migration creates it, and 0031 only
+mentions it in a comment. A BEFORE INSERT trigger reading
+`settings.image_review_enabled` could exist in the database, made by hand in the
+dashboard, and no file here would show it. That is precisely the case where
+reading migrations tells you what was intended rather than what is there.
+
+    select tgname, pg_get_triggerdef(oid) as definition
+    from pg_trigger
+    where tgrelid = 'public.portfolio_items'::regclass
+      and not tgisinternal;
+
+    select count(*) filter (where moderation_status = 'pending')  as pending,
+           count(*) filter (where moderation_status = 'approved') as approved,
+           count(*) filter (where moderation_status = 'rejected') as rejected
+    from public.portfolio_items;
+
+No trigger AND zero `pending` rows ever = the queue has never worked. A trigger,
+or any pending rows, and the defaults are merely inconsistent rather than
+broken.
+
+**33. `notifications.type` HAS NO CHECK CONSTRAINT — LOGGED 9 Sep 2026.**
+
+Free text. A typo creates a new type silently, and every reader falls through to
+a default rather than erroring.
+
+**That is how the notification-type allowlist bug survived.** The allowlist was
+correct for the types that existed when it was written; a new type joined the
+table and inherited the fallback rather than tripping anything. With no
+constraint there is no moment at which the system can notice.
+
+A CHECK listing the live vocabulary would turn a silent typo into a refused
+write. Not added here: it needs the current distinct values read first, because
+a CHECK that omits a type already in the table fails on creation.
+
+    select type, count(*) from public.notifications group by type order by 2 desc;
+
+**34. TWO `reviewed_by` COLUMNS POINT AT DIFFERENT TABLES — LOGGED
+9 Sep 2026.**
+
+`reports.reviewed_by` → `auth.users(id)`.
+`verification_requests.reviewed_by` → `public.users(id)`.
+
+Both record "which admin dealt with this", against two different tables. The
+dedicated console admin is deliberately never an app user (CLAUDE.md), so it has
+an `auth.users` row and may have no `public.users` row at all — which means
+**`verification_requests.reviewed_by` may be unwritable for the primary admin**
+and silently null for every request they handle.
+
+`admin_audit_log.admin_id` → `auth.users`, which is the right choice for the
+same reason. Worth checking whether any verification request reviewed by the
+dedicated admin has a null `reviewed_by`:
+
+    select count(*) filter (where reviewed_at is not null and reviewed_by is null)
+             as reviewed_but_unattributed,
+           count(*) filter (where reviewed_at is not null) as reviewed_total
+    from public.verification_requests;
+
 **31. `providers` HAS TWO COLUMNS FOR ONE COORDINATE PAIR — LOGGED
 8 Sep 2026, NOT FIXED.**
 
