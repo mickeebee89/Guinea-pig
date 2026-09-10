@@ -1708,8 +1708,70 @@ was the reason for three workflows rather than one.
 It remains a signal and not a gate. Everything above about branch protection
 still stands.
 
-**37. THE SITE'S BROWSER-SIDE SUPABASE KEY IS NOT A KEY — LOCALLY. FOUND
-10 Sep 2026. PRODUCTION NOT YET CHECKED. NOT FIXED.**
+**38. THE SITE'S SUPABASE SETTINGS EXIST UNDER TWO NAMES EACH — LOGGED
+10 Sep 2026. NOT FIXED.**
+
+Four variables for two things, in both environments:
+
+| Thing | Server name | Browser name |
+|---|---|---|
+| Project URL | `SUPABASE_URL` | `NEXT_PUBLIC_SUPABASE_URL` |
+| Public API key | `SUPABASE_ANON_KEY` | `NEXT_PUBLIC_SUPABASE_ANON_KEY` |
+
+**Locally the pattern is already contained.** `site/.env.local` writes each browser
+name as a reference to the server name (`$SUPABASE_URL`, `$SUPABASE_ANON_KEY`), so
+each pair has one real value and cannot drift.
+
+**On Vercel it is not.** Vercel stores every variable as an independent value, and
+the two copies already differ in FORMAT:
+
+* production's `NEXT_PUBLIC_SUPABASE_ANON_KEY` is a **legacy JWT** (`eyJ…`);
+* the key in `site/.env.local`, `admin/.env.local` and `mobile/.env` is a **new
+  publishable key** (`sb_publishable_…`), byte-identical across all three.
+
+Both formats are accepted today: a JWT-keyed request returned `404` rather than
+`401`, and a publishable-keyed request returned `406` rather than `401`. **The
+consequence is conditional and specific:** if legacy JWT keys are ever switched off
+for this project, production's browser-side chat and portfolio upload break, while
+local development and both other apps keep working — so it would be noticed last
+in exactly the place it matters most. Vercel's `SUPABASE_ANON_KEY` format was not
+read.
+
+**The sixth one-thing-two-names instance in this schema and its surroundings**,
+after `location`/`location_text`, `location_lat`/`latitude` (item 31), `plan`, the
+Stripe key case-twin, and `sessions`/`bookings`. This is the one hardest to notice,
+because Vercel shows the four variables as four unrelated rows.
+
+**37. ⚠️ WITHDRAWN 10 Sep 2026 — NOT A DEFECT. THE ORIGINAL WRITE-UP BELOW WAS
+WRONG.**
+
+**What is true:** `site/.env.local` contains
+`NEXT_PUBLIC_SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY` — a **reference** to the other
+variable, not a broken value. Next.js expands `$VAR` references in `.env` files
+when it loads them (the expander ships in `@next/env`), so at runtime the browser
+client receives the same valid publishable key the server uses. **The local site's
+chat and portfolio upload work.** The line beside it is the same shape:
+`NEXT_PUBLIC_SUPABASE_URL=$SUPABASE_URL`.
+
+**How that was established, not guessed:** the 18-character value's hash is
+identical to the hash of the literal string `$SUPABASE_ANON_KEY`, which is exactly
+18 characters.
+
+**Where the 401 actually came from:** the PowerShell command read the line as text
+and passed the literal `$SUPABASE_ANON_KEY` to curl as the API key. **Micky's first
+hypothesis — that the extraction failed — was right**, not on line endings but on
+not resolving the reference. The write-up below says both of his hypotheses were
+ruled out. That was wrong.
+
+**The error, and it is the same one again:** the check measured the TEXT in the
+file — its format and its length — and not the VALUE the program resolves from
+it, then wrote "not a key" into this file. A real measurement of the wrong thing.
+It also carried into Micky's own conclusions ("item 37 is local only"; "one of the
+local twins is already broken"), which rested on it.
+
+**What survives is item 38**, which is about the twins themselves.
+
+*The original write-up, kept as it was:*
 
 **What breaks, plainly:** on a local dev server, the site's chat screen and
 portfolio upload fail on every call they make to Supabase from the browser.
@@ -1800,14 +1862,28 @@ Data API. It has also been pasted into two transcripts.
   *"Could not find the table 'public.pg_proc' in the schema cache"*. The default
   schema is `public`, and `pg_proc` is not in it.
 
-**⚠️ Not yet established: whether `pg_catalog` is an exposed schema at all.**
-PostgREST only searches a schema other than the default when the request names it
-in an `Accept-Profile` header, and that request did not. So the 404 rules out
-`public.pg_proc` and says nothing about `pg_catalog`. One request with
-`Accept-Profile: pg_catalog` settles it, and its error lists the schemas that ARE
-exposed. Until then this item does not say "never reachable through the API",
-because that would be the fifth time in this file a measurement of part was
-written down as the whole.
+* **`pg_catalog` is not reachable through the API by any account, signed in or
+  not.** `GET /rest/v1/pg_proc` with `Accept-Profile: pg_catalog` →
+  `406 PGRST106`, *"Invalid schema: pg_catalog"*, hint *"Only the following schemas
+  are exposed: public, graphql_public"*. The error names the exposed schemas, so
+  this does not rest on inference. The exposed-schema list is the same for every
+  role, so the answer holds for `anon` and `authenticated` alike.
+
+**It took two requests, and the first did not settle it.** The 404 proved only that
+`pg_proc` is not in `public`, because PostgREST searches another schema only when
+a request names it in `Accept-Profile`. The item held off saying "never reachable"
+until the second request; recording that because stopping at the first would have
+been the fifth partial measurement in this file written down as the whole.
+
+**So the actual exposure, stated once:** direct database access, which is Micky
+alone, plus two transcripts. No real users, nothing taken, rotated regardless.
+
+**Where the new secret lives — an existing pattern, not a new one.** Vault is
+enabled (`supabase_vault 0.3.1`) and already in use: `cron_secret_purge_selfies`,
+created 27 Jul, stored with `vault.create_secret(...)` and read inline in
+`supabase/purge-selfies-cron.sql` as
+`(select decrypted_secret from vault.decrypted_secrets where name = '...')`. 0038
+follows it exactly for the push secret.
 Micky's count: the second credential to escape that way.
 
 **What a holder can do**, read from `supabase/functions/send-push/index.ts`: POST
