@@ -1708,6 +1708,79 @@ was the reason for three workflows rather than one.
 It remains a signal and not a gate. Everything above about branch protection
 still stands.
 
+**36. ⚠️ THE PUSH SECRET IS HARDCODED IN TWO FUNCTION BODIES — FOUND 10 Sep 2026.
+URGENT. NOT YET ROTATED.**
+
+**What:** the `send-push` shared secret sits in plaintext inside the bodies of
+**`tg_notify_push`** (AFTER INSERT on `notifications`) **and `tg_message_push`**.
+The second was not in the trigger query that surfaced the first, because that
+query did not include `messages`; the 8 Aug schema snapshot's header names both.
+Readable by any role with a SQL session through `pg_proc` or
+`pg_get_functiondef` — not through the public API, but by every dashboard member,
+every holder of the database password or service role, and any future function
+that returns a definition. It has now also been pasted into two transcripts.
+Micky's count: the second credential to escape that way.
+
+**What a holder can do**, read from `supabase/functions/send-push/index.ts`: POST
+`{ user_id, title, body, data }` with the header, and the function looks up that
+user's push tokens with the service role and delivers through Expo. **Any text,
+with any deep-link `data`, to any user's phone, arriving as Cavy.** The only
+other thing needed is a user id, and those appear in app routes. This is an
+impersonation and phishing channel, not a configuration tidy-up.
+
+**Not in the public repo — checked, not assumed.** The prefix appears in no file
+in the working tree and in no commit on any ref (`git log --all -S`, ids only).
+The committed files, `supabase/push-setup.sql` and
+`supabase/schema-snapshot-2026-08-08.sql`, carry the placeholder
+`REPLACE_WITH_PUSH_HOOK_SECRET` and contain no long hex strings. The real value was
+pasted into the database by hand.
+
+**⚠️ A LATENT PATH TO GITHUB STILL EXISTS.** The snapshot's own instructions say to
+regenerate it from the live database "whenever you need certainty". Regenerating it
+without redacting, and committing the result, would publish the live secret in a
+public repo. Moving the secret out of the function bodies closes that path too.
+
+**The knowledge travelled; the mechanism did not.** The 8 Aug snapshot already
+said, in its header, that both functions *"embed the send-push shared secret in
+their bodies"*, and it carefully redacted the value from the file. So a month ago
+someone knew the secret was in `pg_proc`, protected the file, and left the secret
+where it was. Same category as `site/app/(app)/bookings/actions.ts` citing
+`mustWrite` without using it: a correct note in place of a fix.
+
+**Fix:** rotate the secret; store the new value in Supabase Vault; both functions
+read it from `vault.decrypted_secrets` at call time (they are SECURITY DEFINER, so
+they can), so the value never appears in a function body, a migration file, a
+snapshot, or a transcript. `send-push` already fails closed if `PUSH_HOOK_SECRET`
+is unset, which stays as it is.
+
+**Order, and the one decision it needs:** changing `PUSH_HOOK_SECRET` makes the
+exposed value useless at once, and makes every push fail until both functions send
+the new one. `pg_net` requests are queued asynchronously, so notification and
+message rows still insert — only the phone alert is lost for that window. Either
+close it immediately and accept pushes being down until the migration lands, or
+cut over in one sitting with a window of minutes. Micky's call.
+
+**── ALSO DECIDED 10 Sep, RECORDED HERE ────────────────────────────────────────**
+
+* **Item 34 applies to reports as well.** `actioned 3` — `no_reviewer 3`,
+  `no_resolution 3`; `open 4`. Of the three decided: **attributable 2,
+  conflicting_admins 1**, no anonymous rows, none missing an audit row. The two get
+  a reconstructed reviewer with provenance on the same terms as 0037; the
+  conflicting one stays NULL rather than guessed.
+* **Item 29, all three decisions confirmed:** the report functions write
+  `reports.reviewed_by` on every decision; `reports.resolution` gets the reason
+  the admin types; and `admin_act_on_provider`'s remove-portfolio action deletes
+  rows but NOT the storage objects — **those files are orphaned, logged here, and
+  deliberately kept out of the migration** rather than half-handling storage
+  inside a transaction.
+* **Item 35: moderation moves to the dedicated admin.** Micky's reason, recorded
+  as the reason: the problem is not which account is convenient, it is that the
+  personal account holds a provider profile in the product it moderates. Still
+  open on the same item: the dedicated admin also has an app account
+  (`role model`), which the separation was meant to exclude.
+* **The ledger reads 0034–0037 with no gaps**, 0035–0037 applied 10 Sep. The
+  secret fix takes 0038; the four item-29 functions move to 0039.
+
 **35. BREAK-GLASS BECAME THE NORMAL PATH BY DRIFT — LOGGED 10 Sep 2026.
 NOT FIXED.**
 
