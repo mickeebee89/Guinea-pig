@@ -1708,25 +1708,59 @@ was the reason for three workflows rather than one.
 It remains a signal and not a gate. Everything above about branch protection
 still stands.
 
-**36. ⚠️ THE PUSH SECRET IS HARDCODED IN TWO FUNCTION BODIES — FOUND 10 Sep 2026.
-URGENT. NOT YET ROTATED.**
+**36. THE PUSH SECRET IS HARDCODED IN TWO FUNCTION BODIES — FOUND 10 Sep 2026.
+NO REAL USERS, SO NOTHING WAS TAKEN. BEING ROTATED ANYWAY.**
+
+**What did and did not happen.** All 58 accounts on the platform are Micky's own or
+disposable test addresses, and Micky is the only person who has ever signed in.
+There was no one to send a spoofed push to and no one who could have read the
+secret. **This is not a breach and must not be recorded as one.** What follows
+describes a capability that becomes real the day the first real user signs up —
+which is the reason to fix it now.
+
+**Why rotate when nothing was exposed — Micky's reasoning, recorded as the
+reason:** a secret in a function body is a thing nobody remembers to change, and
+the day a real user signs up it becomes reachable by them. That is the whole shape
+of this audit: a mechanism that is fine until the conditions it assumed stop
+holding. Here the assumed condition is "nobody but the owner is on the platform".
 
 **What:** the `send-push` shared secret sits in plaintext inside the bodies of
 **`tg_notify_push`** (AFTER INSERT on `notifications`) **and `tg_message_push`**.
 The second was not in the trigger query that surfaced the first, because that
 query did not include `messages`; the 8 Aug schema snapshot's header names both.
-Readable by any role with a SQL session through `pg_proc` or
-`pg_get_functiondef` — not through the public API, but by every dashboard member,
-every holder of the database password or service role, and any future function
-that returns a definition. It has now also been pasted into two transcripts.
+
+**⚠️ FOURTH INSTANCE OF THE PARTIAL-MEASUREMENT PATTERN.** The secret was found in
+one function, and a second turned up only on follow-up — because the query that
+found the first had a table list, and `messages` was not on it. A measurement of
+part, reported as the whole: after "admin 6" (item 19), "the audit trail is
+unreliable" (item 27), and "the rewrite fixed the rule" (item 19 again). **So the
+sweep across every public function and cron job (issued 10 Sep) is the SCOPE of
+this item, not a confirmation of the two already found.** If it finds a third,
+this item grows.
+**⚠️ WHO CAN READ IT IS NOT YET ESTABLISHED — AND THE FIRST VERSION OF THIS ITEM
+SAID IT WAS.** It read: *"readable by any role with a SQL session … not through
+the public API"*. The second half was asserted, not checked. The distinction it
+glossed is the whole finding:
+
+* **"An admin could read it"** — true today, and describes a platform with one
+  operator.
+* **"Any signed-in account could read it"** — describes what happens the moment
+  the platform has users, and is the version that matters.
+
+`pg_proc` is readable by `PUBLIC` in a stock Postgres, so the question is not
+privilege but reach: whether an `authenticated` JWT can get a query to `pg_proc`
+through any exposed schema, RPC or view. Queries to settle it were issued on
+10 Sep; this item records the answer when it comes back, not before. It has also
+been pasted into two transcripts.
 Micky's count: the second credential to escape that way.
 
 **What a holder can do**, read from `supabase/functions/send-push/index.ts`: POST
 `{ user_id, title, body, data }` with the header, and the function looks up that
 user's push tokens with the service role and delivers through Expo. **Any text,
 with any deep-link `data`, to any user's phone, arriving as Cavy.** The only
-other thing needed is a user id, and those appear in app routes. This is an
-impersonation and phishing channel, not a configuration tidy-up.
+other thing needed is a user id, and those appear in app routes. With no real
+users that capability reached no one; with real users it is an impersonation and
+phishing channel, not a configuration tidy-up.
 
 **Not in the public repo — checked, not assumed.** The prefix appears in no file
 in the working tree and in no commit on any ref (`git log --all -S`, ids only).
@@ -1756,9 +1790,9 @@ is unset, which stays as it is.
 **Order, and the one decision it needs:** changing `PUSH_HOOK_SECRET` makes the
 exposed value useless at once, and makes every push fail until both functions send
 the new one. `pg_net` requests are queued asynchronously, so notification and
-message rows still insert — only the phone alert is lost for that window. Either
-close it immediately and accept pushes being down until the migration lands, or
-cut over in one sitting with a window of minutes. Micky's call.
+message rows still insert — only the phone alert is lost for that window. With no
+real users the outage window reaches no one, so closing it immediately costs
+nothing. Micky is rotating.
 
 **── ALSO DECIDED 10 Sep, RECORDED HERE ────────────────────────────────────────**
 
