@@ -1579,13 +1579,37 @@ The client calls `supabase.rpc(...)` and gets a single error or a single success
 provider is silently not published. **The function itself cannot fail the
 transaction.** Micky's reading, and it is right as far as it goes.
 
-**⚠️ NOT YET ESTABLISHED that the approval cannot roll back.** The `UPDATE` fires
-the `BEFORE UPDATE` triggers on `providers`, and
-`trg_publish_requires_complete_profile` DOES raise (23514). Whether a row can pass
-the function's `WHERE` — `provider_shop_is_publishable(p.id)` and
-`users.is_verified` — and still fail a trigger depends on whether those checks agree
-with `enforce_publish_requires_complete_profile` and
-`enforce_publish_requires_verified`. All three bodies requested verbatim.
+**The question:** the `UPDATE` fires the `BEFORE UPDATE` triggers on `providers`,
+and `trg_publish_requires_complete_profile` DOES raise (23514). Can a row pass the
+function's `WHERE` — `provider_shop_is_publishable(p.id)` and `users.is_verified`
+— and still fail a trigger?
+
+**Micky's reading of the three bodies, 10 Sep (his summaries, not verbatim):** the
+function and `enforce_publish_requires_complete_profile` test the same two things,
+a name and at least one treatment with a category (the trigger's own comment says
+there is deliberately no bio check — the 40-character bar is the public site
+only), and `enforce_publish_requires_verified` is covered because the function's
+`WHERE` already requires `is_verified`. So `publish_provider_if_eligible` cannot
+roll an approval back; an ineligible provider is silently not published.
+
+**⚠️ The summaries themselves differ in one place, pending the verbatim lines: the
+name test.** Function: `name <> ''`. Trigger: raises if `btrim(name) = ''`. If those
+are the literal conditions:
+
+* a name of **only spaces** passes the function (`'  ' <> ''` is true) and fails the
+  trigger — that approval rolls back, today;
+* a **NULL** name fails the function (`NULL <> ''` is not true) and passes the
+  trigger (`btrim(NULL) = ''` is not true either, so it does not raise) — no
+  rollback here, but a NULL-named shop can be published by any other path.
+
+A summary can compress `btrim(name) <> ''` to `name <> ''`, so this is a lead and
+not a finding. The two bodies, and a count of providers in each name state, were
+requested 10 Sep.
+
+**Holds whatever that shows (Micky, 10 Sep): the two checks are duplicated and
+nothing keeps them in step.** If one gains a condition the other lacks, the function
+starts producing rows the trigger refuses, and the rollback risk appears for real.
+0039 records this with a `comment on function` on each, so it sits where both live.
 
 **Holds either way, and goes into the function:** an approval that does not publish
 tells nobody. The shop stays hidden, the admin is not told, and the stylist is told
@@ -1730,6 +1754,74 @@ was the reason for three workflows rather than one.
 It remains a signal and not a gate. Everything above about branch protection
 still stands.
 
+**39. PUSH HAS SEVEN POINTS WHERE IT CAN FAIL WITHOUT SAYING SO, SO "NO TOKEN"
+CANNOT BE TOLD APART FROM "PUSH HAS NEVER WORKED" — LOGGED 10 Sep 2026. OPEN.**
+
+**What prompted it.** The first push after the item 36 rotation returned
+`200 {"sent":0}`. The response before it in `net._http_response` was the 03:15
+selfie purge, so nothing had called `send-push` for about fifteen hours (03:15 to
+18:29; described at the time as eighteen). Micky's question: genuinely quiet, or
+push failing silently for longer than tonight — the difference between "no
+users" and "push has never worked".
+
+**What `{"sent":0}` can mean, read from `supabase/functions/send-push/index.ts`.**
+Exactly two things: the recipient has no rows in `push_tokens`, **or the token
+lookup failed** — its error is discarded and an empty result is treated as no
+tokens. (Tokens that exist but are all dead return `{"sent":0,"pruned":N}`; verify
+B's response had no `pruned`, so it is one of the two.) "No token registered for
+that recipient" is therefore one of two readings, not yet established.
+
+**And `sent` over-reports.** It counts every token Expo did not mark
+`DeviceNotRegistered`, including tickets that came back as errors for any other
+reason — missing FCM credentials among them. A `{"sent":1}` would not prove a
+phone received anything.
+
+**Five more on the phone.** `usePushRegistration(session?.user?.id)` runs in
+`AppEntry` on every sign-in, so registration is wired. But `registerToken` in
+`mobile/src/lib/push.ts` has five ways to do nothing, each indistinguishable from
+success with nothing to do:
+
+| # | Exit | What would land there |
+|---|---|---|
+| 1 | `if (!Device.isDevice) return` | an emulator |
+| 2 | permission not granted → `return` | declined, including Android 13+ notification permission |
+| 3 | `getExpoPushTokenAsync` throws → `catch { return }` | a build without the native module, broken FCM config |
+| 4 | the `push_tokens` upsert result is discarded | an RLS refusal or a rejected row — already one of item 27's remaining mobile sites |
+| 5 | `registerToken(userId).catch(() => {})` | anything else |
+
+No log line, no state, nothing on screen. **A device that cannot receive pushes
+looks exactly like a device that has none to receive** — the signature this file
+keeps finding, on the one feature whose purpose is to reach someone who is not
+looking at the app.
+
+**⚠️ A lead, from the code and the policy as WRITTEN in `push-setup.sql` — the live
+policy has not been read: one phone, several accounts.** The upsert is
+`onConflict: 'token'`, and the policy is `for all using (user_id = auth.uid())`.
+When the token row already belongs to the previously signed-in account, Postgres
+checks the existing row against that policy and refuses the update with an error
+— which exit 4 discards. The comment above the upsert says it *"moves it to the
+current user"*; under that policy it cannot. `clearPushToken` on sign-out avoids
+this only when it runs and its delete succeeds, and its failure is swallowed too.
+If this holds, the token stays with whichever account registered it first, and
+every other account signed in on that phone gets `{"sent":0}` — which is exactly
+how test accounts get used.
+
+**Two cautions on the quiet hours, before reading anything into them:**
+
+* `pg_net` deletes old rows from `net._http_response` after `pg_net.ttl`. An empty
+  stretch there is evidence of nothing firing only if rows from before the stretch
+  survive. The 03:15 row did survive to 18:29; the setting is read, not assumed.
+* `tg_message_push` skips when a session has no model or the recipient is the
+  sender, so not every message calls `send-push`. `tg_notify_push` calls it for
+  every notification.
+
+**Not fixed.** Which point is failing decides the fix — a declined permission is a
+UI change, a throwing token fetch is a build or FCM problem, a refused upsert is a
+policy change plus item 27's `mustWrite`, and `send-push`'s two are server-side —
+so the data comes first. Requested 10 Sep: token rows per account, the live
+`push_tokens` policies, `pg_net.ttl` and the retained window, response breakdown,
+inserts in that window, and which account the 18:29 test went to.
+
 **38. THE SITE'S SUPABASE SETTINGS EXIST UNDER TWO NAMES EACH — LOGGED
 10 Sep 2026. NOT FIXED.**
 
@@ -1842,8 +1934,37 @@ checked and are both ruled out.
 
 **Not fixed:** the request was to find out which, not to change the file.
 
- — FOUND 10 Sep 2026.
-NO REAL USERS, SO NOTHING WAS TAKEN. BEING ROTATED ANYWAY.**
+**36. THE PUSH SECRET WAS HARDCODED IN TWO FUNCTION BODIES — FOUND 10 Sep 2026.
+✅ CLOSED 10 Sep 2026: ROTATED, MOVED TO VAULT, AND A PUSH RETURNED 200.
+NO REAL USERS, SO NOTHING WAS TAKEN.**
+
+*Title restored 10 Sep. Commit `08a2920` inserted item 37 using this item's title as
+its anchor and did not put the title back, so from then until this edit item 36
+began mid-sentence. No content was lost beyond the title.*
+
+**Closed on evidence, not on the migration applying.** Rotation: new value generated
+locally, stored in Vault as `push_hook_secret`, set as `PUSH_HOOK_SECRET` in the
+edge function, 0038 applied. Then:
+
+    verify A  tg_message_push  still_has_hex_literal false · reads_from_vault true · message_push
+              tg_notify_push   still_has_hex_literal false · reads_from_vault true · notify_push
+    verify B  364 · 200 · {"sent":0} · 18:29:49
+
+Block A proves the definitions changed; only Block B proves the Vault copy and the
+edge-function copy agree, which is why the item closed on B. What `{"sent":0}`
+means is a separate question — item 39.
+
+**⚠️ One more file still described the old arrangement.** `send-push`'s own
+comment said the secret is "baked in literally" to both function bodies, and its
+403 log hint told the reader to *"Re-run supabase/push-setup.sql with the current
+value"* — the file now marked DO NOT RE-RUN, because re-running it overwrites the
+live function bodies. Commit `611d1cb` was titled "the docs stop prescribing it";
+the search behind that matched the re-paste instruction's wording, not every
+description of where the secret lives. Found reading `send-push` for item 39, and
+corrected in the file. **The log hint only changes when `send-push` is redeployed,
+and that deploy must carry `--no-verify-jwt`**: there is no `supabase/config.toml`
+to hold the setting, and without the flag the gateway starts demanding a JWT that
+`pg_net` does not send, so every push would fail at the gateway.
 
 **What did and did not happen.** All 58 accounts on the platform are Micky's own or
 disposable test addresses, and Micky is the only person who has ever signed in.

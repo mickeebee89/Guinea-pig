@@ -29,8 +29,9 @@ Deno.serve(async (req) => {
   //
   // Only our DB triggers may call this, and they carry the secret in the header.
   // The catch is that the SAME secret lives in two places that nothing keeps in
-  // step: this env var, and the bodies of tg_message_push / tg_notify_push,
-  // where it is baked in literally (see supabase/push-setup.sql:38, :82).
+  // step: this env var, and Vault's `push_hook_secret`, which tg_message_push /
+  // tg_notify_push read at call time (migration 0038). Until 10 Sep 2026 it was
+  // baked into both function bodies literally — audit item 36. Never put it back.
   //
   // Rotate one and not the other and every push fails — silently, with both
   // halves looking correctly configured, and `supabase secrets list` showing a
@@ -58,9 +59,13 @@ Deno.serve(async (req) => {
       prefixMatches:  gotSecret?.slice(0, 6) === expectedSecret.slice(0, 6),
       hint: gotSecret === null
         ? 'No x-push-secret header — caller is not one of our DB triggers.'
+        : gotSecret === ''
+        ? 'Empty x-push-secret header — push_hook_secret is missing from Vault '
+        + '(the triggers send an empty value rather than fail the insert; migration 0038).'
         : 'Header present but wrong. If length and prefix match, the tail differs; '
-        + 'if they do not, the trigger is almost certainly holding a pre-rotation '
-        + 'secret. Re-run supabase/push-setup.sql with the current value.',
+        + 'if they do not, Vault push_hook_secret and PUSH_HOOK_SECRET hold different '
+        + 'values — set both to the same one. Do NOT re-run supabase/push-setup.sql: '
+        + 'it overwrites the live function bodies.',
     }))
     return respond({ error: 'Forbidden' }, 403)
   }
