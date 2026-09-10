@@ -1,10 +1,22 @@
 -- ============================================================================
 -- Push notifications — DB setup. Run in the Supabase SQL editor.
 --
--- Before running: pick a long random secret (e.g. `openssl rand -hex 32`), then
---   1) set it as an edge-function secret:  supabase secrets set PUSH_HOOK_SECRET=<secret>
---   2) replace every REPLACE_WITH_PUSH_HOOK_SECRET below with the SAME value.
--- Do NOT commit the real secret. (It only authorises calling send-push.)
+-- ⚠️ SUPERSEDED FOR THE SECRET BY MIGRATION 0038 (10 Sep 2026). DO NOT RE-RUN.
+--
+-- This file used to say "replace every REPLACE_WITH_PUSH_HOOK_SECRET below with
+-- the SAME value" — i.e. paste the send-push secret into both function bodies.
+-- That is how the live secret ended up in pg_proc (audit item 36). The two
+-- functions now read it from Vault at call time, under push_hook_secret, and
+-- the expressions below have been changed to match so an accidental re-run
+-- cannot put a literal back.
+--
+-- Re-running this file is still unsafe for a different reason: its function
+-- bodies may have drifted from what is live, and CREATE OR REPLACE would
+-- overwrite the live versions with these. The database is the authority.
+--
+-- The secret itself: generate locally, store it in Vault as push_hook_secret AND
+-- as the PUSH_HOOK_SECRET edge-function secret, with the same value. Never paste
+-- it into a function body, a migration, or a transcript.
 -- The send-push function URL below uses project ref ptluekkhiopowuyvkgnd.
 -- ============================================================================
 
@@ -35,7 +47,7 @@ begin
     url     := 'https://ptluekkhiopowuyvkgnd.supabase.co/functions/v1/send-push',
     headers := jsonb_build_object(
                  'Content-Type', 'application/json',
-                 'x-push-secret', 'REPLACE_WITH_PUSH_HOOK_SECRET'),
+                 'x-push-secret', coalesce((select decrypted_secret from vault.decrypted_secrets where name = 'push_hook_secret'), '')),
     body    := jsonb_build_object(
                  'user_id', new.user_id,
                  'title',   new.title,
@@ -79,7 +91,7 @@ begin
     url     := 'https://ptluekkhiopowuyvkgnd.supabase.co/functions/v1/send-push',
     headers := jsonb_build_object(
                  'Content-Type', 'application/json',
-                 'x-push-secret', 'REPLACE_WITH_PUSH_HOOK_SECRET'),
+                 'x-push-secret', coalesce((select decrypted_secret from vault.decrypted_secrets where name = 'push_hook_secret'), '')),
     body    := jsonb_build_object(
                  'user_id', v_recipient,
                  'title',   coalesce(nullif(trim(v_sender_name), ''), 'New message'),

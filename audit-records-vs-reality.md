@@ -1573,6 +1573,28 @@ the state change, insert the `admin_audit_log` row, commit or roll back as one.
 The client calls `supabase.rpc(...)` and gets a single error or a single success
 — there is no partial state left for it to describe in an alert.
 
+**── FOR `admin_decide_verification`, READ 10 Sep ───────────────────────────────**
+
+`publish_provider_if_eligible` is an `UPDATE … WHERE`, not a raise: an ineligible
+provider is silently not published. **The function itself cannot fail the
+transaction.** Micky's reading, and it is right as far as it goes.
+
+**⚠️ NOT YET ESTABLISHED that the approval cannot roll back.** The `UPDATE` fires
+the `BEFORE UPDATE` triggers on `providers`, and
+`trg_publish_requires_complete_profile` DOES raise (23514). Whether a row can pass
+the function's `WHERE` — `provider_shop_is_publishable(p.id)` and
+`users.is_verified` — and still fail a trigger depends on whether those checks agree
+with `enforce_publish_requires_complete_profile` and
+`enforce_publish_requires_verified`. All three bodies requested verbatim.
+
+**Holds either way, and goes into the function:** an approval that does not publish
+tells nobody. The shop stays hidden, the admin is not told, and the stylist is told
+they are verified. `admin_decide_verification` must return whether it published,
+and the console must say so.
+
+**Also noted:** `first_published_at` makes auto-publish once-ever. A provider who
+has ever been published will never be auto-published again by this path.
+
 **✅ THREE DECISIONS, SETTLED 8 Sep 2026 — do not reopen these while writing it:**
 
 1. **Notifications sit OUTSIDE the transaction.** They are a side effect, not
@@ -1899,6 +1921,27 @@ blanked server-side:**
 Both SECURITY DEFINER with `search_path public`, both `net.http_post` to
 `send-push`, both with the header value hardcoded in the same shape. **Two
 functions, one secret, one edge function.**
+
+**⚠️ THE DOCS PRESCRIBED IT.** This is stronger than "the knowledge travelled
+without the mechanism". Three committed files told the next person to put the secret
+in the function bodies: `supabase/push-setup.sql` (*"replace every
+REPLACE_WITH_PUSH_HOOK_SECRET below with the SAME value"*), `mobile/notes.md:133`
+(*"the trigger bodies hold the literal — re-paste from the secret"*) and
+`mobile/cavy-handover.md:208` (*"re-paste the secret into the trigger bodies"*). All
+three were careful not to COMMIT the value, and all three instructed the pattern
+that exposed it. Corrected 10 Sep alongside 0038; `push-setup.sql` also had the
+expression swapped in both bodies so an accidental re-run cannot reintroduce it.
+
+**And the header is the only gate.** `mobile/cavy-handover.md:206` records
+`send-push` as *"Deployed `--no-verify-jwt`"* — so no JWT is checked at the gateway,
+and the shared secret is the only thing standing between a caller and any user's
+phone. Recorded from the handover, not from deployment config, which is not in the
+repo.
+
+**0038 written 10 Sep** — edits the live definitions in place, swapping only the
+header expression for a Vault lookup; refuses to apply unless `push_hook_secret`
+already exists, and unless each function's owner can read the Vault view. Item
+closes when a push returns 200 after the rotation, not when the migration applies.
 
 **Where the new secret lives — an existing pattern, not a new one.** Vault is
 enabled (`supabase_vault 0.3.1`) and already in use: `cron_secret_purge_selfies`,
