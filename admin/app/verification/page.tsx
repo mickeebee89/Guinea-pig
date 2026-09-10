@@ -4,6 +4,8 @@ import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useLoader } from '@/lib/useLoader'
 import { logAction } from '@/lib/audit'
+import { reviewerNames } from '@/lib/reviewers'
+import { ReviewerLine } from '@/components/ReviewerLine'
 
 interface VerificationRequest {
   id: string
@@ -11,6 +13,11 @@ interface VerificationRequest {
   status: string
   notes: string | null
   created_at: string
+  reviewed_at: string | null
+  /** auth.users id since 0036. NULL on every request reviewed before 10 Sep 2026
+   *  until 0037 reconstructed them. */
+  reviewed_by: string | null
+  reviewed_by_source: 'recorded' | 'reconstructed' | null
   user: {
     id: string
     first_name: string
@@ -32,17 +39,21 @@ export default function VerificationQueuePage() {
   const [filter, setFilter]     = useState<'pending' | 'approved' | 'rejected'>('pending')
   const [notes, setNotes]       = useState<Record<string, string>>({})
   const [working, setWorking]   = useState<string | null>(null)
+  const [names, setNames]       = useState<Record<string, string>>({})
 
   const { loading, reload } = useLoader(filter, async stale => {
     const { data, error } = await supabase
       .from('verification_requests')
-      .select('id, selfie_url, status, notes, created_at, user:users!user_id(id, first_name, last_name, last_initial, email, role, is_verified)')
+      .select('id, selfie_url, status, notes, created_at, reviewed_at, reviewed_by, reviewed_by_source, user:users!user_id(id, first_name, last_name, last_initial, email, role, is_verified)')
       .eq('status', filter)
       .order('created_at', { ascending: false })
     if (error) console.error('verification requests load failed:', error)
     if (stale()) return
     const rows = (data ?? []) as unknown as VerificationRequest[]
     setRequests(rows)
+    const resolved = await reviewerNames(rows.map(r => r.reviewed_by))
+    if (stale()) return
+    setNames(resolved)
 
     // verification-selfies is a PRIVATE bucket. selfie_url now holds a storage path;
     // sign it for ~5 minutes so the <img> can load. Old test rows hold full public
@@ -64,6 +75,17 @@ export default function VerificationQueuePage() {
     // A joined users row hidden by RLS comes back as NULL, not an error.
     if (!req.user) {
       alert("Can't approve — this user's account isn't visible to you.")
+      return
+    }
+    // ── WHO IS DECIDING, READ BEFORE ANYTHING IS WRITTEN ───────────────
+    // Every verification before 10 Sep was approved with no reviewer recorded
+    // (audit item 34) because this update never included reviewed_by. It does
+    // now, and if the acting admin cannot be read the approval is REFUSED rather
+    // than written with a NULL reviewer — the same rule as 0035. Read first,
+    // because the first write below (users.is_verified) is not undoable here.
+    const { data: { user: actor } } = await supabase.auth.getUser()
+    if (!actor) {
+      alert("Can't approve — your admin session couldn't be read, so this decision could not be attributed.\n\nNothing has changed. Sign in again and retry.")
       return
     }
     setWorking(req.id)
@@ -91,7 +113,11 @@ export default function VerificationQueuePage() {
 
       const { error: updateErr } = await supabase
         .from('verification_requests')
-        .update({ status: 'approved', notes: note, reviewed_at: new Date().toISOString() })
+        .update({
+          status: 'approved', notes: note, reviewed_at: new Date().toISOString(),
+          // Written together: 0037's paired CHECK refuses one without the other.
+          reviewed_by: actor.id, reviewed_by_source: 'recorded',
+        })
         .eq('id', req.id)
       if (updateErr) {
         alert(`This user is verified${isModel ? '' : ' and published'}, but the request could not be closed: ${updateErr.message}\n\nIt will still show as pending — approve it again to clear it.`)
@@ -132,12 +158,21 @@ export default function VerificationQueuePage() {
       alert("Can't reject — this user's account isn't visible to you.")
       return
     }
+    // Same rule as approve: no reviewer, no decision.
+    const { data: { user: actor } } = await supabase.auth.getUser()
+    if (!actor) {
+      alert("Can't reject — your admin session couldn't be read, so this decision could not be attributed.\n\nNothing has changed. Sign in again and retry.")
+      return
+    }
     setWorking(req.id)
     const note = notes[req.id] ?? ''
     try {
       const { error: updateErr } = await supabase
         .from('verification_requests')
-        .update({ status: 'rejected', notes: note, reviewed_at: new Date().toISOString() })
+        .update({
+          status: 'rejected', notes: note, reviewed_at: new Date().toISOString(),
+          reviewed_by: actor.id, reviewed_by_source: 'recorded',
+        })
         .eq('id', req.id)
       // Don't tell someone they were rejected if the rejection didn't save — they'd
       // get the bad news and then still see the request sitting under review.
@@ -257,6 +292,20 @@ export default function VerificationQueuePage() {
 
                   {req.notes && filter !== 'pending' && (
                     <p className="text-sm text-[#3D2E2E]/60 italic mb-3">Notes: {req.notes}</p>
+                  )}
+
+                  {/* Reviewed requests say who, and how that is known. Rendered
+                      only through ReviewerLine so the reconstructed marker
+                      travels with the name to every screen that shows one. */}
+                  {filter !== 'pending' && (
+                    <div className="mb-3">
+                      <ReviewerLine
+                        reviewerId={req.reviewed_by}
+                        source={req.reviewed_by_source}
+                        reviewedAt={req.reviewed_at}
+                        names={names}
+                      />
+                    </div>
                   )}
 
                   {filter === 'pending' && (

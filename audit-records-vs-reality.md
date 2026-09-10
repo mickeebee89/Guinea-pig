@@ -1708,7 +1708,41 @@ was the reason for three workflows rather than one.
 It remains a signal and not a gate. Everything above about branch protection
 still stands.
 
-**32. ⚠️ THE IMAGE REVIEW QUEUE HAS NEVER RECEIVED ANYTHING — CONFIRMED
+**35. BREAK-GLASS BECAME THE NORMAL PATH BY DRIFT — LOGGED 10 Sep 2026.
+NOT FIXED.**
+
+The design, in CLAUDE.md: a dedicated console admin (`admin@guineapigapp.co.uk`)
+as the primary, *never an app user*, so app-side changes cannot affect admin
+login; and Micky B's personal account as break-glass backup.
+
+The database, 10 Sep:
+
+| | Meant to be | Verification decisions | Last sign-in | App account |
+|---|---|---|---|---|
+| `8788ed3d` dedicated admin | primary | **2 of 30**, all 26–27 Jul | 26 Jul | yes — `role model` |
+| `ff06d568` Micky B | break-glass | **28 of 30** | 8 Sep | yes — `role provider` |
+
+The dedicated account was used for two days and abandoned, not gone quiet. Every
+identity check since 27 July was approved from the backup.
+
+**Why it matters beyond tidiness.** The account that holds almost every moderation
+decision is **also a stylist in the product it moderates** — a provider profile,
+a shop, subject to the same reports and verification rules as the people it
+approves. Separation between "the person operating the platform" and "a
+participant in it" was the reason for having a dedicated account, and it does not
+exist in practice. And the "never an app user" invariant the separation relied on
+is false too: the dedicated account has an app profile, origin unknown.
+
+**Not fixed, and not a code change.** The options are operational — move
+moderation to the dedicated account and treat Micky B as genuinely break-glass;
+or accept one admin and stop describing it as two — and they are Micky's to
+choose. What changed today is that the record says what happens rather than what
+was intended.
+
+**Same family as the rest of this file:** a control whose description was correct
+when written, and nothing that would notice when practice moved away from it.
+
+ — CONFIRMED
 10 Sep 2026. NOT FIXED.**
 
 **Confirmed from the database, 10 Sep:** no trigger on `portfolio_items`, and
@@ -1826,6 +1860,41 @@ Not changed.
 but it discarded its own insert errors until 8 Sep, and a re-approval writes a
 second row. What can be recovered is a question for the data first, and any
 backfilled reviewer is an inference, not a record, and has to say so.
+
+**── SECOND CORRECTION, 10 Sep 2026: THE PREMISE WAS FALSE TOO ───────────────**
+
+Both the 9 Sep write-up and 0036's header rested on CLAUDE.md's statement that the
+dedicated console admin is *never an app user*, so it might have no
+`public.users` row. Read from the database:
+
+    8788ed3d  admin@guineapigapp.co.uk   role model     last sign-in 26 Jul  in admins
+    ff06d568  micky.buckfield@gmail.com  role provider  last sign-in 8 Sep   in admins
+
+**Both admins have app accounts.** Under the old foreign key, writing either id
+would have succeeded. So 0036 was wrong about the mechanism twice over — the
+column was never refused, and would not have been — and **right about the fix**:
+`auth.users` is still the correct target, matches `reports.reviewed_by` and
+`admin_audit_log.admin_id`, and holds for any future console-only admin.
+
+**0036 is NOT edited to say so.** It is applied, and changing anything above its
+footer would make it read DRIFTED against the ledger. The correction lives here,
+in CLAUDE.md, and in a `comment on column` in the next migration — because 0036
+also stored the false premise in the database itself, as the comment on
+`verification_requests.reviewed_by`.
+
+**0037 applied, 10 Sep:** `reconstructed 25 · recorded 0 · still_unattributed 0`,
+split `ff06d568 23 · 8788ed3d 2`, matching the audit log exactly. The 30 logged
+decisions reconcile: 30 distinct requests, no repeats, 5 for requests since
+deleted by resubmission — the same path that orphans selfie objects.
+
+**Console change shipped the same day:** approve and reject now write
+`reviewed_by` and `reviewed_by_source = 'recorded'`, and refuse outright if the
+acting admin's id cannot be read. Every display of a verification reviewer goes
+through one component, `admin/components/ReviewerLine.tsx`, so the
+"reconstructed — inferred" marker travels with the name to any screen that shows
+one. **Before this change no screen in any app displayed a verification reviewer
+at all**, so "wherever a reviewer appears" was vacuously true; routing through one
+component is what makes it hold for the next one.
 
 *The original write-up, from 9 Sep, is kept below as it was:*
 
