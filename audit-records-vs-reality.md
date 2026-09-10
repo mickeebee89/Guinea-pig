@@ -1833,6 +1833,90 @@ was the reason for three workflows rather than one.
 It remains a signal and not a gate. Everything above about branch protection
 still stands.
 
+**40. ⚠️ ANY SIGNED-IN USER CAN VERIFY THEMSELVES — THE IDENTITY GATE THE WHOLE
+PLATFORM RESTS ON IS WRITABLE BY THE PERSON IT CHECKS. FOUND 10 Sep 2026. LIVE.
+THE MOST SERIOUS FINDING IN THIS FILE.**
+
+**Plainly:** a model is told a stylist's identity has been checked before she is
+alone with a stranger in her home. Any account can set its own `users.is_verified`
+to true with a single API call — no admin, no selfie, no request. The check the
+safety promise rests on can be switched on by the person being checked.
+
+**Proven, not reasoned — rolled back, 10 Sep:**
+
+    is_admin = false · rows changed by the user themselves = 1 · is_verified false -> true
+
+Run as the provider test account against its OWN row, as role `authenticated`.
+
+**The cause.** `users` has two permissive UPDATE policies (schema snapshot
+2026-08-08): *"admins update any user"* (`is_admin()`) and *"users can update own
+row"* (`auth.uid() = id`). **The second has no column restriction, and RLS cannot
+impose one** — column-level control in Postgres is a GRANT, not a policy. There is
+no `revoke update (…)` on `users` and no guard trigger on `is_verified` anywhere in
+the repo. So "update your own row" means every column of it.
+
+**⚠️ Almost certainly not just `is_verified`.** The same policy governs every
+column, so these are presumed writable by their owner and each is a real bypass —
+being confirmed by probe before this is stated as fact:
+
+| Column | What self-writing it grants |
+|---|---|
+| `is_verified` | the identity gate — confirmed |
+| `subscription_status` | the £4.99/mo model features, free |
+| `subscription_waived` | same, by the other door |
+| `provider_fee_waived` | the £14.99 provider verification, free |
+| `is_founding_provider` | Founding Provider status, unearned |
+| `fraud_flagged` | a flagged account clears its own fraud flag |
+| `role` | model/provider/both, self-assigned |
+
+**And a provider who self-verifies is auto-published.** `is_verified` false→true
+fires `trg_user_verified_maybe_publish` → `publish_provider_if_eligible`, so a
+provider with a name and one treatment goes live on the open shop with no human
+ever seeing them. The two feed each other.
+
+**── THE FIX HAS AN APP CHANGE IN IT, AND THAT IS THE WHOLE DIFFICULTY ──**
+
+The right lockdown is column-level: `revoke update on public.users from
+authenticated`, then `grant update (profile_pic_url, date_of_birth,
+instagram_handle, latitude, longitude)` — the only columns a user's own session
+legitimately writes (swept across all three apps, 10 Sep). But:
+
+* **A GRANT is role-wide.** Revoking table UPDATE from `authenticated` also blocks
+  the admin console, whose `is_verified`/`fraud_flagged`/`waive`/`comp` writes are
+  ordinary `authenticated` updates gated only by the admin RLS policy. Those writes
+  must move to the 0039 SECURITY DEFINER functions first — which is exactly why
+  0039's RLS lockdown was scoped to AFTER the console is repointed. This is the
+  same lockdown, now urgent, and reaching `users` as well as `suspensions` and
+  `admin_audit_log`.
+* **One legitimate client self-write of `is_verified` exists and must not break:**
+  `mobile/src/app/(app)/verify-payment.tsx:119`, the model auto-verify after an
+  approved request. It has to move into a SECURITY DEFINER RPC — e.g.
+  `claim_model_verification()` that sets `is_verified` for `auth.uid()` only when
+  that user is a model WITH an approved `verification_requests` row — or the column
+  cannot be locked. This self-write being indistinguishable from the attack is why
+  the hole was invisible: the product depends on the very write it must forbid.
+
+**Sequence, once the probe fixes scope:**
+  1. `claim_model_verification()` RPC; repoint verify-payment.tsx:119 to it.
+  2. Repoint the admin console to 0039's functions (all five surfaces at once).
+  3. THEN one migration: `revoke update on users`, grant back the five safe
+     columns, and lock `suspensions` + `admin_audit_log` in the same file.
+
+**⚠️ A same-day stopgap is possible if the window between now and step 3 is too
+long:** a `BEFORE UPDATE` guard trigger on `users` that raises when a non-admin
+changes any protected column on any row — permitting `is_admin()` (console) and
+the one model case (own row, role model, an approved request exists). It puts
+business logic in a trigger, which the column GRANT then makes redundant, but it
+closes the hole without waiting for two app changes. Decision to be taken on the
+probe result and on how soon steps 1–2 can land.
+
+**How it was found:** not by anything failing. By reading `revoke_verification`'s
+own aftermath — Jojo B verified-but-hidden — asking what set her `is_verified`
+back, ruling the console verify page out, and testing whether a user could do it
+themselves. The same reading pass that closed a three-day-old regression opened
+the most serious finding in the file. **A promise with no mechanism does not throw;
+neither does a gate anyone can open. Both are found only by looking.**
+
 **39. PUSH HAS SEVEN POINTS WHERE IT CAN FAIL WITHOUT SAYING SO, SO "NO TOKEN"
 CANNOT BE TOLD APART FROM "PUSH HAS NEVER WORKED" — LOGGED 10 Sep 2026. OPEN.**
 
