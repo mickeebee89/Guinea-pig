@@ -1708,8 +1708,17 @@ was the reason for three workflows rather than one.
 It remains a signal and not a gate. Everything above about branch protection
 still stands.
 
-**32. ⚠️ THE IMAGE REVIEW QUEUE MAY NEVER RECEIVE ANYTHING — OPEN,
-9 Sep 2026. ONE QUERY SETTLES IT.**
+**32. ⚠️ THE IMAGE REVIEW QUEUE HAS NEVER RECEIVED ANYTHING — CONFIRMED
+10 Sep 2026. NOT FIXED.**
+
+**Confirmed from the database, 10 Sep:** no trigger on `portfolio_items`, and
+`pending 0 · approved 5 · rejected 0`. Nothing has ever been pending. The
+Images queue has never received an image and cannot; the `image_review_enabled`
+toggle governs nothing; and every stylist who uploads is told the photo appears
+*"once it's been reviewed"*. **A published claim with no mechanism behind it.**
+
+The investigation as it was written the day before, while the answer was still
+unknown, is kept below unedited.
 
 `portfolio_items.moderation_status` defaults to **`'approved'`**;
 `status_posts.moderation_status` defaults to `'pending'`. Same column name, same
@@ -1771,8 +1780,54 @@ a CHECK that omits a type already in the table fails on creation.
 
     select type, count(*) from public.notifications group by type order by 2 desc;
 
-**34. TWO `reviewed_by` COLUMNS POINT AT DIFFERENT TABLES — LOGGED
-9 Sep 2026.**
+**34. ⚠️ NO IDENTITY CHECK ON THIS PLATFORM HAS A RECORDED REVIEWER —
+CONFIRMED 10 Sep 2026. 0036 WRITTEN; CONSOLE CHANGE WAITS FOR IT.**
+
+**The fact:** `verification_requests` — `reviewed_but_unattributed 25 ·
+reviewed_total 25`. Every verification ever reviewed has no reviewer recorded.
+Nobody can say who approved any identity check, and identity approval is the
+decision that lets a stranger into someone's home. Micky's framing, and the right
+one: this is a live evidence gap on the most consequential admin decision in the
+product, and it outranks everything else outstanding because it is a fact rather
+than a risk.
+
+**── CORRECTION: THE ORIGINAL WRITE-UP BELOW HAD THE WRONG MECHANISM ──**
+
+It said the column *"may be unwritable for the primary admin"* because it
+references `public.users` and the console-only admin may have no app account.
+That was a hypothesis, and the code disproves it as the cause:
+
+    admin/app/verification/page.tsx:94   approve  → status, notes, reviewed_at
+    admin/app/verification/page.tsx:140  reject   → status, notes, reviewed_at
+
+**Neither update has ever included `reviewed_by`.** The column was not refused;
+it was never asked for. Nothing failed and nothing logged, so no error could ever
+have surfaced it — which is why it survived every other check this month. Note
+the contrast: `admin/app/moderation/page.tsx` DOES write `reviewed_by`, for status
+posts, the lower-stakes decision.
+
+**The foreign key is still wrong** — it becomes the cause the moment the console
+starts writing the column, and because `reviewed_by` sits in the same UPDATE as
+`status`, an FK violation would fail the whole approval. Hence the order:
+
+    1. 0036 — repoint verification_requests.reviewed_by at auth.users
+    2. then the console change that writes it
+
+**ON DELETE, and an inconsistency that is partly mine.** The two reviewer keys
+already on `auth.users` disagree: `reports.reviewed_by` has no ON DELETE (NO
+ACTION), and `status_posts.reviewed_by` is ON DELETE SET NULL — which 0031, written
+in this session, chose. 0036 follows `reports` and `admin_audit_log.admin_id`:
+deleting an admin must not erase who approved an identity check. Status posts
+expire in 48 hours; that SET NULL is defensible there and inconsistent anyway.
+Not changed.
+
+**The 25 are not backfilled.** `admin_audit_log` may carry the attribution —
+`logAction()` records `admin_id` and `details.request_id` for both decisions —
+but it discarded its own insert errors until 8 Sep, and a re-approval writes a
+second row. What can be recovered is a question for the data first, and any
+backfilled reviewer is an inference, not a record, and has to say so.
+
+*The original write-up, from 9 Sep, is kept below as it was:*
 
 `reports.reviewed_by` → `auth.users(id)`.
 `verification_requests.reviewed_by` → `public.users(id)`.
