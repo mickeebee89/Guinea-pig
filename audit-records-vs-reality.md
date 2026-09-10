@@ -1874,6 +1874,45 @@ fires `trg_user_verified_maybe_publish` → `publish_provider_if_eligible`, so a
 provider with a name and one treatment goes live on the open shop with no human
 ever seeing them. The two feed each other.
 
+**✅ ALL SEVEN CONFIRMED, 10 Sep, one rolled-back probe as the provider test
+account:** `is_verified`, `is_founding_provider`, `provider_fee_waived`,
+`subscription_waived`, `subscription_status`, `fraud_flagged` and `role` — every
+one returned `1 row(s)`. Nothing is presumed any more.
+
+**── THE SHAPE OF IT: THE MONEY IS SOUND, THE FLAGS ARE NOT ──**
+
+Traced across all three apps and the edge functions, 10 Sep. Every gate is
+**recorded** server-side and **read** from a self-writable flag:
+
+| Gate | Where the evidence is written | What the gate actually reads |
+|---|---|---|
+| Provider £14.99 | `verification_payments`, inserted only by `stripe-payment/index.ts:231` with the service role — no client writes it | `paid \|\| is_founding_provider \|\| provider_fee_waived` (`verify-payment.tsx`) — two of the three self-writable |
+| Model £4.99/mo | `subscriptions` + `users.subscription_status` via `apply_subscription_state` / the Stripe edge functions — no client writes either | `subscription_status`, `subscription_waived` — both self-writable |
+| Identity | `verification_requests`, approved by an admin in the console | `users.is_verified` — self-writable |
+
+**So the payment paths themselves are not the hole** — they were audited and fixed
+in `7a898fb` (`security-lockdown-handover.md:123`), and a client cannot fake a
+payment row. The hole is that **nothing reads the evidence; everything reads a
+derived flag, and the flags are writable by the person they describe.** Fixing
+Stripe would not have touched this, and no amount of care in the payment code
+could.
+
+**⚠️ AND THE APPROVAL ROW IS SELF-WRITABLE TOO — which changes the fix.**
+`verification_requests` carries `vr_user_policy`: PERMISSIVE, **ALL commands**,
+`auth.uid() = user_id` in both USING and WITH CHECK. `status` has **no CHECK
+constraint** (constraints dump, 10 Sep: PK and FKs only). So a user can update
+their own request to `status = 'approved'`, or insert one that way, and can write
+`reviewed_by` and `reviewed_by_source` while they are at it. Being probed before
+this is stated as certain, but if it holds:
+
+**No server-side re-check of "this user has an approved request" is worth
+anything**, because the user wrote the row. That kills the obvious permit — the
+one legitimate model self-write at `verify-payment.tsx:119` cannot be
+distinguished from a forged one by any test the database can run on that row.
+The consequence, and it is Micky's own question answered against the convenient
+option: **the RPC belongs in the stopgap, not at step 3**, and the stopgap has to
+guard `verification_requests` as well as `users`.
+
 **── THE FIX HAS AN APP CHANGE IN IT, AND THAT IS THE WHOLE DIFFICULTY ──**
 
 The right lockdown is column-level: `revoke update on public.users from
