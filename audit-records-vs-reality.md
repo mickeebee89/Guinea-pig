@@ -1729,8 +1729,14 @@ the two copies already differ in FORMAT:
 * the key in `site/.env.local`, `admin/.env.local` and `mobile/.env` is a **new
   publishable key** (`sb_publishable_…`), byte-identical across all three.
 
-Both formats are accepted today: a JWT-keyed request returned `404` rather than
-`401`, and a publishable-keyed request returned `406` rather than `401`. **The
+Both FORMATS are accepted today: a JWT-keyed request returned `404` rather than
+`401`, and a publishable-keyed request returned `406` rather than `401`.
+
+**⚠️ That does not establish that production's key works.** The JWT that
+returned `404` was the same FORMAT as Vercel's, not shown to be the same KEY. So
+"production's browser client is fine" is not established — it is probably true,
+and it rests on a format match. The earlier conclusion that it was fine rested on
+something weaker still (item 37). **The
 consequence is conditional and specific:** if legacy JWT keys are ever switched off
 for this project, production's browser-side chat and portfolio upload break, while
 local development and both other apps keep working — so it would be noticed last
@@ -1766,8 +1772,12 @@ ruled out. That was wrong.
 **The error, and it is the same one again:** the check measured the TEXT in the
 file — its format and its length — and not the VALUE the program resolves from
 it, then wrote "not a key" into this file. A real measurement of the wrong thing.
-It also carried into Micky's own conclusions ("item 37 is local only"; "one of the
-local twins is already broken"), which rested on it.
+**⚠️ THIS INSTANCE HAD TWO AUTHORS.** In the same round, working from the same
+non-fact, Micky concluded *"production is fine; item 37 is local only"* — by
+comparing Vercel's `eyJ…` key against the 18-character local value, which was
+never a value at all. His note, recorded as he put it: both of us reasoned from the
+same non-fact in the same round. The correction was found before either conclusion
+was acted on.
 
 **What survives is item 38**, which is about the twins themselves.
 
@@ -1877,6 +1887,18 @@ been the fifth partial measurement in this file written down as the whole.
 
 **So the actual exposure, stated once:** direct database access, which is Micky
 alone, plus two transcripts. No real users, nothing taken, rotated regardless.
+
+**Both functions confirmed from the database, 10 Sep, bodies read with the secret
+blanked server-side:**
+
+| Function | Fired by | What it sends |
+|---|---|---|
+| `tg_message_push` | `messages` → `message_push`, AFTER INSERT | resolves the recipient from `sessions` + `providers`, skips if the model is null or the recipient is the sender, builds the sender's name from `users`; `user_id`, `title` (sender name or "New message"), `body`, `data {type: new_message, session_id}` |
+| `tg_notify_push` | `notifications` → `notify_push`, AFTER INSERT | `user_id`, `title`, `body`, `data {type, session_id} \|\| new.data` |
+
+Both SECURITY DEFINER with `search_path public`, both `net.http_post` to
+`send-push`, both with the header value hardcoded in the same shape. **Two
+functions, one secret, one edge function.**
 
 **Where the new secret lives — an existing pattern, not a new one.** Vault is
 enabled (`supabase_vault 0.3.1`) and already in use: `cron_secret_purge_selfies`,
