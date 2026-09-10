@@ -1708,7 +1708,47 @@ was the reason for three workflows rather than one.
 It remains a signal and not a gate. Everything above about branch protection
 still stands.
 
-**36. THE PUSH SECRET IS HARDCODED IN TWO FUNCTION BODIES — FOUND 10 Sep 2026.
+**37. THE SITE'S BROWSER-SIDE SUPABASE KEY IS NOT A KEY — LOCALLY. FOUND
+10 Sep 2026. PRODUCTION NOT YET CHECKED. NOT FIXED.**
+
+**What breaks, plainly:** on a local dev server, the site's chat screen and
+portfolio upload fail on every call they make to Supabase from the browser.
+Everything the site does on the server works.
+
+**The evidence**, read without printing any value:
+
+| `site/.env.local` | Format | Length | Same as admin and mobile |
+|---|---|---|---|
+| `SUPABASE_ANON_KEY` | publishable (`sb_publishable_…`) | 46 | **yes** — byte-identical hash |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | **neither Supabase format** | **18** | no |
+
+The 18-character value is not quoted, has no stray whitespace, and the file has
+no CRLF line endings or byte-order mark. What the value is has not been
+established — it matched none of a handful of common placeholder strings, and
+this item does not guess.
+
+**Why the site works at all:** the site reads `SUPABASE_ANON_KEY` in three places,
+all server-side, and `NEXT_PUBLIC_SUPABASE_ANON_KEY` in exactly one —
+`site/lib/supabase-browser.ts`, whose only importers are
+`app/(app)/messages/[sessionId]/ChatThread.tsx` and
+`app/(app)/portfolio/PortfolioManager.tsx`. Server-rendered pages and server
+actions carry the valid key; only those two browser-side paths carry the broken
+one.
+
+**Production is a separate question.** Vercel holds its own copy of every
+variable, so a broken local file says nothing about the deployed site until the
+Vercel value has been read.
+
+**How it was found, and whose error that was.** Micky hit `401 Invalid API key`
+running an API test built from `NEXT_PUBLIC_SUPABASE_ANON_KEY`. The command that
+named that variable was mine: it was written after checking the file's variable
+NAMES, without checking that the value under that name was a key. Micky's two
+hypotheses — a line-ending problem in the extraction, or a stale key — were both
+checked and are both ruled out.
+
+**Not fixed:** the request was to find out which, not to change the file.
+
+ — FOUND 10 Sep 2026.
 NO REAL USERS, SO NOTHING WAS TAKEN. BEING ROTATED ANYWAY.**
 
 **What did and did not happen.** All 58 accounts on the platform are Micky's own or
@@ -1748,10 +1788,26 @@ glossed is the whole finding:
   the platform has users, and is the version that matters.
 
 `pg_proc` is readable by `PUBLIC` in a stock Postgres, so the question is not
-privilege but reach: whether an `authenticated` JWT can get a query to `pg_proc`
-through any exposed schema, RPC or view. Queries to settle it were issued on
-10 Sep; this item records the answer when it comes back, not before. It has also
-been pasted into two transcripts.
+privilege but reach: whether an account can get a query to `pg_proc` through the
+Data API. It has also been pasted into two transcripts.
+
+**Established, 10 Sep 2026:**
+
+* **Direct database access is Micky's alone** — his statement, and he is the only
+  person who has ever signed in to anything.
+* **`pg_proc` is not in the API's default schema.**
+  `GET /rest/v1/pg_proc?select=proname&limit=1` → `404 PGRST205`,
+  *"Could not find the table 'public.pg_proc' in the schema cache"*. The default
+  schema is `public`, and `pg_proc` is not in it.
+
+**⚠️ Not yet established: whether `pg_catalog` is an exposed schema at all.**
+PostgREST only searches a schema other than the default when the request names it
+in an `Accept-Profile` header, and that request did not. So the 404 rules out
+`public.pg_proc` and says nothing about `pg_catalog`. One request with
+`Accept-Profile: pg_catalog` settles it, and its error lists the schemas that ARE
+exposed. Until then this item does not say "never reachable through the API",
+because that would be the fifth time in this file a measurement of part was
+written down as the whole.
 Micky's count: the second credential to escape that way.
 
 **What a holder can do**, read from `supabase/functions/send-push/index.ts`: POST
