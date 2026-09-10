@@ -50,6 +50,7 @@ _This file is read automatically at the start of every Claude Code session. It h
   the public website.
 - **Run mobile:** `cd C:\Users\micky\Documents\Guinea-pig\mobile` then `npx expo start -c --dev-client`.
 - **Deploy an edge function:** from repo ROOT, `npx supabase functions deploy <name>` (the "Docker not running" warning is harmless).
+  **⚠️ `send-push`, `stripe-webhook` and `waitlist-signup` must add `--no-verify-jwt`** — each says so in its own header, and there is no `supabase/config.toml` to remember it. Deployed without it, the gateway demands a JWT their callers never send (the push triggers via `pg_net`, Stripe, anonymous signups), and they fail with nothing on screen. `purge-selfies`'s header does not say either way — check before redeploying it.
 
 ## Key identifiers
 
