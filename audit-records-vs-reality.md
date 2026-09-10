@@ -1646,17 +1646,44 @@ The one revocation is Micky's own test of `revoke_verification` on Jojo B, earli
 that night. **The test that proved the revocation mechanism is the most likely
 source of the first live instance of this defect, and nobody noticed at the time.**
 
-**⚠️ OPEN — two accounts of that case cannot both be true.** Micky's account: Jojo B
-was re-verified through the console afterwards and her shop came back, which only
-the console's direct publish could do. But a shop that came back is published, and
-the counted row is a verified stylist whose shop is HIDDEN. So either the counted
-row is Jojo B and her shop did not come back, or it is a different stylist (one who
-hid their own shop, which is not a defect) and Jojo B was saved by the direct
-publish. Which console path re-verified her matters too: only the verification
-page publishes directly. The users page and providers page `verify` set
-`is_verified` alone — in today's console and in 0039's shared helper — so they
-cannot re-publish a revoked stylist either. Not recorded either way until the row
-is identified.
+**✅ RESOLVED 10 Sep — IT IS JOJO B, AND HER SHOP NEVER CAME BACK.**
+
+    shop Jojo B. · provider c42537d1-0b26-49b1-8770-a390b048ef9e
+    is_verified true · is_published false · first_published_at 2026-09-07 14:31:05
+    moderation: revoke_verification @ 07 Sep 19:56 · verification_requests: none
+
+**The first live instance of this defect was produced by the audit itself.** A
+test of `revoke_verification` on 7 Sep left a real provider verified and hidden,
+with no route back through auto-publish, and nothing surfaced it for three days.
+
+**⚠️ CORRECTION — Micky's.** He reported that Jojo B was re-verified and her shop
+came back. What he saw on 7 Sep was the composer message changing, and he reported
+the shop reappearing from it. His words: *"I reported the second from the first."*
+
+**⚠️ CORRECTION — Claude's, in the query that identified her.** Its
+`admin_actions_24h` column only looked back 24 hours, because the revocation had
+been described as "earlier tonight". It was 7 Sep. The null was then read as "never
+re-verified through any console page", and that does not follow: a console verify
+on 7, 8 or 9 Sep would not appear in it. **Seventh instance of a partial measurement
+read as the whole.** What IS established about how `is_verified` became true again:
+
+| Path | Status |
+|---|---|
+| verification page approve | **ruled out** — it needs a request row, and she has none; `revoke_verification` deleted the last one and nothing has been submitted since |
+| mobile `verify-payment.tsx:119` | **ruled out** — it writes only for a non-provider with an approved request |
+| users page / providers page Verify | **not ruled out** — the query window missed the period; all-time audit rows requested |
+| hand edit (SQL editor, dashboard table editor) | not ruled out; leaves no audit row |
+| her own session through the API | not ruled out — see below |
+
+**⚠️ A LEAD, NOT A FINDING: a signed-in user may be able to set their own
+`is_verified`.** `mobile/src/app/(app)/verify-payment.tsx:119` writes
+`users.update({ is_verified: true })` from the user's own session, on the model
+path, and the product depends on that write succeeding. The `users` policy
+*"users can update own row"* allows any column of your own row, and no column
+grant or guard trigger on `is_verified` was found in the repo. If the live database
+matches, anyone can mark themselves identity-verified with one API call — and a
+provider doing so is auto-published by the trigger chain. A rolled-back test as a
+non-admin account was requested before this is recorded as anything more.
 
 **Holds whatever that shows (Micky, 10 Sep): the two checks are duplicated and
 nothing keeps them in step.** If one gains a condition the other lacks, the function
