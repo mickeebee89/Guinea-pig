@@ -1652,6 +1652,21 @@ source of the first live instance of this defect, and nobody noticed at the time
     is_verified true · is_published false · first_published_at 2026-09-07 14:31:05
     moderation: revoke_verification @ 07 Sep 19:56 · verification_requests: none
 
+**✅ FIXED 11 Sep 2026 BY 0040, AND BY THE NORMAL PATH.** Read after applying:
+
+    Jojo B. · is_published true · first_published_at 2026-09-11 16:26:38 · is_verified true
+
+**The timestamp is the migration's own run**, which is what proves the mechanism
+rather than the repair: 0040 cleared `first_published_at`, that fired
+`trg_provider_maybe_publish`, and `publish_provider_if_eligible` applied the same
+eligibility rules as every other publish in the product. No hand-written UPDATE
+touched her row. The cause is fixed too — `unpublish_on_verification_lost` now
+clears the column when it hides a shop, so every path benefits, including paths
+nobody has found.
+
+**Hidden 7 Sep 19:56 to 11 Sep 16:26.** Four days, by a test of the revocation
+mechanism, found by reading rather than by anything failing.
+
 **The first live instance of this defect was produced by the audit itself.** A
 test of `revoke_verification` on 7 Sep left a real provider verified and hidden,
 with no route back through auto-publish, and nothing surfaced it for three days.
@@ -1877,9 +1892,50 @@ be corrected without causing real drift — but it is a 40-file sweep and is log
 rather than done mid-flight. Same family as item 36: **an instruction, committed
 and followed, that produces the failure it exists to prevent.**
 
-**40. ⚠️ ANY SIGNED-IN USER CAN VERIFY THEMSELVES — THE IDENTITY GATE THE WHOLE
-PLATFORM RESTS ON IS WRITABLE BY THE PERSON IT CHECKS. FOUND 10 Sep 2026. LIVE.
-THE MOST SERIOUS FINDING IN THIS FILE.**
+**40. ANY SIGNED-IN USER COULD VERIFY THEMSELVES — THE IDENTITY GATE THE WHOLE
+PLATFORM RESTS ON WAS WRITABLE BY THE PERSON IT CHECKS. FOUND 10 Sep 2026.
+✅ CLOSED 11 Sep 2026 BY 0040. THE MOST SERIOUS FINDING IN THIS FILE.**
+
+**Closed on evidence, 11 Sep — five blocks, and the two that could have gone
+wrong quietly are B and the control in A:**
+
+    A  all seven columns refuse a real change, and the self-approved insert refuses
+    B  every legitimate path still works: own photo, coordinates, Instagram
+       handle, submitting a request, deleting your own to resubmit — no false
+       refusals, so "no convenience exceptions" cost nothing
+    C  the permit and its boundary: a member claiming an ADMIN-approved
+       verification succeeds; the same with the request rejected is refused
+    D  Jojo B republished — see item 29
+    E  three RESTRICTIVE denies per money table, alongside the SELECT policies
+
+**⚠️ THE FIRST BLOCK A REPORTED TWO OF SEVEN AS STILL OPEN, AND WAS WRONG.**
+`provider_fee_waived` and `fraud_flagged` came back writable. Neither was: the
+block reused the probe that FOUND the hole, which wrote absolute values, and the
+account already held both (`fee_waived=t`, `fraud=f` — printed by the corrected
+block). Writing a column the value it already has changes nothing, so the trigger
+had nothing to refuse.
+
+**That is worth more than the bug it did not find.** The probe was written against
+privileges and RLS, which do not look at VALUES — so writing a column its own
+value still proves the column is in the caller's writable set, which is exactly
+what it was for. The same text, reused against a trigger, measures nothing,
+because a trigger compares old to new. **The test was valid before 0040 and
+invalid after it, with its text unchanged: what it measured moved underneath it.**
+Micky's framing, and it is the eighth instance of this file's oldest pattern.
+The corrected block flips booleans with `not`, moves `subscription_status` and
+`role` to values they cannot already hold, prints the BEFORE state, and carries a
+no-op control asserting that writing an unchanged column is STILL permitted —
+because a guard that refused that would break ordinary profile saves.
+
+**Still to check, on device rather than in SQL (Micky, 11 Sep):** the two client
+reads that the RESTRICTIVE denies sit next to — subscription state on mobile
+Settings, and the fee check on the verify screen.
+
+**What remains, in the order Micky set it:** the console repoint to 0039's
+functions, then `claim_model_verification()` with the `verify-payment.tsx:119`
+line, then the column GRANT that makes 0040's triggers redundant. **0040 is a
+stopgap and says so in both function comments.** It is not removed when the GRANT
+lands; it simply stops mattering.
 
 **Plainly:** a model is told a stylist's identity has been checked before she is
 alone with a stranger in her home. Any account can set its own `users.is_verified`
