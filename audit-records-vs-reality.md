@@ -1833,6 +1833,50 @@ was the reason for three workflows rather than one.
 It remains a signal and not a gate. Everything above about branch protection
 still stands.
 
+**41. THE MIGRATION FOOTER TELLS YOU TO STAMP LAST, AND STAMPING LAST IS WHAT
+MAKES THE LEDGER READ DRIFTED — FOUND 11 Sep 2026. NOT FIXED.**
+
+**What happens:** apply a migration while its footer still says
+`PENDING_CHECKSUM`, and that literal string is what the database records. Stamp
+afterwards and the file holds a real checksum the ledger will never match.
+`migration-status.mjs` then reports **DRIFTED — file changed since it was
+applied**, which is the one status meaning "the repo looks authoritative and is
+wrong". On 0040 it was false: the checksum covers everything ABOVE the footer and
+stamping only rewrites the footer line, so the applied body and the committed body
+were byte-identical. Verified by recomputing rather than by re-applying —
+`858df98d…` from the working file, from the commit that was applied, and from the
+stamp itself. Three ways, one answer.
+
+**Where the instruction points the wrong way.** Every migration ends with:
+
+    -- LAST STEP, EVERY TIME
+    --   node scripts/migration-status.mjs --stamp
+    --   node scripts/migration-status.mjs
+
+It sits below the VERIFY section, so reading a file top to bottom means apply,
+verify, then stamp. The tool says the opposite in the line it prints while
+stamping: *"Commit, then paste into the SQL editor."*
+
+**Scope, as narrow as the check:** 40 of the 41 migration files carry that block.
+Two were read in full (0038, 0040) and neither says when to apply relative to
+stamping. The other 38 were counted, not read.
+
+**⚠️ CORRECTION — Claude's.** The 0040 handover said *"Apply 0040, then stamp
+it"*, following the file's order rather than the tool's, and that is what put
+`PENDING_CHECKSUM` into the ledger. The framework behaved exactly as written; the
+writing pointed the wrong way and I repeated it.
+
+**The reconcile, for this class only:** set the recorded checksum to the file's,
+once the BODY is established as unchanged — which is the whole question, and is
+answerable by recomputing. **Re-applying to fix a bookkeeping mismatch would run
+the side effects twice**, which for 0040 means repeating the Jojo B repair and the
+policy drops.
+
+**Not fixed:** the block is in 40 files, and it sits BELOW the footer, so it can
+be corrected without causing real drift — but it is a 40-file sweep and is logged
+rather than done mid-flight. Same family as item 36: **an instruction, committed
+and followed, that produces the failure it exists to prevent.**
+
 **40. ⚠️ ANY SIGNED-IN USER CAN VERIFY THEMSELVES — THE IDENTITY GATE THE WHOLE
 PLATFORM RESTS ON IS WRITABLE BY THE PERSON IT CHECKS. FOUND 10 Sep 2026. LIVE.
 THE MOST SERIOUS FINDING IN THIS FILE.**
@@ -1902,8 +1946,23 @@ could.
 `auth.uid() = user_id` in both USING and WITH CHECK. `status` has **no CHECK
 constraint** (constraints dump, 10 Sep: PK and FKs only). So a user can update
 their own request to `status = 'approved'`, or insert one that way, and can write
-`reviewed_by` and `reviewed_by_source` while they are at it. Being probed before
-this is stated as certain, but if it holds:
+`reviewed_by` and `reviewed_by_source` while they are at it.
+
+**✅ PROBED 11 Sep. BOTH ROUTES WERE OPEN, AND THE SECOND WAS WORSE THAN ONE ROW.**
+Inserting an already-`approved` row: **1 row**. Updating existing rows to
+`approved` with `reviewed_by_source` filled so 0037's paired CHECK is satisfied:
+**2 rows** — every request that account had, flipped in one statement. The route
+that looked closed on 10 Sep was closed by a constraint written for provenance,
+not for authorisation, and it stopped being a block the moment the forger filled
+in the column it cares about. **A protection that works for a reason nobody chose
+is not a protection; it is a coincidence with a deadline.**
+
+**One result in that probe holds for the right reason:** the `settings` write
+returned 0 rows against a key that exists (`founding_provider_limit`), refused by
+`settings_write_admin`, an admin-only policy for ALL commands. A rule saying no,
+rather than an accident.
+
+So:
 
 **No server-side re-check of "this user has an approved request" is worth
 anything**, because the user wrote the row. That kills the obvious permit — the
