@@ -496,55 +496,94 @@ notify pgrst, 'reload schema';
 -- ===========================================================================
 -- VERIFY — after applying.
 --
--- ── BLOCK A — the hole is closed, all seven ─────────────────────────────
+-- ── BLOCK A — the hole is closed, all seven ───────────────────────
 --
--- The same probe that proved the hole, re-run. Every line must now say blocked.
+-- ⚠️ EVERY WRITE HERE IS A REAL TRANSITION, AND THAT IS THE WHOLE POINT.
+--
+-- The first version of this block reused the probe that FOUND the hole, which
+-- wrote absolute values (`fraud_flagged = false`, `provider_fee_waived = true`).
+-- That was the right instrument for the probe and the wrong one here, and it
+-- reported two of the seven columns as still open on 11 Sep when they were not:
+--
+--   * privileges and RLS do not look at values, so writing a column its own
+--     current value still proves the column is in the caller's writable set —
+--     which is what the probe was for;
+--   * a TRIGGER does look at values. Writing false over false changes nothing,
+--     so the guard has nothing to refuse and the row count is 1.
+--
+-- fraud_flagged is NOT NULL DEFAULT false, so `= false` is a no-op on any
+-- account that was never flagged. Same for `provider_fee_waived = true` on an
+-- account that already had the fee waived. Booleans are therefore flipped with
+-- `not`, and the current values are printed first so a surprising line can be
+-- read against the state it started from.
 --
 --   do $$
---   declare n integer; v_log text := '';
+--   declare
+--     n integer; v_log text := '';
+--     v_id uuid := '517c2853-50bb-4e8f-87fe-d79311bc37c0';
+--     v_ver boolean; v_found boolean; v_fee boolean; v_waived boolean;
+--     v_sub text; v_fraud boolean; v_role text;
 --   begin
---     perform set_config('request.jwt.claims',
---       '{"sub":"517c2853-50bb-4e8f-87fe-d79311bc37c0","role":"authenticated"}', true);
+--     select is_verified, is_founding_provider, provider_fee_waived, subscription_waived,
+--            subscription_status, fraud_flagged, role
+--       into v_ver, v_found, v_fee, v_waived, v_sub, v_fraud, v_role
+--     from public.users where id = v_id;
+--     v_log := format('BEFORE: is_verified=%s founding=%s fee_waived=%s sub_waived=%s sub_status=%s fraud=%s role=%s',
+--                     v_ver, v_found, v_fee, v_waived, v_sub, v_fraud, v_role);
+--
+--     perform set_config('request.jwt.claims', format('{"sub":"%s","role":"authenticated"}', v_id), true);
 --     set local role authenticated;
---     v_log := format('is_admin=%s (must be false)', public.is_admin());
+--     v_log := v_log || format(E'\nis_admin=%s (must be false)', public.is_admin());
 --
 --     begin update public.users set is_verified = not is_verified where id = auth.uid();
 --       get diagnostics n = row_count; v_log := v_log || format(E'\nis_verified:          %s row(s)  <-- STILL OPEN', n);
---     exception when others then v_log := v_log || format(E'\nis_verified:          blocked', ''); end;
+--     exception when others then v_log := v_log || E'\nis_verified:          blocked'; end;
 --
---     begin update public.users set is_founding_provider = true where id = auth.uid();
+--     begin update public.users set is_founding_provider = not is_founding_provider where id = auth.uid();
 --       get diagnostics n = row_count; v_log := v_log || format(E'\nis_founding_provider: %s row(s)  <-- STILL OPEN', n);
---     exception when others then v_log := v_log || format(E'\nis_founding_provider: blocked', ''); end;
+--     exception when others then v_log := v_log || E'\nis_founding_provider: blocked'; end;
 --
---     begin update public.users set provider_fee_waived = true where id = auth.uid();
+--     begin update public.users set provider_fee_waived = not provider_fee_waived where id = auth.uid();
 --       get diagnostics n = row_count; v_log := v_log || format(E'\nprovider_fee_waived:  %s row(s)  <-- STILL OPEN', n);
---     exception when others then v_log := v_log || format(E'\nprovider_fee_waived:  blocked', ''); end;
+--     exception when others then v_log := v_log || E'\nprovider_fee_waived:  blocked'; end;
 --
---     begin update public.users set subscription_waived = true where id = auth.uid();
+--     begin update public.users set subscription_waived = not subscription_waived where id = auth.uid();
 --       get diagnostics n = row_count; v_log := v_log || format(E'\nsubscription_waived:  %s row(s)  <-- STILL OPEN', n);
---     exception when others then v_log := v_log || format(E'\nsubscription_waived:  blocked', ''); end;
+--     exception when others then v_log := v_log || E'\nsubscription_waived:  blocked'; end;
 --
---     begin update public.users set subscription_status = 'active' where id = auth.uid();
+--     -- a value it cannot already hold, whatever the account's state
+--     begin update public.users set subscription_status =
+--             case when subscription_status = 'active' then 'none' else 'active' end where id = auth.uid();
 --       get diagnostics n = row_count; v_log := v_log || format(E'\nsubscription_status:  %s row(s)  <-- STILL OPEN', n);
---     exception when others then v_log := v_log || format(E'\nsubscription_status:  blocked', ''); end;
+--     exception when others then v_log := v_log || E'\nsubscription_status:  blocked'; end;
 --
---     begin update public.users set fraud_flagged = false where id = auth.uid();
+--     begin update public.users set fraud_flagged = not fraud_flagged where id = auth.uid();
 --       get diagnostics n = row_count; v_log := v_log || format(E'\nfraud_flagged:        %s row(s)  <-- STILL OPEN', n);
---     exception when others then v_log := v_log || format(E'\nfraud_flagged:        blocked', ''); end;
+--     exception when others then v_log := v_log || E'\nfraud_flagged:        blocked'; end;
 --
---     begin update public.users set role = 'both' where id = auth.uid();
+--     begin update public.users set role = case when role = 'both' then 'model' else 'both' end where id = auth.uid();
 --       get diagnostics n = row_count; v_log := v_log || format(E'\nrole:                 %s row(s)  <-- STILL OPEN', n);
---     exception when others then v_log := v_log || format(E'\nrole:                 blocked', ''); end;
+--     exception when others then v_log := v_log || E'\nrole:                 blocked'; end;
 --
 --     begin insert into public.verification_requests (user_id, status) values (auth.uid(), 'approved');
 --       get diagnostics n = row_count; v_log := v_log || format(E'\nself-approved insert: %s row(s)  <-- STILL OPEN', n);
---     exception when others then v_log := v_log || format(E'\nself-approved insert: blocked', ''); end;
+--     exception when others then v_log := v_log || E'\nself-approved insert: blocked'; end;
+--
+--     -- CONTROL. Writing a column its own value changes nothing, so the guard
+--     -- permits it and 1 row is the CORRECT answer. If this one says blocked,
+--     -- the guard is refusing writes that alter nothing, which would break
+--     -- ordinary profile saves that happen to include an unchanged column.
+--     begin update public.users set provider_fee_waived = provider_fee_waived where id = auth.uid();
+--       get diagnostics n = row_count; v_log := v_log || format(E'\nno-op control:        %s row(s)  (1 is correct here)', n);
+--     exception when others then v_log := v_log || E'\nno-op control:        blocked  <-- WRONG, see above'; end;
 --
 --     reset role;
 --     raise exception E'ROLLED BACK ON PURPOSE.\n%', v_log;
 --   end $$;
 --
---   Expect: eight lines, all "blocked", is_admin false.
+--   Expect: eight "blocked" lines, then the no-op control at 1 row, is_admin
+--   false. A row count on any of the eight is a column the guard is not
+--   covering; read it against the BEFORE line before concluding anything.
 --
 -- ── BLOCK B — the things that must STILL work ──────────────────────────
 --
