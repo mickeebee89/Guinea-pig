@@ -1937,7 +1937,7 @@ because a guard that refused that would break ordinary profile saves.
   sits behind it. Exercising it needs an unverified provider.
 
 **Risk is low and that is not the same as having looked** (Micky, 11 Sep): Block B
-proved  is readable and the denies are write-only, so the
+proved `provider_fee_waived` is readable and the denies are write-only, so the
 read path has no reason to have changed. Recorded as unconfirmed anyway, because
 "probably fine" is what this file exists to stop being written down as fine.
 
