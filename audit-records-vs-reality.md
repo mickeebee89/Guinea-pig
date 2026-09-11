@@ -1927,9 +1927,19 @@ The corrected block flips booleans with `not`, moves `subscription_status` and
 no-op control asserting that writing an unchanged column is STILL permitted —
 because a guard that refused that would break ordinary profile saves.
 
-**Still to check, on device rather than in SQL (Micky, 11 Sep):** the two client
-reads that the RESTRICTIVE denies sit next to — subscription state on mobile
-Settings, and the fee check on the verify screen.
+**Device check, 11 Sep — one of two, and the record says which.**
+
+* **subscriptions read: CONFIRMED.** A comped account on mobile Settings shows
+  "Complimentary" and no Cancel row — state resolving through the new RESTRICTIVE
+  denies, and a correct ABSENCE rather than a blank or an error.
+* **verification_payments read: NOT CONFIRMED.** Every account to hand is already
+  verified, so the verify screen shows the verified state and the fee question
+  sits behind it. Exercising it needs an unverified provider.
+
+**Risk is low and that is not the same as having looked** (Micky, 11 Sep): Block B
+proved  is readable and the denies are write-only, so the
+read path has no reason to have changed. Recorded as unconfirmed anyway, because
+"probably fine" is what this file exists to stop being written down as fine.
 
 **What remains, in the order Micky set it:** the console repoint to 0039's
 functions, then `claim_model_verification()` with the `verify-payment.tsx:119`
