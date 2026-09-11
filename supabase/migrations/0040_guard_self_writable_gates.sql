@@ -486,7 +486,7 @@ create policy no_client_delete on public.verification_payments as restrictive fo
 
 -- MIGRATION FOOTER
 insert into public.schema_migrations (version, name, checksum)
-values ('0040', 'guard_self_writable_gates', 'PENDING_CHECKSUM');
+values ('0040', 'guard_self_writable_gates', '858df98d23da38ee35e5dc0468a6eb6f85243b8be6ee7899617422c9dbb9497f');
 
 commit;
 
