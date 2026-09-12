@@ -3,7 +3,8 @@
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useLoader } from '@/lib/useLoader'
-import { logAction } from '@/lib/audit'
+import { humanError, shopsNote } from '@/lib/adminActions'
+import type { ActionResult } from '@/lib/adminActions'
 
 interface Provider {
   id: string
@@ -70,40 +71,76 @@ export default function ProvidersPage() {
     (p.user?.email ?? '').toLowerCase().includes(search.toLowerCase())
   )
 
+  /**
+   * ── ONE CALL, AND IT TAKES THE PROVIDER RATHER THAN THE OWNER ─────────
+   *
+   * admin_act_on_provider (0039) resolves the owner from the provider row, so
+   * this page no longer passes provider.user?.id — and no longer refuses when
+   * that embed is null. The old pre-check treated an RLS-hidden owner as an
+   * absent one; providers.user_id is NOT NULL, and the function reads it as
+   * definer, so there is always an owner to act on.
+   *
+   *   * ⚠️ SUSPENSIONS REPLACE RATHER THAN STACK, the third and last copy of
+   *     the defect item 29 named. This page inserted into suspensions without
+   *     deleting first, exactly as reports did.
+   *
+   *   * VERIFY NOW REPORTS THE SHOPS, through the same _admin_apply_user_action
+   *     and the same shopsNote as the users page. Verifying an owner whose shop
+   *     cannot publish used to look identical to one whose shop went live.
+   *
+   *   * ⚠️ REMOVE IMAGES SAYS WHAT IT LEAVES BEHIND. It deletes portfolio_items
+   *     ROWS; the files stay in the portfolio-photos bucket, because storage is
+   *     deliberately outside the transaction (settled 8 Sep — a database
+   *     function cannot delete from a bucket, and pretending it can inside a
+   *     transaction is worse than saying so). The function returns every URL it
+   *     orphaned and writes them into the audit row, which becomes the only
+   *     record that those files exist. The alert states the count and where the
+   *     list lives rather than pasting URLs into a dialog.
+   *
+   *   * logAction is gone; the function writes the row with the same
+   *     provider_<action> labels the audit-log page already reads.
+   */
   async function doAction() {
     if (!modal) return
     const { provider, action } = modal
-    const now = new Date()
 
-    // Every action except remove_portfolio targets the OWNER's user row. If RLS
-    // hid that row the embed is null, and these would previously have thrown.
-    const ownerId = provider.user?.id
-    if (!ownerId && action !== 'remove_portfolio') {
-      alert("Can't act on this provider — their user account isn't visible to you.")
+    const { data, error } = await supabase.rpc('admin_act_on_provider', {
+      p_provider_id:   provider.id,
+      p_action:        action,
+      p_reason:        reason.trim() || null,
+      p_duration_days: action === 'suspend' ? Number(duration) : null,
+    })
+
+    if (error) {
+      alert(`Could not ${action.replace('_', ' ')} this provider.\n\n${humanError(error.message)}\n\nNothing has changed.`)
       return
     }
 
-    let err: { message: string } | null = null
-    if (action === 'suspend') {
-      const until = new Date(now.getTime() + parseInt(duration) * 24 * 60 * 60 * 1000)
-      ;({ error: err } = await supabase.from('suspensions').insert({ user_id: ownerId, suspended_until: until.toISOString(), banned: false, reason }))
-    }
-    if (action === 'ban') {
-      ;({ error: err } = await supabase.from('suspensions').insert({ user_id: ownerId, banned: true, reason }))
-    }
+    const result = (data ?? {}) as ActionResult
+
     if (action === 'verify') {
-      ;({ error: err } = await supabase.from('users').update({ is_verified: true }).eq('id', ownerId))
-    }
-    if (action === 'remove_portfolio') {
-      ;({ error: err } = await supabase.from('portfolio_items').delete().eq('provider_id', provider.id))
+      const note = shopsNote(result.shops ?? [])
+      if (note) {
+        alert(
+          `The owner of @${provider.shop_handle} is verified, but that did not make their shop live.\n\n` +
+          `${note}\n\nNothing needs re-doing — this is what the shop looks like now.`,
+        )
+      }
     }
 
-    // Don't write an audit entry claiming an action that didn't happen.
-    if (err) {
-      alert(`Couldn't ${action.replace('_', ' ')}: ${err.message}`)
-      return
+    if (action === 'remove_portfolio') {
+      const n = result.removed_count ?? 0
+      alert(
+        n === 0
+          ? `@${provider.shop_handle} had no portfolio images to remove.`
+          : `Removed ${n} portfolio image${n === 1 ? '' : 's'} from @${provider.shop_handle}.\n\n` +
+            `The image FILES are still in the portfolio-photos bucket. This removes the rows that point ` +
+            `at them, and nothing sweeps the bucket afterwards.\n\n` +
+            `The ${n === 1 ? 'URL is' : `${n} URLs are`} recorded in the audit log under ` +
+            `details.orphaned_media_urls — now the only record that those files are there.`,
+      )
     }
-    await logAction(`provider_${action}`, { targetUserId: ownerId ?? null, targetProviderId: provider.id, adminNote: reason })
+
     setModal(null)
     setReason('')
     reload()

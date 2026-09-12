@@ -3,6 +3,8 @@
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useLoader } from '@/lib/useLoader'
+import { humanError, shopsNote } from '@/lib/adminActions'
+import type { ActionResult } from '@/lib/adminActions'
 
 interface User {
   id: string
@@ -29,60 +31,6 @@ interface User {
 
 const ROLES = ['all', 'model', 'provider', 'both']
 
-/**
- * What admin_act_on_user returns. Copied from 0039's _provider_shops_state and
- * _admin_apply_user_action rather than inferred from one observed response:
- *
- *   warn | suspend | ban | reinstate   {}
- *   verify                             { shops: [...] }
- *   flag | waive | comp                { new_value: boolean }
- *
- * The shop entries are FACTS and not a reason — published, could-be-published
- * (by the existing check, not a third copy of it), and ever-published, so
- * "not republished" can be told apart from "not ready".
- */
-interface ShopState {
-  provider_id: string
-  published: boolean
-  publishable: boolean
-  ever_published: boolean
-}
-interface ActionResult {
-  new_value?: boolean
-  shops?: ShopState[]
-}
-
-/** 0039 prefixes its messages for a database log. An alert is not a log. */
-const humanError = (m: string) => m.replace(/^admin_act_on_user:\s*/, '')
-
-/**
- * ── AN APPROVAL THAT DOES NOT PUBLISH TELLS NOBODY ───────────────────────
- *
- * Verifying a stylist is supposed to make their shop live. When it does not,
- * nothing on this screen said so: the shop stayed hidden, the admin saw a
- * success, and the stylist was told they were verified. Jojo B sat in exactly
- * that state for four days (audit items 29 and 40).
- *
- * Returns null when there is nothing worth saying — a model with no shops, or
- * a shop that is live, which is what the admin already expected.
- */
-function shopsNote(shops: ShopState[]): string | null {
-  if (shops.length === 0) return null
-  const hidden = shops.filter(sh => !sh.published)
-  if (hidden.length === 0) return null
-
-  const why = (sh: ShopState) =>
-    !sh.publishable
-      ? 'it is not ready — a shop needs a name and at least one treatment with a category'
-      : sh.ever_published
-        ? 'it is ready, and it has been live before, so it is hidden by choice rather than by the rules'
-        : 'it is ready to publish but is not live'
-
-  const lead = shops.length === 1
-    ? 'Their shop is NOT live: '
-    : `${hidden.length} of their ${shops.length} shops are NOT live: `
-  return lead + hidden.map(why).join('; ') + '.'
-}
 
 // Mirrors is_suspended() in supabase/suspension-enforcement.sql: banned outright,
 // or suspended with an end date still in the future. Expired rows are inert.

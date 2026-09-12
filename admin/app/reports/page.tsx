@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useLoader } from '@/lib/useLoader'
+import { humanError } from '@/lib/adminActions'
 
 interface Party {
   id: string
@@ -69,9 +70,6 @@ function isFlagged(r: Report, history: Map<string, SubjectHistory>): boolean {
   const h = r.reported_email_hash ? history.get(r.reported_email_hash) : undefined
   return !!h && h.child_safety_reports > 0
 }
-
-/** 0039 prefixes its messages for a database log. An alert is not a log. */
-const humanError = (m: string) => m.replace(/^admin_act_on_report:\s*/, '')
 
 const ACTION_HELP: Record<string, string> = {
   warn:    'Sends this user an official warning in the app. It does NOT close the report — resolve it afterwards.',
