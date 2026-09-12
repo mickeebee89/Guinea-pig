@@ -1743,6 +1743,41 @@ looking for it; it was found because the rewrite made the missing case
 impossible to leave implicit. **A structure that cannot omit a case beats a
 review that has to notice one.**
 
+**── THE REPOINT, SURFACE BY SURFACE (11–12 Sep) ─────────────────**
+
+One surface per commit, so a mistake in the calling convention shows up once
+rather than five times. **No production console exists** — Vercel's project has
+root `site/`, and `admin/` runs on localhost against the live database — so a
+partly-repointed console is seen by one person.
+
+| Surface | Commit | Exercised |
+|---|---|---|
+| `users` | `acda495` | verify on an unpublishable shop, suspend with no reason, a toggle, warn. One audit row per action, all `via admin_act_on_user` |
+| `reports` | `fc1e19e` | suspensions replace rather than stack, closing records who and why, audit one-for-one |
+
+**⚠️ TWO PATHS ON `reports` ARE UNTESTED, AND UNTESTED IS NOT PASSING:**
+
+* **The deleted-subject refusal.** All four open reports have living subjects, so
+  the path where `admin_act_on_report` refuses `warn`/`suspend`/`ban` because the
+  reported account is gone was never reached. That matters more than it looks:
+  the repoint DELETED the client-side pre-check covering it, on the grounds that
+  the function refuses more precisely. The reasoning is sound and it has not run.
+* **The double-close guard.** Once a report closes the UI offers only View Chat,
+  so ⟨D4⟩'s "this report is already dismissed" cannot be reached by clicking. It
+  guards a stale tab or a direct API call, which is where the risk actually sits
+  — but it means the row lock protects something the interface cannot show.
+
+**Found by using the page rather than by any test, and fixed 12 Sep: the CHILD
+SAFETY badge said the same thing about two different facts.** `isFlagged()` is
+true either when a report IS a child-safety report, or when the person it is
+about has EVER been the subject of one — the second being the half that matters,
+and the reason the flag keys on `reported_email_hash` rather than a user id. Both
+rendered one red "CHILD SAFETY" badge, so a spam report about someone with
+history read as a child-safety report, and the badge is what an admin scans
+before the reason line. Now `CHILD SAFETY` for its own kind and `CHILD-SAFETY
+HISTORY` for the other — both red, both still sorted to the top, because the
+priority was never wrong. Only the words were.
+
 **── ARE THE ROWS ALREADY IN admin_audit_log TRUSTWORTHY? ───────────────**
 
 Unknown until checked. Probably none are false — one admin, who would have

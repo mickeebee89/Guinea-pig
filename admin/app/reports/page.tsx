@@ -274,10 +274,29 @@ export default function ReportsPage() {
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-2 flex-wrap">
+                    {/* ── THE BADGE SAYS WHICH KIND OF FLAG IT IS ──────────────
+                       isFlagged is true for two different reasons, and a single
+                       "CHILD SAFETY" badge said the same thing about both. A spam
+                       report about someone with child-safety history was reading
+                       as a child-safety report, and the badge is what an admin
+                       scans before the reason line.
+
+                       Both stay red and both still sort to the top: the priority
+                       is the person's history either way, which is the whole
+                       point of keying the flag to reported_email_hash. Only the
+                       WORDS differ, because only the words were wrong. */}
                     {isFlagged(r, history) && (
-                      <span className="text-xs px-2 py-0.5 rounded-full font-bold bg-red-600 text-white">
-                        CHILD SAFETY
-                      </span>
+                      r.reason_code === 'child_safety' ? (
+                        <span className="text-xs px-2 py-0.5 rounded-full font-bold bg-red-600 text-white"
+                          title="This report is itself a child-safety report.">
+                          CHILD SAFETY
+                        </span>
+                      ) : (
+                        <span className="text-xs px-2 py-0.5 rounded-full font-bold bg-red-600 text-white ring-2 ring-red-200"
+                          title="This report is not a child-safety report. The person it is about has been the subject of one before.">
+                          CHILD-SAFETY HISTORY
+                        </span>
+                      )
                     )}
                     <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusColor(r.status)}`}>{r.status}</span>
                     <span className="text-xs text-[#3D2E2E]/40">{new Date(r.created_at).toLocaleDateString('en-GB')}</span>
