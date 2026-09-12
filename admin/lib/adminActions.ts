@@ -35,12 +35,23 @@ export interface ShopState {
  *   verify                                                 { shops }
  *   flag | waive | comp                                    { new_value }
  *   remove_portfolio                    { removed_count, orphaned_media_urls }
+ *   approved | rejected (a verification decision)
+ *                    { decision, user_id, role, already_verified, shops }
  */
 export interface ActionResult {
   new_value?: boolean
   shops?: ShopState[]
   removed_count?: number
   orphaned_media_urls?: string[]
+  decision?: 'approved' | 'rejected'
+  /** Who the decision was about. The caller needs it to send the notification,
+   *  which stays OUTSIDE the transaction by decision — so this is how the page
+   *  addresses someone whose users row RLS may have hidden from it. */
+  user_id?: string
+  role?: string
+  /** True when the account was ALREADY verified before this approval, so the
+   *  console can stop announcing a change that did not happen. */
+  already_verified?: boolean
 }
 
 /**

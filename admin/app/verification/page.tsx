@@ -3,7 +3,8 @@
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useLoader } from '@/lib/useLoader'
-import { logAction } from '@/lib/audit'
+import { humanError, shopsNote } from '@/lib/adminActions'
+import type { ActionResult, ShopState } from '@/lib/adminActions'
 import { reviewerNames } from '@/lib/reviewers'
 import { ReviewerLine } from '@/components/ReviewerLine'
 
@@ -27,6 +28,39 @@ interface VerificationRequest {
     role: string
     is_verified: boolean
   }
+}
+
+/**
+ * ── THE STYLIST'S WORDS, WHICH ARE NOT THE ADMIN'S ───────────────────────
+ *
+ * shopsNote() in lib is third person, for someone scanning a queue. This is
+ * second person, for the person it happened to, and they say different things
+ * on purpose.
+ *
+ * ⚠️ WORDED FROM `shops`, NEVER ASSUMED. The old message told every approved
+ * provider "your verified badge and profile are now live" — untrue whenever the
+ * shop could not publish. That is the same untruth the console was telling the
+ * ADMIN until 0039, aimed at the stylist instead, and it is worse here: they
+ * have no queue to check it against.
+ *
+ * ⚠️ The "name and at least one treatment" sentence recites requirements this
+ * page cannot see. provider_shop_is_publishable is the rule; 0041 adds
+ * has_name / has_categorised_treatment beside its verdict so this can say which
+ * half is missing. Until then it is deliberately a list and not a diagnosis.
+ */
+function stylistApprovalBody(role: string | undefined, shops: ShopState[]): string {
+  if (role === 'model' || shops.length === 0) {
+    return 'Your Cavy profile is now verified. Your badge is live!'
+  }
+  const hidden = shops.filter(sh => !sh.published)
+  if (hidden.length === 0) {
+    return 'Your identity check passed — your verified badge and your shop are now live.'
+  }
+  return 'Your identity check passed and your verified badge is live. '
+    + (hidden.some(sh => !sh.publishable)
+        ? 'Your shop is not public yet: it needs a name and at least one treatment with a category. '
+          + 'Add those from your dashboard and it will go live.'
+        : 'Your shop is not public yet — open your dashboard to publish it.')
 }
 
 // Shown when there's no signed URL (missing image, or an old public-URL row).
@@ -71,82 +105,86 @@ export default function VerificationQueuePage() {
     setSignedUrls(Object.fromEntries(entries))
   })
 
+  /**
+   * ── FIVE WRITES BECOME ONE, AND THREE ALERTS STOP EXISTING ───────────
+   *
+   * Approving was: users.is_verified, then providers.is_published, then
+   * verification_requests, then a notification, then the audit row — five
+   * sequential client writes, each checked, none able to undo the one before.
+   * The three alerts that described what happens when it breaks half way are
+   * quoted verbatim in audit item 29 and in 0035's header, because they are the
+   * design admitting in prose that it could not be consistent:
+   *
+   *     :81  "Couldn't verify this user … Nothing else was changed."
+   *     :87  "The user was verified, but their shop could not be published …
+   *           The request has been left pending — try again."
+   *     :97  "This user is verified and published, but the request could not be
+   *           closed … approve it again to clear it."
+   *
+   * ⚠️ THEY ARE DELETED RATHER THAN REWORDED. Only the first described a clean
+   * failure; the other two described HALF-CHANGED states that
+   * admin_decide_verification cannot produce. A message describing an
+   * impossible state is worse than none — the next person reads it as evidence
+   * the state can happen, and writes code to handle it.
+   *
+   * What the function does inside one transaction: locks the request, refuses a
+   * second decision on it ⟨D4⟩, sets is_verified, publishes explicitly but only
+   * where provider_shop_is_publishable passes ⟨D1⟩, closes the request with
+   * reviewed_by AND reviewed_by_source ('recorded', which 0037's paired CHECK
+   * requires), and writes the audit row.
+   *
+   * What stays out here: the notification ⟨D2⟩. A failed message must not roll
+   * back a verification. It is worded from `shops` — see stylistApprovalBody.
+   *
+   * Two client-side guards are also gone. supabase.auth.getUser() checked the
+   * actor before writing, because five separate writes needed to know who was
+   * acting; the function reads auth.uid() itself and refuses without one. And
+   * `if (!req.user)` refused whenever RLS hid the joined users row — the
+   * function resolves the user as definer and returns user_id, which is how the
+   * notification below reaches someone this page cannot see.
+   */
   async function approve(req: VerificationRequest) {
-    // A joined users row hidden by RLS comes back as NULL, not an error.
-    if (!req.user) {
-      alert("Can't approve — this user's account isn't visible to you.")
-      return
-    }
-    // ── WHO IS DECIDING, READ BEFORE ANYTHING IS WRITTEN ───────────────
-    // Every verification before 10 Sep was approved with no reviewer recorded
-    // (audit item 34) because this update never included reviewed_by. It does
-    // now, and if the acting admin cannot be read the approval is REFUSED rather
-    // than written with a NULL reviewer — the same rule as 0035. Read first,
-    // because the first write below (users.is_verified) is not undoable here.
-    const { data: { user: actor } } = await supabase.auth.getUser()
-    if (!actor) {
-      alert("Can't approve — your admin session couldn't be read, so this decision could not be attributed.\n\nNothing has changed. Sign in again and retry.")
-      return
-    }
     setWorking(req.id)
     const note = notes[req.id] ?? ''
-    const isModel = req.user.role === 'model'
-
     try {
-      // Do the SUBSTANTIVE change first and abort on failure. Previously the
-      // request status was written first and everything after it ran regardless,
-      // so you could end up "approved + user notified" while is_verified stayed
-      // false, or verified+published with the request stuck pending and no audit
-      // row. Re-running is harmless (all of these are idempotent).
-      const { error: verifyErr } = await supabase
-        .from('users').update({ is_verified: true }).eq('id', req.user.id)
-      if (verifyErr) { alert(`Couldn't verify this user: ${verifyErr.message}\n\nNothing else was changed.`); return }
-
-      if (!isModel) {
-        const { error: pubErr } = await supabase
-          .from('providers').update({ is_published: true }).eq('user_id', req.user.id)
-        if (pubErr) {
-          alert(`The user was verified, but their shop could not be published: ${pubErr.message}\n\nThe request has been left pending — try again.`)
-          return
-        }
-      }
-
-      const { error: updateErr } = await supabase
-        .from('verification_requests')
-        .update({
-          status: 'approved', notes: note, reviewed_at: new Date().toISOString(),
-          // Written together: 0037's paired CHECK refuses one without the other.
-          reviewed_by: actor.id, reviewed_by_source: 'recorded',
-        })
-        .eq('id', req.id)
-      if (updateErr) {
-        alert(`This user is verified${isModel ? '' : ' and published'}, but the request could not be closed: ${updateErr.message}\n\nIt will still show as pending — approve it again to clear it.`)
+      const { data, error } = await supabase.rpc('admin_decide_verification', {
+        p_request_id: req.id,
+        p_decision:   'approved',
+        p_note:       note.trim() || null,
+      })
+      if (error) {
+        alert(`Couldn't approve this request.\n\n${humanError(error.message)}\n\nNothing has changed.`)
         return
       }
 
-      // Only tell them once the state change actually stuck — and check that
-      // the telling worked. The state change stands either way, so this is a
-      // warning, not a rollback: the person IS verified and only the message
-      // failed, which is exactly the distinction they need in order to act.
-      const { error: notifyErr } = await supabase.from('notifications').insert({
-        user_id: req.user.id,
-        type: 'verification',
-        title: isModel ? 'You\'re verified! ✅' : 'You\'re verified! 🎉',
-        body: isModel
-          ? 'Your Cavy profile is now verified. Your badge is live!'
-          : 'Your identity check passed — your verified badge and profile are now live.',
-      })
-      if (notifyErr) {
-        alert(
-          `${req.user.email ?? 'This user'} IS verified, but could not be notified: ${notifyErr.message}\n\n`
-          + 'Nothing needs re-approving. Tell them by hand if it matters.',
-        )
+      const result = (data ?? {}) as ActionResult
+      const shops  = result.shops ?? []
+
+      // The admin's version of the same facts, and the reason this page stopped
+      // being able to show a verified stylist with a silently hidden shop.
+      const note2 = shopsNote(shops)
+      if (note2) {
+        alert(`Verified, but that did not make the shop live.\n\n${note2}\n\n`
+          + 'The decision is recorded either way — this is what the shop looks like now.')
+      }
+      if (result.already_verified) {
+        alert('For the record: this account was already verified before you approved it. '
+          + 'The request is now closed and attributed to you.')
       }
 
-      await logAction('verification_approve', {
-        targetUserId: req.user.id,
-        details: { request_id: req.id, role: req.user.role, outcome: 'approved' },
+      if (!result.user_id) return   // cannot notify someone the function did not name
+      const { error: notifyErr } = await supabase.from('notifications').insert({
+        user_id: result.user_id,
+        type:    'verification',
+        title:   result.role === 'model' ? 'You\'re verified! ✅' : 'You\'re verified! 🎉',
+        body:    stylistApprovalBody(result.role, shops),
       })
+      // The decision STANDS. Only the message failed, and that distinction is
+      // exactly what the admin needs in order to act.
+      if (notifyErr) {
+        alert(`The decision is recorded, but they could not be notified: ${notifyErr.message}\n\n`
+          + 'Nothing needs re-approving. Tell them by hand if it matters.')
+      }
     } finally {
       setWorking(null)
       reload()
@@ -154,55 +192,36 @@ export default function VerificationQueuePage() {
   }
 
   async function reject(req: VerificationRequest) {
-    if (!req.user) {
-      alert("Can't reject — this user's account isn't visible to you.")
-      return
-    }
-    // Same rule as approve: no reviewer, no decision.
-    const { data: { user: actor } } = await supabase.auth.getUser()
-    if (!actor) {
-      alert("Can't reject — your admin session couldn't be read, so this decision could not be attributed.\n\nNothing has changed. Sign in again and retry.")
-      return
-    }
     setWorking(req.id)
     const note = notes[req.id] ?? ''
     try {
-      const { error: updateErr } = await supabase
-        .from('verification_requests')
-        .update({
-          status: 'rejected', notes: note, reviewed_at: new Date().toISOString(),
-          reviewed_by: actor.id, reviewed_by_source: 'recorded',
-        })
-        .eq('id', req.id)
-      // Don't tell someone they were rejected if the rejection didn't save — they'd
-      // get the bad news and then still see the request sitting under review.
-      if (updateErr) {
-        alert(`Couldn't reject this request: ${updateErr.message}\n\nThe user has NOT been notified.`)
+      const { data, error } = await supabase.rpc('admin_decide_verification', {
+        p_request_id: req.id,
+        p_decision:   'rejected',
+        p_note:       note.trim() || null,
+      })
+      // Don't tell someone they were rejected if the rejection didn't save.
+      if (error) {
+        alert(`Couldn't reject this request.\n\n${humanError(error.message)}\n\nThe user has NOT been notified.`)
         return
       }
 
+      const result = (data ?? {}) as ActionResult
+      if (!result.user_id) return
       const { error: notifyErr } = await supabase.from('notifications').insert({
-        user_id: req.user.id,
-        type: 'verification',
-        title: 'Verification not approved',
-        body: note
-          ? `Your verification was not approved: ${note}`
+        user_id: result.user_id,
+        type:    'verification',
+        title:   'Verification not approved',
+        body:    note.trim()
+          ? `Your verification was not approved: ${note.trim()}`
           : 'Your verification was not approved. Please resubmit with a clearer photo.',
       })
-      // The rejection stands; only the message failed. Said plainly because a
-      // rejected person who is never told is the silent failure this console
-      // exists to remove.
+      // Said plainly: a rejected person who is never told is the silent failure
+      // this console exists to remove.
       if (notifyErr) {
-        alert(
-          `The request is rejected, but the user could not be notified: ${notifyErr.message}\n\n`
-          + 'They have NOT been told. Contact them by hand.',
-        )
+        alert(`The rejection is recorded, but they could not be notified: ${notifyErr.message}\n\n`
+          + 'They have NOT been told. Contact them by hand.')
       }
-
-      await logAction('verification_reject', {
-        targetUserId: req.user.id,
-        details: { request_id: req.id, role: req.user.role, outcome: 'rejected', reason: note || null },
-      })
     } finally {
       setWorking(null)
       reload()
