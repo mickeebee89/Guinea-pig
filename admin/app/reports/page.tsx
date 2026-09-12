@@ -3,7 +3,6 @@
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useLoader } from '@/lib/useLoader'
-import { logAction } from '@/lib/audit'
 
 interface Party {
   id: string
@@ -70,6 +69,9 @@ function isFlagged(r: Report, history: Map<string, SubjectHistory>): boolean {
   const h = r.reported_email_hash ? history.get(r.reported_email_hash) : undefined
   return !!h && h.child_safety_reports > 0
 }
+
+/** 0039 prefixes its messages for a database log. An alert is not a log. */
+const humanError = (m: string) => m.replace(/^admin_act_on_report:\s*/, '')
 
 const ACTION_HELP: Record<string, string> = {
   warn:    'Sends this user an official warning in the app. It does NOT close the report — resolve it afterwards.',
@@ -181,58 +183,62 @@ export default function ReportsPage() {
     setChat({ report, messages: (data as unknown as Message[]) ?? [] })
   }
 
+  /**
+   * ── ONE CALL, AND IT TAKES THE REPORT RATHER THAN THE REPORTED USER ───
+   *
+   * admin_act_on_report (0039) takes the report id, locks the row, and resolves
+   * the reported account itself. Five things change here, and three of them are
+   * behaviour rather than tidying:
+   *
+   *   * ⚠️ SUSPENSIONS NOW REPLACE RATHER THAN STACK. warn/suspend/ban go
+   *     through the same _admin_apply_user_action as the users page. This page
+   *     inserted into suspensions without deleting first, so suspending someone
+   *     already suspended left TWO live rows and activeSuspension() picked
+   *     whichever came back first. That is a real change in what the button
+   *     does, and it is the fix audit item 29 predicted would fall out of there
+   *     being one copy of an action instead of three.
+   *
+   *   * ⚠️ CLOSING A REPORT NOW RECORDS WHO AND WHY. dismiss and resolve write
+   *     reports.reviewed_by and reports.resolution in the same transaction.
+   *     This page wrote neither: the reason typed into that box reached
+   *     admin_audit_log.admin_note and nowhere else, and reports.reviewed_by had
+   *     never been written at all — the reports half of audit item 34.
+   *
+   *   * ⚠️ THE DELETED-ACCOUNT PRE-CHECK IS GONE, and this is the deletion that
+   *     is not a simplification. It refused warn/suspend/ban whenever
+   *     report.reported?.id was falsy — which is true when the account is gone
+   *     AND when RLS merely hid the row from this admin. The function runs as
+   *     SECURITY DEFINER, so it can tell those two apart, and an RLS-hidden
+   *     account is perfectly actionable to it; refusing here would block
+   *     something the database permits. It raises a precise message for the
+   *     genuinely deleted case, and the modal keeps its amber warning — so the
+   *     explanation still reaches the admin BEFORE they pick an action, which is
+   *     earlier than this check ever did.
+   *
+   *   * logAction is gone. The function writes the row, with the same
+   *     report_<action> labels the audit-log page already reads.
+   *
+   *   * Two admins cannot both close one report: the row is locked FOR UPDATE
+   *     before its status is read, so the second is refused with "this report is
+   *     already dismissed" rather than quietly overwriting the first decision.
+   */
   async function doAction() {
     if (!actionModal) return
     const { report, action } = actionModal
-    // Null when the account was deleted, or when RLS hides the row.
-    // warn/suspend/ban all target the user, so refuse rather than throw;
-    // dismiss/resolve only touch the report and stay available either way.
-    const reportedId = report.reported?.id
-    if (!reportedId && ['warn', 'suspend', 'ban'].includes(action)) {
-      alert(
-        wasDeleted(report.reported, report.reported_name)
-          ? `${report.reported_name} has deleted their account, so there's nothing left to ${action}.\n\n` +
-            'The report stays in the queue as a record, and their email fingerprint is kept — ' +
-            'if they sign up again with the same address it will match. Resolve or dismiss it instead.'
-          : "Can't act on this user — their account isn't visible to you.",
-      )
-      return
-    }
-    const now = new Date()
 
-    let err: { message: string } | null = null
-    if (action === 'warn') {
-      ;({ error: err } = await supabase.from('notifications').insert({
-        user_id: reportedId, type: 'admin_warning',
-        title: 'Warning from Cavy', body: reason || 'You have received an official warning.',
-      }))
-    }
-    if (action === 'suspend') {
-      const until = new Date(now.getTime() + parseInt(duration) * 24 * 60 * 60 * 1000)
-      ;({ error: err } = await supabase.from('suspensions').insert({ user_id: reportedId, suspended_until: until.toISOString(), banned: false, reason }))
-    }
-    if (action === 'ban') {
-      ;({ error: err } = await supabase.from('suspensions').insert({ user_id: reportedId, banned: true, reason }))
-    }
-    if (action === 'dismiss') {
-      ;({ error: err } = await supabase.from('reports').update({ status: 'dismissed' }).eq('id', report.id))
-    }
-    if (action === 'resolve') {
-      ;({ error: err } = await supabase.from('reports').update({ status: 'actioned', resolved_at: now.toISOString() }).eq('id', report.id))
-    }
-
-    // The modal tells the admin their note is recorded — so don't write an audit
-    // entry for something that didn't actually happen.
-    if (err) {
-      alert(`Couldn't ${action} this report: ${err.message}\n\nNothing has been recorded.`)
-      return
-    }
-
-    await logAction(`report_${action}`, {
-      targetUserId: reportedId,
-      details: { report_id: report.id },
-      adminNote: reason,
+    const { error } = await supabase.rpc('admin_act_on_report', {
+      p_report_id:     report.id,
+      p_action:        action,
+      p_reason:        reason.trim() || null,
+      p_duration_days: action === 'suspend' ? Number(duration) : null,
     })
+
+    if (error) {
+      // Nothing partial to describe: it committed or it did not.
+      alert(`Could not ${action} this report.\n\n${humanError(error.message)}\n\nNothing has changed.`)
+      return
+    }
+
     setActionModal(null)
     setReason('')
     reload()
@@ -404,8 +410,18 @@ export default function ReportsPage() {
             )}
 
             {/* Every action takes a note, including dismiss/resolve — without one
-               there's no record of WHY a report was closed. It's carried into the
-               audit log via logAction's adminNote. */}
+               there's no record of WHY a report was closed.
+
+               Where it goes, since 0039: admin_act_on_report writes it to
+               admin_audit_log.admin_note for every action, AND to
+               reports.resolution when the action closes the report. So a closed
+               report now carries its own reason rather than only being
+               explainable by cross-referencing the audit log.
+
+               It previously said "carried into the audit log via logAction's
+               adminNote". This page no longer calls logAction — a comment naming
+               a function the file does not call is the same defect as an alert
+               describing a state that cannot happen, only quieter. */}
             <div className="mb-4">
               <label className="text-xs font-medium text-[#3D2E2E]/60 block mb-1">
                 {['dismiss', 'resolve'].includes(actionModal.action)
