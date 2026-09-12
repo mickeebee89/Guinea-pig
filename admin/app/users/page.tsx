@@ -3,7 +3,6 @@
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useLoader } from '@/lib/useLoader'
-import { logAction } from '@/lib/audit'
 
 interface User {
   id: string
@@ -29,6 +28,61 @@ interface User {
 }
 
 const ROLES = ['all', 'model', 'provider', 'both']
+
+/**
+ * What admin_act_on_user returns. Copied from 0039's _provider_shops_state and
+ * _admin_apply_user_action rather than inferred from one observed response:
+ *
+ *   warn | suspend | ban | reinstate   {}
+ *   verify                             { shops: [...] }
+ *   flag | waive | comp                { new_value: boolean }
+ *
+ * The shop entries are FACTS and not a reason — published, could-be-published
+ * (by the existing check, not a third copy of it), and ever-published, so
+ * "not republished" can be told apart from "not ready".
+ */
+interface ShopState {
+  provider_id: string
+  published: boolean
+  publishable: boolean
+  ever_published: boolean
+}
+interface ActionResult {
+  new_value?: boolean
+  shops?: ShopState[]
+}
+
+/** 0039 prefixes its messages for a database log. An alert is not a log. */
+const humanError = (m: string) => m.replace(/^admin_act_on_user:\s*/, '')
+
+/**
+ * ── AN APPROVAL THAT DOES NOT PUBLISH TELLS NOBODY ───────────────────────
+ *
+ * Verifying a stylist is supposed to make their shop live. When it does not,
+ * nothing on this screen said so: the shop stayed hidden, the admin saw a
+ * success, and the stylist was told they were verified. Jojo B sat in exactly
+ * that state for four days (audit items 29 and 40).
+ *
+ * Returns null when there is nothing worth saying — a model with no shops, or
+ * a shop that is live, which is what the admin already expected.
+ */
+function shopsNote(shops: ShopState[]): string | null {
+  if (shops.length === 0) return null
+  const hidden = shops.filter(sh => !sh.published)
+  if (hidden.length === 0) return null
+
+  const why = (sh: ShopState) =>
+    !sh.publishable
+      ? 'it is not ready — a shop needs a name and at least one treatment with a category'
+      : sh.ever_published
+        ? 'it is ready, and it has been live before, so it is hidden by choice rather than by the rules'
+        : 'it is ready to publish but is not live'
+
+  const lead = shops.length === 1
+    ? 'Their shop is NOT live: '
+    : `${hidden.length} of their ${shops.length} shops are NOT live: `
+  return lead + hidden.map(why).join('; ') + '.'
+}
 
 // Mirrors is_suspended() in supabase/suspension-enforcement.sql: banned outright,
 // or suspended with an end date still in the future. Expired rows are inert.
@@ -123,91 +177,92 @@ export default function UsersPage() {
   })
 
   /**
-   * ── THE AUDIT ROW IS ONLY WRITTEN IF THE ACTION SUCCEEDED ─────────────
+   * ── ONE CALL. THE ACTION AND ITS RECORD COMMIT TOGETHER, OR NEITHER DOES ──
    *
-   * Every branch below used to discard its result and then `logAction` ran
-   * unconditionally. supabase-js resolves with `{ error }` rather than
-   * rejecting, so a suspension RLS refused was written into `admin_audit_log`
-   * as having happened, and the list refreshed as though it had.
+   * This page used to perform the write, check it, then insert the audit row
+   * separately. Checking first fixed audit item 27's FALSE entry — a row
+   * claiming an action RLS had refused — but left item 29's GAP: the action
+   * could land and the record fail, leaving a suspension in force with nothing
+   * saying who did it or why, in a table kept six years as the evidence for a
+   * ban.
    *
-   * That is not a missing record. It is a FALSE one, in a table kept six years
-   * as the evidence for a ban (0005, 0006). Every other site in audit item 27
-   * fails as "nothing happened"; this one failed as "something happened that
-   * did not".
+   * admin_act_on_user (0039) does both in one transaction. What that removes
+   * from this file is the point of it:
    *
-   * So the fix is the ORDER, not error handling bolted around it: do the thing,
-   * check it, and only then write the record.
+   *   * THE EIGHT-BRANCH SWITCH. The database now holds the one copy of what
+   *     each action means. Three copies is why the reports and providers pages
+   *     still stack suspensions that this page learned not to stack in 0035.
    *
-   * ⚠️ THE TWO WRITES ARE STILL NOT ATOMIC. If the action lands and the audit
-   * insert then fails, the action stands and the admin is told, loudly, to
-   * record it by hand — see below for why that is the right way round, and
-   * audit item 29 for the version where they cannot disagree at all.
+   *   * logAction. The function writes the row; a second insert here would
+   *     double-record.
+   *
+   *   * THE "applied but could NOT be recorded" ALERT, deleted rather than
+   *     reworded. It described a state this function makes impossible, and a
+   *     message describing an impossible state is worse than none — the next
+   *     person reads it as evidence the state can happen.
+   *
+   *   * THE warn BRANCH. The notification IS the action there, so it belongs
+   *     inside the transaction (0035's header, the one decision 0039 revisits).
+   *     An audit row saying "warned" can no longer outlive a warning that was
+   *     never delivered.
+   *
+   *   * THE default: BRANCH, which refused an action with no write so that a
+   *     new action string could not silently produce an audit row for something
+   *     that never ran. That guard is NOT gone — it is _admin_apply_user_action's
+   *     else clause, raising `unknown action %`. Noted here because it moved from
+   *     a file the next console author reads into one they may not.
+   *
+   *   * !user.fraud_flagged AND ITS TWO SIBLINGS. The toggles were computed
+   *     from a row this page read at some earlier point. The function reads and
+   *     flips inside the same transaction and returns what the value BECAME, so
+   *     a stale page can no longer silently do the opposite of what was clicked.
    */
   async function doAction() {
     if (!modal) return
     const { user, action } = modal
-    const now = new Date()
 
-    // The one write this action consists of. Returned rather than performed
-    // inline so there is a single place that decides whether it worked.
-    const perform = (): PromiseLike<{ error: { message: string } | null }> => {
-      switch (action) {
-        case 'warn':
-          return supabase.from('notifications').insert({
-            user_id: user.id, type: 'admin_warning',
-            title: 'Warning from Cavy',
-            body: reason || 'You have received an official warning.',
-          })
-        case 'suspend': {
-          const until = new Date(now.getTime() + parseInt(duration) * 24 * 60 * 60 * 1000)
-          return supabase.from('suspensions').insert({ user_id: user.id, suspended_until: until.toISOString(), banned: false, reason })
-        }
-        case 'ban':
-          return supabase.from('suspensions').insert({ user_id: user.id, banned: true, reason })
-        case 'reinstate':
-          return supabase.from('suspensions').delete().eq('user_id', user.id)
-        case 'verify':
-          return supabase.from('users').update({ is_verified: true }).eq('id', user.id)
-        case 'flag':
-          return supabase.from('users').update({ fraud_flagged: !user.fraud_flagged }).eq('id', user.id)
-        case 'waive':
-          // Free access: waive the £14.99 provider fee (or revoke it). The mobile publish
-          // gate treats a waived provider as fee-settled, so they can make their shop live.
-          return supabase.from('users').update({ provider_fee_waived: !user.provider_fee_waived }).eq('id', user.id)
-        case 'comp':
-          // Free membership: grant/revoke a comped model subscription (no Stripe charge). The
-          // mobile apply-gate (hasActiveSubscription) treats a waived member as subscribed —
-          // for App-Review demo accounts, comps and promos.
-          return supabase.from('users').update({ subscription_waived: !user.subscription_waived }).eq('id', user.id)
-        default:
-          // An action with no write is a bug, not a no-op to be logged. Refusing
-          // here is what stops a new action silently producing audit rows for
-          // something that never ran.
-          return Promise.resolve({ error: { message: `Unknown action "${action}" — nothing was attempted.` } })
-      }
-    }
+    const { data, error } = await supabase.rpc('admin_act_on_user', {
+      p_user_id:       user.id,
+      p_action:        action,
+      p_reason:        reason.trim() || null,
+      p_duration_days: action === 'suspend' ? Number(duration) : null,
+    })
 
-    const { error } = await perform()
     if (error) {
-      alert(
-        `Could not ${action} this user: ${error.message}\n\n` +
-        'Nothing has changed, and nothing has been written to the audit log.',
-      )
+      // There is no partial state to describe. It committed or it did not.
+      alert(`Could not ${action} this user.\n\n${humanError(error.message)}\n\nNothing has changed.`)
       return
     }
 
-    const logged = await logAction(action, { targetUserId: user.id, adminNote: reason })
-    if (!logged.ok) {
-      // THE ACTION STANDS. Undoing it because the record failed would leave an
-      // unrecorded reversal on top of an unrecorded action — two gaps instead of
-      // one — and the rollback can fail too. So the action holds and a person is
-      // told, which is the only part of this that cannot fail silently.
+    const result = (data ?? {}) as ActionResult
+
+    // What the button PROMISED, from the row this page last read, against what
+    // the transaction actually did. Silence here would mean an admin who
+    // clicked "Flag fraud" on a stale row has just unflagged someone instead.
+    const promised: Partial<Record<string, boolean>> = {
+      flag:  !user.fraud_flagged,
+      waive: !user.provider_fee_waived,
+      comp:  !user.subscription_waived,
+    }
+    if (typeof result.new_value === 'boolean'
+        && promised[action] !== undefined
+        && result.new_value !== promised[action]) {
       alert(
-        `The ${action} was applied, but it could NOT be recorded in the audit log:\n` +
-        `${logged.error}\n\n` +
-        'The action is in force. Record it by hand — this log is kept as evidence ' +
-        'for six years and there is now a gap in it.',
+        'This page was showing stale information.\n\n' +
+        `You clicked to turn this ${promised[action] ? 'ON' : 'OFF'}, and it is now ` +
+        `${result.new_value ? 'ON' : 'OFF'} — it had already been changed since this page loaded. ` +
+        'What the database now holds is what stands.',
       )
+    }
+
+    if (action === 'verify') {
+      const note = shopsNote(result.shops ?? [])
+      if (note) {
+        alert(
+          `${user.first_name} is verified, but that did not make their shop live.\n\n${note}\n\n` +
+          'Nothing needs re-doing — this is what the shop looks like now.',
+        )
+      }
     }
 
     setModal(null)
@@ -333,6 +388,25 @@ export default function UsersPage() {
                         className="text-[11px] px-2 py-1 rounded-md font-medium bg-blue-100 text-blue-700">
                         Verify
                       </button>
+                      {/* ── WHAT THESE TWO FLAGS UNLOCK, DOWNSTREAM IN MOBILE ──────
+                         These comments lived on the waive/comp branches of the
+                         switch this page used to hold. 0039 sets the columns and
+                         has no idea what they unlock — that is not a gap in the
+                         function, it is knowledge that belongs where the person
+                         granting it is standing.
+
+                         provider_fee_waived  the mobile publish gate treats a
+                           waived provider as fee-settled, so they can make their
+                           shop live without paying the £14.99.
+                         subscription_waived  the mobile apply-gate
+                           (hasActiveSubscription) treats a waived member as
+                           subscribed — for App Review demo accounts, comps and
+                           promos.
+
+                         Both are read-and-flipped inside the transaction ⟨D3⟩, so
+                         these buttons say what they WILL do based on a row this
+                         page last read; doAction reports it if that turned out
+                         to be stale. */}
                       {(u.role === 'provider' || u.role === 'both') && (
                         <button onClick={() => { setModal({ user: u, action: 'waive' }); setReason('') }}
                           title={u.provider_fee_waived ? 'Revoke free access' : 'Waive the £14.99 verification fee'}
