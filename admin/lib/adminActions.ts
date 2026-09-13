@@ -25,6 +25,17 @@ export interface ShopState {
   published: boolean
   publishable: boolean
   ever_published: boolean
+  /**
+   * OBSERVATIONS, added by 0041, and not the rule — `publishable` is the
+   * verdict. They mirror provider_shop_is_publishable's own two expressions and
+   * are checked against it on every provider row when 0041 applies.
+   *
+   * Optional because a response from before 0041 will not carry them. Read them
+   * with `=== false`, never as falsy: `undefined` means "this did not say",
+   * which is not the same as "no".
+   */
+  has_name?: boolean
+  has_categorised_treatment?: boolean
 }
 
 /**
@@ -90,12 +101,26 @@ export function shopsNote(shops: ShopState[]): string | null {
   const hidden = shops.filter(sh => !sh.published)
   if (hidden.length === 0) return null
 
-  const why = (sh: ShopState) =>
-    !sh.publishable
-      ? 'it is not ready — a shop needs a name and at least one treatment with a category'
-      : sh.ever_published
+  const why = (sh: ShopState) => {
+    if (sh.publishable) {
+      return sh.ever_published
         ? 'it is ready, and it has been live before, so it is hidden by choice rather than by the rules'
         : 'it is ready to publish but is not live'
+    }
+    // 0041: name the half that is actually missing. This used to recite both
+    // requirements, so a shop that HAD a name read as missing one — Micky, on
+    // Test A, 12 Sep: it sends someone looking for a problem that isn't there.
+    const missing = [
+      sh.has_name === false ? 'a name' : null,
+      sh.has_categorised_treatment === false ? 'at least one treatment with a category' : null,
+    ].filter(Boolean)
+    // No observation explains it: the rule is refusing for a reason this cannot
+    // see. Say that, rather than naming requirements that are already met — an
+    // incomplete message is the failure mode this was designed for.
+    return missing.length > 0
+      ? `it still needs ${missing.join(' and ')}`
+      : 'it is not ready, and not because of its name or its treatments — something else in the publish rules is refusing it'
+  }
 
   const lead = shops.length === 1
     ? 'Their shop is NOT live: '

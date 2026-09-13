@@ -43,10 +43,9 @@ interface VerificationRequest {
  * ADMIN until 0039, aimed at the stylist instead, and it is worse here: they
  * have no queue to check it against.
  *
- * ⚠️ The "name and at least one treatment" sentence recites requirements this
- * page cannot see. provider_shop_is_publishable is the rule; 0041 adds
- * has_name / has_categorised_treatment beside its verdict so this can say which
- * half is missing. Until then it is deliberately a list and not a diagnosis.
+ * Since 0041 this names the half that is actually missing, from has_name and
+ * has_categorised_treatment. It used to recite both requirements, which told a
+ * stylist whose shop HAS a name to go and fix the name.
  */
 function stylistApprovalBody(role: string | undefined, shops: ShopState[]): string {
   if (role === 'model' || shops.length === 0) {
@@ -56,11 +55,21 @@ function stylistApprovalBody(role: string | undefined, shops: ShopState[]): stri
   if (hidden.length === 0) {
     return 'Your identity check passed — your verified badge and your shop are now live.'
   }
+
+  // The first hidden shop. Nearly every stylist has one; if that ever stops
+  // being true this under-reports rather than misreports, which is the right
+  // way round for a message going to a person.
+  const sh = hidden[0]
+  const missing = [
+    sh.has_name === false ? 'a name' : null,
+    sh.has_categorised_treatment === false ? 'at least one treatment with a category' : null,
+  ].filter(Boolean)
+
   return 'Your identity check passed and your verified badge is live. '
-    + (hidden.some(sh => !sh.publishable)
-        ? 'Your shop is not public yet: it needs a name and at least one treatment with a category. '
-          + 'Add those from your dashboard and it will go live.'
-        : 'Your shop is not public yet — open your dashboard to publish it.')
+    + (missing.length > 0
+        ? `Your shop is not public yet — it still needs ${missing.join(' and ')}. `
+          + `Add ${missing.length > 1 ? 'those' : 'that'} from your dashboard and it will go live.`
+        : 'Your shop is not public yet — open your dashboard to check it.')
 }
 
 // Shown when there's no signed URL (missing image, or an old public-URL row).
