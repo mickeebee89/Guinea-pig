@@ -1811,7 +1811,26 @@ telling the ADMIN, aimed at the stylist, who has no queue to check it against.
 The message is now built from `shops`. Two approvals on 12 Sep produced two
 different and true messages for the first time.
 
-**⚠️ THREE PATHS ARE UNTESTED, AND UNTESTED IS NOT PASSING:**
+**✅ ALL FOUR GUARDS NOW EXERCISED, 13 Sep — AND THE REASON THEY LOOKED
+UNTESTABLE WAS WRONG.** Each was run in the scenario it was written for: the
+report double-close and the verification second decision from a STALE TAB (open
+the page twice, act in one, act again in the other), and the status-post expiry
+by setting `expires_at` two minutes out and deciding after it passed. All three
+refused. Five minutes in total.
+
+**⚠️ CORRECTION — Claude's, and it propagated three times.** These were recorded
+as "unreachable by clicking". That is true of a FRESH page and false of the case
+they exist for — a stale tab is trivially reachable. The false half rode along
+with the true half because they were welded into one phrase, and each retelling
+cited the previous sentence rather than re-deriving it from what the guard
+protects. Same shape as the `name <> ''` lead: a summary compared against
+another summary. **The rule: when restating a claim about testability, derive it
+from what the thing GUARDS, not from the last thing you wrote about it.**
+
+*What was recorded before that, kept because the reasoning for holding B–E was
+sound even though one premise was not:*
+
+**⚠️ THREE PATHS WERE UNTESTED, AND UNTESTED IS NOT PASSING:**
 
 * **The deleted-subject refusal.** All four open reports have living subjects, so
   the path where `admin_act_on_report` refuses `warn`/`suspend`/`ban` because the
@@ -1943,6 +1962,50 @@ was the reason for three workflows rather than one.
 
 It remains a signal and not a gate. Everything above about branch protection
 still stands.
+
+**43. THE USERS CONSOLE FIRES THREE COUNTING QUERIES PER ROW — MEASURED
+13 Sep 2026. NOT FIXED.**
+
+**What it does.** `admin/app/users/page.tsx` loads every user, then inside a
+`Promise.all` over the rows counts, per user: `sessions`, `reports` and
+`verification_payments`. Three round trips per row, on every load, before the
+table renders.
+
+**Measured in the browser rather than inferred from the code:**
+
+    unfiltered /users    202 requests · 2.32s to finish · DOMContentLoaded 897ms
+    ~58 accounts         verification_payments / sessions / reports, cycling in
+                         threes, every one from fetch.ts:17
+
+**⚠️ WHAT IS MEASURED, AND WHAT IS NOT.** The PATTERN is measured: the waterfall
+shows 202 requests with the right names in the right repeating order, which is
+the N+1 itself rather than arithmetic about it. **The causal share is not
+measured.** 2.32s may have other contributors and they have not been isolated,
+so "the page is slow because of this" is not yet established — only that this is
+present, large, and the obvious candidate.
+
+**The filtered comparison was not obtained.** Changing the role dropdown does not
+trigger a navigation, so the network panel kept counting across loads: 292
+requests and 27.93s cumulative, which measures nothing. Recorded as NOT OBTAINED
+rather than read as a result, because a dirty number that points the right way is
+still the thing this file keeps catching.
+
+**Why it is worth fixing independent of the share:** it scales with the account
+list. 58 accounts cost 202 requests; 500 would cost about 1,500, on the page an
+admin opens to find somebody. The counts are also decorative in the common case
+— they populate three columns nobody filters or sorts on.
+
+**The fix, when it comes, is one round trip:** a single SQL function returning
+`user_id, session_count, report_count, fee_paid` for the page's rows, the way
+`report_subject_history` already does for the reports queue. Not atomicity, not
+item 27 or 29 — this is the first performance item in the file, and it is a
+different failure class from everything around it: nothing here is untrue,
+nothing fails silently, and no check is looking at the wrong thing. It is simply
+slow, and it gets slower in exactly the direction the product is meant to grow.
+
+**Found by Micky using the console, not by any test** — like the CHILD SAFETY
+badge and the two Verify buttons. Three of this file's findings in two days came
+from someone operating the product rather than reading it.
 
 **42. TWO BUTTONS CALLED VERIFY, ON TWO PAGES, DOING DIFFERENT THINGS — FOUND
 12 Sep 2026. NOT FIXED.**
