@@ -1972,6 +1972,94 @@ request"), or it offers to close any pending request at the same time, or the
 queue is the only place verification can be granted. Third option is the
 smallest product, first is the smallest change.
 
+**41. ⚠️ CORRECTED 13 Sep 2026 — THE MISLEADING INSTRUCTION WAS IN SIX FILES,
+ALL WRITTEN BY CLAUDE IN THIS SESSION, NOT IN FORTY. ✅ SWEPT AND CLOSED.**
+
+**What is true.** The 34 files `0001`–`0034` never mention `--stamp` at all.
+Their block names only the status report, and *"Apply, verify, THEN run this"* is
+correct advice about that report. The six files that put `--stamp` inside a block
+headed "LAST STEP, EVERY TIME" are `0035`–`0040` — every one written by Claude
+between 10 and 11 Sep 2026, each copied forward from the last. `0000`, the
+framework's own documentation, already described the intended flow: *"Write the
+file, commit it, paste it into the SQL editor"*, with the checksum in the file
+before it reaches the editor. **The framework was coherent the whole time.**
+
+**So the sequence was:** Claude wrote the misleading block, copied it into six
+files, followed it on `0040`, got a DRIFTED ledger, and recorded the framework as
+the cause — in an item blaming forty files for a defect five days old and
+entirely its own.
+
+**⚠️ THREE THINGS MAKE THIS WORSE THAN AN ORDINARY WRONG CONCLUSION** (Micky,
+13 Sep):
+
+1. **The record contained its own refutation.** The original write-up says, in
+   plain words, *"the other 38 were counted, not read."* It was correct, it was
+   visible, and it was acted on anyway.
+2. **Both files read were its own.** A sample of two that shared an author,
+   generalised to forty. `git log` would have said so.
+3. **The count did the work of evidence.** *"40 of 41 files carry that block"* is
+   a TRUE sentence that sounds like a finding. Its accuracy is what made it
+   persuasive, and 38 of the forty were never opened.
+
+**THE RULE, IN THE FORM THE TRAP ACTUALLY TAKES: A COUNT IS NOT A READING.**
+"40 of 41 files carry X" tells you about forty files only if you opened forty.
+The trap is not carelessness — the count was accurate. It is that an accurate
+count reads like evidence about the things counted, when it is only evidence
+about how many of them there are.
+
+**⚠️ AND THE HARD QUESTION, BECAUSE "ADD A CAVEAT" DEMONSTRABLY DID NOT WORK.**
+The caveat was present, correct, and inert. Two things would have stopped it:
+
+* **Naming the sample in the HEADLINE rather than the body.** The item was titled
+  *"THE MIGRATION FOOTER TELLS YOU TO STAMP LAST"* — a claim about forty files.
+  Had the title been forced to read *"two files I wrote tell you to stamp last"*,
+  the overreach would have been visible where the item is read from, not buried
+  four paragraphs down where it was.
+* **Treating a cheap caveat as a TRIGGER, not a disclosure.** Closing this gap
+  cost one command:
+
+      grep -c -- "--stamp" supabase/migrations/*.sql
+
+  It returns 6 of 41. **When the gap can be closed for the price of one command,
+  writing it down as a limitation is not an acceptable substitute for closing
+  it.** A caveat is for what cannot be checked now. This could.
+
+**Ninth instance of the pattern, and the first where the unexamined majority was
+innocent.** Every previous instance found a defect WIDER than the check that
+found it. This one invented a defect in files that did not have it — the same
+error running in the opposite direction.
+
+**What was right, and is unchanged:** stamping after applying does produce a
+DRIFTED ledger; `0040` was applied that way and needed a reconcile by hand; the
+reversed order is proven by `0041` applying clean, with no drift and no
+reconcile. The fix is real. The diagnosis of where the instruction came from was
+not.
+
+**✅ SWEPT 13 Sep 2026 — FOR A DIFFERENT REASON THAN THE ORIGINAL RECORDED.** The
+older blocks are SILENT on stamping, not wrong about it, so a migration written
+by copying the nearest file gets applied unstamped and its ledger row reads
+DRIFTED for ever after. **Adding the missing step is the fix**; correcting a
+misleading order never was, because outside those six files there was no
+misleading order.
+
+All 41 files carrying an instruction block now hold the same accurate one, and it
+keeps what the old variants were right about — the status report, the `0009`
+story (written, committed, never applied, found by eye), and the service-role key
+— rather than deleting real content to make room for a correction about Claude's
+own mistake.
+
+**`0000` was deliberately NOT touched.** Its only mention of this sits in the file
+header, ABOVE the `-- MIGRATION FOOTER` line, where the checksum covers it.
+Editing it would have caused exactly the drift this item is about.
+
+**Proof the sweep was safe, measured rather than asserted:** every body checksum
+in the directory recomputed before and after — 42 files, none moved — then
+confirmed independently by `migration-status.mjs` reading the database: 42
+applied, nothing drifted. The tool computes those checksums its own way, which is
+the point of checking with it rather than with the script that did the editing.
+
+*The original write-up, kept as it was:*
+
 **41. THE MIGRATION FOOTER TELLS YOU TO STAMP LAST, AND STAMPING LAST IS WHAT
 MAKES THE LEDGER READ DRIFTED — FOUND 11 Sep 2026. NOT FIXED.**
 

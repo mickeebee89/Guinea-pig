@@ -293,7 +293,31 @@ notify pgrst, 'reload schema';
 
 
 -- ===========================================================================
--- LAST STEP, EVERY TIME
+-- ⚠️ STAMP BEFORE YOU APPLY — NOT AFTER
 --
---   node scripts/migration-status.mjs
+--   node scripts/migration-status.mjs --stamp     <- BEFORE pasting this file
+--   (paste the whole file into the Supabase SQL editor)
+--   node scripts/migration-status.mjs             <- confirm: applied, no drift
+--
+-- WHY THE ORDER MATTERS. A new file's footer says PENDING_CHECKSUM, and
+-- --stamp replaces it with the real checksum. Apply first and the database
+-- records the literal string PENDING_CHECKSUM, which the checksum written
+-- afterwards can never match, so the ledger reads DRIFTED from then on. 0040
+-- was applied that way on 11 Sep 2026 and needed a reconcile by hand.
+--
+-- This block used to say "LAST STEP, EVERY TIME" and name only the status
+-- report. That was correct about the report and SILENT about stamping — which
+-- is how a migration written by copying the nearest file gets applied
+-- unstamped. Swept across every migration on 13 Sep 2026, audit item 41.
+--
+-- The status report is still worth running last. It catches what no verify
+-- block can: a migration written, committed, and never applied at all. 0009 sat
+-- in that state for a day and was noticed by eye. A check that depends on
+-- someone noticing is not a check. It needs the service-role key in the shell:
+--   $env:SUPABASE_SERVICE_ROLE_KEY = '<service-role-key>'
+--
+-- Editing this block on an APPLIED migration is safe, and that is measured
+-- rather than assumed: it sits BELOW the MIGRATION FOOTER line, the checksum
+-- covers only what is above that line, and every body checksum in this
+-- directory was recomputed before and after the sweep.
 -- ===========================================================================
