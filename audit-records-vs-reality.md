@@ -1754,8 +1754,24 @@ partly-repointed console is seen by one person.
 |---|---|---|
 | `users` | `acda495` | verify on an unpublishable shop, suspend with no reason, a toggle, warn. One audit row per action, all `via admin_act_on_user` |
 | `reports` | `fc1e19e` | suspensions replace rather than stack, closing records who and why, audit one-for-one |
+| `providers` | `3e92b01` | 5 image rows removed with 5 URLs recorded, verify on an unpublishable shop, suspend twice leaving one row |
+| `verification` | `f195b74` | approve on a shop that could and could not publish, each producing a different true message; a reject; all three carrying `reviewed_by_source = 'recorded'` |
 
-**⚠️ TWO PATHS ON `reports` ARE UNTESTED, AND UNTESTED IS NOT PASSING:**
+**The helpers were lifted at the third copy** (`3e92b01`): `shopsNote` and
+`humanError` went to `admin/lib/adminActions.ts` before `providers` became the
+third page to hold them, with two surfaces still to come. The `rpc()` calls were
+deliberately NOT lifted — each surface passes different parameters and reads
+different keys, and a wrapper would put the contract one indirection away from
+whoever checks it against the migration.
+
+**What `verification` actually changed, beyond atomicity:** every approved
+provider used to be told *"your verified badge and profile are now live"*. That
+was false whenever the shop could not publish — the same untruth the console was
+telling the ADMIN, aimed at the stylist, who has no queue to check it against.
+The message is now built from `shops`. Two approvals on 12 Sep produced two
+different and true messages for the first time.
+
+**⚠️ THREE PATHS ARE UNTESTED, AND UNTESTED IS NOT PASSING:**
 
 * **The deleted-subject refusal.** All four open reports have living subjects, so
   the path where `admin_act_on_report` refuses `warn`/`suspend`/`ban` because the
@@ -1766,6 +1782,11 @@ partly-repointed console is seen by one person.
   so ⟨D4⟩'s "this report is already dismissed" cannot be reached by clicking. It
   guards a stale tab or a direct API call, which is where the risk actually sits
   — but it means the row lock protects something the interface cannot show.
+* **The second-decision guard on verification**, for the same reason: a decided
+  request leaves the pending tab, so "this request is already approved" is
+  unreachable by clicking. Both row locks exist for the stale-tab and direct-call
+  cases, and both are recorded here as untested rather than left to look covered
+  by a green run.
 
 **Found by using the page rather than by any test, and fixed 12 Sep: the CHILD
 SAFETY badge said the same thing about two different facts.** `isFlagged()` is
@@ -1882,6 +1903,34 @@ was the reason for three workflows rather than one.
 
 It remains a signal and not a gate. Everything above about branch protection
 still stands.
+
+**42. TWO BUTTONS CALLED VERIFY, ON TWO PAGES, DOING DIFFERENT THINGS — FOUND
+12 Sep 2026. NOT FIXED.**
+
+**What happened:** Micky went to approve a verification request, clicked
+**Verify** on the USERS page instead of **Approve** in the verification queue,
+and reported the result as a failure — nothing had moved. Nothing was broken. He
+was on the other surface.
+
+| Surface | Button | What it does | What it leaves |
+|---|---|---|---|
+| `admin/users` | **Verify** | sets `users.is_verified`, and since 0039 reports what happened to the shops | any pending verification request **still pending** |
+| `admin/verification` | **Approve** | decides the REQUEST: verifies, publishes where eligible, closes the request with a reviewer | nothing outstanding |
+
+**Both are correct in isolation, and that is the point.** The collision is the
+word and the residue: the users-page button leaves a request sitting in the
+queue for an account that is already verified, and nothing links the two
+surfaces or says so. Approving that stale request later is harmless — it lands
+in the `already_verified` branch — but only because 0039 added one.
+
+**It took someone who wrote the console to hit it**, which is the part worth
+recording. This is not a case of an unfamiliar user guessing wrong.
+
+**Not fixed, and the fix is a naming decision rather than code:** either the
+users-page action says what it is ("Mark verified" / "Verify identity without a
+request"), or it offers to close any pending request at the same time, or the
+queue is the only place verification can be granted. Third option is the
+smallest product, first is the smallest change.
 
 **41. THE MIGRATION FOOTER TELLS YOU TO STAMP LAST, AND STAMPING LAST IS WHAT
 MAKES THE LEDGER READ DRIFTED — FOUND 11 Sep 2026. NOT FIXED.**

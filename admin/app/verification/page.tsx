@@ -160,17 +160,22 @@ export default function VerificationQueuePage() {
       const result = (data ?? {}) as ActionResult
       const shops  = result.shops ?? []
 
-      // The admin's version of the same facts, and the reason this page stopped
-      // being able to show a verified stylist with a silently hidden shop.
-      const note2 = shopsNote(shops)
-      if (note2) {
-        alert(`Verified, but that did not make the shop live.\n\n${note2}\n\n`
-          + 'The decision is recorded either way — this is what the shop looks like now.')
-      }
+      // ONE dialog, built from whichever facts apply. This was two alerts —
+      // already-verified, then the shop note — so approving Test A cost two
+      // OK-clicks for one decision. An alert per fact is a queue of
+      // interruptions rather than a report of what happened.
+      const said: string[] = []
       if (result.already_verified) {
-        alert('For the record: this account was already verified before you approved it. '
-          + 'The request is now closed and attributed to you.')
+        said.push('This account was already verified before you approved it — the request is now '
+          + 'closed and attributed to you.')
       }
+      const shopNote = shopsNote(shops)
+      if (shopNote) {
+        said.push(`Verifying did not make the shop live. ${shopNote}`)
+        // Only when there is a shop note: on its own it refers to nothing.
+        said.push('The decision is recorded either way — this is what the shop looks like now.')
+      }
+      if (said.length > 0) alert(said.join('\n\n'))
 
       if (!result.user_id) return   // cannot notify someone the function did not name
       const { error: notifyErr } = await supabase.from('notifications').insert({
