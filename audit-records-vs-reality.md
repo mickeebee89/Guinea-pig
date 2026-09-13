@@ -944,6 +944,52 @@ which the placeholder list at least never did.
 **Still Micky's to write, and stated by him rather than inferred (13 Sep):**
 *"Writing the real list is mine to do, not a build task."*
 
+**── WHAT THE MECHANISM CAN AND CANNOT EXPRESS, READ 13 Sep ─────────**
+
+The list's shape depends on the screen, so both function bodies were read
+verbatim from `0032` (applied, unmodified — so the file IS the live definition).
+
+**Websites are already handled, and NOT by the list.**
+`strip_links_from_status_post()` runs FIRST and deletes them outright: markdown
+targets, HTML tags, anything starting `http://`, `https://` or `www.`, and bare
+domains. They never reach the screen, so website terms do not belong in the list.
+
+**⚠️ BUT THE TLD LIST IS NARROW, AND A SHORTENER WALKS STRAIGHT THROUGH.** The
+bare-domain pattern matches only:
+
+    com | co.uk | uk | net | org | io | me | shop | store | link | xyz
+
+**`bit.ly` survives.** So do `.app`, `.co`, `.social`, `.gg`, `.to`, `.page`. The
+narrowness is deliberate — matching every dotted string would eat "3.30pm" and
+prices — but a link shortener is the exact thing the strip exists to stop.
+**Micky, 13 Sep: fix this FIRST.** It is in the mechanism rather than the data,
+it is the cheaper half, and it is worth doing whether or not patterns ever land.
+
+**Phone numbers and `insta: @me` are the real gap, and substring cannot reach
+them.** `strpos` cannot express "eleven digits with optional spaces".
+
+**⚠️ AND GOING REGEX WOULD OVERTURN A DECISION THAT HAS ALREADY BEEN VINDICATED.**
+`screen_status_post`'s own comment records using `strpos` *"rather than a regex
+so a stray metacharacter in the list cannot break it"* — and the ADVISORY copy in
+`admin/app/moderation/page.tsx`, which does build a regex, once threw on a stray
+`(` and left that tab silently empty. In the trigger it would be worse: the
+pattern compiles at insert time, so a malformed entry makes the INSERT RAISE and
+a stylist simply cannot post. That fails in the opposite direction from
+everything else in `0032`.
+
+**✅ SETTLED 13 Sep — TWO SETTINGS, NOT ONE.** `banned_words` stays exactly as it
+is: substring, case-insensitive, unbreakable. A separate `banned_patterns` holds
+regexes, **each one wrapped so a compile failure degrades to "no match, queue the
+post" rather than raising.** Micky's reasoning, and it is the rule the whole of
+`0032` is built on: *"fail-closed-but-loud is the rule; fail-closed-and-silent-
+to-the-author isn't."* One list that is sometimes a pattern produces "everything
+queues and nobody knows which entry did it".
+
+**And one consequence that must land in the SAME migration:** the console's
+advisory copy currently ESCAPES metacharacters. The moment patterns become real
+it has to stop, or the two disagree about the same post — which `0032`'s own
+comment forbids in as many words. Not a follow-up.
+
 **18. EVERY PUBLIC-SITE QUERY FAILURE LOOKS LIKE "NO DATA" — NEW, 7 Sep 2026.**
 
 `site/lib/stylists.ts` wraps every read of `public_stylists`:
@@ -1962,6 +2008,61 @@ was the reason for three workflows rather than one.
 
 It remains a signal and not a gate. Everything above about branch protection
 still stands.
+
+**44. A MODEL'S INSTAGRAM HANDLE IS SHOWN TO ANY SIGNED-IN STYLIST — FOUND
+13 Sep 2026. MEMBERS-ONLY, NOT OPEN WEB. NOT FIXED.**
+
+**What happens.** A model sets her Instagram handle on her own profile
+(`mobile/src/app/(app)/model-profile.tsx:680`). It is then rendered to any
+signed-in viewer of that profile as a tappable link to `instagram.com/<handle>`
+(`mobile/src/app/(app)/model/[id].tsx:501`; also selected by
+`site/lib/queries/model.ts:90`).
+
+**Read from the database, 13 Sep:**
+
+    public_profiles    id, first_name, last_initial, profile_pic_url, instagram_handle
+    public_stylists    — no instagram_handle at all
+
+    anon can select:   public_profiles           FALSE
+                       public_stylists           true
+                       public_stylist_status     true
+                       public_categories         true
+                       public_stylist_portfolio  false
+                       public_stylist_reviews    false
+
+**So it was never an open-web leak.** `public_profiles` is unreachable by `anon`
+— the revoke from the §7 preflight held. Members-only, which is materially
+smaller than scrapeable.
+
+**⚠️ DIRECTION CORRECTION.** The decision was first written as *"remove
+instagram_handle from stylist profiles"*. It is not on stylist profiles:
+`public_stylists` does not carry the column and no code reads it for a provider.
+The flow is **model → stylist**. Recorded as a correction rather than quietly
+fixed, because the removal would otherwise have been the right change made for a
+stated reason that was backwards — and the stated reason is what the next person
+reads.
+
+**And the corrected direction is the worse one** (Micky, 13 Sep): the stylist is
+the party with a financial reason to move a booking off-platform, and the model
+is the one handing over a contact route — before any booking, to a stranger she
+has not met, on a platform whose safety argument is that contact stays inside it
+until she chooses otherwise.
+
+**⚠️ SCOPE — THREE PARTS, OR IT IS NOT DONE.** Removing the DISPLAY while leaving
+the FIELD gives a column models keep filling that nothing renders: **a writer
+with no reader**, the inversion of the read-with-no-writer family this file has
+found four times.
+
+  1. **The display** — `model/[id].tsx:501` and `site/lib/queries/model.ts`.
+  2. **The setter** — `model-profile.tsx:680` and its input.
+  3. **The column** out of `public_profiles`, and a decision on
+     `users.instagram_handle` itself: dropped, or kept with a comment saying
+     nothing reads it and why.
+
+**Not settled here:** whether a model should have ANY way to publish a contact
+route. That is the same question as the banned-words list's second category
+(item 17), and the two answers have to agree — there is no point screening
+status posts for handles while a profile field publishes one directly.
 
 **43. THE USERS CONSOLE FIRES THREE COUNTING QUERIES PER ROW — MEASURED
 13 Sep 2026. NOT FIXED.**
