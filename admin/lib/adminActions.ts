@@ -37,6 +37,8 @@ export interface ShopState {
  *   remove_portfolio                    { removed_count, orphaned_media_urls }
  *   approved | rejected (a verification decision)
  *                    { decision, user_id, role, already_verified, shops }
+ *   approved | rejected (a status-post decision)
+ *                    { decision, provider_id, notify_user_id }
  */
 export interface ActionResult {
   new_value?: boolean
@@ -52,6 +54,11 @@ export interface ActionResult {
   /** True when the account was ALREADY verified before this approval, so the
    *  console can stop announcing a change that did not happen. */
   already_verified?: boolean
+  provider_id?: string
+  /** The shop owner, resolved inside the same transaction as the decision.
+   *  The moderation page used to fetch this separately AFTER the write, and
+   *  skipped the notification silently if that read failed. */
+  notify_user_id?: string
 }
 
 /**
