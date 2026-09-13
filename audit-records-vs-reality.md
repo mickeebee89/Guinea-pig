@@ -871,8 +871,8 @@ Both statements go in the same migration, and the verify block reads
 `information_schema.role_table_grants` for `anon` rather than trusting that the
 grant line ran.
 
-**17. `banned_words` HOLDS PLACEHOLDER TEST VALUES — NEW, 7 Sep 2026. A
-DECISION, NOT A BUILD TASK.**
+**17. `banned_words` HAS NEVER HELD A REAL LIST — NEW, 7 Sep 2026. STILL OPEN
+13 Sep 2026, WITH HALF OF IT FIXED. A DECISION, NOT A BUILD TASK.**
 
 The live list is:
 
@@ -903,6 +903,46 @@ post that queues proves the trigger fires; it does NOT show the screen behaving
 sensibly, because sensible behaviour cannot be observed against nonsense input.
 Re-test after the real list lands — and treat any judgement about
 false-positive rates made before then as untested.
+
+**── 13 Sep 2026: THE PLACEHOLDERS ARE GONE, AND THIS IS NOT CLOSED ─────**
+
+`banned_words` now holds **two terms, profanity only**. Micky replaced the
+placeholders at some point without recording it, because "hair" was blocking
+almost every legitimate test post, and picked two obvious profanities to get
+something real in there.
+
+**His framing, and neither label offered fitted: it is TEST SCAFFOLDING.** Not
+deliberate, not an oversight — the list has never been scoped against the three
+categories the screen was designed for. So the item splits in two:
+
+* **Fixed:** the reason the placeholders were a problem. Ordinary posts no
+  longer queue, and the 12 Sep moderation exercise ran against a list that does
+  not flag normal English.
+* **Not fixed:** the reason this item exists. There is no real list.
+
+**What that means in practice, which is worse than "a short list":**
+
+    "message me on WhatsApp 07700 900123, cash only"
+
+passes untouched and reaches every model in range. **The two categories carrying
+the safety promise — steering people off-platform, and soliciting payment
+off-platform — are entirely unscreened.** The screen catches two words.
+
+**Mechanism correct, data makes it ineffective: the same failure type as when
+the placeholders were found, still true with different values.** Swapping the
+values changed WHICH posts get through, not whether the screen does anything
+useful. That is the sentence to keep, because the obvious reading of "the
+placeholders are gone" is that the problem went with them.
+
+**⚠️ AND THE TESTING TRAP SURVIVED THE SWAP.** The 12 Sep exercise proved the
+screen, the queue, the preview and the rejection notice work end to end. It
+proved nothing about whether the screen catches what it should, because a
+two-word list cannot demonstrate that. **A nearly-empty queue is not evidence
+that nothing is getting through** — and it now looks exactly like a healthy one,
+which the placeholder list at least never did.
+
+**Still Micky's to write, and stated by him rather than inferred (13 Sep):**
+*"Writing the real list is mine to do, not a build task."*
 
 **18. EVERY PUBLIC-SITE QUERY FAILURE LOOKS LIKE "NO DATA" — NEW, 7 Sep 2026.**
 

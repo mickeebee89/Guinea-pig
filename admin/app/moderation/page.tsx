@@ -4,6 +4,8 @@ import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useLoader } from '@/lib/useLoader'
 import { logAction } from '@/lib/audit'
+import { humanError } from '@/lib/adminActions'
+import type { ActionResult } from '@/lib/adminActions'
 import Image from 'next/image'
 
 interface PortfolioItem {
@@ -280,10 +282,50 @@ export default function ModerationPage() {
     })))
   })
 
+  /**
+   * ── ONE CALL FOR THE DECISION; THE MESSAGE STAYS OUT HERE ─────────────
+   *
+   * admin_decide_status_post (0039) writes moderation_status, reviewed_at,
+   * reviewed_by and review_note in one transaction with the audit row, and
+   * returns notify_user_id so the rejection notice can be sent without a second
+   * read. What changes on this page:
+   *
+   *   * ⚠️ AN EXPIRED POST IS NOW REFUSED. This queue already filters expired
+   *     posts out, so the gap was only ever the modal being open while the 48
+   *     hours ran out — after which approving published nothing and rejecting
+   *     sent a notice about a post that had already gone. The function checks
+   *     expires_at inside the lock and says so. Reachable by clicking: open the
+   *     queue, wait, decide.
+   *
+   *   * ⚠️ THE SILENT NOTIFICATION SKIP IS GONE. The old code fetched
+   *     providers.user_id AFTER the write and did `if (uid)` with no else, so a
+   *     failed or empty read meant the stylist was never told and nobody knew.
+   *     notify_user_id comes back from the transaction instead.
+   *
+   *   * A FAILED NOTICE NOW REACHES THE ADMIN. It was console.error only — on
+   *     the one queue whose stated purpose is that a stylist is never left
+   *     wondering why their update did not appear. The decision still stands;
+   *     only the telling failed, and that is the distinction the admin can act
+   *     on. Same wording as the verification queue.
+   *
+   * WHAT DELIBERATELY STAYS:
+   *
+   *   * The empty-reason check, even though 0039 raises on it too. The function
+   *     is the authority; this copy exists to stop a round trip that tells the
+   *     page what it already knows. Two copies of a rule is a cost and it is
+   *     stated here rather than left to be discovered.
+   *
+   *   * The window.confirm preview, which has nothing to do with atomicity. It
+   *     exists because on 7 Sep a rejection went out reading "cointained a
+   *     banned word" — a typo in the only sentence a stylist gets about why
+   *     their update was refused.
+   *
+   *   * logAction, for the IMAGE half of this page. decide() and
+   *     toggleImageReview are audit item 27 group B, not group A: 0039 has no
+   *     function for them, and half-repointing a surface is worse than a clean
+   *     line through it.
+   */
   async function decidePost(post: StatusPost, decision: 'approved' | 'rejected', note: string) {
-    // review_note is what the stylist is shown when a post is rejected, so a
-    // rejection without one leaves them with "not published" and no reason —
-    // the silent-failure shape this queue exists to remove.
     if (decision === 'rejected' && !note.trim()) {
       alert('A rejection needs a reason. The stylist is shown it, and "not published" with no explanation is why this queue exists.')
       return
@@ -298,10 +340,8 @@ export default function ModerationPage() {
     //
     // This is not a spell-check and does not pretend to be one. It is the step
     // that makes the admin READ the message as the stylist will, in full, before
-    // it is sent — the same argument as the image-review toggle's confirm: a
-    // one-way action gets a look at what it will do first. The message is built
-    // ONCE here and reused for the insert below, so what is previewed cannot
-    // drift from what is sent.
+    // it is sent. The message is built ONCE here and reused for the insert
+    // below, so what is previewed cannot drift from what is sent.
     const stylistMessage = decision === 'rejected'
       ? 'We didn\u2019t publish your recent shop update.'
         + (note.trim() ? '\n\n' + note.trim() : '')
@@ -317,19 +357,18 @@ export default function ModerationPage() {
       )
       if (!ok) return
     }
-    const { error } = await supabase
-      .from('status_posts')
-      .update({
-        moderation_status: decision,
-        reviewed_at: new Date().toISOString(),
-        reviewed_by: (await supabase.auth.getUser()).data.user?.id ?? null,
-        review_note: note.trim() || null,
-      })
-      .eq('id', post.id)
+
+    const { data, error } = await supabase.rpc('admin_decide_status_post', {
+      p_post_id:  post.id,
+      p_decision: decision,
+      p_note:     note.trim() || null,
+    })
     if (error) {
-      alert(`Couldn't ${decision === 'approved' ? 'approve' : 'reject'} this post: ${error.message}`)
+      alert(`Couldn't ${decision === 'approved' ? 'approve' : 'reject'} this post.\n\n`
+        + `${humanError(error.message)}\n\nNothing has changed.`)
       return
     }
+
     // ── TELL THEM, RATHER THAN LETTING IT EXPIRE ─────────────────────────
     //
     // A rejected post is visible to its author as 'rejected' (0031's RLS) but
@@ -343,31 +382,22 @@ export default function ModerationPage() {
     //
     // Approval is deliberately silent: the post simply appears, which is what
     // the stylist expected when they wrote it.
-    if (decision === 'rejected' && post.provider?.id) {
-      const { data: prov } = await supabase
-        .from('providers').select('user_id').eq('id', post.provider.id).maybeSingle()
-      const uid = (prov as { user_id?: string } | null)?.user_id
-      if (uid) {
-        const { error: noteErr } = await supabase.from('notifications').insert({
-          user_id: uid,
-          type: 'admin_message',
-          title: 'Your update wasn\u2019t published',
-          // The previewed string itself. Rebuilding it here is how a preview
-          // stops describing what is actually sent.
-          body: stylistMessage ?? '',
-        })
-        // Logged, not fatal: the decision has already been written and undoing
-        // it because a notification failed would be worse than a quiet one.
-        if (noteErr) console.error('[moderation] rejection notice failed', noteErr)
+    const result = (data ?? {}) as ActionResult
+    if (stylistMessage && result.notify_user_id) {
+      const { error: noteErr } = await supabase.from('notifications').insert({
+        user_id: result.notify_user_id,
+        type:    'admin_message',
+        title:   'Your update wasn\u2019t published',
+        // The previewed string itself. Rebuilding it here is how a preview
+        // stops describing what is actually sent.
+        body:    stylistMessage,
+      })
+      if (noteErr) {
+        alert(`The post is rejected and that is recorded, but the stylist could not be told: `
+          + `${noteErr.message}\n\nThey have NOT been notified. Contact them by hand.`)
       }
     }
 
-    await logAction(`status_post_${decision}`, {
-      // undefined, not null: logAction takes an optional string, and a post with
-      // no resolvable provider should omit the field rather than record a null.
-      targetProviderId: post.provider?.id ?? undefined,
-      details: { post_id: post.id, note: note.trim() || null },
-    })
     reloadStatusPosts()
   }
 
@@ -563,10 +593,21 @@ export default function ModerationPage() {
           fail-closed default is fail-SILENT: a flagged post sits invisible
           until its 48 hours run out and the stylist is never told why.
 
-          ⚠️ AUDIT ITEM 17. banned_words currently holds placeholder values
-          including "hair", which flags nearly every legitimate post a hair
-          stylist writes. Expect this queue to be full of ordinary posts until a
-          real list is set. That is the list being wrong, not the screen. */}
+          ⚠️ AUDIT ITEM 17, STILL OPEN, AND ITS SHAPE CHANGED ON 13 Sep.
+          banned_words no longer holds the placeholders that flagged "hair" and
+          buried this queue in ordinary posts. It holds TWO profanity terms, put
+          there as test scaffolding; a real list has never been scoped against
+          the three categories this screen was designed for.
+
+          So the screen catches two words. "message me on WhatsApp 07700 900123,
+          cash only" passes untouched and reaches every model in range —
+          steering people off-platform and soliciting payment off-platform, the
+          two categories carrying the safety promise, are unscreened.
+
+          ⚠️ EXPECT THIS QUEUE TO BE NEARLY EMPTY, AND DO NOT READ THAT AS
+          NOTHING GETTING THROUGH. An empty queue now looks exactly like a
+          healthy one, which the placeholder list at least never did. That is
+          the list, not the screen. */}
       {show('status') && (
         <section className="mb-8">
           <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-[#3D2E2E]/50">
