@@ -2576,6 +2576,66 @@ the two copies already differ in FORMAT:
 Both FORMATS are accepted today: a JWT-keyed request returned `404` rather than
 `401`, and a publishable-keyed request returned `406` rather than `401`.
 
+**── VERCEL'S VARIABLE NAMES, READ 13 Sep ────────────────────────**
+
+Five variables, Production and Preview, nothing for Development. `cavy` is the
+only project on the account and no shared variables are linked.
+
+    NEXT_PUBLIC_SUPABASE_URL        added Aug 9
+    NEXT_PUBLIC_SUPABASE_ANON_KEY   added Aug 9
+    SUPABASE_URL                    added Aug 7
+    SUPABASE_ANON_KEY               added Aug 7
+    PUBLIC_SITE_MODE                added Aug 7
+
+**The twins are confirmed on Vercel, and the dates say how they got there.** The
+server pair on 7 Aug, the browser pair on 9 Aug — two days apart. Micky's
+reading: the `NEXT_PUBLIC_` pair was added when something needed browser access,
+on top of a server pair that already existed, rather than four variables being
+set up as two deliberate pairs. **That is how one-thing-two-names happens**, and
+it is the mechanism the other five instances in this schema presumably share.
+
+**`PUBLIC_SITE_MODE` exists**, so going live is a value change rather than a new
+variable — which the member-area deploy depends on.
+
+**⚠️ THE FORMAT GAP IS NARROWED, NOT CLOSED.** The values are sensitive-locked
+in the dashboard. The `eyJ…` prefix seen through the Edit dialog proves the
+project holds a JWT-SHAPED key; it does not prove it holds THIS project's key.
+That can only close from the other end — a request made FROM production that
+succeeds or returns 401 — which is a deploy-time check, not a dashboard one.
+Micky made this distinction himself, 13 Sep, having earlier drawn the wider
+conclusion from the same prefix.
+
+**⚠️ AND ONE VARIABLE FINDING IS WITHDRAWN — Claude's, 13 Sep.** It was claimed
+that `site/` reads a `SUPABASE_SECRET_KEY` which production has never had, and
+that something had therefore been failing silently since August. **False.** All
+three "call sites" are the same JSDoc example inside
+`site/node_modules/@supabase/auth-js/` — a comment showing a library user how
+they might pass a key. No code in `site/` reads that variable and nothing was
+broken. Two Vercel dashboard checks were spent on it.
+
+**How it was produced, because the shape is new to this file.** The grep listing
+env var names had no `--exclude-dir=node_modules`, so it reached into 40,000
+files nobody here wrote. **The same output announced its own contamination** —
+`ICEBERG_TOKEN`, `TINYGLOBBY_DEBUG`, `BOOK_LANG`, `NODE_UNIQUE_ID` sat in the
+same twenty lines — and the one plausible-looking name was picked out of it.
+Plausibility did the filtering that `--exclude-dir` should have.
+
+**It is the WIDE variant of this file's oldest pattern.** The other nine
+instances were a check NARROWER than the claim drawn from it. This was a check
+wider than the thing being examined, with the surplus mistaken for the subject.
+Micky, 13 Sep: worth recording as a distinct variant rather than a tenth of the
+same.
+
+**And the framing made the wrong answer the appealing one to confirm:** "it
+isn't there" was offered as *the more interesting answer*, which is the same
+family as item 41's caveat — sitting in the record, correct, and inert. One
+pointed at the wrong branch; the other failed to point at anything.
+
+**So: three variable findings stand, not four** — the 18-character value that was
+a reference, the four names for two things, and the `eyJ` prefix that proves
+format and not key. Each needed the code and the dashboard put together; the
+withdrawn fourth was in neither.
+
 **⚠️ That does not establish that production's key works.** The JWT that
 returned `404` was the same FORMAT as Vercel's, not shown to be the same KEY. So
 "production's browser client is fine" is not established — it is probably true,
