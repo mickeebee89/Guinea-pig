@@ -3,6 +3,7 @@ import { createSupabaseServerClient, requireUser } from '@/lib/supabase-server'
 import { getStylistSetup } from '@/lib/queries/shop'
 import { EmptyState } from '@/components/ui'
 import { SelfieCapture } from './SelfieCapture'
+import { FeePanel } from './FeePanel'
 
 export const metadata = { title: 'ID check' }
 
@@ -94,7 +95,13 @@ export default async function VerifyPage() {
         <h2 className="font-display text-xl text-warm-dark">The one-off fee comes first</h2>
         <p className="mt-1 text-sm text-muted">
           There’s a £14.99 one-off charge before the ID check, and it’s settled once, ever.
-          Paying it is in the Cavy app for now — it’s coming to the web shortly.
+        </p>
+        <div className="mt-5">
+          <FeePanel />
+        </div>
+        <p className="mt-4 text-xs text-muted">
+          Payments are handled by Stripe. Your card details are entered on Stripe’s own form and
+          never reach Cavy’s servers.
         </p>
       </Wrap>
     )

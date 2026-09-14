@@ -77,10 +77,26 @@ const nextConfig: NextConfig = {
    * every request, which makes every route dynamic — and static rendering is
    * the thing the whole SEO plan rests on. So `script-src` keeps
    * 'unsafe-inline' for Next's hydration payload, and the value here comes from
-   * everything else: no third-party origin can load a script, be framed, or
-   * receive a form post. This site loads nothing external at all — fonts are
-   * self-hosted by next/font and there is no analytics — so the allowlist can
-   * stay this tight.
+   * everything else: no UNLISTED third-party origin can load a script, be
+   * framed, or receive a form post.
+   *
+   * ── ⚠️ THIS USED TO SAY "loads nothing external at all" ──────────────────
+   * It did, and that was true until 14 Sep 2026. Fonts are still self-hosted by
+   * next/font and there is still no analytics. What changed is Stripe: card
+   * payments cannot be collected without loading Stripe's script and framing
+   * their card field, because the whole point is that card numbers never touch
+   * this origin.
+   *
+   * The sentence is rewritten rather than left standing, because a comment
+   * describing a policy the file no longer has is how "there is no webhook"
+   * survived nine places for three weeks (audit item 47). The allowlist below
+   * now has exactly three external origins and every one is Stripe's.
+   *
+   * ── WHY THIS MATTERS MORE THAN MOST OF THIS FILE ─────────────────────────
+   * A CSP mistake is invisible to every check this project has. eslint, tsc,
+   * `next build`, CI and a Vercel deploy all pass on a policy that blocks the
+   * payment form, and the failure appears only in a real browser. The comment
+   * on connect-src below records the last time exactly that happened here.
    */
   async headers() {
     // React's DEV build uses eval() for debugging features — reconstructing
@@ -105,11 +121,22 @@ const nextConfig: NextConfig = {
     // drift from the URL the client is actually calling.
     const supabaseOrigin = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
     const wsOrigin = supabaseOrigin.replace(/^https:/, 'wss:')
-    const connectSrc = ["'self'", supabaseOrigin, wsOrigin].filter(Boolean).join(' ')
+
+    // Stripe.js posts the payment confirmation to api.stripe.com DIRECTLY from
+    // the browser — it is not proxied through this origin, and that is the
+    // design: card details must not reach our server. Omitting it fails exactly
+    // the way connect-src 'self' did in slice 2: an opaque "TypeError: Failed to
+    // fetch" that never mentions CSP, at the moment someone is paying.
+    const STRIPE_API = 'https://api.stripe.com'
+    const connectSrc = ["'self'", supabaseOrigin, wsOrigin, STRIPE_API]
+      .filter(Boolean).join(' ')
 
     const csp = [
       "default-src 'self'",
-      `script-src 'self' 'unsafe-inline'${devEval}`,
+      // js.stripe.com serves Stripe.js. It is the ONLY external script origin
+      // on this site, and Stripe requires it be loaded from there rather than
+      // bundled — they ship fixes to it without a release on our side.
+      `script-src 'self' 'unsafe-inline' https://js.stripe.com${devEval}`,
       "style-src 'self' 'unsafe-inline'",
       // next/image proxies remote images through /_next/image, so they are
       // same-origin by the time a browser sees them; the Supabase host is
@@ -117,6 +144,20 @@ const nextConfig: NextConfig = {
       "img-src 'self' data: https://ptluekkhiopowuyvkgnd.supabase.co",
       "font-src 'self'",
       `connect-src ${connectSrc}`,
+      // ⚠️ THERE WAS NO frame-src HERE AT ALL, so default-src 'self' governed
+      // frames and Stripe's card field was refused. Elements puts the card
+      // input in an iframe on Stripe's origin precisely so the number never
+      // enters this page's DOM — blocking it does not make the site safer, it
+      // makes payment impossible while every build stays green.
+      //
+      // hooks.stripe.com is the 3-D Secure challenge frame. A card that needs
+      // SCA — which, in the UK, is most of them — fails at the bank step
+      // without it, AFTER the customer believes they have paid.
+      "frame-src 'self' https://js.stripe.com https://hooks.stripe.com",
+      // NB X-Frame-Options: DENY below and frame-ancestors 'none' above both
+      // govern THIS site being framed by someone else. They have nothing to do
+      // with this site framing Stripe, which is frame-src. Worth saying: it is
+      // the first question anyone asks when reading these together.
       "form-action 'self'",
       "base-uri 'self'",
       "object-src 'none'",

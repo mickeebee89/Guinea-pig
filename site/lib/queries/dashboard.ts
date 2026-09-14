@@ -61,7 +61,6 @@ export interface ModelDashboard {
   completedCount: number
   favourites: { providerId: string; name: string; picUrl: string | null }[]
   updates: StylistUpdate[]
-  hasActiveSubscription: boolean
 }
 
 export interface ProviderDashboard {
@@ -154,7 +153,13 @@ export async function getModelDashboard(
 ): Promise<ModelDashboard> {
   const today = todayIso()
 
-  const [upcomingRes, pendingRes, completedRes, favRes, subRes] = await Promise.all([
+  // NB no subscription query here. There used to be one, feeding a
+  // `hasActiveSubscription` field that nothing consumed and that meant
+  // `status = 'active'` only — no date check, no waiver, no past_due — while
+  // lib/verification.ts exported a function of the same name doing all three.
+  // Removed 14 Sep 2026 (audit item 48). If this page ever needs the answer,
+  // call getGateState; do not recompute it.
+  const [upcomingRes, pendingRes, completedRes, favRes] = await Promise.all([
     supabase.from('sessions')
       .select('id, provider_id, date, start_time, status, treatment_id')
       .eq('model_user_id', userId).eq('status', 'accepted').gte('date', today)
@@ -168,7 +173,6 @@ export async function getModelDashboard(
       .eq('model_user_id', userId).eq('status', 'completed')
       .order('date', { ascending: false }),
     supabase.from('favourites').select('provider_id').eq('user_id', userId),
-    supabase.from('subscriptions').select('id').eq('user_id', userId).eq('status', 'active').maybeSingle(),
   ])
 
   type SessRow = { id: string; provider_id: string; date: string; start_time: string | null; status: string; treatment_id: string | null }
@@ -258,7 +262,6 @@ export async function getModelDashboard(
       picUrl: provMap[id]?.profile_pic_url ?? null,
     })),
     updates,
-    hasActiveSubscription: !!subRes.data,
   }
 }
 

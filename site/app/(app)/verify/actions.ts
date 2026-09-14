@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createSupabaseServerClient, requireUser } from '@/lib/supabase-server'
+import type { ConfirmOutcome } from '@/components/PayForm'
 
 export type VerifyResult = { ok: true } | { ok: false; error: string }
 
@@ -120,6 +121,101 @@ export async function submitSelfie(form: FormData): Promise<VerifyResult> {
     return {
       ok: false,
       error: 'Your photo uploaded but we couldn’t log it for review. Try submitting again.',
+    }
+  }
+
+  revalidatePath('/verify')
+  revalidatePath('/shop')
+  revalidatePath('/dashboard')
+  return { ok: true }
+}
+
+/* ───────────────────────────────────────────────────────────────────────────
+ * THE £14.99 ONE-OFF FEE
+ *
+ * Same two-step shape as the membership: create an intent, collect the card,
+ * then go and find out whether we recorded it. Deliberately the same shape —
+ * one flow understood once, rather than two that drift.
+ *
+ * ── ⚠️ ONE REAL DIFFERENCE, AND IT CHANGES WHAT THE PERSON IS TOLD ─────────
+ * A failed subscription confirm is PENDING: the Stripe webhook receives
+ * customer.subscription.created and writes the row on its own, so the honest
+ * instruction is "don't pay again, it is finishing".
+ *
+ * Nothing does that here. `verification_payments` is written ONLY by
+ * confirm_verification — no webhook event touches it — so a failed confirm
+ * stays failed until someone acts. Its outcome is pending:false, and the
+ * retry below is safe: the edge function treats a duplicate payment intent
+ * (23505) as benign success, so re-confirming the SAME paymentIntentId
+ * records the payment without charging anything a second time.
+ * ─────────────────────────────────────────────────────────────────────────── */
+
+export type FeeStartResult =
+  | { ok: true; alreadyPaid: true }
+  | { ok: true; alreadyPaid: false; clientSecret: string; paymentIntentId: string }
+  | { ok: false; error: string }
+
+export async function startFeePayment(): Promise<FeeStartResult> {
+  await requireUser()
+  const supabase = await createSupabaseServerClient()
+
+  // ⚠️ ASSUMPTION, same as app/(app)/subscribe/actions.ts: the cookie-backed
+  // server client forwards this user's access token, which is how
+  // stripe-payment resolves userId. Not verified locally — proving it needs a
+  // signed-in browser session, and a temporary debug route calling a live
+  // payment action is a thing that gets forgotten. If wrong it is a 401 from
+  // the edge function; the fix is to pass the token explicitly from
+  // supabase.auth.getSession().
+  const { data, error } = await supabase.functions.invoke('stripe-payment', {
+    body: { action: 'create_verification_intent' },
+  })
+
+  if (error) {
+    console.error('[verify] create_verification_intent failed', error)
+    return { ok: false, error: 'We could not start the payment. Nothing has been charged.' }
+  }
+
+  if (data?.alreadyPaid) return { ok: true, alreadyPaid: true }
+
+  if (!data?.clientSecret || !data?.paymentIntentId) {
+    console.error('[verify] create_verification_intent returned no clientSecret', data)
+    return { ok: false, error: 'We could not start the payment. Nothing has been charged.' }
+  }
+
+  return {
+    ok: true,
+    alreadyPaid: false,
+    clientSecret: data.clientSecret as string,
+    paymentIntentId: data.paymentIntentId as string,
+  }
+}
+
+export async function confirmFeePayment(paymentIntentId: string): Promise<ConfirmOutcome> {
+  await requireUser()
+  const supabase = await createSupabaseServerClient()
+
+  const { data, error } = await supabase.functions.invoke('stripe-payment', {
+    body: { action: 'confirm_verification', paymentIntentId },
+  })
+
+  if (error) {
+    console.error('[verify] confirm_verification transport failed', error)
+    return {
+      ok: false,
+      pending: false,
+      error: 'we could not reach our own server to record it',
+    }
+  }
+
+  // confirm_verification returns 500 with { success: false } when the insert
+  // fails, and supabase-js surfaces that as `error` — but it ALSO has a 200
+  // path, so both are checked. Never read the absence of an error as success.
+  if (data?.success === false) {
+    console.error('[verify] confirm_verification reported failure', data)
+    return {
+      ok: false,
+      pending: false,
+      error: typeof data.error === 'string' ? data.error : 'the payment was not recorded',
     }
   }
 

@@ -82,8 +82,12 @@ function BookingRow({ b }: { b: BookingCard }) {
 
 /** One half of the apply gate: what it is, and where they stand on it. */
 function GateItem({
-  done, title, doneText, todoText,
-}: { done: boolean; title: string; doneText: string; todoText: string }) {
+  done, title, doneText, todoText, action,
+}: {
+  done: boolean; title: string; doneText: string; todoText: string
+  /** Where to go and do the outstanding half, when the web can do it. */
+  action?: { href: string; label: string }
+}) {
   return (
     <li className="flex items-start gap-3">
       <span
@@ -100,6 +104,14 @@ function GateItem({
           <span className="sr-only">: {done ? 'done' : 'still needed'}</span>
         </p>
         <p className="text-sm text-muted">{done ? doneText : todoText}</p>
+        {!done && action && (
+          <Link
+            href={action.href}
+            className="mt-1 inline-block text-sm font-bold text-rose hover:underline"
+          >
+            {action.label} →
+          </Link>
+        )}
       </div>
     </li>
   )
@@ -245,6 +257,9 @@ export default async function DashboardPage({
               title="Membership"
               doneText={gate.waived ? 'Active — membership waived on your account' : 'Active'}
               todoText="£4.99 a month, cancel any time. It’s what lets you apply for sessions."
+              action={!gate.subscribed
+                ? { href: '/subscribe', label: 'Join for £4.99 a month' }
+                : undefined}
             />
             <GateItem
               done={gate.verified}
@@ -256,10 +271,18 @@ export default async function DashboardPage({
                         passport or a driving licence."
             />
           </ul>
-          <p className="mt-4 rounded-md bg-input-bg px-3 py-2 text-xs text-muted">
-            Both are in the Cavy app for now. They’re coming to the web shortly — this page will
-            update itself when they do.
-          </p>
+          {/* This said "Both are in the Cavy app for now" until 14 Sep 2026, when
+              membership became payable here. Split rather than left standing: a
+              sentence that was true when written and quietly stops being true is
+              how "there is no webhook" survived in nine places for three weeks
+              (audit item 47), and this one would be telling someone the wrong
+              thing about their own account. */}
+          {!gate.verified && (
+            <p className="mt-4 rounded-md bg-input-bg px-3 py-2 text-xs text-muted">
+              The ID check is in the Cavy app for now — it’s coming to the web shortly, and this
+              page will update itself when it does.
+            </p>
+          )}
         </section>
       )}
 

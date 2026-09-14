@@ -82,6 +82,10 @@ export const config = {
     '/portfolio/:path*',
     '/shop/:path*',
     '/settings/:path*',
+    // The £4.99 membership page. Added 14 Sep 2026 with the route itself —
+    // check-route-coverage.mjs refused the build until it was here, which is
+    // the whole point of that check existing.
+    '/subscribe/:path*',
     '/browse/:path*',
     '/verify/:path*',
     // Auth screens need the cookie writer for sign-in and for the callbacks

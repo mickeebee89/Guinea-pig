@@ -215,8 +215,7 @@ export function StylistSetupPanel({ setup }: { setup: StylistSetup }) {
             ? setup.isFoundingProvider
               ? 'Covered — you’re a Founding Provider, so there’s nothing to pay.'
               : 'Settled. Nothing to pay.'
-            : <>£14.99, once, ever. Paying it is in the Cavy app for now — it’s coming to the web
-               shortly.</>}
+            : <>£14.99, once, ever. You can pay it on the ID check page.</>}
         </Step>
 
         <Step
