@@ -54,6 +54,51 @@ jobs:
 
       - run: npm ci
 
-      # The same script `next build` runs locally, so CI and the build-time
-      # gate cannot drift into checking different things.
-      - run: npm run checks
+      # Two steps, not `npm run build`, so the GitHub UI names which half
+      # failed. `build` is `checks && next build`, and running it would repeat
+      # checks for nothing.
+      - name: checks (eslint + the three custom scripts)
+        run: npm run checks
+
+      # ── WHY THIS STEP EXISTS, AND WHAT IT COST TO LEARN ──────────────────
+      #
+      # `checks` never compiles anything. It is eslint plus three scripts that
+      # read source as text, so a TYPE error is invisible to it — and `site` is
+      # the only one of the three apps whose `checks` omits `tsc --noEmit`,
+      # deliberately, because site/README.md reasoned that `next build`
+      # type-checks anyway. True for a deploy. False for CI, which never built.
+      #
+      # On 8 Sep 2026 a duplicate `let` reached lib/queries/dashboard.ts.
+      # eslint passed it. Every Vercel build errored. cavybeauty.com served the
+      # 10 August build for five weeks while this workflow reported green, and
+      # the green tick is what made two red deploys easy to skip past.
+      #
+      # Audit items 28 and 45: a signal you watch can hide a signal you don't,
+      # when the watched one is narrower than the thing it appears to certify.
+      #
+      # 15s for checks, 30s for the build. The tradeoff I assumed existed does
+      # not.
+      - name: next build (what Vercel actually runs)
+        run: npx next build
+        env:
+          # Read by supabase-public.ts (public pages) and supabase-server.ts
+          # (the member area's server client). Without them the module throws
+          # at import and the build dies before compiling anything.
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
+          # Mirrors site/.env.local, where the NEXT_PUBLIC_ pair are $VAR
+          # references to the two above rather than separate values.
+          NEXT_PUBLIC_SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
+          # NEVER `live` here. A preview artefact that thinks it is live would
+          # emit an indexable robots.txt and a real sitemap. lib/site.ts says
+          # the same thing.
+          PUBLIC_SITE_MODE: preview
+
+      # ⚠️ CI BUILDS AGAINST A DIFFERENT KEY GENERATION THAN VERCEL DOES.
+      # These variables hold `sb_publishable_…` keys, matching site/.env.local.
+      # Vercel's four Supabase variables are all legacy `eyJ…` JWTs. One
+      # generation each side, consistently — audit item 38. So a green run here
+      # plus a green Vercel deploy of the same commit is the first real evidence
+      # that both generations work, rather than an assumption. If one goes red
+      # while the other stays green, read that difference before anything else.
