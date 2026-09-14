@@ -2019,6 +2019,72 @@ was the reason for three workflows rather than one.
 It remains a signal and not a gate. Everything above about branch protection
 still stands.
 
+**48. PAIRED IMPLEMENTATIONS THAT NEVER MEET — THREE FOUND IN ONE DAY,
+14 Sep 2026. THE THIRD IS LOGGED HERE. NOT FIXED.**
+
+**The third instance, and the one that names the pattern.** `site/lib/queries/
+dashboard.ts:261` computes `hasActiveSubscription` from
+
+    supabase.from('subscriptions').select('id')
+      .eq('user_id', userId).eq('status', 'active').maybeSingle()
+
+while `site/lib/verification.ts` exports a function of the SAME NAME, in the same
+`lib/`, that applies the date check, grants on `past_due`, and reconciles against
+Stripe when the row cannot settle it.
+
+**Three definitions of "subscribed" in one app:**
+
+| Where | What it means |
+|---|---|
+| `verification.ts` `hasActiveSubscription` | `active`/`cancelling` AND period in future; `past_due` grants; asks Stripe when uncertain |
+| `apply_subscription_state` (0023/0024) | the canonical vocabulary both writers share |
+| `dashboard.ts:261` | `status = 'active'` only — excludes `cancelling`, ignores the date, ignores `past_due` |
+
+A member who cancelled but is paid until the 30th is `cancelling`: the real gate
+grants, the orphan denies. **It would be wrong in both directions.**
+
+**✅ The only reason it is not a live defect: NOTHING CONSUMES IT.** Declared on
+the interface at line 64, set at 261, read by no component, page or route. So it
+is a query run on every model dashboard load and thrown away — the same
+work-with-no-consumer shape as item 43's N+1 — plus a name collision sitting in
+wait.
+
+**⚠️ CLAUDE'S CORRECTION, SAME DAY.** This was first reported as *"a live
+billing-gate defect on the surface we just deployed"* that *"outranks the Stripe
+build"*, from reading six lines of a 400-line file. Both halves were wrong: the
+query does filter on status, and nothing reads it. Micky asked for it to be
+investigated rather than assumed, which is what turned a reordering of the work
+into a ten-minute read.
+
+**── THE PATTERN, WHICH IS MICKY'S ─────────────────────────────────**
+
+*"Something about this codebase produces paired implementations that never
+meet."* Three in one day:
+
+1. **`site/lib/verification.ts`** — a comment insisting no webhook exists, forty
+   lines above a comment reasoning correctly about what the webhook writes. One
+   file, arguing both ways (item 47).
+2. **Two buttons called Verify** — users page vs verification queue, different
+   effects, and the first leaves a request pending for ever (item 42).
+3. **Two `hasActiveSubscription`s** — this item.
+
+**And the sharper half, which is what makes it actionable: in all three the
+second copy is a FOSSIL OF A CORRECT IDEA.** `status === 'active'` is precisely
+what `verification.ts` says the gate USED to be before the over-grant fix. The
+duplicate is not a wrong idea someone invented — it is the right idea from an
+earlier date, left in place while the original moved on. That is why they read as
+plausible and why nobody notices: **a fossil looks exactly like the thing it is a
+copy of, minus the last correction.**
+
+**What would catch it:** searching for the NAME before reusing it, and — for the
+gate specifically — having one exported definition that the dashboard imports
+rather than recomputes. The fix here is to delete the orphan and, if the dashboard
+ever needs the answer, call `getGateState`.
+
+**Not fixed, deliberately:** it is dead code, so removing it is safe but not
+urgent, and it is better removed in the same change that adds the web
+subscription surface — where someone will otherwise be tempted to wire it up.
+
 **47. A JUSTIFICATION THAT OUTLIVED ITS REASON — "THERE IS NO WEBHOOK" SURVIVED
 IN NINE PLACES FOR THREE WEEKS AFTER THE WEBHOOK WENT LIVE. FOUND AND CORRECTED
 14 Sep 2026.**

@@ -124,6 +124,48 @@ anything.** It is a prompt to go and ask the system that knows.
 
 ---
 
+## The reconcile's shape, decided 14 Sep 2026
+
+The webhook has been the primary writer of `subscriptions.status` since 25 Aug.
+`syncSubscription` also writes it, and its own comment warns what that costs:
+*"the webhook records past_due on a failed payment and the next read-time sync
+quietly overwrites it with active, so the user is never shown as behind and the
+grace period silently restarts."*
+
+**✅ DECIDED: the web gate reconciles READ-ONLY. One writer, one owner.**
+
+Micky, 14 Sep, and the second argument is the one worth keeping: *"the webhook is
+the primary writer and has been since 25 Aug, but four files spent three weeks
+asserting it didn't exist. Adding a second writer now — on the surface I just
+deployed — would be building on a premise the codebase has only just stopped
+contradicting itself about."*
+
+So the web asks Stripe when its own row cannot settle the question, and reports
+the answer without repairing anything. The webhook owns the column. Mobile keeps
+its existing behaviour for now: changing it is a separate decision about a
+shipped binary, not a side effect of building a web page.
+
+### ⚠️ LOGGED, NOT BUILT: consult the webhook's own record first
+
+The better version, and it should not gate shipping. `stripe_webhook_events`
+(migration 0022) records every event by Stripe's `evt_` id with `outcome` in
+`processed | ignored | failed`, a `user_id` where it could be resolved, a
+`detail`, and an index on failures.
+
+So the gap the reconcile exists to cover is **enumerable, not hypothetical**:
+
+* an event that failed → a row with `outcome = 'failed'` and a reason;
+* one that could not be attributed → a row with `user_id` null;
+* one Stripe never delivered → no row, confirmable against Stripe's dashboard.
+
+**Ask Stripe only when THIS user's webhook history shows a gap.** Micky's framing
+of why it is worth doing: *"that is the version that stops being a policy and
+starts being a measurement."* Today's rule — ask whenever the row looks lapsed —
+is a standing assumption that the row might be stale. The other asks whether it
+IS stale, from a table that knows.
+
+---
+
 ## The fix
 
 **`sync_subscription`** — the authoritative answer, in the edge function that
