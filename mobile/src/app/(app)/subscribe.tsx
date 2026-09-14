@@ -106,7 +106,20 @@ export default function SubscribeScreen() {
       // ── DO NOT CLAIM SUCCESS WE HAVE NOT ESTABLISHED ────────────────────
       //
       // This used to swallow confirmErr with "webhook will sync DB — proceed".
-      // There is no webhook, and there never was. On that path Stripe billed
+      //
+      // ⚠️ CORRECTED 14 Sep 2026. The next sentence used to read "There is no
+      // webhook, and there never was." Both halves were false by the time
+      // anyone read them: the webhook went live 25 Aug 2026 and the function
+      // was deployed 31 Aug. It was true when the swallow was written and
+      // stayed in the file for three weeks asserting it — which is how a
+      // reader (twice, including Claude on 14 Sep) concludes there is no
+      // webhook while one is processing renewals.
+      //
+      // What remains TRUE and is why this code is still right: a webhook is
+      // asynchronous. It cannot tell THIS screen whether THIS payment was
+      // recorded, because it may not have arrived yet. So the check below
+      // stands on its own merits, not on the absence of a webhook. On the old
+      // path Stripe billed
       // £4.99 every month while our subscriptions row was never written, so
       // Settings showed "Free Plan", the Cancel row never rendered, and
       // cancel_subscription 404'd on the missing row — against a published

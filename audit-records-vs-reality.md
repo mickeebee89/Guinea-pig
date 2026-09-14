@@ -87,13 +87,23 @@ because with no webhook that column is written only at initial subscribe. Caught
 by tracing what actually writes it rather than trusting `notes.md:52`, which
 calls the design "date-driven" — true only of the `cancelling` branch.
 
+**⚠️ CORRECTED 14 Sep 2026 — the premise expired, the near-miss stands.** the webhook has been live since 25 Aug 2026 (function deployed 31 Aug; Stripe endpoint `cavy-subscriptions` ACTIVE, five events, signing secret set), and it writes `current_period_end` on every renewal. So
+the column is no longer "written only at initial subscribe", and the naive fix
+would no longer cut off paying subscribers for that reason. The near-miss is
+still worth keeping: it was real, and the habit that caught it — trace what
+writes a column rather than trust a record describing it — is what found this
+correction too.
+
 The original finding follows.
 
 `legal.ts:218` promises "cancel at any time from within the app".
 
 `mobile/src/app/(app)/subscribe.tsx:105` swallows a failed `confirm_subscription`
 with the comment *"webhook will sync DB — proceed"*. **There is no webhook** —
-the repo says so in three places. On that path Stripe bills £4.99/month for ever
+the repo says so in three places. **[⚠️ 14 Sep 2026: FALSE SINCE 25 AUG. The webhook went live 25 Aug 2026,
+the function was deployed 31 Aug, and the Stripe endpoint `cavy-subscriptions`
+is ACTIVE on five events with its signing secret set. The swallow described
+here was also fixed. See item 47.]** On that path Stripe bills £4.99/month for ever
 while our `subscriptions` row is never written, so Settings shows "Free Plan",
 the Cancel row (`settings.tsx:689`, gated on `isPaid`) never renders, and
 `cancel_subscription` would 404 anyway because it looks up that missing row.
@@ -2008,6 +2018,84 @@ was the reason for three workflows rather than one.
 
 It remains a signal and not a gate. Everything above about branch protection
 still stands.
+
+**47. A JUSTIFICATION THAT OUTLIVED ITS REASON — "THERE IS NO WEBHOOK" SURVIVED
+IN NINE PLACES FOR THREE WEEKS AFTER THE WEBHOOK WENT LIVE. FOUND AND CORRECTED
+14 Sep 2026.**
+
+**What it is, and it is a new shape for this file.** Not a stale record of a
+FACT — a stale record of a REASON. The code was right; the reasoning printed
+beside it was wrong; and anyone reading it concluded the webhook did not exist.
+Which is exactly what Claude concluded on 14 Sep, from `subscribe.tsx:109`,
+about ninety minutes before establishing the opposite.
+
+**The truth, established from four sides:** the webhook went live 25 Aug 2026,
+the function was deployed 31 Aug, the Stripe endpoint `cavy-subscriptions` is
+ACTIVE on five events with a signing secret, and `stripe-webhook.md` records a
+panel reading *"4 events in the last 7 days · last `invoice.payment_succeeded`"*.
+It has processed real renewals. (This week shows 0 deliveries — because nobody
+has subscribed since 8 Sep, not because it is idle. Those two facts were briefly
+allowed to sit together as if they meant the same thing.)
+
+**Where it survived — nine claims across six files:**
+
+| File | What it asserted |
+|---|---|
+| `mobile/src/app/(app)/subscribe.tsx:109` | *"There is no webhook, and there never was"* |
+| `supabase/functions/stripe-payment/index.ts:438` | the swallow, in the present tense |
+| `supabase/functions/stripe-payment/index.ts:605` | `current_period_end` written only at initial subscribe |
+| `site/lib/verification.ts:43` | the same, as the reason the gate asks Stripe |
+| `subscription-state-reconcile.md:93, :104` | the same, twice |
+| `mobile/cavy-handover.md:217` | *"no webhook exists"* |
+| `audit-records-vs-reality.md:86, :95` | the same, twice |
+
+**⚠️ AND FOUR OF THEM WERE LOAD-BEARING, NOT ASIDES.** They read: *"There is no
+webhook, so `current_period_end` is written only by `confirm_subscription` at
+initial subscribe. Stripe renews; our row does not move. Someone who subscribed
+in January still shows a February end date in April while paying every month."*
+
+**Every sentence after the first is now false.** The webhook's
+`invoice.payment_succeeded` handler RETRIEVES the subscription — deliberately not
+trusting the invoice period, *"because on a renewal the invoice line period and
+the subscription period can differ by proration, and the gates read
+current_period_end"* — and writes the fresh period through
+`apply_subscription_state`'s `p_period_end`. Confirmed three ways: the handler,
+the RPC signature in `0024`, and `stripe-webhook.md`'s own table. **The row moves
+every month.**
+
+**✅ ALL NINE CORRECTED 14 Sep.** Code comments rewritten to state what is true;
+durable records given dated correction notes with the original kept visible, the
+same treatment as items 37 and 41.
+
+**⚠️ THE SHARPER HALF: THE CORRECTION WAS ALREADY IN THE REPO, IN THE FILE BEING
+DISTRUSTED.** `mobile/notes.md:102` has read *"✅ ~~No Stripe webhook~~ — built and
+live since 25 Aug 2026"* since the day it was built, and even records the cost of
+the gap: *"three subscriptions billed for a month while our own table showed them
+lapsed."*
+
+Fifty lines above it sits `notes.md:52` — and BOTH `subscription-state-reconcile.md`
+and the `stripe-payment` comment explain, carefully and correctly, why they were
+right not to trust `notes.md:52`. **Two documents reasoned about the
+unreliability of one line in a file, above a line in the same file that would
+have settled the question.** The correction landed in one place and was consulted
+in another.
+
+**What generalises:** this file already had *a count is not a reading* and *the
+record contained its own refutation*. This is the third in that family and the
+most uncomfortable: **the record contained its own correction, and the people
+citing that record cited the wrong line of it.** A correction is only worth what
+its findability is worth, and "it is written down" says nothing about whether it
+is written down where anyone will look.
+
+**⚠️ ONE LIVE QUESTION THIS OPENS, LOGGED RATHER THAN ANSWERED.**
+`hasActiveSubscription` (both clients) asks Stripe when its own row looks lapsed,
+and the justification was that rows could not self-update. **They now can.** What
+the reconcile still covers is genuinely narrower: an event Stripe never
+delivered, one the webhook filed as `failed`, or a customer it could not
+attribute to a user. Whether that justifies the same design, or whether the gate
+should now trust the row and treat a Stripe call as the exception, is a real
+decision about live billing — and it must not be settled by editing a comment,
+which is how the old reasoning got there.
 
 **46. THE HOMEPAGE SAYS "LAUNCHING SOON" ABOVE A WORKING PRODUCT — LOGGED
 14 Sep 2026. NOT A DEFECT. NOT URGENT.**

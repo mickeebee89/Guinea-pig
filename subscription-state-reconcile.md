@@ -90,6 +90,14 @@ the gate honour `current_period_end` for `active`, exactly as it already did for
 `cancelling`. That reasoning is sound and **it would have cut off every paying
 subscriber at their first renewal.**
 
+> **⚠️ CORRECTED 14 Sep 2026.** The paragraph below is kept as written because
+> the reasoning it records is what stopped a bad fix. Its PREMISE has since
+> stopped being true: the webhook has been live since 25 Aug 2026 (function deployed 31 Aug; Stripe endpoint `cavy-subscriptions` ACTIVE, five events, signing secret set), and its `invoice.payment_succeeded`
+> handler retrieves the subscription and writes the fresh `current_period_end`
+> through `apply_subscription_state`. The row now moves on every renewal. What
+> the reconcile still covers is narrower — an undelivered event, one filed as
+> `failed`, or a customer it could not attribute.
+
 There is no webhook. `current_period_end` is written by `confirm_subscription`
 and by nothing else — meaning at initial subscribe, once. Stripe renews monthly;
 our row never moves. Someone who subscribes in January still shows a February end
@@ -101,7 +109,12 @@ that would have looked like correct behaviour.
 
 **What caught it:** tracing what actually writes `current_period_end`, rather
 than trusting `mobile/notes.md:52`, which states the design is *"date-driven"* and
-that no webhook is *"fine for now"*. That claim is half-true: the date check
+that no webhook is *"fine for now"*. (**14 Sep 2026:** `notes.md:102`, fifty
+lines below the line distrusted here, records the webhook as *"built and live
+since 25 Aug 2026"* — so the correction was already in the same file that was
+being read sceptically. Two documents reasoned carefully about why one line of
+`notes.md` could not be trusted, above a line that would have settled it.) That
+claim is half-true: the date check
 exists, but only on the `cancelling` branch. The mitigation the record relies on
 was written down and never fully implemented — the same shape as everything else
 this audit found, one layer deeper.

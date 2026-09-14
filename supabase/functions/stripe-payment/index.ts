@@ -435,8 +435,11 @@ async function revenueSummary(userId: string) {
 // reports the disagreements. Writes nothing, anywhere.
 //
 // -- WHY THIS EXISTS ---------------------------------------------------------
-// subscribe.tsx:105 swallows a failed confirm_subscription ("webhook will sync
-// DB - proceed"), and confirmSubscription ALSO returns HTTP 200 with
+// subscribe.tsx:105 USED TO swallow a failed confirm_subscription ("webhook
+// will sync DB - proceed") - fixed since, and the webhook it named has been
+// live since 25 Aug 2026. This tool is not made redundant by either: a webhook
+// is asynchronous and cannot answer "was THIS payment recorded" at the moment
+// the client asks. confirmSubscription ALSO returns HTTP 200 with
 // { success: false } when its database write fails, which no client checks. On
 // either path Stripe bills every month while we hold no row at all - so the
 // affected people are invisible to every query that starts from our own tables.
@@ -602,11 +605,24 @@ async function reconcileAudit(userId: string) {
 //     for ever. 8 of 11 rows were in that state on 24 Aug 2026.
 //
 //  2. A naive date check would OVER-REVOKE, from the people actually paying.
-//     There is no webhook, so current_period_end is only ever written by
+//
+//     ⚠️ SUPERSEDED 14 Sep 2026 - THE PREMISE, NOT THE CONCLUSION. This read:
+//     "There is no webhook, so current_period_end is only ever written by
 //     confirm_subscription - at initial subscribe. Stripe renews; our row does
 //     not move. Someone who subscribed in January still shows a February end
-//     date in April, while paying every month. Denying them would be the worse
-//     of the two bugs.
+//     date in April, while paying every month."
+//
+//     Every sentence after the first is now false. The webhook (live 25 Aug
+//     2026) handles invoice.payment_succeeded by RETRIEVING the subscription -
+//     deliberately not trusting the invoice period, because proration can make
+//     them differ - and writing the fresh period through
+//     apply_subscription_state's p_period_end. The row moves every month.
+//
+//     The over-revoke risk was real when this was written and the reasoning was
+//     sound then. What it now protects against is narrower: a delivery Stripe
+//     never made, an event filed as 'failed', or a customer the webhook could
+//     not attribute to a user. Whether that justifies the same design is a live
+//     question, logged rather than answered by editing this comment.
 //
 // So a lapsed-looking row is not evidence of anything. It is a prompt to ask
 // Stripe. That is what makes the date check safe, and why this must land in the

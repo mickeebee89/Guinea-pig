@@ -40,11 +40,19 @@ export async function isIdentityVerified(
  *     date check applied only to 'cancelling'. An 'active' row whose period had
  *     ended kept granting access for ever. 8 of 11 rows were in that state.
  *
- *   OVER-REVOKE. Adding a bare date check would have been worse. There is no
- *     webhook, so current_period_end is written only by confirm_subscription at
- *     initial subscribe. Stripe renews; our row does not move. Someone who
- *     subscribed in January still shows a February end date in April while
- *     paying every month - and a date check alone would cut them off.
+ *   OVER-REVOKE. Adding a bare date check would have been worse.
+ *
+ *     ⚠️ CORRECTED 14 Sep 2026. This said "There is no webhook, so
+ *     current_period_end is written only by confirm_subscription at initial
+ *     subscribe. Stripe renews; our row does not move." The webhook has been
+ *     live since 25 Aug 2026 and writes the fresh period on every renewal, so
+ *     the row DOES move. Note the same file already knew: the past_due comment
+ *     below reasons correctly about the webhook writing 'expired'. One file,
+ *     arguing both ways, forty lines apart.
+ *
+ *     The date check is still not safe ALONE, for a smaller reason: a renewal
+ *     event that was never delivered, filed as failed, or could not be
+ *     attributed to a user leaves the row behind while the person keeps paying.
  *
  * So a lapsed-looking row is not evidence. It is a reason to ask Stripe, which
  * is what sync_subscription does: it reconciles, repairs our rows, and returns
