@@ -2009,6 +2009,76 @@ was the reason for three workflows rather than one.
 It remains a signal and not a gate. Everything above about branch protection
 still stands.
 
+**46. THE HOMEPAGE SAYS "LAUNCHING SOON" ABOVE A WORKING PRODUCT — LOGGED
+14 Sep 2026. NOT A DEFECT. NOT URGENT.**
+
+The hero reads **"LAUNCHING SOON IN THE UK"**. The header, top right, offers
+**Sign in** — which works, and lands on a dashboard. Both are true statements
+about different things, on the same screen, to the same visitor.
+
+**The mechanism is correct.** `PUBLIC_SITE_MODE=preview` was set when there was
+nothing behind that sign-in, and `lib/site.ts` gates three things on it together:
+`robots.ts` disallows everything, `sitemap.ts` returns `[]`, and the root layout
+emits `noindex, nofollow`. All of that is still right — `public_stylists` has no
+inventory worth indexing, and `site/README.md` gates the flip on inventory rather
+than on the domain resolving.
+
+**It is the shape this file keeps finding: a correct mechanism describing a
+condition that moved.** The copy stopped being true at 20:14 on 14 Sep, when five
+weeks of member area reached production in one deploy.
+
+**Logged so the flip is ONE decision with both halves in it** — the value and the
+words — rather than a value change that leaves the copy behind. The README's
+condition for flipping (real published stylists clearing the content bar) is
+unchanged and is still the right gate.
+
+**45. THE CI CHECK COULD NOT SEE THE FAILURE THAT BLOCKED PRODUCTION FOR FIVE
+WEEKS — FOUND 14 Sep 2026. ✅ FIXED THE SAME DAY.**
+
+**What happened.** A duplicate `let hiddenByBlock = false` on consecutive lines of
+`site/lib/queries/dashboard.ts`, written by an edit script on 8 Sep. Turbopack
+refuses it. Every Vercel build since errored; `cavybeauty.com` served the 10
+August build until 14 Sep. `/shop` returning 404 in production while `/dashboard`
+redirected correctly was the tell that unravelled it.
+
+**⚠️ GITHUB WAS GREEN THROUGHOUT, AND COULD NOT HAVE BEEN ANYTHING ELSE.**
+`site.yml` ran `npm run checks` — `eslint --max-warnings=0` plus three custom
+scripts that read source as TEXT. **None of them compiles.** A duplicate
+declaration is a compiler error, so the workflow was not unlucky: it was
+structurally incapable of seeing this class, and it reported success on a branch
+that could not build.
+
+**And `site` was the only one of the three apps exposed.** `admin` and `mobile`
+both run `eslint . --max-warnings=0 && tsc --noEmit` — confirmed by reading their
+`package.json`, not recalled. `site` omits `tsc` DELIBERATELY, and its README
+gives the reason: *"Type errors are already build-blocking: `next build`
+type-checks."* **True for a deploy. False for CI, which never built.** The one app
+that delegated type-checking to its build is the one whose CI could not
+type-check.
+
+**Micky's framing, 14 Sep, and it is sharper than item 28's:** *a signal you watch
+can hide a signal you don't, when the watched one is narrower than the thing it
+appears to certify.* Item 28 warned that "CI is wired" must not be read as
+"commits are checked". This is one layer deeper: the check ran, passed honestly,
+and its green tick is what made two red Vercel builds easy to skip past.
+
+**THE COST ARGUMENT DID NOT EXIST, WHICH IS HALF THE LESSON.** Measured before
+deciding:
+
+    npm run checks   15s   exit 0   does NOT catch it
+    next build       30s   exit 0   catches it
+
+I had been weighing "the expensive option" against a cheap one. The thing that
+reproduces Vercel costs thirty seconds. **✅ `site.yml` now runs both as two named
+steps** so the UI says which half failed, with `SUPABASE_URL` and
+`SUPABASE_ANON_KEY` from repository Variables — `supabase-public.ts` throws at
+import without them and the six treatment pages are statically generated — and
+`PUBLIC_SITE_MODE` pinned to `preview`.
+
+**Still true, and unchanged:** this remains a SIGNAL, not a gate. It runs after
+the commit is on `main`. It would have told us on 8 Sep; it would not have
+stopped the commit.
+
 **44. A MODEL'S INSTAGRAM HANDLE IS SHOWN TO ANY SIGNED-IN STYLIST — FOUND
 13 Sep 2026. MEMBERS-ONLY, NOT OPEN WEB. NOT FIXED.**
 
@@ -2596,6 +2666,53 @@ it is the mechanism the other five instances in this schema presumably share.
 
 **`PUBLIC_SITE_MODE` exists**, so going live is a value change rather than a new
 variable — which the member-area deploy depends on.
+
+**✅ CLOSED 14 Sep 2026, FROM THE END PREDICTED.** Vercel's UNPREFIXED
+`SUPABASE_ANON_KEY` was read at last: it also starts `eyJ`. So it is a clean
+split rather than a mix — no app is running two generations at once:
+
+    local (site, admin, mobile)   sb_publishable_
+    shipped mobile binary         sb_publishable_  — EAS holds NO environment
+                                  variables at all, so the build read mobile/.env
+    production web (Vercel)       eyJ — BOTH the server and the browser variables
+
+**One outlier, and it is the surface a stranger meets first.** Better than
+feared in the way that matters: the shipped app agrees with local, so no store
+release is involved. The fix, if wanted, is two Vercel values and a redeploy.
+
+**And both generations are now known to work on the same code.** Commit
+`1480009` built green on GitHub Actions (publishable keys, from repository
+Variables) and green on Vercel (JWTs) — the first time both were exercised
+against identical source instead of assumed equivalent. That is what the CI
+change bought beyond catching compile errors.
+
+**⚠️ AND WE BOTH RE-DERIVED A FOUR-DAY-OLD RECORD FROM SCRATCH.** The `eyJ` /
+`sb_publishable_` split is written six lines above this, dated 10 Sep. On 14 Sep
+Micky found it again while adding the GitHub variables and reported it as new;
+Claude only caught it by re-reading the item rather than answering from memory.
+**Same family as item 41, running the other way:** there the record held its own
+refutation and was acted on anyway; here it held the finding and we found it
+twice.
+
+What IS new is the sharper reading, Micky's: **anything verified locally has been
+verified against a different credential than production uses.** The original
+framed this as a future risk conditional on Supabase retiring JWTs. As a present
+fact about what local testing proves, it depends on Supabase doing nothing at
+all.
+
+**THREE FOLLOW-UPS, LOGGED RATHER THAN ANSWERED FROM MEMORY:**
+
+1. **Should production move to publishable keys?** Two values and a redeploy.
+   The argument for is that every other surface is already there; the argument
+   against is that nothing is currently broken.
+2. **Is the JWT generation deprecated, and on what timetable?** Needs Supabase's
+   own documentation. Not answerable from recollection, and the answer decides
+   whether (1) is housekeeping or a deadline.
+3. ~~Is the shipped mobile app on a third generation?~~ **ANSWERED 14 Sep: no.**
+   EAS holds no environment variables, so the binary took `mobile/.env` at build
+   time — publishable, same as local.
+
+*The original, kept:*
 
 **⚠️ THE FORMAT GAP IS NARROWED, NOT CLOSED.** The values are sensitive-locked
 in the dashboard. The `eyJ…` prefix seen through the Edit dialog proves the
