@@ -476,7 +476,6 @@ export async function getStylistUpdates(
   const hasLoc = me?.latitude != null && me?.longitude != null
 
   let hiddenByBlock = false
-  let hiddenByBlock = false
   const blocked = new Set(
     ((blockRes.data ?? []) as { blocker_id: string; blocked_id: string }[])
       .map(b => (b.blocker_id === userId ? b.blocked_id : b.blocker_id)),
