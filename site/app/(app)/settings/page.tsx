@@ -3,6 +3,8 @@ import { createSupabaseServerClient, requireUser } from '@/lib/supabase-server'
 import { indexById, displayName, type ProfileRef } from '@/lib/queries/util'
 import { getStylistSetup } from '@/lib/queries/shop'
 import { BlockedList, type BlockedPerson } from './BlockedList'
+import { getGateState } from '@/lib/verification'
+import { MembershipSection, type MembershipView } from './MembershipSection'
 
 export const metadata = { title: 'Settings' }
 
@@ -29,6 +31,30 @@ export default async function SettingsPage() {
   // the pair in both directions precisely so neither person can tell which way
   // round it was.
   const setup = await getStylistSetup(supabase, user.id)
+
+  // ── TWO READS, TWO JOBS, KEPT APART ─────────────────────────────────────
+  // getGateState DECIDES whether this account has a membership: it applies the
+  // date check, grants on past_due, folds in the admin waiver, and asks Stripe
+  // when its own row cannot settle it.
+  //
+  // The row read below is DISPLAY ONLY — the status and renewal date exactly as
+  // we hold them, so a person can see what our records say. It is deliberately
+  // not turned into a second opinion about membership. Audit item 48 is what
+  // happens when a surface starts deciding that for itself: dashboard.ts grew a
+  // `status = 'active'` test under the same name as the real gate and disagreed
+  // with it about every cancelling, past_due and comped account.
+  const gate = await getGateState(supabase, user.id)
+  const { data: subRow } = await supabase
+    .from('subscriptions')
+    .select('status, current_period_end')
+    .eq('user_id', user.id)
+    .maybeSingle()
+  const membership: MembershipView = {
+    subscribed: gate.subscribed,
+    waived: gate.waived,
+    status: (subRow as { status?: string } | null)?.status ?? null,
+    renewsOn: (subRow as { current_period_end?: string } | null)?.current_period_end ?? null,
+  }
 
   const { data: rows } = await supabase
     .from('blocks')
@@ -83,6 +109,11 @@ export default async function SettingsPage() {
           )}
         </section>
       )}
+
+      <section className="mb-8">
+        <h2 className="mb-2 font-display text-lg text-warm-dark">Membership</h2>
+        <MembershipSection view={membership} />
+      </section>
 
       <section>
         <h2 className="mb-2 font-display text-lg text-warm-dark">Blocked people</h2>

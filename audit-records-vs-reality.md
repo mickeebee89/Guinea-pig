@@ -2019,6 +2019,68 @@ was the reason for three workflows rather than one.
 It remains a signal and not a gate. Everything above about branch protection
 still stands.
 
+**49. A DEFAULT NOBODY CHOSE, MEETING A FLOW WE DID — FOUND 14 Sep 2026,
+CLOSED THE SAME DAY BY TURNING THE DEFAULT OFF.**
+
+**What happened.** The £14.99 fee form went live on the web and offered four
+payment methods: **Card, Klarna, Revolut Pay, Amazon Pay.** The subscription form
+offered Card only. Nobody enabled any of them. Stripe's dashboard defaults them
+on for one-off payments, and Elements renders whatever the account permits; a
+recurring mandate supports fewer, which is why the two forms differed.
+
+**So buy-now-pay-later on a verification fee was live for a few hours**, and a
+stylist could have entered a BNPL agreement with a third party over £14.99.
+
+**⚠️ AND IT WOULD HAVE TAKEN MONEY WITHOUT RECORDING IT.** The three extra
+methods are redirect-based. `PayForm` calls:
+
+    stripe.confirmPayment({ elements, redirect: 'if_required' })
+
+with **no `confirmParams.return_url`**, because the flow was designed never to
+leave the page — that property is why Elements was chosen over Checkout. A
+redirect method needs a return URL, and even with one there is **no return
+handler**: nothing on the way back calls `confirm_verification`. And
+`verification_payments` is written by that action and nothing else — no webhook
+event touches it, unlike subscriptions.
+
+**Money moves, no row.** That is precisely the defect mobile's subscribe flow was
+fixed for in August, reached by a route neither of us wrote.
+
+**✅ FIXED 14 Sep by turning the three methods off in Stripe. Card only, live
+mode.** Not by code: the flow is correct for the path it was built for, and
+today's real payment proved that path end to end.
+
+**── THE CATEGORY, WHICH IS MICKY'S AND IS NEW TO THIS FILE ───────────**
+
+*"A default we didn't choose, interacting with a flow we did."*
+
+Every other finding in this file came from something someone wrote — a wrong
+line, a stale comment, a check too narrow, a claim wider than its evidence. This
+one has no author. Two correct-in-isolation facts met: Stripe's sensible default
+of offering more ways to pay, and a deliberate decision that our flow never
+leaves the page.
+
+**The mitigation is not code. It is knowing which defaults are live.** No test
+would have caught this, because there was nothing wrong to catch until the two
+met — and no amount of care in either half would have prevented it.
+
+**⚠️ WHICH MAKES THE OBVIOUS QUESTION: WHAT ELSE IS ON BY DEFAULT?** Nobody has
+inventoried this, and at least one other instance is already sitting unresolved:
+the `npm warn allow-scripts` notice on `sharp` and `unrs-resolver`, flagged
+13 Sep and carried since. Whether install scripts run is a default nobody in this
+project has chosen either way, and `sharp` is in the build path via
+`opengraph-image`.
+
+Others worth a look, none checked yet: Supabase's project-level settings (JWT
+expiry, email confirmations, rate limits), Vercel's build and function defaults,
+Next.js's own (image optimisation hosts, caching), and whatever else Stripe has
+on that nobody has read — radar rules, receipt emails, statement descriptors.
+
+**Decided, not inherited:** if those three methods are ever wanted back, it is
+the work described above — a `return_url`, a return-handler route reading the
+PaymentIntent status, and a way to record a payment that settles minutes later
+— and its own decision, not a toggle.
+
 **48. PAIRED IMPLEMENTATIONS THAT NEVER MEET — THREE FOUND IN ONE DAY,
 14 Sep 2026. THE THIRD IS LOGGED HERE. NOT FIXED.**
 
