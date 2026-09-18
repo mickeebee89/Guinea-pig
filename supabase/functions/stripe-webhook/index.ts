@@ -395,6 +395,40 @@ Deno.serve(async (req) => {
 
       case 'invoice.payment_failed': {
         const inv = event.data.object as Stripe.Invoice
+
+        // ── A FIRST INVOICE WAITING ON 3-D SECURE IS NOT A FAILURE (audit item 55)
+        // Stripe sends invoice.payment_failed when a subscription's FIRST
+        // payment needs the bank's 3-D Secure step, in the same second as
+        // payment_intent.requires_action and invoice.payment_action_required.
+        // The live payload that proved it (14 Sep 2026, in_1UFiGI2NT7OAGIRcetxUB109):
+        //
+        //   "billing_reason": "subscription_create"
+        //   "attempt_count": 0          <- no charge against a card counted
+        //   "attempted": true
+        //   "status": "open"
+        //   "amount_paid": 0, "amount_remaining": 499
+        //   "next_payment_attempt": null   <- nothing is waiting to be retried
+        //   "last_finalization_error": null
+        //
+        // This handler treated it as a declined renewal: it wrote 'past_due',
+        // which both gates read as a live membership, so the person was a member
+        // before paying, and it told them their card was declined. In the UK most
+        // cards go through 3-D Secure, so that was most sign-ups.
+        //
+        // So: ignored, with a 200. No status is written and no notification is
+        // sent. The subscription is still 'incomplete' at Stripe, and what settles
+        // it arrives on its own: customer.subscription.updated and
+        // invoice.payment_succeeded when the step is completed, or the
+        // subscription expiring if it is abandoned. A first invoice that REALLY
+        // failed has attempt_count >= 1, and so does every renewal. Both still
+        // take the path below, unchanged.
+        if (inv.billing_reason === 'subscription_create' && inv.attempt_count === 0) {
+          await finish('ignored',
+            `First invoice ${inv.id} awaiting 3-D Secure (billing_reason=subscription_create, `
+            + `attempt_count=0) — not a failure; no status written, no notification sent`)
+          break
+        }
+
         const failedSubId = subscriptionIdFrom(inv)
         if (!failedSubId) {
           if (isSubscriptionInvoice(inv)) {
