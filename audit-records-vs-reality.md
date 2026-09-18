@@ -561,6 +561,56 @@ web chat, web stylist and model profiles — checked at 375px as well as desktop
 **11. ~~Pre-launch: the six treatment pages must not be empty~~** — diagnosed
 2 Sep 2026, and the cause changes the action.
 
+> **⚠️ CLARIFIED 18 Sep 2026 — THE CAUSE STANDS; "EMPTY" NEEDED DEFINING.**
+> A live check of `https://cavybeauty.com/hair-models` on 18 Sep showed a fully
+> rendered marketing page, with *"Cavy hasn't launched yet — join the waitlist
+> and we'll email you when stylists near you start looking"* where stylists
+> would be. It was read as evidence that the pages are *not* empty in the way
+> recorded here, and that the site-mode flag might be what hides stylists.
+> **The code says otherwise. VERIFIED, `site/app/(public)/[treatment]/page.tsx`:**
+>
+> * The page never reads the flag. Lines 1–7 import no `IS_LIVE` and no
+>   `PUBLIC_SITE_MODE`. The flag reaches this page only through the layout's
+>   robots meta (`site/app/layout.tsx:42`), which does not change what renders.
+> * **The waitlist line is the empty state.** It shows when the count is 0:
+>   `{count > 0 ? … : 'Cavy hasn’t launched yet — …'}` (`:103-105`).
+> * **The stylist cards are the other half of it.** They render only when
+>   `{stylists.length > 0 && (` (`:124`).
+> * Both numbers come from `public_stylists` and nothing else (`:51-54` →
+>   `site/lib/stylists.ts:48-56` and `:63-78`, `.from('public_stylists')`, anon
+>   client). There is no intermediate view or function.
+>
+> So what was seen live **is** the empty state this item describes: no cards,
+> and the waitlist line standing in for them. "Render zero cards" was accurate.
+> "Empty" means that, not a blank page. **Bio length, through the view's bar,
+> is still what empties these pages.** The 18 Sep database check agrees: 3
+> providers published, 0 rows in `public_stylists`, all 3 failing the
+> 40-character bar.
+>
+> **Two things this adds:**
+> 1. **The waitlist line is tied to the data, not to launch.** Every category
+>    with no qualifying stylist will say *"Cavy hasn't launched yet"*, including
+>    after launch. It is the same shape as item 46 (*"launching soon"* above a
+>    working product), reached by a different route.
+> 2. **One bio does not fill all six pages.** Each page filters on its own
+>    category, `.contains('category_slugs', [dbSlug])` (`stylists.ts:53`), and
+>    `/hair-models` filters on `hair` (`site/lib/site.ts:57-58`). Micky B's new
+>    40+ character bio fills only the pages for categories he offers. Which
+>    ones is not established. `select category_slugs from
+>    public.public_stylists;` answers it, and returns slugs only.
+>
+> **Caching.** `export const revalidate = 900` (`page.tsx:9`) applies to the
+> whole route, whichever branch renders. The pages are prerendered, and the
+> 15 Sep build listed them as `● /[treatment]  15m  1y`. INFERRED from
+> standard Next.js incremental regeneration, not observed: a data change shows
+> after the 15-minute window has passed **and** a request has triggered the
+> rebuild, with the next request after that seeing it. A change of the flag
+> needs a redeploy, INFERRED from how Vercel applies environment variables.
+> A redeploy re-prerenders all six, so **the flag cannot leave stale waitlist
+> copy behind.** What can: a regeneration whose query fails. Item 18 says that
+> returns `[]`, so a failure would be cached as the empty state for another
+> 15 minutes.
+
 ## The SEO pages are not empty for want of stylists
 
 `/hair-models` and the other five render zero cards. **That is not an inventory
@@ -2187,6 +2237,15 @@ itself populate the six /[treatment] pages"*. **The repo contradicts that.**
 VERIFIED from the applied migration's text. **The live view definition was not
 queried.** `select pg_get_viewdef('public.public_stylists'::regclass, true);`
 settles it.
+
+> **⚠️ CLARIFIED 18 Sep 2026 — see the note under item 11.** The live page shows
+> the waitlist line rather than stylists. That is this section's empty state,
+> not a sign the site-mode flag is involved: the page's content never reads
+> the flag (`page.tsx:1-7`). The 18 Sep database check (3 published, 0 in
+> `public_stylists`, all 3 below the bar) **confirms** this section's
+> conclusion rather than correcting it. The one refinement: a 40-character bio
+> fills only the pages for the stylist's own categories
+> (`stylists.ts:53`), not all six.
 
 **What the planned rule changes, then:** not publishing. It does change public
 visibility, for anyone it makes write more. The 40 already exists once in
