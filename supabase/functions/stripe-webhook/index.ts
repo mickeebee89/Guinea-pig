@@ -75,6 +75,10 @@ function mapStatus(stripeStatus: string): 'active' | 'cancelling' | 'past_due' |
 const iso = (seconds: number | null | undefined) =>
   seconds ? new Date(seconds * 1000).toISOString() : null
 
+/** A user id we can safely hand to Postgres. Anything else would raise 22P02
+ *  on the insert, which is a thrown error and so a Stripe retry loop. */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 /** Never let a formatting failure be the thing that swallows an error. */
 function describeError(err: unknown): string {
   if (err instanceof Error) return err.message
@@ -427,6 +431,83 @@ Deno.serve(async (req) => {
         })
         await notifyPaymentFailed(userId, inv.id, periodEnd)
         await finish('processed', `payment failed -> past_due, access continues to ${periodEnd}`, userId)
+        break
+      }
+
+      case 'payment_intent.succeeded': {
+        // ── THE £14.99 FEE: THE BACKSTOP FOR A CLOSED TAB (audit item 53) ────
+        // confirm_verification (stripe-payment) records the fee when the client
+        // calls it after paying. If the tab closes or the app is killed first,
+        // nothing else ever did: Stripe had the money and verification_payments
+        // had no row, so the stylist came back to a fresh "Pay £14.99".
+        //
+        // This writes the SAME row from Stripe's side. confirm_verification is
+        // unchanged and stays the immediate path; whichever of the two lands
+        // second hits verification_payments_stripe_payment_id_key (23505).
+        //
+        // Only intents create_verification_intent made are ours. It stamps
+        // metadata { user_id, type: 'verification' } (stripe-payment:111) from
+        // the caller's verified session, and this event's signature is already
+        // checked, so the user id can be trusted. Every other intent, including
+        // the ones Stripe creates for subscription invoices (the invoice.*
+        // handlers above own those), is 'ignored' with a 200. Never a failure,
+        // never a retry.
+        const pi = event.data.object as Stripe.PaymentIntent
+        const meta = (pi.metadata ?? {}) as Record<string, string | undefined>
+
+        if (meta.type !== 'verification') {
+          await finish('ignored',
+            `payment_intent.succeeded with metadata.type=${meta.type ?? 'none'} — not a verification fee`)
+          break
+        }
+
+        // 'failed', not 'ignored': this file's rule is that 'ignored' only ever
+        // means "not ours to act on" (see isSubscriptionInvoice). A verification
+        // fee we cannot attribute IS ours — money was taken and nothing records
+        // it — so it must show on the Revenue panel as a failure. 200, because
+        // redelivering the same payload cannot conjure a user.
+        const userId = meta.user_id ?? ''
+        if (!UUID_RE.test(userId)) {
+          await finish('failed',
+            `Verification fee ${pi.id} paid but metadata.user_id is ${userId ? 'not a uuid' : 'missing'}. `
+            + `Not recorded — chase by hand.`)
+          return new Response(JSON.stringify({ received: true, unattributed: true }), { status: 200 })
+        }
+
+        // EXACTLY confirm_verification's insert (stripe-payment:231-237), so
+        // both paths produce one indistinguishable row.
+        const { error: payErr } = await db.from('verification_payments').insert({
+          user_id:           userId,
+          stripe_payment_id: pi.id,
+          amount:            pi.amount,
+          currency_code:     (pi.currency ?? 'gbp').toUpperCase(),
+        })
+        const code = (payErr as { code?: string } | null)?.code
+
+        if (code === '23505') {
+          await finish('processed', `Verification fee ${pi.id} already recorded — confirm_verification got there first`, userId)
+          break
+        }
+
+        if (code === '23503') {
+          // user_id references public.users ON DELETE CASCADE, so this means
+          // the profile row is gone, almost certainly a deleted account.
+          // Retrying cannot bring it back, and a thrown error here would be
+          // item 54's retry loop. user_id is passed as null because
+          // stripe_webhook_events.user_id references auth.users, which may be
+          // gone too, and a failed update would leave this row reading
+          // 'processing'.
+          await finish('failed',
+            `Verification fee ${pi.id} paid by user ${userId}, who has no public.users row `
+            + `(deleted?). Not recorded — chase by hand.`)
+          return new Response(JSON.stringify({ received: true, unattributed: true }), { status: 200 })
+        }
+
+        // Anything else may be transient. Thrown on purpose: the catch below
+        // returns 500 so Stripe retries, and a retry genuinely re-runs.
+        if (payErr) throw new Error(`verification_payments insert failed: ${payErr.message}`)
+
+        await finish('processed', `Verification fee ${pi.id} recorded (${pi.amount} ${pi.currency})`, userId)
         break
       }
 
