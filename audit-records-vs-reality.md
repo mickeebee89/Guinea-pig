@@ -2069,6 +2069,155 @@ was the reason for three workflows rather than one.
 It remains a signal and not a gate. Everything above about branch protection
 still stands.
 
+**55. RELOADING /subscribe CAN CANCEL A SUBSCRIPTION THE PERSON HAS JUST PAID
+FOR — AND A FAILED FIRST PAYMENT GRANTS ACCESS AND SENDS A NOTICE THAT IS FALSE.
+FOUND 18 Sep 2026 BY READING. NOTHING OBSERVED; THE SQL THAT SETTLES THE
+INFERRED PARTS IS AT THE END.**
+
+**Plainly:** after paying £4.99, someone who reloads `/subscribe` before our
+record says "active" gets a fresh "Pay £4.99 and join". Loading that page
+immediately cancels, at Stripe, the subscription they just paid for. And when a
+first payment attempt fails, the person is let in as a member anyway, and told
+by notification that their membership "stays active".
+
+**── 1. WHAT A RELOAD SHOWS. VERIFIED FROM CODE ─────────────────────────────**
+
+`site/app/(app)/subscribe/page.tsx:42-44` asks `getGateState`, which is
+`hasActiveSubscription` (`site/lib/verification.ts`):
+* no `subscriptions` row → not subscribed, with no Stripe check (`:83`);
+* status `active`, `cancelling` or `past_due`, with a future period end and a
+  customer id → **subscribed** (`:98`);
+* **any other status (in practice `expired`) → not subscribed, with no Stripe
+  check** (`:102`).
+
+If subscribed, the page shows *"You're already a member"* / *"Your membership
+is active. There is nothing to pay here."* (`page.tsx:44-60`). Otherwise it
+shows *"£4.99 a month"* and mounts `<SubscribePanel />` (`:63-78`).
+**`SubscribePanel` calls `startSubscription` on mount** (`SubscribePanel.tsx:24-39`),
+which is `create_subscription`. Its form's button reads *"Pay £4.99 and join"*
+(`:78`). **So loading the page, not clicking, runs `create_subscription`.**
+
+**── 2. THE CANCEL-THEN-CREATE PATH. VERIFIED FROM CODE ─────────────────────**
+
+`supabase/functions/stripe-payment/index.ts`:
+* `:161-162`: only a stored status of exactly `active` returns `alreadyActive`.
+* `:165`: otherwise it reuses the stored customer.
+* **`:179-183`: if the row holds any `stripe_subscription_id`, it calls
+  `stripe.subscriptions.cancel()` on it (an immediate cancel) and swallows any
+  error.**
+* `:185-194`: it then creates a new `default_incomplete` subscription.
+
+**So it cancels under every stored status except `active`**: `expired`,
+`past_due` and `cancelling`, which is all of the vocabulary `0022` allows.
+
+**It can cancel a subscription paid for seconds earlier. All of these must
+hold:**
+1. A row exists holding that subscription's id. **It does, from the moment the
+   form first loads.** See 3: the webhook writes the row on
+   `customer.subscription.created`, before any payment.
+2. The stored status is not `active`.
+3. `/subscribe` renders the panel, which needs `getGateState` to say "not
+   subscribed". `expired` does that (`verification.ts:102`). `past_due` with a
+   future period end does not (`:98`), and shields the person.
+4. The reload happens after Stripe has taken the money but before any write of
+   `active`. Three things write it: `confirm_subscription` from the paying tab,
+   the webhook's `invoice.payment_succeeded`, or its
+   `customer.subscription.updated`.
+
+**── 3. THE EVENTS, IN THE 14 Sep SAMPLE ─────────────────────────────────────**
+
+The times are the ones Micky pasted. The status each event writes is VERIFIED
+from code. Whether each did write it is INFERRED until the first query below.
+
+| Time | Event | Stored status written | Page on reload | Cancel reachable? |
+|---|---|---|---|---|
+| 23:22:10 | `customer.subscription.created` (Stripe status `incomplete`) | **`expired`**: `mapStatus` sends `incomplete` to the default (`stripe-webhook/index.ts:61-71`, `:332-334`) | panel, so `create_subscription` runs | **yes** |
+| 23:24:28 | `invoice.payment_failed` | **`past_due`**, hard-coded (`:427`) | "already a member" if the period end is set | shielded |
+| 23:25:20 | `invoice.payment_succeeded` | `active`, read back from Stripe (`:384`) | "already a member" | no |
+| 23:25:21 | `customer.subscription.updated` | `active` (`:332-334`) | same | no |
+
+`confirm_subscription` also writes `active` directly, as soon as the paying tab
+calls it (`stripe-payment/index.ts:362-378`).
+
+**── 4. THE WINDOW ──────────────────────────────────────────────────────────**
+
+**In this sample there was none.** The money was taken while the stored status
+was `past_due`, because the failed attempt at 23:24:28 had written it. That
+status shields the page. Luck, not design.
+
+**In the ordinary case there is one**, with no failed attempt first. The
+stored status is `expired` from the form's first load until the first write of
+`active`. Normally that is a second or two, because the paying tab confirms
+straight away and the webhook follows in seconds. **It becomes unbounded
+exactly when something has already gone wrong:**
+* `confirm_subscription` fails. The person then sees `PayForm`'s pending
+  message, which **tells them to reload** (*"Do not pay again — reload this page
+  in a minute or two"*, `site/components/PayForm.tsx:127-130`).
+* And the webhook's active write is late, retrying, or filed `'failed'`.
+
+**What the person would experience, INFERRED where marked:**
+* They reload and see *"£4.99 a month"* and a fresh *"Pay £4.99 and join"*.
+* The subscription they paid for is already cancelled at Stripe. INFERRED from
+  Stripe's defaults: no refund, because `cancel()` is called with no proration
+  or invoice options.
+* If they pay again, they have paid £9.98 for one membership.
+* INFERRED on ordering: **the old subscription's `customer.subscription.deleted`
+  can then land after the new one is active and overwrite it.** The webhook
+  never checks that an event's subscription is the one stored (`:317-344`).
+  `apply_subscription_state` upserts one row per user (`0024:210`) and replaces
+  the stored subscription id with the event's (`0024:214`). They would then be
+  billed monthly for the new subscription while recorded as `expired`, with
+  access gone.
+
+**── 5. THE 23:24:28 PAYMENT FAILURE ────────────────────────────────────────**
+
+VERIFIED from code. Whether it happened on 14 Sep is INFERRED until the queries
+below.
+
+* The handler finds the subscription id from the invoice, finds the user, and
+  **writes `past_due`** (`stripe-webhook/index.ts:396-433`).
+  `apply_subscription_state` maps `past_due` to **`users.subscription_status =
+  'active'`** (`0024:194`).
+* **That grants membership to someone who has never paid.** `past_due` with a
+  future period end passes the gate's fast path (`site/lib/verification.ts:98`).
+  So the apply gate opens, and `/subscribe` says *"Your membership is active"*.
+  That depends on Stripe giving an `incomplete` subscription a period end
+  (INFERRED). The event's own `detail` records it.
+* Here the access lasted 52 seconds, until the payment succeeded. INFERRED from
+  Stripe's rules for first payments: if it never succeeds, the subscription
+  stays `incomplete` for about 23 hours, then becomes `incomplete_expired`. So
+  access would last up to about a day, for nothing paid.
+* **A notification is sent** (`:432` → `notifyPaymentFailed`, `:159-189`),
+  once per invoice. Its title is *"We couldn't take your £4.99 payment"*. Its
+  body reads *"Your card was declined. Your membership stays active until
+  <date>. Stripe will try again over the next few days — if you've got a new
+  card, update it and nothing else is needed. You haven't been charged twice."*
+  **For a first payment, three claims in it are false.** There was no membership
+  to stay active. INFERRED from Stripe's rules: Stripe does not retry a first
+  payment on its own. And updating a card does not complete it. The copy was
+  written for renewals, and nothing distinguishes the first payment's
+  `billing_reason`, which is `subscription_create`.
+
+**Also seen while reading:** `/subscribe` still says *"Cancel any time — in the
+Cavy app for now, and on the web shortly"* (`page.tsx:67-68`). Cancelling has
+been on web Settings since `48e0146`. It is a stale sentence, item 47's
+pattern.
+
+**── WHAT SETTLES THE INFERRED PARTS (read-only, no personal data) ──────────**
+
+    -- what the webhook recorded for each 14 Sep event (detail carries the period end)
+    select type, outcome, detail, received_at from public.stripe_webhook_events
+    where received_at between '2026-09-14 21:00+00' and '2026-09-15 01:00+00'
+    order by received_at;
+
+    -- whether the payment-failed notice was sent, and what it said
+    select title, body, created_at from public.notifications
+    where type = 'payment_failed' order by created_at desc limit 5;
+
+Not established: whether this account had an older `subscriptions` row before
+23:22. If it did, the 23:22 page load cancelled that older subscription too.
+Harmless if it was already cancelled, because the error is swallowed.
+
 **54. DELETING A SUBSCRIBER'S ACCOUNT PROBABLY LEAVES A FAILED WEBHOOK EVENT
 AND DAYS OF STRIPE RETRIES — LOGGED 18 Sep 2026. MOSTLY INFERRED; THE SQL THAT
 SETTLES IT IS BELOW.**
