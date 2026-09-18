@@ -162,6 +162,103 @@ async function createSubscription(userId: string, email: string) {
     return respond({ alreadyActive: true })
   }
 
+  // ── NEVER REPLACE A SUBSCRIPTION ON THE STRENGTH OF OUR OWN ROW ──────────
+  // Audit item 55. This used to cancel whatever subscription our row held
+  // whenever our status was not exactly 'active', then create a new one. But
+  // the webhook stores a brand-new subscription as 'expired' the moment it is
+  // created (Stripe calls it 'incomplete', which mapStatus does not name), and
+  // our row lags Stripe. So a reload after paying cancelled the subscription
+  // just paid for and asked for £4.99 again.
+  //
+  // Now Stripe is asked. Only Stripe's own word that a subscription is over
+  // lets it be replaced. Anything live or part-paid is returned to the caller
+  // instead, and anything we cannot read fails closed, because a second
+  // subscription beside a live one is a second monthly charge.
+  if (existingRow?.stripe_subscription_id) {
+    let existing: Stripe.Subscription | null = null
+    try {
+      existing = await stripe.subscriptions.retrieve(existingRow.stripe_subscription_id, {
+        expand: ['latest_invoice.payment_intent'],
+      })
+    } catch (e) {
+      if ((e as { code?: string })?.code !== 'resource_missing') {
+        console.error('[stripe-payment] create_subscription could not read the stored subscription', e)
+        return respond({
+          error: 'We could not check your existing membership with Stripe. Nothing has been charged — please try again.',
+        }, 503)
+      }
+      // resource_missing: Stripe has no such subscription, so nothing to cancel.
+    }
+
+    if (existing) {
+      const existingCustomer = typeof existing.customer === 'string' ? existing.customer : existing.customer.id
+
+      switch (existing.status) {
+        case 'active':
+        case 'trialing':
+        case 'past_due':
+          // Live at Stripe; our row is behind. `finishing` tells the caller
+          // this came from Stripe, not from our own record.
+          return respond({ alreadyActive: true, finishing: true, stripeStatus: existing.status })
+
+        case 'incomplete': {
+          const pi = (existing.latest_invoice as Stripe.Invoice | null)
+            ?.payment_intent as Stripe.PaymentIntent | null
+          if (pi?.status === 'succeeded' || pi?.status === 'processing') {
+            // Paid, or being paid. It goes active on its own.
+            return respond({ alreadyActive: true, finishing: true, stripeStatus: existing.status })
+          }
+          if (pi?.client_secret &&
+              ['requires_payment_method', 'requires_confirmation', 'requires_action'].includes(pi.status)) {
+            // Still waiting for its first payment. Finish THIS one, rather than
+            // cancelling it and starting another.
+            return respond({
+              clientSecret:   pi.client_secret,
+              subscriptionId: existing.id,
+              customerId:     existingCustomer,
+              resumed:        true,
+            })
+          }
+          console.error('[stripe-payment] create_subscription: incomplete subscription in an unexpected state', {
+            subscriptionId: existing.id, paymentStatus: pi?.status ?? null,
+          })
+          return respond({
+            error: 'Your membership is part-way set up and we could not pick it up again. Nothing new has been '
+              + 'charged — please email support@guineapigapp.co.uk.',
+          }, 409)
+        }
+
+        case 'unpaid':
+          // Stripe has given up collecting it: over by Stripe's own account.
+          // Cancel so it cannot linger, then create a fresh one below.
+          try {
+            await stripe.subscriptions.cancel(existing.id)
+          } catch (e) {
+            console.error('[stripe-payment] create_subscription could not cancel an unpaid subscription', e)
+            return respond({
+              error: 'We could not close your old membership with Stripe. Nothing has been charged — please try again.',
+            }, 503)
+          }
+          break
+
+        case 'canceled':
+        case 'incomplete_expired':
+          // Already over at Stripe. Nothing to cancel.
+          break
+
+        default:
+          // 'paused', or a status newer than this code. Not ours to replace.
+          console.error('[stripe-payment] create_subscription: stored subscription in unhandled state', {
+            subscriptionId: existing.id, status: existing.status,
+          })
+          return respond({
+            error: 'There is already a membership on this account that we cannot change here. Nothing has been '
+              + 'charged — please email support@guineapigapp.co.uk.',
+          }, 409)
+      }
+    }
+  }
+
   let customerId: string = existingRow?.stripe_customer_id ?? ''
 
   if (!customerId) {
@@ -175,12 +272,9 @@ async function createSubscription(userId: string, email: string) {
   // Resolve the £4.99/mo price (env-var'd real price id in live; safe find-or-create otherwise).
   const priceId = await resolveMonthlyPriceId()
 
-  // Cancel any existing incomplete subscription before creating a new one
-  if (existingRow?.stripe_subscription_id) {
-    try {
-      await stripe.subscriptions.cancel(existingRow.stripe_subscription_id)
-    } catch { /* ignore if already gone */ }
-  }
+  // (The unconditional cancel that stood here is gone. What replaced it runs
+  // above, before anything is created, and cancels only what Stripe says is
+  // over. Audit item 55.)
 
   const subscription = await stripe.subscriptions.create({
     customer:         customerId,

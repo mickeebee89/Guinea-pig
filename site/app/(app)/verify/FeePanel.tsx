@@ -1,16 +1,27 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { PayForm } from '@/components/PayForm'
 import { startFeePayment, confirmFeePayment } from './actions'
 
 /**
  * The £14.99 one-off fee, on the web.
  *
- * Deliberately the same shape as SubscribePanel: create the intent on mount,
- * mount PayForm, let the confirm step go and check. One flow to understand
- * rather than two that drift — audit item 48 is a catalogue of what happens
- * when a second copy is made.
+ * Deliberately the same shape as SubscribePanel: create the intent, mount
+ * PayForm, let the confirm step go and check. One flow to understand rather
+ * than two that drift — audit item 48 is a catalogue of what happens when a
+ * second copy is made.
+ *
+ * ⚠️ CHANGED 18 Sep 2026. This used to create the intent ON MOUNT. It now
+ * waits for the button, for the same reason as SubscribePanel: loading a page
+ * must never create anything at Stripe that moves money (audit item 55). A
+ * reload used to mint a fresh PaymentIntent every time.
+ *
+ * ⚠️ WHAT THIS DOES NOT FIX. create_verification_intent is unchanged: it
+ * checks only for a verification_payments row. Someone who paid and presses
+ * the button again before that row exists (the webhook or confirm has not
+ * landed yet) is still issued a new intent and shown "Pay £14.99". The button
+ * narrows that to a deliberate second press; it does not close it.
  *
  * ⚠️ CORRECTED 18 Sep 2026. This said a failed fee confirm "has no webhook
  * behind it, so its outcome is pending:false". It does now. Since 18 Sep
@@ -27,28 +38,40 @@ import { startFeePayment, confirmFeePayment } from './actions'
  */
 export function FeePanel() {
   const [state, setState] = useState<
+    | { kind: 'idle' }
     | { kind: 'loading' }
     | { kind: 'paid' }
     | { kind: 'ready'; clientSecret: string; paymentIntentId: string }
     | { kind: 'error'; error: string }
-  >({ kind: 'loading' })
+  >({ kind: 'idle' })
 
-  useEffect(() => {
-    let cancelled = false
-    startFeePayment()
-      .then(r => {
-        if (cancelled) return
-        if (!r.ok) return setState({ kind: 'error', error: r.error })
-        if (r.alreadyPaid) return setState({ kind: 'paid' })
-        setState({ kind: 'ready', clientSecret: r.clientSecret, paymentIntentId: r.paymentIntentId })
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setState({ kind: 'error', error: 'We could not start the payment. Nothing has been charged.' })
-        }
-      })
-    return () => { cancelled = true }
-  }, [])
+  async function start() {
+    setState({ kind: 'loading' })
+    try {
+      const r = await startFeePayment()
+      if (!r.ok) return setState({ kind: 'error', error: r.error })
+      if (r.alreadyPaid) return setState({ kind: 'paid' })
+      setState({ kind: 'ready', clientSecret: r.clientSecret, paymentIntentId: r.paymentIntentId })
+    } catch {
+      setState({ kind: 'error', error: 'We could not start the payment. Nothing has been charged.' })
+    }
+  }
+
+  if (state.kind === 'idle') {
+    return (
+      <div>
+        <button
+          onClick={start}
+          className="rounded-lg bg-rose px-4 py-2 text-sm font-medium text-white"
+        >
+          Continue to payment
+        </button>
+        <p className="mt-2 text-xs text-muted">
+          You’ll enter your card on the next step. Nothing is charged until you press Pay.
+        </p>
+      </div>
+    )
+  }
 
   if (state.kind === 'loading') {
     return <p className="text-sm text-muted">Setting up the payment form…</p>

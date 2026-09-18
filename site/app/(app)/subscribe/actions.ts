@@ -21,7 +21,12 @@ import type { ConfirmOutcome } from '@/components/PayForm'
  */
 
 export type StartResult =
-  | { ok: true; alreadyActive: true }
+  /**
+   * `finishing` is true when the answer came from STRIPE rather than our row:
+   * Stripe holds a live or paid subscription that our record has not caught
+   * up with yet (audit item 55). False when it is our own 'active' row.
+   */
+  | { ok: true; alreadyActive: true; finishing: boolean }
   | { ok: true; alreadyActive: false; clientSecret: string; subscriptionId: string }
   | { ok: false; error: string }
 
@@ -66,7 +71,7 @@ export async function startSubscription(): Promise<StartResult> {
   // Handled rather than trusted: this does not claim they are subscribed, it
   // reports that the server thinks a subscription already exists and sends
   // them to the gate, which applies the real rule.
-  if (data?.alreadyActive) return { ok: true, alreadyActive: true }
+  if (data?.alreadyActive) return { ok: true, alreadyActive: true, finishing: data.finishing === true }
 
   if (!data?.clientSecret || !data?.subscriptionId) {
     console.error('[subscribe] create_subscription returned no clientSecret', data)
