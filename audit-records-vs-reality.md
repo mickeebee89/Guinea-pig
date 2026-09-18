@@ -2074,6 +2074,14 @@ FOR — AND A FAILED FIRST PAYMENT GRANTS ACCESS AND SENDS A NOTICE THAT IS FALS
 FOUND 18 Sep 2026 BY READING. NOTHING OBSERVED; THE SQL THAT SETTLES THE
 INFERRED PARTS IS AT THE END.**
 
+> **⚠️ CORRECTED 18 Sep 2026: THERE WAS NO FAILED PAYMENT.** This title, and
+> every description in this item of the 22:24:26 (23:24 BST)
+> `invoice.payment_failed` as *"a failed first payment"*, *"a failed
+> attempt"* or *"a failure"*, is wrong. That includes Claude's sections 4 and 5
+> and the 18 Sep addendum, and the handover's *"two minutes before the
+> successful payment"*. **The payment was waiting on 3-D Secure.** See the
+> payload addendum at the end of this item. The text is left as written.
+
 **Plainly:** after paying £4.99, someone who reloads `/subscribe` before our
 record says "active" gets a fresh "Pay £4.99 and join". Loading that page
 immediately cancels, at Stripe, the subscription they just paid for. And when a
@@ -2170,6 +2178,10 @@ exactly when something has already gone wrong:**
   access gone.
 
 **── 5. THE 23:24:28 PAYMENT FAILURE ────────────────────────────────────────**
+
+> **⚠️ CORRECTED 18 Sep 2026: NOT A PAYMENT FAILURE.** The event was Stripe
+> asking for 3-D Secure (payload addendum below). What this section says the
+> handler did is still right. What it says the event *was* is not.
 
 VERIFIED from code. Whether it happened on 14 Sep is INFERRED until the queries
 below.
@@ -2295,6 +2307,64 @@ asks for 3-D Secure** is let in before paying and told their card was declined
 — most UK cards. Not established. One sample fits it. Stripe's
 `invoice.payment_failed` payload for this invoice would settle it: look at the
 PaymentIntent's status, `requires_action` versus a decline code.
+
+**── 18 Sep 2026: THE PAYLOAD. `invoice.payment_failed` ON A FIRST INVOICE IS
+3-D SECURE, NOT A DECLINE ──**
+
+**VERIFIED from the pasted live payload** of the 14 Sep 23:24:26 BST event,
+invoice `in_1UFiGI2NT7OAGIRcetxUB109`:
+
+    "billing_reason": "subscription_create"
+    "attempt_count": 0
+    "attempted": true
+    "status": "open"
+    "amount_paid": 0
+    "amount_remaining": 499
+    "next_payment_attempt": null
+    "last_finalization_error": null
+    "default_payment_method": null
+    "payment_settings.payment_method_types": ["card"]
+
+There is no `requires_action` field anywhere in it. `attempt_count` is 0.
+Stripe marks the invoice `attempted`, but no charge against a card was counted,
+and `next_payment_attempt` is null because nothing is waiting to be retried.
+
+**VERIFIED from the Stripe events list for the same subscription.** Three
+events fired together at 23:24:25 BST:
+* `payment_intent.requires_action`: *"The payment pi_3UFiGI2NT7OAGIRc0l4Jh97O
+  for GBP 4.99 requires you to take action in order to complete the payment"*;
+* `invoice.payment_failed`;
+* `invoice.payment_action_required`: *"payment for an invoice for GBP 4.99
+  requires a verification step by the user"*.
+
+**So `invoice.payment_failed` on a first invoice means "waiting on 3-D
+Secure".** It does not mean a card was declined. The live endpoint does not
+subscribe to `invoice.payment_action_required`, the event that says so
+plainly. It receives only the one whose name says the opposite.
+
+**The consequence.** VERIFIED for this sample. INFERRED for everyone else, from
+the mechanism: these three events are Stripe's standard path for a first
+payment that needs authentication. **Every sign-up that goes through 3-D Secure
+— in the UK, most of them — was, until this fix:**
+* **granted membership before paying.** The handler wrote `past_due`, and both
+  gates treat that as a live membership: `site/lib/verification.ts:98` and
+  `mobile/src/lib/verification.ts:67`. The grant lasted as long as the
+  3-D Secure step took: 53 s here. `users.subscription_status` read `active`
+  for the same period (`0024:194`).
+* **told their card was declined**, by the notification recorded above, which
+  says nothing true about this situation except *"You haven't been charged
+  twice"*.
+
+The earlier addendum's *"INFERRED, AND WORSE IF TRUE"* paragraph is settled
+**true** for this sample by this payload.
+
+**The fix (18 Sep, the commit after this one).** `stripe-webhook`'s
+`invoice.payment_failed` handler now treats `billing_reason` of
+`subscription_create` with `attempt_count` 0 as not a failure. It records the
+event `ignored` with a 200, writes no subscription status, and sends no
+notification. The genuine-failure path, and its notification copy, are
+unchanged. `mapStatus`, the `past_due` → `active` mapping in `0024`, and
+`stripe-payment` are not touched. They are the next piece of work.
 
 **54. DELETING A SUBSCRIBER'S ACCOUNT PROBABLY LEAVES A FAILED WEBHOOK EVENT
 AND DAYS OF STRIPE RETRIES — LOGGED 18 Sep 2026. MOSTLY INFERRED; THE SQL THAT
