@@ -12,10 +12,18 @@ import { startFeePayment, confirmFeePayment } from './actions'
  * rather than two that drift — audit item 48 is a catalogue of what happens
  * when a second copy is made.
  *
- * The difference that matters is inside confirmFeePayment, not here: a failed
- * fee confirm has no webhook behind it, so its outcome is pending:false and the
- * retry re-confirms the same paymentIntentId, which the edge function treats as
- * idempotent. Nobody is charged twice by trying again.
+ * ⚠️ CORRECTED 18 Sep 2026. This said a failed fee confirm "has no webhook
+ * behind it, so its outcome is pending:false". It does now. Since 18 Sep
+ * stripe-webhook records the fee from payment_intent.succeeded (audit item 53),
+ * so a stylist who closes the tab after paying comes back to "Already paid"
+ * below, once the webhook has landed, instead of a second "Pay £14.99".
+ *
+ * Still true: re-confirming the same paymentIntentId is idempotent (23505 is
+ * benign), so nobody is charged twice by trying again. Not yet caught up:
+ * confirmFeePayment still returns pending:false. See the fee section of
+ * verify/actions.ts for what that means for the person, and why it is left.
+ * Migration 0040:31-32 still carries the old "inserted only by" claim. It is
+ * checksummed and cannot be edited, so it is recorded as stale, not removed.
  */
 export function FeePanel() {
   const [state, setState] = useState<

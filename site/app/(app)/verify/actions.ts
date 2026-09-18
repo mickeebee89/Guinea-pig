@@ -142,12 +142,31 @@ export async function submitSelfie(form: FormData): Promise<VerifyResult> {
  * customer.subscription.created and writes the row on its own, so the honest
  * instruction is "don't pay again, it is finishing".
  *
- * Nothing does that here. `verification_payments` is written ONLY by
- * confirm_verification — no webhook event touches it — so a failed confirm
- * stays failed until someone acts. Its outcome is pending:false, and the
- * retry below is safe: the edge function treats a duplicate payment intent
- * (23505) as benign success, so re-confirming the SAME paymentIntentId
- * records the payment without charging anything a second time.
+ * ⚠️ CORRECTED 18 Sep 2026. This paragraph said: "Nothing does that here.
+ * `verification_payments` is written ONLY by confirm_verification — no webhook
+ * event touches it — so a failed confirm stays failed until someone acts."
+ *
+ * True when written, false since 18 Sep. stripe-webhook now handles
+ * payment_intent.succeeded for intents whose metadata says type
+ * 'verification', and writes the same four-column row confirm_verification
+ * does (audit item 53). So the fee now has what the membership has: a failed
+ * or abandoned confirm is finished by the webhook. Whichever of the two lands
+ * second hits verification_payments_stripe_payment_id_key, and the edge
+ * function treats that 23505 as benign success. So re-confirming the SAME
+ * paymentIntentId is still safe and still charges nothing a second time.
+ *
+ * ⚠️ THE CODE BELOW HAS NOT CAUGHT UP. confirmFeePayment still returns
+ * pending:false. By PayForm's own contract (components/PayForm.tsx:39-41) that
+ * means "will not finish on its own", which is no longer true. The person is
+ * told "Payment taken, not set up" when the webhook will in fact finish it.
+ * It is still safe, because both messages say do not pay again, but it is more
+ * alarming than the truth. Changing it is a code decision, not made here.
+ *
+ * THE OLD CLAIM IS STILL IN ONE PLACE, AND IT STAYS. Migration 0040:31-32
+ * says the fee is "inserted only by stripe-payment/index.ts:231". That is
+ * above 0040's MIGRATION FOOTER, so the checksum covers it. Editing it would
+ * make the ledger read DRIFTED. The sentence is left where it is and recorded
+ * as stale (audit item 47's pattern), rather than pretending it is gone.
  * ─────────────────────────────────────────────────────────────────────────── */
 
 export type FeeStartResult =

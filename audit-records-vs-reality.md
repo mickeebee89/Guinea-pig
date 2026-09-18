@@ -2215,6 +2215,45 @@ It is **not live until it is deployed and the event is added to the Stripe
 endpoint.** Until both are done, the sentence above — *"The webhook handles no
 one-off payment event"* — is still true of production.
 
+**── 18 Sep 2026: THE WEBHOOK FIX IS LIVE ──**
+
+VERIFIED from Micky's report, 18 Sep:
+* `npx supabase functions deploy stripe-webhook --no-verify-jwt` succeeded
+  at about 12:15.
+* `payment_intent.succeeded` is subscribed on the live endpoint, which now
+  listens to **6** events.
+* The deployed file was read back, and the `payment_intent.succeeded` case is
+  in what shipped (`37a6b08`).
+
+**So the sentence above — "until both are done, 'The webhook handles no
+one-off payment event' is still true of production" — has been false since 18
+Sep.** It is kept as written. Not yet observed: no real `payment_intent.succeeded`
+has reached the new handler. The first will be the first live £14.99 ever paid.
+
+**── WHAT THE LIVE PAYLOAD SAYS. VERIFIED FROM PASTED OUTPUT, 18 Sep ──**
+
+* **The endpoint's payload style is Snapshot, on API version
+  `2026-05-27.dahlia`.**
+* **The 14 Sep `customer.subscription.updated` payload has
+  `current_period_end` at the top level of the subscription object**: value
+  `1792016526`, which is 14 Oct 2026. So the subscription handlers' direct reads
+  of `sub.current_period_start` and `sub.current_period_end`
+  (`stripe-webhook/index.ts`, the `customer.subscription.*` case) are correct
+  for this endpoint. That holds even though `invoice.subscription` did move in
+  2025, which is what the `subscriptionIdFrom` shim handles.
+* **`public.subscriptions` holds 13 rows.** Only the oldest, from 20 Jun 2026,
+  has null period dates, and every row since has both set. One row is
+  `active`, dated 14 Sep 2026.
+
+**⚠️ WITHDRAWN: AN INFERENCE OF CLAUDE'S, MADE IN CHAT ON 18 Sep AND NEVER
+WRITTEN HERE.** The final audit report said that from Stripe's 2025 API
+versions onward, the period dates moved off the subscription object. It said
+`customer.subscription.*` events on a newer endpoint *"would write status but
+keep the old dates."* **The live payload shows the opposite for this
+endpoint.** It was labelled inferred and low risk, and it was never checked
+against a real payload until now. It is recorded here so it is not repeated as
+a finding.
+
 **52. WHAT THE LIVE DATABASE SAYS ABOUT ADMIN, PUBLISHING, ROLES AND VERCEL —
 READ 15–18 Sep 2026. VERIFIED FROM OUTPUT MICKY PASTED, UNLESS MARKED.**
 
@@ -2808,6 +2847,33 @@ subscription surface — where someone will otherwise be tempted to wire it up.
 **47. A JUSTIFICATION THAT OUTLIVED ITS REASON — "THERE IS NO WEBHOOK" SURVIVED
 IN NINE PLACES FOR THREE WEEKS AFTER THE WEBHOOK WENT LIVE. FOUND AND CORRECTED
 14 Sep 2026.**
+
+> **── 18 Sep 2026: THE SAME PATTERN, FOR THE FEE — AND ONE COPY THAT CANNOT BE
+> CORRECTED ──**
+>
+> The webhook began recording the £14.99 fee on 18 Sep (item 53). That made a
+> second family of sentences false: *"`verification_payments` is written ONLY
+> by confirm_verification — no webhook event touches it"*.
+>
+> * **Corrected, with the original quoted:** `site/app/(app)/verify/actions.ts`,
+>   the fee section's header, and `site/app/(app)/verify/FeePanel.tsx`, its
+>   header comment.
+> * **⚠️ NOT CORRECTABLE: `supabase/migrations/0040_guard_self_writable_gates.sql:31-32`**
+>   says the fee is *"inserted only by stripe-payment/index.ts:231 under the
+>   service role"*. That is above 0040's `MIGRATION FOOTER` (line 487), so the
+>   checksum covers it. Editing it would make the ledger read DRIFTED. **It
+>   stays, and this is where the record says so.** Anyone reading 0040 should
+>   treat those two lines as true on 10 Sep and false from 18 Sep.
+>
+> **And this time the stale reason is still driving code.** `confirmFeePayment`
+> returns `pending: false`, and that choice was argued from the "no webhook"
+> premise. By `PayForm`'s own contract (`site/components/PayForm.tsx:39-41`),
+> `false` means "will not finish on its own", which is now untrue. A failed
+> confirm tells the person "Payment taken, not set up" when the webhook will in
+> fact finish it. It is safe, because both messages say do not pay again, but
+> it is more alarming than the truth. **This is item 47's sharper half, again:
+> not a stale comment beside correct code, but code whose reason has gone.**
+> Left as it is, on instruction. It needs a decision, not a comment.
 
 **What it is, and it is a new shape for this file.** Not a stale record of a
 FACT — a stale record of a REASON. The code was right; the reasoning printed
