@@ -2254,6 +2254,19 @@ endpoint.** It was labelled inferred and low risk, and it was never checked
 against a real payload until now. It is recorded here so it is not repeated as
 a finding.
 
+> **SOURCE, CORRECTED 18 Sep 2026.** The heading above names Claude alone, and
+> that is incomplete. **Two places held this inference, and neither had checked
+> it against a real payload:**
+> * **Micky's other working chat**, which reports that the inference was its
+>   own.
+> * **This audit session's final report, 18 Sep**, which states it in these
+>   words: *"from Stripe's 2025 API versions onward, the subscription's period
+>   start and end dates moved off the main subscription object"*.
+>
+> Recorded with both sources, rather than either alone, so neither is later
+> read as the only one to have got it wrong. The live payload settled it for
+> both.
+
 **52. WHAT THE LIVE DATABASE SAYS ABOUT ADMIN, PUBLISHING, ROLES AND VERCEL —
 READ 15–18 Sep 2026. VERIFIED FROM OUTPUT MICKY PASTED, UNLESS MARKED.**
 
