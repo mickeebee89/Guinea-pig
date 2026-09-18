@@ -2019,6 +2019,211 @@ was the reason for three workflows rather than one.
 It remains a signal and not a gate. Everything above about branch protection
 still stands.
 
+**50. THE `public.users` INSERT PATH IS UNGUARDED, AND NOTHING CAN REACH IT
+TODAY — 0 EXPOSED ACCOUNTS ON 15 Sep 2026. OPEN AS A CONDITION, NOT A HOLE.
+RECORDED 18 Sep 2026.**
+
+Evidence below is VERIFIED from queries Micky ran against the live database on
+15 Sep and pasted, or from files read in the repo (cited `file:line`). Anything
+else is marked INFERRED.
+
+**── ⚠️ SUPERSEDED: THE FIRST CONCLUSION, KEPT VISIBLE ─────────────────────**
+
+The first reading of the policy and trigger evidence, 15 Sep, concluded:
+
+> *"an authenticated user whose public.users row does not yet exist can insert it
+> with any guarded column set, and the 0040 guard does not fire. Whether a row
+> always exists before the user can reach PostgREST is unestablished."*
+
+**The mechanism in that sentence is right. The exposure it implied is not.** It
+was superseded the same day by the `auth.users` trigger evidence below: the
+profile row is created in the same transaction as the auth user, so no session
+exists before the row does. The sentence is kept because the mechanism it names
+is still true and is what item 50 is about.
+
+**── THE EVIDENCE (VERIFIED, pasted output, 15 Sep) ───────────────────────**
+
+`public.users`:
+* INSERT policy `users can insert own row`, `authenticated`, WITH CHECK
+  `(auth.uid() = id)` and nothing else. Also in
+  `supabase/schema-snapshot-2026-08-08-policies.sql:230`.
+* UPDATE policy `users can update own row`, `(auth.uid() = id)`.
+* **No DELETE policy.**
+* Table grants: `anon` and `authenticated` both hold INSERT, UPDATE, DELETE,
+  SELECT, TRUNCATE, REFERENCES, TRIGGER.
+* Triggers: `trg_guard_users_protected_columns` **BEFORE UPDATE only**
+  (`0040:283-285`); `trg_unpublish_on_verification_lost` AFTER UPDATE;
+  `trg_user_verified_maybe_publish` AFTER UPDATE. **No INSERT trigger.**
+
+`verification_requests`:
+* `vr_user_policy` — ALL, `authenticated`, `(auth.uid() = user_id)` on USING
+  and WITH CHECK.
+* Restrictive `vr_selfie_path_matches_user` (`0019:186-192`).
+* `trg_guard_verification_decision` BEFORE INSERT OR UPDATE (`0040:356-358`).
+  **No DELETE trigger.**
+
+`auth.users`:
+* `on_auth_user_created`, AFTER INSERT, enabled (`tgenabled O`), calls
+  `public.handle_new_auth_user()`, SECURITY DEFINER, `search_path public`.
+* The function validates role (model | provider) and DOB (18+), inserts
+  `public.users` with `id, email, role, first_name, last_name, last_initial,
+  region, date_of_birth, terms_accepted_at, is_founding_provider`
+  `on conflict (id) do nothing`, then a `providers` row for providers, then a
+  `founding_providers` row on a grant — granted when role is provider and
+  `raw_user_meta_data->>'signup_source'` is any non-empty string, under an
+  advisory lock, while `count(founding_providers) < founding_provider_cap`.
+
+Counts: auth users without a `public.users` row = **0**. `is_founding_provider`
+true = 1. `founding_providers` rows = 1. Founding flag without a slot row = 0.
+`founding_provider_cap` = 200.
+
+**── THE CONCLUSION, AS WIDE AS THAT EVIDENCE ─────────────────────────────**
+
+The INSERT policy checks only `auth.uid() = id`, and `0040`'s guard is
+UPDATE-only, so a `public.users` INSERT carrying `is_verified`,
+`subscription_status`, `provider_fee_waived`, `subscription_waived`,
+`is_founding_provider`, `fraud_flagged` or `role` is refused by nothing. **But
+the row is created inside the signup transaction**, so the only accounts that
+could use it are auth users with no profile row — **0 of them on 15 Sep.**
+
+**It reopens the moment any path deletes `public.users` and leaves
+`auth.users`.** Three do; see question 3. The sample is one count on one day.
+
+**── ⚠️ CORRECTION: "IN NO FILE UNDER supabase/" IS HALF WRONG ────────────**
+
+The 15 Sep evidence stated `handle_new_auth_user` *"exists in the live database
+and in no file under supabase/"*. Claude had said the same thing a turn earlier
+about the function's absence. **Both wrong, and the second was Claude's.**
+
+* **The FUNCTION is in version control.** `0011_founding_provider_grant.sql:83-181`
+  defines exactly the body read from the live database: the role and DOB gates,
+  `pg_advisory_xact_lock(hashtext('founding_provider_grant'))` (`:134`), the cap
+  from settings (`:136-137`), `is_founding_provider` in the insert column list,
+  the `founding_providers` slot row (`:176`). `0002:96` defines the version it
+  replaced.
+* **The TRIGGER is not.** `on_auth_user_created` appears only in
+  `supabase/schema-snapshot-2026-08-08.sql:414-415`, which records state and is
+  not applied. No migration creates it. So the function is versioned and the
+  wiring that makes it run is not: drop the trigger and `0011` still reads as
+  applied, with a matching checksum, while creating no profile rows at all.
+* **It was noticed once and dropped.** `web-phase-1-handover.md:954` listed
+  `on_auth_user_created` under "Missing triggers". Nothing carried it forward.
+
+How Claude got it wrong: the searches were for `function public.is_admin` and
+for trigger declarations `on auth.users`. The definition is
+`create or replace function public.handle_new_auth_user()`, with the trigger
+declared nowhere in `migrations/`, so neither search could find it and the
+absence was reported as a fact. **The search was narrower than the claim**, the
+oldest pattern in this file.
+
+`is_admin()` is still not established either way. It was searched for by the
+same narrow pattern and should be re-checked before anyone repeats "not in any
+migration" about it.
+
+**── THE SIX QUESTIONS, FROM THE REPO ─────────────────────────────────────**
+
+**1. What assumes the trigger. VERIFIED, five places:** `mobile/notes.md:16`
+(*"the primary row creator"*); `mobile/src/screens/auth/SignupScreen.tsx:107`
+(its own checks are *"a BACKSTOP, not a replacement"*); `site/lib/signup.ts:6`
+(the metadata shape exists for it); `seed/teardown.mjs:261` (reasons about its
+`users_email_key` collision); `0003:14` (relies on its `on conflict (id) do
+nothing`).
+
+**2. `mobile/src/lib/ensureProfile.ts`. VERIFIED.**
+* Upserts (`:44-53`) `id, email, role, first_name, last_name, last_initial,
+  date_of_birth, region` with the user's own session, `onConflict: 'id'`,
+  `ignoreDuplicates: true`.
+* Runs on the first resolve after login.
+* **A second writer of the trigger's row, and it knows it:** `:41-43` names the
+  race and makes a trigger-created row a no-op. `:70-76` then UPDATEs
+  `date_of_birth` when null.
+* **The whole insert branch depends on the row NOT existing** (`:40`,
+  `if (!existingUser)`). Its header (`:11-16`) says why it was written: an auth
+  user who exists without a profile row. So the shipped client carries a live
+  path whose precondition is the state counted at 0.
+* **One guarded column is in it: `role`.** It writes `role: metaRole` from user
+  metadata, which the user controls, on the INSERT path the guard cannot see.
+  Today that branch only runs when the row is missing, so it reaches nobody.
+
+**3. Paths that leave auth.users with no public.users. VERIFIED, three:**
+* **`delete-account`, when the auth delete fails.** `delete_account_data` runs at
+  `supabase/functions/delete-account/index.ts:166` and deletes the profile row
+  (`supabase/account-deletion-fix.sql:349`). The auth delete is `:197`; on
+  failure `:201` returns *"Your data was removed but the account could not be
+  closed."* **The auth user is not banned and can still sign in** — with no
+  profile row, which is exactly the precondition above.
+* **`seed/teardown.mjs`, when the auth delete fails.** Deletes `public.users`
+  first (`:267`, checked), then the auth user (`:277`); on failure it bans the
+  account for `876000h` (`:288`). **Same state, deliberately defused.** Its own
+  comment (`:282-283`) is the reason item 50 matters: *"signing in grants the
+  `authenticated` role that RLS opens up."* Someone already reasoned about this
+  exact shape for seed accounts. `delete-account` did not get the same treatment.
+* **By hand.** `authenticated` has the DELETE grant but no DELETE policy, so RLS
+  refuses it. Service role and the SQL editor bypass both.
+
+The asymmetry underneath all three is on record at
+`schema-snapshot-2026-08-08.sql:78`: the trigger inserts into `public.users`,
+which has no FK back to `auth.users`, *"so deletion does NOT cascade the other
+way."*
+
+**4. `signup_source`. VERIFIED. Nothing checks it, and nothing could.**
+* Set only at `site/lib/signup.ts:88-89`: `input.source?.trim()`, then
+  `.slice(0, 120)`. Typed optional at `:38`.
+* The grant tests `nullif(btrim(coalesce(...signup_source, '')), '')`
+  (`0011:93`) and `v_role = 'provider' and v_source is not null` (`:133`).
+  **Any non-empty string counts as a referral.** No allowlist, no signature, no
+  referrer table.
+* Mobile sends none (`0011:39-42`; `HANDOVER.md:70`), so no app signup
+  qualifies.
+* **INFERRED:** anyone signing up as a stylist on the web with any value in
+  that field takes one of the 199 remaining slots. That is up to 199 × £14.99 =
+  £2,983 of fee, with the cap as the only limit. Not tested — testing it means a
+  real signup.
+
+**5. Can deleting your own verification_requests rows unlock an old approval?
+No. VERIFIED.**
+* A revoke is recorded in **`moderation_actions`** (`0027:241`:
+  `admin_id, target_user_id, action = 'revoke_verification', reason`).
+  `0040:228-230` reads its `created_at` through `max()`.
+* That table is **append-only**: `trg_lock_moderation BEFORE DELETE OR UPDATE`
+  (`schema-snapshot-2026-08-08.sql:440`), raising *"moderation_actions is
+  immutable"* (`account-deletion-fix.sql:250`). A member cannot remove it.
+* Deleting your own requests deletes your own **approval**, which is the other
+  half of the permit. That makes a claim harder, not easier.
+* A revoke already deletes them anyway (`0027:202`). `0040:213-216` says the
+  date check deliberately does not rely on that.
+
+**One unchecked column. An observation, not a finding:** the permit compares
+`coalesce(vr.reviewed_at, vr.created_at)`, and `created_at` is not among the
+columns `guard_verification_decision` checks (`0040:310-313` checks `status`,
+`reviewed_by`, `reviewed_by_source`, `reviewed_at`). A member can insert a
+pending row with a `created_at` they chose. That only matters if an approval
+can land with `reviewed_at` null. **Not established** — the read that would
+settle it (the admin approve path) was not done.
+
+**6. Does the insert guard permit an already-approved decision? No.
+VERIFIED.** `0040:308-320` raises `42501` on INSERT unless `status` is
+`'pending'` and `reviewed_by`, `reviewed_by_source` and `reviewed_at` are all
+null. It fires BEFORE INSERT OR UPDATE (`0040:356-358`). This is the interlock
+`0040`'s header calls load-bearing.
+
+**── WHAT IS OPEN ─────────────────────────────────────────────────────────**
+
+No fix written. On request, not by oversight.
+
+* The INSERT path has no guard. Safe today only because no qualifying account
+  exists.
+* `delete-account` can create a qualifying account and does not ban it.
+  `teardown.mjs` does.
+* `on_auth_user_created` is not in version control.
+* `signup_source` is an unauthenticated free-text field that grants a waived fee.
+* `created_at` on `verification_requests` is member-writable and read by a
+  permit.
+* `0040`'s own header (`:47-56`) already names the fix that closes the first
+  item as a side effect: the column-level GRANT. Because a GRANT covers INSERT
+  as well as UPDATE, that stopgap-to-real-fix path was always wider than the
+  trigger it replaces.
+
 **49. A DEFAULT NOBODY CHOSE, MEETING A FLOW WE DID — FOUND 14 Sep 2026,
 CLOSED THE SAME DAY BY TURNING THE DEFAULT OFF.**
 
