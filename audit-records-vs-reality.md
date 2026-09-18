@@ -2218,6 +2218,84 @@ Not established: whether this account had an older `subscriptions` row before
 23:22. If it did, the 23:22 page load cancelled that older subscription too.
 Harmless if it was already cancelled, because the error is swallowed.
 
+**── 18 Sep 2026: WHAT THE 14 Sep EVENTS ACTUALLY WROTE ──**
+
+VERIFIED from pasted output: Micky's queries of `stripe_webhook_events` and
+`notifications`. Database times are UTC. The 23:xx times in the table above
+were Stripe dashboard local time, BST, which is one hour ahead.
+
+| Received (UTC) | Event | Outcome | `detail` |
+|---|---|---|---|
+| 22:22:09.605 | `customer.subscription.created` | processed | `customer.subscription.created -> expired` |
+| 22:24:26.491 | `invoice.payment_failed` | processed | `payment failed -> past_due, access continues to 2026-10-14T22:22:06.000Z` |
+| 22:25:19.654 | `customer.subscription.updated` | processed | `customer.subscription.updated -> active` |
+| 22:25:19.676 | `invoice.payment_succeeded` | processed | `payment succeeded, renewed to 2026-10-14T22:22:06.000Z` |
+
+**Settled from this:**
+* Every status write in section 3 happened as the code predicts: `expired`,
+  then `past_due`, then `active`.
+* **An `incomplete` subscription does carry a period end.** The failure event
+  recorded `access continues to 2026-10-14`. So the `past_due` write did pass
+  the gate's fast path, and **a person who had not paid was a member for 53
+  seconds** (22:24:26 → 22:25:19). Section 5's INFERRED is now VERIFIED.
+
+**⚠️ CORRECTION to section 3: the order.** `customer.subscription.updated`
+arrived **22 milliseconds before** `invoice.payment_succeeded`, not after. The
+table above lists them the other way round, and is left as written. Stripe
+does not guarantee delivery order, and nothing here depends on it: both write
+`active`.
+
+**⚠️ ON THE WIDTH OF THE WINDOW — recorded as the evidence shows, which
+differs from how it was put when handed over.** The handover described the
+stored status as `expired` from 22:22:09 to 22:25:19, three minutes ten
+seconds. **The second row above contradicts that.** `invoice.payment_failed`
+wrote `past_due` at 22:24:26.491. So:
+
+* **`expired`: 22:22:09.605 → 22:24:26.491, 2 min 17 s.** This was before any
+  payment. A reload here would have cancelled a subscription that had not been
+  paid for. No money lost, but the person would lose the payment form they had
+  open.
+* **`past_due`: 22:24:26.491 → 22:25:19.654, 53 s.** This shields the page
+  (`site/lib/verification.ts:98`). A reload shows *"You're already a member"*
+  to someone who has not paid.
+* **`active` from 22:25:19.654.**
+
+**So section 4's "in this sample there was none" stands.** The money was taken
+while `past_due` shielded the page. What the sample does **not** measure is
+the ordinary case: a card that needs no 3-D Secure step and succeeds first
+time. There the status goes straight from `expired` to `active`, and the
+dangerous window is however long the first `active` write takes. No sample of
+that exists yet.
+
+**The notification. VERIFIED: the only `payment_failed` row that exists,**
+created 22:24:27.767, on a FIRST payment:
+
+> **We couldn't take your £4.99 payment**
+> Your card was declined. Your membership stays active until 14/10/2026. Stripe
+> will try again over the next few days — if you've got a new card, update it
+> and nothing else is needed. You haven't been charged twice.
+> (ref in_1UFiGI2NT7OAGIRcetxUB109)
+
+**Three of its four claims are false for a first payment:**
+1. *"Your card was declined"*: the same card was taken 53 s later.
+2. *"Your membership stays active until 14/10/2026"*: there was no membership
+   to stay active.
+3. *"Stripe will try again … update it and nothing else is needed"*: Stripe
+   does not retry a first payment by itself (INFERRED), and updating a card
+   does not complete it.
+
+The fourth, *"You haven't been charged twice"*, is true.
+
+**⚠️ INFERRED, AND WORSE IF TRUE: THIS MAY BE EVERY 3-D SECURE SIGN-UP.** A
+failure at 22:24:26 followed by success on the same invoice 53 s later, with
+no card change recorded, is the shape Stripe produces when a first payment
+needs 3-D Secure. The attempt is recorded as failed while it waits for the
+bank's challenge. If that is what happened, then **every new member whose card
+asks for 3-D Secure** is let in before paying and told their card was declined
+— most UK cards. Not established. One sample fits it. Stripe's
+`invoice.payment_failed` payload for this invoice would settle it: look at the
+PaymentIntent's status, `requires_action` versus a decline code.
+
 **54. DELETING A SUBSCRIBER'S ACCOUNT PROBABLY LEAVES A FAILED WEBHOOK EVENT
 AND DAYS OF STRIPE RETRIES — LOGGED 18 Sep 2026. MOSTLY INFERRED; THE SQL THAT
 SETTLES IT IS BELOW.**
