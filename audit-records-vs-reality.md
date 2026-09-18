@@ -2153,6 +2153,68 @@ paymentIntentId is treated as idempotent."* The mechanism is right. The
 conclusion is wrong. **A person who comes back never re-confirms the same id —
 they are issued a new one.**
 
+**── 18 Sep 2026: THE CONSTRAINT, THE DEFAULTS, AND STRIPE'S OWN COUNT ──**
+
+VERIFIED from pasted output: Micky's live queries and the Stripe live dashboard,
+18 Sep.
+
+**`public.verification_payments` constraints:** PRIMARY KEY (`id`); **UNIQUE
+(`stripe_payment_id`), named `verification_payments_stripe_payment_id_key`**;
+FOREIGN KEY (`user_id`) REFERENCES `users(id)` ON DELETE CASCADE; CHECK
+`selfie_status in ('pending','passed','failed','locked','refunded')`.
+**Indexes:** only the two unique indexes behind the primary key and that
+constraint. **There is no index on `user_id`.** Every one of the six
+existence checks listed on 18 Sep filters on `user_id`, so each is a full scan.
+INFERRED impact: nothing at 3 rows.
+
+**Column defaults:** `id gen_random_uuid()`, `currency_code 'GBP'`,
+`selfie_status 'pending'`, `retry_count 0`, `created_at now()`.
+`selfie_checked_at`, `payment_captured_at` and `locked_until` are nullable with
+no default. `user_id`, `stripe_payment_id` and `amount` are NOT NULL with no
+default.
+
+**What that settles:**
+* **The 23505 duplicate path is genuinely harmless.** The unique constraint
+  exists live. Step 1 of the fix plan is already satisfied, and no migration is
+  needed.
+* **The foreign key points at `public.users`, not `auth.users`.** So a user id
+  whose profile row has gone fails with 23503. That matters for any writer that
+  learns the user id from somewhere other than a session, and the webhook will
+  be one.
+* **`supabase/functions/stripe-payment/db-setup.sql` is a fossil, not the
+  schema.** It is the repo's only definition of this table, and it disagrees
+  with the live table on nearly everything. It declares
+  `stripe_payment_intent_id text not null unique`, a column called `currency`,
+  and a foreign key to `auth.users` (`:12-19`). Live has `stripe_payment_id`,
+  `currency_code`, a foreign key to `public.users`, and five columns the file
+  never mentions. No migration defines the table. `mobile/notes.md:126` had the
+  column names right.
+
+**Stripe, live mode, every £14.99 payment ever:** exactly **3**, all
+**Incomplete**, none captured, none refunded. Two are dated 19 Aug 2026 18:59,
+one 14 Sep 2026 23:46.
+
+**So no live £14.99 has ever been paid.** Nobody has lost money to this gap, and
+no back-fill or repair of existing users is needed. "0 known instances" above is
+now 0 **verified**, against Stripe's complete list rather than an absence of
+looking.
+
+INFERRED: the 14 Sep intent is from the web fee form being checked the night it
+shipped (`4c97f11`, 14 Sep 23:13). The 19 Aug pair are from mobile. The three
+13 Jul rows in our table predate live mode, as already recorded.
+
+**A refund state was designed and never built.** `selfie_status` permits
+`'refunded'`, and nothing anywhere sets it. The same is true of every other
+non-default value in that column, and of `payment_captured_at`,
+`selfie_checked_at`, `retry_count` and `locked_until`. That was VERIFIED by the
+18 Sep search of every `.ts`, `.tsx`, `.mjs`, `.js`, `.sql` and `.md` file.
+
+**The fix:** the webhook handles `payment_intent.succeeded`, as a backstop to
+`confirm_verification` (written 18 Sep, see the commit that follows this one).
+It is **not live until it is deployed and the event is added to the Stripe
+endpoint.** Until both are done, the sentence above — *"The webhook handles no
+one-off payment event"* — is still true of production.
+
 **52. WHAT THE LIVE DATABASE SAYS ABOUT ADMIN, PUBLISHING, ROLES AND VERCEL —
 READ 15–18 Sep 2026. VERIFIED FROM OUTPUT MICKY PASTED, UNLESS MARKED.**
 
