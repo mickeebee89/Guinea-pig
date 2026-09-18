@@ -2555,6 +2555,16 @@ offered Card only. Nobody enabled any of them. Stripe's dashboard defaults them
 on for one-off payments, and Elements renders whatever the account permits; a
 recurring mandate supports fewer, which is why the two forms differed.
 
+> **⚠️ CORRECTED 18 Sep 2026 — the reason the two forms differed was wrong.**
+> It was not that a recurring mandate supports fewer methods.
+> `create_subscription` sets `payment_settings.payment_method_types: ['card']`
+> explicitly (`supabase/functions/stripe-payment/index.ts:190`), while
+> `create_verification_intent` sets `automatic_payment_methods: { enabled: true }`
+> (`:112`), which hands the choice to the dashboard. **So the subscription was
+> card-only because the code said so; the fee followed the dashboard default
+> because the code said that.** The finding stands. The explanation was an
+> inference, written before either line was read.
+
 **So buy-now-pay-later on a verification fee was live for a few hours**, and a
 stylist could have entered a BNPL agreement with a third party over £14.99.
 
