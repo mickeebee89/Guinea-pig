@@ -2019,6 +2019,304 @@ was the reason for three workflows rather than one.
 It remains a signal and not a gate. Everything above about branch protection
 still stands.
 
+**54. DELETING A SUBSCRIBER'S ACCOUNT PROBABLY LEAVES A FAILED WEBHOOK EVENT
+AND DAYS OF STRIPE RETRIES — LOGGED 18 Sep 2026. MOSTLY INFERRED; THE SQL THAT
+SETTLES IT IS BELOW.**
+
+**VERIFIED, from the code:**
+* `delete-account` cancels the Stripe subscription **immediately**
+  (`supabase/functions/delete-account/index.ts:139-161`,
+  `stripe.subscriptions.cancel`), and only after that runs
+  `delete_account_data` (`:166`). That deletes `public.users`
+  (`supabase/account-deletion-fix.sql:349`), and its comment says the delete
+  cascades to `subscriptions` (`:346-348`). The Stripe customer is not deleted,
+  and nothing in that file deletes it.
+* When the webhook gets a subscription event for a customer it has no row for,
+  `resolveUserId` falls back to the customer's `metadata.user_id`
+  (`supabase/functions/stripe-webhook/index.ts:93-110`). That metadata survives,
+  so it returns the deleted user's id. `writeState` then calls
+  `apply_subscription_state` for that id, and it **throws** on any error
+  (`:151`).
+* A handler that throws records `'failed'` and returns 500 (`:436-445`). A
+  redelivery of a `'failed'` event runs again rather than short-circuiting
+  (`:289-294`).
+
+**INFERRED — two steps that were not checked:**
+1. That Stripe's `customer.subscription.deleted` usually arrives **after**
+   `delete_account_data` commits. It is sent asynchronously, and the
+   database work starts straight after the cancel call.
+2. That `subscriptions.user_id` has a foreign key to `public.users`. No FK
+   definition for either money table was found anywhere in the repo. The
+   cascade comment implies one.
+
+**If both hold:** the upsert fails with 23503, and every subscriber who deletes
+their account leaves a `'failed'` event that Stripe retries for days. That shows
+as a failure on the Revenue panel's `failures_7d`, which makes real failures
+harder to spot. **No money moves** — the subscription is already cancelled.
+
+**The case where money does move:** when the Stripe cancel fails
+(`delete-account/index.ts:145-159`), the account is still deleted. Stripe keeps
+billing, and every renewal fails the same way in the webhook. The only record
+is one `billing_orphan_on_delete` row in `admin_audit_log`, and nothing watches
+for it.
+
+`seed/teardown.mjs:243` deletes `subscriptions` rows directly, with no Stripe
+call. That is fine for seed accounts, which should have no live Stripe
+subscription. Not checked.
+
+**53. A STYLIST WHO PAYS £14.99 AND CLOSES THE TAB CAN BE CHARGED AGAIN —
+FOUND 18 Sep 2026 BY READING. VERIFIED FROM CODE, NOT OBSERVED. NOT TESTED:
+TESTING IT MEANS SPENDING REAL MONEY.**
+
+**Plainly:** if someone pays the verification fee, passes the bank's 3-D Secure
+check, and the tab closes before our server has recorded the payment, they come
+back to a fresh "Pay £14.99" button. Nothing tells them they already paid.
+
+**The mechanism:**
+* `create_verification_intent` checks for an existing payment only by looking
+  for a `verification_payments` row
+  (`supabase/functions/stripe-payment/index.ts:103-105`). Otherwise it
+  **always creates a new PaymentIntent** (`:107-113`).
+* That row is written by `confirm_verification` and nothing else (`:215-248`).
+  It only runs when the browser calls it after payment.
+* The webhook handles no one-off payment event. It handles
+  `customer.subscription.*` and `invoice.payment_*` (`stripe-webhook/index.ts:312-431`).
+  A fee has no invoice, and anything else is filed `'ignored'` (`:433-434`).
+* The retry that would record the first payment safely — re-confirming the
+  **same** `paymentIntentId`, where the 23505 path turns a duplicate into a
+  benign success — needs that id. It lived only in the closed tab's React state
+  (`site/app/(app)/verify/FeePanel.tsx:21-35`).
+
+**Also:** the first payment is then recorded only in Stripe. The admin Revenue
+figures read Stripe charges directly (`stripe-payment/index.ts:390-431`), so
+Revenue counts it while `verification_payments` does not. The two disagree by
+exactly the payments this item is about.
+
+**Not findable from our tables, by construction.** It is findable from Stripe's
+side. Every fee intent carries `metadata: { user_id, type: 'verification' }`
+(`:111`), so "succeeded fee intents with no matching row" is a Stripe query.
+No such check exists. **0 known instances.** The sample is: nobody has looked.
+
+**Correction to the 15 Sep handoff**, which was chat and is not in this file:
+*"The fee retry is safe if the person comes back: re-confirming the same
+paymentIntentId is treated as idempotent."* The mechanism is right. The
+conclusion is wrong. **A person who comes back never re-confirms the same id —
+they are issued a new one.**
+
+**52. WHAT THE LIVE DATABASE SAYS ABOUT ADMIN, PUBLISHING, ROLES AND VERCEL —
+READ 15–18 Sep 2026. VERIFIED FROM OUTPUT MICKY PASTED, UNLESS MARKED.**
+
+**`is_admin()`, live:**
+
+    CREATE OR REPLACE FUNCTION public.is_admin() RETURNS boolean LANGUAGE sql
+    STABLE SECURITY DEFINER SET search_path TO 'public' AS $function$
+    select exists (select 1 from public.admins where user_id = auth.uid());
+    $function$
+
+**`public.admins`, live:** RLS enabled, not forced. One policy, `admins_read`:
+SELECT, `authenticated`, `using is_admin()`, no WITH CHECK. **No INSERT, UPDATE
+or DELETE policy.** `anon` and `authenticated` hold every table privilege, and
+there are no triggers. Two rows: `admin@guineapigapp.co.uk` (`public.users.role
+= 'model'`) and `micky.buckfield@gmail.com` (`role = 'provider'`).
+
+A scan of every non-system function whose source mentions `admins` found one
+besides `is_admin()`: `admin_act_on_report`, SECURITY DEFINER. It calls
+`is_admin()` at its line 14 and only reads. **No function grants admin.** Admin
+can only be granted by the service role or the SQL editor.
+
+**So the thing `is_admin()` reads cannot be written by an end user.** That
+answers §4's question. It also has the shape `0040:458-464` warned about on the
+money tables: it is **protected by omission**. The grants are wide open, and
+the only thing refusing a write is the absence of a policy that allows one.
+There is no restrictive deny. A permissive ALL policy added later for some
+convenience would make admin self-grantable, and nothing in the table would
+object.
+
+**── ⚠️ CORRECTION: WHERE `is_admin()` LIVES IN THE REPO ───────────────────**
+
+In chat on 15 Sep, Claude said *"`is_admin()` is defined nowhere in
+`supabase/`"*. Item 50 then recorded it as *"still not established either
+way"*. **The first was wrong. The second was too cautious.**
+
+* **The body is in the repo:** `supabase/schema-snapshot-2026-08-08.sql:46-50`.
+  It is character-for-character the live body above.
+* **No migration creates it.** `0039:118` and `0040:126` assert that it exists
+  and refuse to run without it. Neither defines it.
+* **`public.admins` is created by no file at all.** A search of the whole repo
+  for `create table … admins` returned nothing.
+* Why the search missed it: `grep "function public.is_admin"` is
+  case-sensitive, and the snapshot spells it `FUNCTION`. That is the same
+  failure as the `handle_new_auth_user` correction in item 50, in the other
+  direction. There the thing was in a migration and was reported absent. Here
+  it is in the snapshot only, and was reported absent from everything.
+
+**So three objects this product depends on have the same status:**
+`is_admin()`, `public.admins` and `on_auth_user_created`. Each exists live and
+is recorded in the repo only by an 8 Aug snapshot, or not at all. No migration
+would rebuild any of them.
+
+**`provider_shop_is_publishable()`, live:**
+
+    CREATE OR REPLACE FUNCTION public.provider_shop_is_publishable(p_provider_id uuid)
+    RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path TO 'public'
+    AS $function$ select exists (select 1 from public.providers p
+      where p.id = p_provider_id and coalesce(btrim(p.name), '') <> ''
+        and exists (select 1 from public.provider_treatments pt
+                    where pt.provider_id = p.id and pt.category is not null)); $function$
+
+**Bio length is not part of publishability.** It agrees with `0016`'s header
+and with `site/lib/queries/shop.ts:79-83`. **The planned 40-character bio rule
+would not change which providers publish.**
+
+**── ⚠️ BUT THE SIX /[treatment] PAGES DO DEPEND ON BIO LENGTH ─────────────**
+
+The instruction this item was written from said adding a bio *"would not by
+itself populate the six /[treatment] pages"*. **The repo contradicts that.**
+
+* The pages don't ask about publishability. They read the `public_stylists`
+  view: `site/app/(public)/[treatment]/page.tsx:51-54` →
+  `site/lib/stylists.ts:48-56`.
+* That view requires `length(btrim(coalesce(p.bio, ''))) >= 40`, as well as
+  `is_published`, a name and a category. See
+  `supabase/migrations/0034_public_stylists_without_status_text.sql:263-265`
+  (an applied migration) and `supabase/public-web-views.sql:153`.
+* Item 11 records that Micky B is published with a 13-character bio. For any
+  published stylist with a categorised treatment, **a 40-character bio is the
+  only thing between them and those pages.**
+
+VERIFIED from the applied migration's text. **The live view definition was not
+queried.** `select pg_get_viewdef('public.public_stylists'::regclass, true);`
+settles it.
+
+**What the planned rule changes, then:** not publishing. It does change public
+visibility, for anyone it makes write more. The 40 already exists once in
+application code, as a display copy of the view's bar: `BIO_MIN_CHARS`,
+`site/lib/queries/shop.ts:38`. The 15 Sep handoff said there were *"ZERO
+definitions"*. That was wrong.
+
+**Roles, live:** `users_role_check` permits `model`, `provider` and `both`.
+`handle_new_auth_user` rejects anything but `model` or `provider`
+(`0011:99-103`). Counts: 29 model, 29 provider, **0 both**.
+
+**Is `both` a live role? Read-only answer: it is read everywhere and written
+nowhere.**
+* **Readers:** `mobile/src/app/(app)/settings.tsx:33, 217, 545-547`;
+  `admin/app/users/page.tsx:32, 319, 358, 365`; `admin/app/page.tsx:96`. The
+  `0040` guard's model permit is written to handle it (`0040:218-220`).
+* **Writers, none:** the web signup type is `'model' | 'provider'`
+  (`site/lib/signup.ts:30`) and mobile's is the same. The trigger rejects it.
+  `0040` refuses self-changes to `role`. No function in `0035` or `0039` sets
+  `role`.
+* The only ways to produce a `both` account are the service role and the SQL
+  editor.
+* INFERRED: a fossil of a dual-role feature that was dropped at the write side
+  and never at the read side. Not established from history.
+
+**`moderation_actions`, live:** `trg_lock_moderation` BEFORE UPDATE OR DELETE
+(`guard_moderation_actions`), and `trg_moderation_subject` BEFORE INSERT, both
+enabled. **This confirms from the live database the append-only claim item 50
+sourced from the snapshot.** One detail differs: the snapshot names the lock's
+function `prevent_mutation()` (`schema-snapshot-2026-08-08.sql:440`). Live it
+is `guard_moderation_actions`. So the snapshot is already stale on at least one
+function name.
+
+**Vercel project `cavy`:** six environment variables, **all scoped to
+Production and Preview together**, including `PUBLIC_SITE_MODE`. **No Stripe
+secret key is held at Vercel.** It holds only the publishable key. That agrees
+with the repo: every use of `STRIPE_SECRET_KEY` is in `supabase/functions/`.
+`site.yml:96` overrides `PUBLIC_SITE_MODE` to `preview` in CI.
+
+**What `PUBLIC_SITE_MODE` controls — VERIFIED, all of it:**
+`IS_LIVE = process.env.PUBLIC_SITE_MODE === 'live'` (`site/lib/site.ts:17`).
+There are three branches, and all three are about indexing:
+`app/layout.tsx:42` (`noindex, nofollow` meta), `app/robots.ts:7` (disallow
+all) and `app/sitemap.ts:19` (empty sitemap). **Nothing else reads it** — no
+query and no view (`public-web-views.sql:159` only mentions it in a comment).
+
+**What differs between the two builds:**
+* **A CI build** gets `preview`, so all three take the noindex branch.
+* **A Vercel preview deploy** gets whatever Production has, because the
+  variable is scoped to both.
+
+Today they probably match. The production value is not part of this evidence;
+names only were read. **The day Production is set to `live`, every preview
+deploy is also `live`.** `site/lib/site.ts:15` says *"Vercel preview
+deployments must never be 'live'."* The current scoping makes that rule false
+at exactly the moment it starts to matter. INFERRED, not relied on: Vercel may
+add its own noindex header to preview URLs. That has not been checked.
+
+**51. NOTHING GATES `main`, AND "PRODUCTION WAS BLOCKED FOR FIVE WEEKS" WAS SIX
+DAYS — RECORDED 18 Sep 2026. CORRECTS ITEM 45'S TITLE AND THE 15 Sep HANDOFF.**
+
+**Branch protection: none. VERIFIED** — Micky, from
+`github.com/mickeebee89/Guinea-pig/settings/branches`, 18 Sep. There are no
+rules on `main`. Commits go straight to `main`, and nothing gates a merge.
+Item 28 recorded protection as *"AVAILABLE AND NOT RECOMMENDED"* (line 1992),
+and that is still the state.
+
+**What follows from that:**
+* **Neither `npm run checks` nor `npx next build` can block anything.** Both run
+  in `site.yml` on push, after the commit is already on `main`. They are a
+  signal, as items 28 and 45 say.
+* **The only thing that stopped the duplicate-`let` commit reaching production
+  was Vercel refusing to build it.** A failed Vercel build leaves the last good
+  deployment serving. That fallback is what protected the live site. It also
+  hid the problem: the site kept working, just on old code.
+* **Nothing in the repo links Vercel deploys to GitHub Actions.** There is no
+  `vercel.json` at the root or in `site/`, and no ignored-build command anywhere
+  in the repo.
+* **Vercel's failure emails were on, and one arrived.** A *"Production
+  deployment failed for cavy"* email dated 8 Sep is in Micky's inbox. So
+  failures were delivered, but nobody acted on it for six days.
+
+**── THE REAL TIMELINE. VERIFIED FROM GIT ─────────────────────────────────**
+
+| When | What | Source |
+|---|---|---|
+| 10 Aug 13:54 / 13:57 | `a18efe9` committed and pushed — the build production then served | `git show`; `origin/main` reflog |
+| 10 Aug → 8 Sep | **No push at all.** Commits dated 14, 19, 24, 25, 31 Aug and 2, 3, 4, 7, 8 Sep sat on this machine | `origin/main` reflog; commit dates |
+| 8 Sep 15:41 | `29d979d` (item 20) writes `let hiddenByBlock = false` twice | `d9d740a`'s message and diff |
+| 8 Sep 20:36 and 21:00 | First pushes since 10 Aug (`7071e72`, `2e2bd5f`). Both Vercel builds fail | reflog; `d9d740a` says *"Vercel was red twice"* |
+| 14 Sep 18:10 | `d9d740a` deletes the duplicate and is pushed. Production moves | reflog |
+
+The reflog is this machine's record of when `origin/main` moved. It would not
+show a push from anywhere else. It agrees with Micky's Vercel deployment list,
+which showed nothing between 10 Aug and 8 Sep.
+
+**So `cavybeauty.com` served the 10 August build for 35 days, for two different
+reasons:**
+* **29 days (10 Aug → 8 Sep): nothing had been pushed.** Production matched
+  `origin/main` exactly. No system failed. Work sat unpushed.
+* **6 days (8 Sep → 14 Sep): the duplicate `let` blocked every build.** This is
+  the failure, and the one the email reported.
+
+**Which record is wrong:**
+* **Micky's notes — "builds were blocked from 8 Sep" — are right.** So is
+  `d9d740a`'s message, *"blocked production since 8 September … served the 10
+  August build"*.
+* **The 15 Sep handoff is wrong.** It said *"production sat five weeks stale
+  behind a duplicate `let` that no gate could see"*. Production was five weeks
+  stale, but only six of those days were caused by the `let`.
+* **Item 45's title is wrong in the same way.** It says *"THE FAILURE THAT
+  BLOCKED PRODUCTION FOR FIVE WEEKS"*. Its body is right. A correction note is
+  added under the title, with the original left visible.
+* **The inference "five weeks implies early August" was the error.** It treated
+  how old production was as how long it had been blocked.
+
+**And Micky's framing needs the same split.** *"A noticing failure, not a
+delivery failure"* is right for the six days. For the other 29, nothing was
+there to notice. For anyone using the site, though, the result was the same:
+the live site ran five weeks behind the repo, and no check tracks the gap
+between what is committed and what is pushed.
+
+**The 7 and 8 Aug failure emails are a separate event.** INFERRED: they are the
+site's first deploys failing because the admin console's `proxy.ts` was being
+compiled into the site build. `site/next.config.ts:9-15` says that *"is what
+broke the first two deploys"*. The commits fit: `b84198c` and `43c156e` scoped
+the build to `site/` on 7 Aug, and `2b8bca2` moved the admin console into
+`admin/` at 20:16 that day. The reflog does not go back before 10 Aug, so push
+times for 7–8 Aug are not established.
+
 **50. THE `public.users` INSERT PATH IS UNGUARDED, AND NOTHING CAN REACH IT
 TODAY — 0 EXPOSED ACCOUNTS ON 15 Sep 2026. OPEN AS A CONDITION, NOT A HOLE.
 RECORDED 18 Sep 2026.**
@@ -2120,6 +2418,14 @@ oldest pattern in this file.
 same narrow pattern and should be re-checked before anyone repeats "not in any
 migration" about it.
 
+> **⚠️ CORRECTED 18 Sep 2026 — see item 52.** Now established: `is_admin()`
+> exists live, and its body is in the repo at
+> `supabase/schema-snapshot-2026-08-08.sql:46-50`, identical to the live one.
+> **No migration creates it**, and no file creates `public.admins`. The
+> original search was case-sensitive and missed the snapshot's `FUNCTION`. It
+> has the same status as `on_auth_user_created`: live, and recorded only in a
+> snapshot.
+
 **── THE SIX QUESTIONS, FROM THE REPO ─────────────────────────────────────**
 
 **1. What assumes the trigger. VERIFIED, five places:** `mobile/notes.md:16`
@@ -2201,6 +2507,21 @@ pending row with a `created_at` they chose. That only matters if an approval
 can land with `reviewed_at` null. **Not established** — the read that would
 settle it (the admin approve path) was not done.
 
+> **✅ SETTLED 18 Sep 2026 — not reachable through the app.**
+> `admin_decide_verification` sets `reviewed_at = now()` on every decision,
+> approve or reject (`0039:614-621`). It is the only code in the repo that moves
+> a request off `pending`: both clients only insert
+> (`mobile/src/app/(app)/verify-payment.tsx:208`,
+> `site/app/(app)/verify/actions.ts:113`), and `0040`'s guard refuses anything
+> else from a member. So an approval made through the console always has a
+> `reviewed_at`, and the permit's `coalesce` never falls back to a
+> member-written `created_at`.
+> **What is left:** rows approved **outside** that function — before the
+> console repoint on 12 Sep (`f195b74`), or by hand in the SQL editor. Their
+> count has not been checked. The query is `select count(*) from
+> public.verification_requests where status = 'approved' and reviewed_at is
+> null;`.
+
 **6. Does the insert guard permit an already-approved decision? No.
 VERIFIED.** `0040:308-320` raises `42501` on INSERT unless `status` is
 `'pending'` and `reviewed_by`, `reviewed_by_source` and `reviewed_at` are all
@@ -2219,6 +2540,7 @@ No fix written. On request, not by oversight.
 * `signup_source` is an unauthenticated free-text field that grants a waived fee.
 * `created_at` on `verification_requests` is member-writable and read by a
   permit.
+  *(18 Sep: only reachable through approvals made outside `admin_decide_verification` — see the settled note above.)*
 * `0040`'s own header (`:47-56`) already names the fix that closes the first
   item as a side effect: the column-level GRANT. Because a GRANT covers INSERT
   as well as UPDATE, that stopgap-to-real-fix path was always wider than the
@@ -2455,6 +2777,13 @@ unchanged and is still the right gate.
 
 **45. THE CI CHECK COULD NOT SEE THE FAILURE THAT BLOCKED PRODUCTION FOR FIVE
 WEEKS — FOUND 14 Sep 2026. ✅ FIXED THE SAME DAY.**
+
+> **⚠️ CORRECTED 18 Sep 2026 — see item 51. "FOR FIVE WEEKS" IS WRONG.** The
+> failure blocked production for **six days**, 8–14 Sep. Production was five
+> weeks old because nothing was pushed between 10 Aug and 8 Sep, according to
+> the `origin/main` reflog and Vercel's deployment list. The body below is
+> right: *"Every Vercel build since errored"* counts from the 8 Sep commit. The
+> title is left as written.
 
 **What happened.** A duplicate `let hiddenByBlock = false` on consecutive lines of
 `site/lib/queries/dashboard.ts`, written by an edit script on 8 Sep. Turbopack
