@@ -97,9 +97,16 @@ export function ChatThread({ thread, userId }: { thread: Thread; userId: string 
     })
     if (error) {
       setText(body)   // restore rather than lose what they typed
-      // The RESTRICTIVE policies refuse a send from a blocked or suspended
-      // user. Say something true without guessing which one fired.
-      setSendError('That didn’t send. Reload the page and try again.')
+      // CV001 is the banned-words screen (migration 0042, trg_messages_90_screen).
+      // That refusal is the sender's to fix, so it gets its own words. Every
+      // other failure keeps the old message: the RESTRICTIVE policies refuse a
+      // send from a blocked or suspended user, and this says something true
+      // without guessing which one fired.
+      setSendError(
+        error.code === 'CV001'
+          ? 'That message can’t be sent because it contains words we don’t allow. Edit it and try again.'
+          : 'That didn’t send. Reload the page and try again.',
+      )
       console.error('[chat] send failed', error)
     }
     setSending(false)

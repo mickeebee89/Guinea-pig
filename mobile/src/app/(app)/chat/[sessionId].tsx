@@ -308,6 +308,16 @@ export default function ChatScreen() {
     if (error) {
       setInputText(text)  // restore on failure
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)
+      // CV001 is the banned-words screen (migration 0042, trg_messages_90_screen).
+      // That refusal is the sender's to fix, so it is the one failure that says
+      // why. Every other failure keeps its existing behaviour: text restored,
+      // error haptic.
+      if (error.code === 'CV001') {
+        Alert.alert(
+          'Message not sent',
+          'That message can’t be sent because it contains words we don’t allow. Edit it and try again.',
+        )
+      }
     }
     setSending(false)
   }
