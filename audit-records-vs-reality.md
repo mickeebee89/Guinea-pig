@@ -843,6 +843,13 @@ need three answers, not one template.
 
 **15. NO TEXT IN THIS PRODUCT IS SCREENED BEFORE PUBLICATION — NEW, 7 Sep 2026.**
 
+> **⚠️ NO LONGER TRUE AS WRITTEN — 19 Sep 2026.** Status posts have been
+> screened since `0032`, and chat messages since `0042`, which refuses a
+> message containing a banned word. Bios, shop copy, reviews, booking notes,
+> cancellation reasons and portfolio category names are still unscreened. See
+> item 58 for the deferred plan, and item 59 for the one PATCH that walks round
+> the message screen. The title is left as written.
+
 Found while scoping the status composer, and larger than that feature, so it is
 its own item rather than folded into it.
 
@@ -2068,6 +2075,187 @@ was the reason for three workflows rather than one.
 
 It remains a signal and not a gate. Everything above about branch protection
 still stands.
+
+**60. `--stamp` REWRITES EVERY MIGRATION'S COMMENT, BECAUSE ITEM 41'S SWEEP PUT
+THE SENTINEL IN ALL OF THEM — FOUND 19 Sep 2026 BY RUNNING IT. NOTHING COMMITTED;
+NOT FIXED.**
+
+**What happened. VERIFIED.** Stamping `0042` printed `stamped` for all 42
+files, not one. `scripts/migration-status.mjs:139-140` treats any file that
+*contains* `PENDING_CHECKSUM` as unstamped, and replaces the **first**
+occurrence. Item 41's 13 Sep sweep wrote that literal string into the "STAMP
+BEFORE YOU APPLY" comment of every migration, 0001–0041. So in each already
+applied file, the first occurrence is that comment. The script overwrote the
+sentence *"A new file's footer says PENDING_CHECKSUM"* with the file's own
+checksum.
+
+**How far it reached. VERIFIED.** A check of every changed file found no
+replacement above any `MIGRATION FOOTER` line. So no checksum and no migration
+body changed, only comment text below the footer. All 41 files were reverted
+with `git checkout` before anything was committed. `0042` was stamped correctly
+at its footer. Its checksum was then recomputed the way the script computes it
+(`checksumOf`, `:118-122`), and it matches: `22a4c781…`.
+
+**Why it matters.** The instructions in every migration say to run `--stamp`
+before applying. **As things stand, every run does this to all 41 files.**
+Anyone who then commits "the stamped file" commits 41 corrupted comments with
+it. The failure would get worse if a sentinel ever appeared ABOVE a footer — in
+a header explaining the process, say. Then the replacement would land in the
+checksummed body, and a stamped migration's recorded checksum would disagree
+with its own contents.
+
+**The pattern.** The fix for item 41's problem put the problem's own trigger
+word into every file the tool scans. That is the same shape as item 47: text
+written to explain a mechanism, which the mechanism then reads.
+
+**`0042` is safe from it:** its stamp comment deliberately doesn't spell the
+sentinel out, and says why. **Not fixed.** The two obvious fixes are to make
+`--stamp` replace only the sentinel on the footer's `values` line, or to remove
+the literal from the 41 comments (safe, because it is below the footer). Until
+one lands: **do not run `--stamp` with other files present, or revert
+everything but the new file straight afterwards.**
+
+**59. EITHER PARTY TO A BOOKING CAN REWRITE ANY MESSAGE IN IT — INCLUDING THE
+OTHER PERSON'S — FOUND 19 Sep 2026 WHILE BUILDING 0042. NOT FIXED; A DECISION.**
+
+**The policy. VERIFIED from the 8 Aug schema snapshot, and changed by no
+migration since:** `"participants can update messages"`
+(`supabase/schema-snapshot-2026-08-08-policies.sql:76-79`) is a PERMISSIVE
+UPDATE policy for `authenticated`. Its only test is that the caller is the
+booking's model or its stylist. It has no WITH CHECK, so the USING test is
+reused, and RLS cannot restrict columns. So either party can UPDATE **any
+column of any message** in the booking — `body`, `sender_id`, `created_at` —
+their own or the other person's. The live policy was not read for this item.
+The next step is to paste
+`select policyname, cmd, qual, with_check from pg_policies where tablename = 'messages';`
+and read it.
+
+**What the clients actually do:** they only ever update `read_at`
+(`site/app/(app)/messages/[sessionId]/ChatThread.tsx:68`,
+`site/lib/queries/thread.ts:134`, `mobile/src/app/(app)/chat/[sessionId].tsx:236, 275`).
+The write access is far wider than anything the product uses.
+
+**Why it matters, in order:**
+1. **Messages are evidence.** A report can quote a chat, and an admin reads the
+   chat to decide it. Either party can currently rewrite what the other said,
+   or what they said themselves, before or after a report is made. The
+   evidence the moderation process rests on can be edited by the people it is
+   about.
+2. **It walks round `0042`.** The screen is BEFORE INSERT. A message that
+   passed it can be changed to anything with one PATCH.
+
+**The fix, not taken:** a column GRANT (`update (read_at)` only), or a guard
+trigger in the style of `0040` that refuses any change except to `read_at`. A
+GRANT is role-wide, so it needs checking that no admin path updates
+`messages` directly. None was found in `admin/` on 19 Sep, but that was not
+exhaustive.
+
+**58. SCREENING BIOS AND OTHER PROFILE TEXT — PLANNED 19 Sep 2026, DEFERRED BY
+DECISION.**
+
+**Decision, 19 Sep 2026 (Micky): messages now (`0042`), bios later. Revisit
+before onboarding stylists Micky does not personally know** — the same point as
+item 56's fee check, and for the same reason: until then, a reviewer who knows
+everyone is a real control.
+
+**What is unscreened. VERIFIED from code, 19 Sep:**
+
+| Field | Seen by | Write paths |
+|---|---|---|
+| `providers.bio` | public: app, web, `public_stylists` | web `site/app/(app)/shop/actions.ts:49-52`; mobile `edit-shop.tsx:162-169`, `settings.tsx:357` |
+| `providers.name` (shop name) | public | the same web and `edit-shop` paths; mobile first-time insert `provider-dashboard.tsx:331-340` |
+| `providers.location_text` | public | the same web and `edit-shop` paths |
+| `model_attributes.bio` | stylists | mobile `model-profile.tsx:646-654` |
+| `reviews.comment` | the reviewee, and readers of reviews | mobile `leave-review.tsx:299-312` |
+| `sessions.note` | the stylist | `create_session_with_consent`'s `p_note` (`0001:176, 213`), from mobile `apply-session.tsx:570-581` |
+| cancellation reason | the other party, quoted in a notification (`0030:79-80`) | `cancel_booking`'s `p_reason`; web `bookings/actions.ts:120`, mobile `lib/cancel.ts:31` |
+| `portfolio_categories.name` | portfolio viewers | mobile `portfolio.tsx:136-138` |
+
+**Out of scope:**
+* `reports.reason` must never be screened: a report has to be able to quote the
+  abuse.
+* Names are an identity question, not a screening one.
+* Model attributes are pick lists in the UI (`model-profile.tsx:62-71`).
+  INFERRED: the database will still accept any text for them.
+
+**The plan.**
+* **One checker, already built.** `banned_words_check` (`0042`) is the rule.
+  Each field gets its own small trigger or in-function call, because what a
+  hit MEANS differs by field.
+* **Profile text (bio, shop name, review comment): hold without changing a
+  single reader.** Add a pending column beside each field (`bio_pending`,
+  `name_pending`, `comment_pending`, plus `*_held_at`). On a hit, the BEFORE
+  trigger moves the new text into the pending column and **puts the old value
+  back in the live column**. Everything that reads `bio` — `public_stylists`,
+  both apps, the console — goes on showing the last approved text.
+* **Review.** An admin decision function in the style of `0039` approves
+  (copies pending into live) or rejects (clears pending), and logs the
+  decision. The moderation page gets a held-profile-text queue.
+* **Text inside functions.** `p_note` is checked inside
+  `create_session_with_consent`. `p_reason` is checked inside `cancel_booking`,
+  where **a hit drops the quoted reason from the notice and never refuses the
+  cancellation**.
+* **An unreadable list, per field:** profile text can fail closed, because it
+  can wait. Anything conversational fails open, as messages do.
+* **Trigger names** must sort so the screen sees the final text (item 57). Any
+  database-enforced minimum bio length must sort AFTER the screen, so it
+  measures the text that would actually go live.
+
+**What would break if a bio were held, and how the plan answers each:**
+* **The six `/[treatment]` pages.** `public_stylists` requires a bio of at
+  least 40 characters (`0034:265`). A hold that blanked a published stylist's
+  bio would drop them from the pages. Under the plan the old bio stays live, so
+  nothing changes for an existing stylist. A first bio that is held leaves them
+  below the bar, exactly as today.
+* **Publishability does not change.** `provider_shop_is_publishable` never
+  reads `bio` (item 52).
+* **The setup panel** measures the live bio (`site/lib/queries/shop.ts:172-190`).
+  It would tell a stylist whose bio is held to *"add a bit more"*. It needs to
+  know about the pending column.
+* **Mobile's empty-shop state:** `!provider?.bio` feeds `shopIsEmpty`
+  (`mobile/src/app/(app)/provider/[id].tsx:333`). A design that nulled the bio
+  would flip a stylist's own shop to empty. Keeping the old value doesn't.
+* **The editors show the live value after a save** (`getShopEditorData`,
+  `shop.ts:225`; mobile `edit-shop`, `settings.tsx:357`). A held save would
+  look like it didn't save — item 27's refused-write-reads-as-success. Each
+  editor needs a "your new bio is waiting for review" state.
+* **No admin surface today.** The moderation page only searches live text
+  after the fact (`admin/app/moderation/page.tsx:201-207`). Held text needs the
+  queue and the decision function above.
+* **The shop name must never be held down to empty.** `name <> ''` is part of
+  the publish rule, and the first-time insert (`provider-dashboard.tsx:331-340`)
+  has no previous value to fall back to.
+
+**57. 0032'S TWO TRIGGERS FIRE IN THE OPPOSITE ORDER TO THE ONE ITS COMMENT
+STATES — FOUND 19 Sep 2026 BY READING. NOT FIXED.**
+
+**The claim.** `0032:201` says *"The strip runs first so THE SCREEN SEES
+EXACTLY WHAT WILL BE STORED."*
+
+**The fact. VERIFIED.** Postgres fires triggers on the same table, timing and
+event **in alphabetical order of name**, not creation order. `0032` creates
+`trg_status_post_strip_links` (`:212`) and `trg_status_post_screen` (`:217`),
+both BEFORE INSERT OR UPDATE. `trg_status_post_screen` sorts first (a byte
+sort puts `sc` before `st`), **so the screen runs before the strip.**
+
+**The two consequences:**
+1. **A banned word inside a link is caught, and the post is held.** The
+   comment says the word is deleted with the link and never reaches the
+   screen. The actual behaviour is stricter than described.
+2. **The screen judges text the strip then changes.** A post is approved or
+   held on a body that is rewritten underneath the decision. That is exactly
+   the outcome the comment says the order was chosen to prevent.
+
+**Neither is harmful today**, because stripping only removes text. But the
+comment describes an order that does not happen, and anyone copying the pair
+inherits the wrong belief. That nearly happened: it was found while planning
+screening for other tables.
+
+**The fix is renaming**, so the names sort in the intended order — for example
+`trg_status_post_10_strip_links` and `trg_status_post_90_screen`, matching the
+convention `0042` set for messages. That needs its own migration, and the
+corrected comment has to go in the new file, because `0032`'s body is
+checksummed.
 
 **56. THE DATABASE NEVER ENFORCES THE £14.99 FEE — FOUND 19 Sep 2026 BY
 READING. EACH PIECE VERIFIED; THE END-TO-END ROUTE IS UNTESTED. ENFORCEMENT
