@@ -2069,6 +2069,60 @@ was the reason for three workflows rather than one.
 It remains a signal and not a gate. Everything above about branch protection
 still stands.
 
+**56. THE DATABASE NEVER ENFORCES THE £14.99 FEE — FOUND 19 Sep 2026 BY
+READING. EACH PIECE VERIFIED; THE END-TO-END ROUTE IS UNTESTED. ENFORCEMENT
+DEFERRED BY DECISION.**
+
+**Plainly:** paying the £14.99 is required only by the screens. Nothing in the
+database requires it. A stylist who writes their verification request straight
+to the database, without paying, can be approved and published by an admin.
+The only thing in the way is the reviewer noticing "Unpaid" in the console.
+
+**The pieces, each VERIFIED:**
+* **Submitting a request does not check the fee.** `vr_user_policy` is ALL,
+  `authenticated`, `(auth.uid() = user_id)` on USING and WITH CHECK, per
+  Micky's live paste of 15 Sep (item 50). The `0040` guard on this table
+  checks only that the row arrives `pending` with no decision on it
+  (`0040:308-320`). Mobile already inserts the row directly through PostgREST
+  (`mobile/src/app/(app)/verify-payment.tsx:208`). The web's fee check before a
+  photo (`site/app/(app)/verify/actions.ts:73`) is a server action, and a
+  direct insert never passes through it.
+* **Approving does not check the fee.** `admin_decide_verification`
+  (`0039:543-640`) checks `is_admin()`, the decision, and that the request is
+  `pending`. It then sets `is_verified`, publishes any shop that
+  `provider_shop_is_publishable` passes, and records the reviewer. It never
+  reads `verification_payments`, `is_founding_provider` or `provider_fee_waived`.
+* **Publishing does not check the fee.** `provider_shop_is_publishable` checks
+  a name and a categorised treatment (live body, item 52). No trigger, policy
+  or function in `supabase/migrations/` gates anything on payment. Every
+  migration that mentions these columns does so for the founding grant
+  (`0011`), in comments (`0013`, `0016`), for the self-write guard (`0040`), or
+  for the admin toggle (`0035`, `0039`).
+* **Every fee check that does exist runs in a client or a server action:**
+  `site/lib/queries/shop.ts:210`, `site/app/(app)/verify/actions.ts:73`,
+  `mobile/src/app/(app)/verify-payment.tsx:82`, and
+  `mobile/src/app/(app)/provider-dashboard.tsx:296, 562`. The console shows
+  the fee state to the reviewer as a label, *Waived / Founding / Paid / Unpaid*
+  (`admin/app/users/page.tsx:240-242`). That label is advice to a person. It
+  enforces nothing.
+
+**UNTESTED end to end:** that a direct insert, followed by an admin approval,
+leaves an unpaid stylist verified and published. Every step is read from code
+or live output. The whole route has not been run, and running it means
+approving an unpaid account on the live database.
+
+**── DECISIONS, 19 Sep 2026 (Micky) ──**
+* **The founding grant stays as it is** (item 50's correction), including the
+  open `?ref=` route to a slot.
+* **Fee enforcement is deferred.** Today every stylist is someone Micky knows,
+  so the reviewer's eye on "Unpaid" is a real control.
+* **The intended fix is a fee check in the approve path.**
+  `admin_decide_verification` would refuse to approve a provider unless the fee
+  is settled: a payment row, founding, or waived. That is the same three-way
+  rule every reader already uses. **It must land before onboarding stylists
+  Micky does not personally know.** At that point the reviewer can no longer
+  tell a genuine stylist from someone who skipped the fee.
+
 **55. RELOADING /subscribe CAN CANCEL A SUBSCRIPTION THE PERSON HAS JUST PAID
 FOR — AND A FAILED FIRST PAYMENT GRANTS ACCESS AND SENDS A NOTICE THAT IS FALSE.
 FOUND 18 Sep 2026 BY READING. NOTHING OBSERVED; THE SQL THAT SETTLES THE
@@ -2955,6 +3009,30 @@ way."*
   that field takes one of the 199 remaining slots. That is up to 199 × £14.99 =
   £2,983 of fee, with the cap as the only limit. Not tested — testing it means a
   real signup.
+
+> **⚠️ CORRECTED 19 Sep 2026 — RIGHT AS ARITHMETIC, WRONG AS A LOSS.**
+> 199 × £14.99 = £2,983.01, and that stands. The full cap of 200 is £2,998.
+> **It is not money lost.** It is the ceiling on fees given up under an offer
+> published on purpose: `/for-stylists`, and Terms §5 (`0011:7-9`). The
+> founding grant waives the fee through the readers, not through
+> `provider_fee_waived`. Every "does this stylist still owe £14.99" check accepts
+> paid OR `is_founding_provider` OR `provider_fee_waived` (`0011:19`;
+> `site/lib/queries/shop.ts:210`; `site/app/(app)/verify/actions.ts:73`;
+> `mobile/src/app/(app)/verify-payment.tsx:82`;
+> `mobile/src/app/(app)/provider-dashboard.tsx:296, 562`). The grant itself
+> writes only `is_founding_provider` (`0011:148-150`). `provider_fee_waived` is
+> written only by the admin toggle (`0039:298-299`, earlier `0035:220-222`).
+>
+> **The finding is who can claim it.** VERIFIED from code: the web sign-up takes
+> `signup_source` straight from the URL. `/sign-up?ref=<anything>`
+> (`site/app/(auth)/sign-up/page.tsx:45`) becomes a hidden form field
+> (`SignUpForm.tsx:66`), then the server action (`actions.ts:40`), then the
+> metadata, and the trigger accepts any non-empty value (`0011:93`, `:133`).
+> So anyone who adds any `?ref=` value to the sign-up URL can take a slot,
+> not only a referred cohort. Still not tested, because testing it means a
+> real sign-up.
+>
+> **Decided 19 Sep: the founding grant stays as it is.** See item 56.
 
 **5. Can deleting your own verification_requests rows unlock an old approval?
 No. VERIFIED.**
