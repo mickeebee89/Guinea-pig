@@ -2076,6 +2076,97 @@ was the reason for three workflows rather than one.
 It remains a signal and not a gate. Everything above about branch protection
 still stands.
 
+**61. `anon` AND `authenticated` HOLD DELETE ON `public.messages`, AND NO DELETE
+POLICY EXISTS — SEEN 20 Sep 2026 IN `0043`'s BLOCK A. READ-ONLY; NOT FIXED. ONE
+QUERY DECIDES WHETHER IT IS INERT OR SERIOUS.**
+
+**What was seen. VERIFIED from pasted output.** `0043`'s Block A lists the
+table ACL for `public.messages`: `anon` and `authenticated` each hold DELETE,
+INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER and TRUNCATE. The migration took
+UPDATE away from both. It did not touch DELETE, and was never meant to.
+
+(In passing: `MAINTAIN` only exists from Postgres 17, so the cluster is on 17
+or later. Noted because nothing else in this file dates it.)
+
+**Is there a DELETE policy? NO. VERIFIED by reading every policy in the repo.**
+`public.messages` has six, all in
+`supabase/schema-snapshot-2026-08-08-policies.sql`: `messages_insert_not_blocked`
+and `messages_not_suspended` (RESTRICTIVE, INSERT), `messages_select_admin` and
+`"participants can read messages"` (PERMISSIVE, SELECT), `"participants can
+send messages"` (PERMISSIVE, INSERT) and `"participants can update messages"`
+(PERMISSIVE, UPDATE). **None is FOR DELETE**, and a repo-wide search for
+`for delete` finds nothing for this table.
+
+**Does any client delete a message? NO. VERIFIED.** A search of `site`,
+`mobile/src` and `admin` for a delete on `messages` returns nothing. The only
+deletes anywhere run as `service_role` or by hand:
+* `seed/teardown.mjs:181` — seeded sessions.
+* `delete_account_data` (`supabase/account-deletion-fix.sql:340`, and
+  `0004:379`) — account deletion.
+* `supabase/cleanup-consentless-test-sessions.sql:96` — a hand-run script.
+
+There is no in-product "delete message" feature on any surface, and
+`run_retention_purge` does not touch this table.
+
+**── ⚠️ THE ONE THING THAT DECIDES THE EXPOSURE, AND IT IS NOT ESTABLISHED ──**
+
+**Whether row level security is ENABLED on `public.messages`.** No file in the
+repo turns it on for this table. The snapshot records the policies but not the
+table's `relrowsecurity` flag, and policies exist happily on a table with RLS
+switched off — they simply do nothing.
+
+* **If RLS is enabled** (what the six policies imply, and what the product's
+  behaviour suggests), a DELETE from `anon` or `authenticated` matches no rows,
+  because no policy permits any. It deletes nothing and raises nothing. The
+  grant is **inert** — but inert by the absence of a permission, not by any
+  refusal. That is exactly the shape `0040:458-464` described on the money
+  tables: *"writes are refused because nothing permits them, not because
+  anything denies them."* Add one permissive ALL policy for some future
+  convenience, and deletion opens with it, silently.
+* **If RLS is NOT enabled**, the grant is live, and **any signed-in user could
+  delete any message in the database, and `anon` could too.** Nothing in the
+  product would notice, and nothing would record it.
+
+**The query that settles it, and a probe that proves the behaviour:**
+
+    select relrowsecurity as rls_enabled, relforcerowsecurity as rls_forced
+    from pg_class where oid = 'public.messages'::regclass;
+
+    -- and, rolled back: what a real participant's DELETE actually does
+    do $$
+    declare
+      v_user uuid := 'b0df9c2f-02c5-4fef-afb0-9b184c3b9130';
+      v_msg uuid; n integer;
+    begin
+      select m.id into v_msg from public.messages m
+      join public.sessions s on s.id = m.session_id
+      where s.model_user_id = v_user order by m.created_at desc limit 1;
+      perform set_config('request.jwt.claims',
+        format('{"sub":"%s","role":"authenticated"}', v_user), true);
+      set local role authenticated;
+      delete from public.messages where id = v_msg;
+      get diagnostics n = row_count;
+      reset role;
+      raise exception E'ROLLED BACK ON PURPOSE.\nparticipant DELETE: % row(s) — 0 is the safe answer', n;
+    end $$;
+
+**Why it matters more here than on most tables.** Messages are the evidence a
+report rests on: a report carries a `session_id`, and an admin reads the chat
+to decide it. `0043` stopped either party rewriting that evidence. **Deletion
+would remove it outright, and leave less trace than an edit** — an edited
+message still exists; a deleted one is gone, with no tombstone, no audit row
+and nothing for moderation to look at. The asymmetry is worth stating plainly:
+the product spent two migrations protecting the *content* of messages while a
+table-level DELETE sat next to it, unexamined.
+
+**Not fixed, and deliberately not.** If the probe returns 0 rows, the sensible
+shape is the one `0040` used on the money tables: a RESTRICTIVE
+`no_client_delete` policy, so the refusal is stated rather than implied, plus
+`revoke delete ... from anon, authenticated`. If it returns 1, it is urgent and
+changes what else must be checked — because RLS being off would also mean every
+permissive SELECT policy on this table has been decorative, and the same
+question then applies to every other table.
+
 **60. `--stamp` REWRITES EVERY MIGRATION'S COMMENT, BECAUSE ITEM 41'S SWEEP PUT
 THE SENTINEL IN ALL OF THEM — FOUND 19 Sep 2026 BY RUNNING IT. NOTHING COMMITTED;
 NOT FIXED.**
@@ -2117,6 +2208,40 @@ everything but the new file straight afterwards.**
 
 **59. EITHER PARTY TO A BOOKING CAN REWRITE ANY MESSAGE IN IT — INCLUDING THE
 OTHER PERSON'S — FOUND 19 Sep 2026 WHILE BUILDING 0042. NOT FIXED; A DECISION.**
+
+> **✅ CLOSED 20 Sep 2026 BY `0043`, ON EVIDENCE.** Decision, Micky: block edits
+> entirely — nobody can change a sent message, their own or the other
+> person's. `0043` leaves the participant policy as the row rule and changes
+> the COLUMN privilege: table-level UPDATE revoked from `public`, `anon` and
+> `authenticated`, with `update (read_at)` granted back to `authenticated`.
+> Postgres checks column privileges before RLS, so an UPDATE naming any other
+> column is refused with 42501 whatever the policy says.
+>
+> **Applied 20 Sep. All five verify blocks pass, VERIFIED from pasted output:**
+>
+> * **A — the table ACL.** `anon` and `authenticated` hold DELETE, INSERT,
+>   MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE — **and no UPDATE**.
+>   `postgres` and `service_role` keep UPDATE alongside the rest, which is what
+>   the migration said they must.
+> * **B — the column ACL.** Exactly one row: `read_at`, `authenticated`,
+>   UPDATE. Nothing else was granted back.
+> * **C — as the model test account.** `read_at`: 1 row, so receipts still
+>   work. `body`: refused, 42501 insufficient_privilege. `sender_id`: refused,
+>   42501. **That is the finding closed: the text of a sent message cannot be
+>   altered by either party.**
+> * **D — the row rule still bounds it.** A non-participant setting `read_at`
+>   affects 0 rows, so the policy is still doing its half.
+> * **E — nothing else moved.** A plain send inserts, and a listed word is
+>   still refused CV001, so `0042`'s screen survives the grant change.
+>
+> **What remains, by design and stated in `0043`:** a participant can set or
+> clear `read_at` on messages in their own booking, including the other
+> person's, because that is how a receipt is recorded. It changes no content.
+> `service_role` can still edit anything — the same standing as every other
+> table.
+>
+> **⚠️ AND BLOCK A SHOWED SOMETHING ELSE, WHICH IS ITEM 61:** `anon` and
+> `authenticated` hold table-level **DELETE** on `public.messages`.
 
 **The policy. VERIFIED from the 8 Aug schema snapshot, and changed by no
 migration since:** `"participants can update messages"`
