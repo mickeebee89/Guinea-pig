@@ -2167,6 +2167,61 @@ changes what else must be checked — because RLS being off would also mean ever
 permissive SELECT policy on this table has been decorative, and the same
 question then applies to every other table.
 
+**── 20 Sep 2026: SETTLED. RLS IS ON, SO THE GRANT IS THE INERT CASE ──**
+
+**VERIFIED from pasted output:**
+
+    relrowsecurity      true
+    relforcerowsecurity false
+
+**So the first branch above is the real one.** Row level security is enabled on
+`public.messages`, no policy permits DELETE, and a delete from `anon` or
+`authenticated` therefore matches no rows: it removes nothing and raises
+nothing. **The table-level DELETE grant is inert.**
+
+**Two things that settles beyond the DELETE question:**
+1. **The policies on this table are live, not decorative.** Every permissive
+   SELECT and INSERT policy on `public.messages` is doing the work its text
+   describes, and `0043`'s column grant sits on top of a row rule that is
+   genuinely enforced. The wider worry raised above — that RLS being off would
+   have made the six policies ornamental, and would have forced the same
+   question onto every other table — does not arise.
+2. **`relforcerowsecurity false` is expected and is not a gap.** It means RLS
+   is not applied to the table's OWNER. That is how the service-role paths in
+   `delete_account_data` and `seed/teardown.mjs` delete messages at all, and it
+   is the same standing `0043` records for `service_role` on UPDATE.
+
+**── THE RESIDUAL, STATED SO IT IS NOT MISREAD AS CLOSED ──**
+
+**The protection is the absence of a policy, not a refusal.** Nothing on this
+table says "no client may delete a message". Deletes fail only because no rule
+permits them. **One permissive ALL policy added later — for a read someone
+needs, in the shape this file has seen before — would open deletion in the same
+stroke, silently**, and nothing in the table would object. That is the exact
+risk `0040:458-464` wrote down for `subscriptions` and `verification_payments`,
+and the reason it added RESTRICTIVE denies there rather than leaving them
+protected by omission.
+
+**DEFERRED SUGGESTION, NOT SCHEDULED WORK** (Micky, 20 Sep): the `0040`-shaped
+fix, if this is ever picked up —
+
+    create policy no_client_delete on public.messages
+      as restrictive for delete to authenticated using (false);
+    revoke delete on public.messages from anon, authenticated;
+
+The policy states the refusal; the revoke removes the privilege that makes the
+question possible at all. Neither is urgent while the current state holds, and
+the reason for writing them down is that the current state is a coincidence of
+omissions rather than a decision anyone made.
+
+**── AND ONE FACT ABOUT THE CLUSTER ──**
+
+`MAINTAIN` appears in the Block A ACL for `anon` and `authenticated`. That
+privilege was introduced in **Postgres 17**, so this database runs 17 or later.
+VERIFIED from the ACL listing. Recorded because nothing else in this file dates
+the cluster, and several findings here turn on behaviour that varies by
+version.
+
 **60. `--stamp` REWRITES EVERY MIGRATION'S COMMENT, BECAUSE ITEM 41'S SWEEP PUT
 THE SENTINEL IN ALL OF THEM — FOUND 19 Sep 2026 BY RUNNING IT. NOTHING COMMITTED;
 NOT FIXED.**
