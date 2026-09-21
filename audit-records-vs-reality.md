@@ -2080,6 +2080,67 @@ still stands.
 FOUND 21 Sep 2026. THE APPLY GATES DON'T GRANT THEM; MOBILE SETTINGS AND THE
 CONSOLE SAY THEY'RE ACTIVE. NOT REPAIRED; PLAN BELOW.**
 
+> **✅ REPAIRED 21 Sep 2026. VERIFIED FROM PASTED OUTPUT.**
+>
+> **The run.** `scripts/repair-lapsed-subscriptions.mjs` (`2151927`) was run as
+> a preview, then with `--apply`. It used a **restricted live key with
+> Subscriptions: Read only**, so the script could not have changed anything at
+> Stripe even by mistake.
+> * **8 rows selected** — the seven `active` and the one `cancelling`, as
+>   planned.
+> * **All 8 came back "NOT FOUND IN LIVE STRIPE."** None was a genuine expiry
+>   read from Stripe, and none was skipped for an error.
+> * **0 waived.**
+> * **All 8 written `expired` through `apply_subscription_state`**, keeping
+>   their own July–August period dates. No table was written directly.
+> * **The script's re-selection found 0 remaining.**
+> * **The restricted key has since been deleted.**
+>
+> **Independent check afterwards**, grouping `subscriptions.status`, whether
+> the period end is in the future, and `users.subscription_status`:
+>
+> | `subscriptions.status` | end in future | `users.subscription_status` | rows |
+> |---|---|---|---|
+> | `active` | true | `active` | 1 |
+> | `expired` | false | `none` | 11 |
+> | `expired` | null | `none` | 1 |
+>
+> That totals 13 rows, matching item 53's corrected count. **Both tables now
+> agree with each other, and with Stripe's single active subscriber.** The
+> console's plan column and mobile Settings will show `none` / "Free Plan" for
+> the eight.
+>
+> **What "not found" tells us: these were test-mode rows.** Live-mode
+> subscriptions stay retrievable from Stripe's API after they are cancelled, so
+> a live key getting `resource_missing` on all eight means none of them ever
+> existed in live mode. The dates fit: 8–17 Jul, all on or before the live
+> switch on 17 Jul. The one other thing that could produce the same answer — a
+> subscription id belonging to a *different* Stripe account — would need a
+> second account that nothing in this project has ever referred to. **So
+> nobody was charged for any of these rows, and none held a membership anyone
+> was paying for.** The repair corrected what our tables said. It changed
+> nothing anyone had bought.
+>
+> **── WHAT STAYS OPEN. SEPARATE DECISIONS, NOT PART OF THIS REPAIR ──**
+> 1. **Nothing schedules a reconcile.** The next row to fall behind Stripe —
+>    a missed event, or a webhook row filed `'failed'` — waits for its owner to
+>    open a gated screen, and then only repairs that owner's own row.
+> 2. **Mobile Settings still reads the `users` copy without a date check**
+>    (`mobile/src/app/(app)/settings.tsx:551`). It will show "✨ Premium" and a
+>    Cancel row for any future lapsed row, exactly as it did for these eight.
+>    So does the admin console's plan column (`admin/app/users/page.tsx:323`).
+> 3. **Both gates grant access when Stripe can't be reached** (mobile
+>    `verification.ts:83-87`, web `:112-115`). That was a deliberate choice —
+>    wrongly denying a payer is worse than briefly granting a lapsed member —
+>    but it means an unreachable Stripe turns any lapsed row back into a member
+>    for the length of the outage.
+>
+> Also still open from this item, and not touched by the repair: the web gate
+> calls `sync_subscription`, which writes, against two comments that record
+> it as read-only; and `reconcile_audit`'s lapsed list only takes `status =
+> 'active'` (`stripe-payment/index.ts:650-652`), so it would have shown seven
+> of these eight.
+
 **The evidence. VERIFIED from Micky's query, 21 Sep**, grouping
 `subscriptions.status`, whether `current_period_end` is in the future, and
 `users.subscription_status`:
