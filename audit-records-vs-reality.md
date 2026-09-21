@@ -2141,6 +2141,63 @@ CONSOLE SAY THEY'RE ACTIVE. NOT REPAIRED; PLAN BELOW.**
 > 'active'` (`stripe-payment/index.ts:650-652`), so it would have shown seven
 > of these eight.
 
+>
+> **── 22 Sep 2026: TWO WEB SETTINGS GAPS FROM THIS ITEM'S READING, FIXED
+> (`c1cf660`) ──**
+>
+> **1. `past_due` no longer reads as healthy on web.** Web Settings used to
+> check only for `cancelling` (`MembershipSection.tsx:37`), so a member whose
+> renewal was failing saw *"Active. £4.99 a month, renewing on {date}."* It now
+> shows (`site/app/(app)/settings/MembershipSection.tsx:86-104`):
+> * **"Your last payment didn't go through."**
+> * **"You keep your membership until {date}."**, or without a date, *"…until
+>   the end of the period you've paid for."* That is true: the gate grants
+>   `past_due` to the period end (`site/lib/verification.ts:98`).
+> * **"There's no way to change your card on Cavy yet, so if your card has
+>   changed or expired, email us at support@guineapigapp.co.uk."** No card-update
+>   route exists anywhere, so the copy says so rather than promising one (see
+>   item 55's note). This is the sentence to change if one is ever built.
+>
+> The status line reads *"£4.99 a month."* (`:112-113`), deliberately **not**
+> "paid up to {date}". On a failed renewal Stripe has already moved the period
+> on, so `current_period_end` is the end of the unpaid period. The cancel
+> control stays.
+>
+> **Mobile is unchanged, and still shows the same false "active".** Its
+> Settings reads the `users` copy, where `apply_subscription_state` writes
+> `past_due` as `active` (`0024:194`). So it shows "✨ Premium" with a "Next
+> billing" date. Open point 2 above still stands for mobile.
+>
+> **2. The Membership section now shows for models, plus anyone holding a live
+> subscription** (`site/app/(app)/settings/page.tsx:59-73, 129`). Before, every
+> role saw it, so a stylist got *"No membership on this account… join here"*.
+> "Models" matches mobile's `isModel`, which counts `both`. **The exception is
+> deliberate:**
+> * **A stylist can reach `/subscribe`.** VERIFIED. Until this change,
+>   Settings' own "join here" link sent them there
+>   (`MembershipSection.tsx:66-67`). Now only a typed URL does: the other link
+>   to it, on the dashboard (`dashboard/page.tsx:261`), sits in the models-only
+>   branch (`:175`, `isProvider ? null`).
+> * **What they see there is the models' pitch.** *"£4.99 a month. Membership is
+>   what lets you apply for sessions…"* and "Continue to payment". Nothing on
+>   the page checks role (`subscribe/page.tsx`).
+> * **And they can pay.** `create_subscription` checks no role
+>   (`stripe-payment/index.ts:152`). So a stylist can hold a subscription.
+>   Hiding the section by role alone would have hidden the **cancel control**
+>   from someone being billed. The section therefore also shows to anyone
+>   whose subscription row exists and isn't `expired`.
+>
+> **Not established:** whether any stylist holds a subscription today. This
+> answers it, with no personal data:
+>
+>     select u.role, s.status, count(*)
+>     from public.subscriptions s join public.users u on u.id = s.user_id
+>     group by u.role, s.status order by 1, 2;
+>
+> **Still open, and not part of this change:** `/subscribe` and
+> `create_subscription` accept a stylist. Whether a stylist should be able to
+> buy the models' membership at all is a product decision.
+
 **The evidence. VERIFIED from Micky's query, 21 Sep**, grouping
 `subscriptions.status`, whether `current_period_end` is in the future, and
 `users.subscription_status`:
@@ -3027,10 +3084,28 @@ below.
   written for renewals, and nothing distinguishes the first payment's
   `billing_reason`, which is `subscription_create`.
 
+  > **⚠️ 22 Sep 2026: THE CARD CLAIM IS UNTRUE FOR RENEWALS TOO.** *"If you've
+  > got a new card, update it and nothing else is needed"* assumes somewhere to
+  > update it. **There is nowhere.** VERIFIED by search of `site`, `mobile/src`,
+  > `admin` and both edge functions: no Stripe billing portal, no SetupIntent,
+  > no payment-method change of any kind. The only mention of a card update in
+  > the codebase is this sentence (`stripe-webhook/index.ts:185`). So the
+  > notification sends a member whose renewal failed to look for a control
+  > that doesn't exist. Not changed: the notification copy was left alone
+  > (`c13752e`), and it still is. The web Settings copy added in `c1cf660`
+  > says the true thing instead (item 63).
+
 **Also seen while reading:** `/subscribe` still says *"Cancel any time — in the
 Cavy app for now, and on the web shortly"* (`page.tsx:67-68`). Cancelling has
 been on web Settings since `48e0146`. It is a stale sentence, item 47's
 pattern.
+
+> **✅ FIXED 22 Sep 2026 (`c1cf660`).** It now reads *"Membership is what lets
+> you apply for sessions. Cancel any time in Settings — you keep access until
+> the end of the month you've paid for."*, with Settings linked
+> (`site/app/(app)/subscribe/page.tsx:67-69`). "Until the end of the month
+> you've paid for" is what `cancel_subscription` does: it sets
+> `cancel_at_period_end`.
 
 **── WHAT SETTLES THE INFERRED PARTS (read-only, no personal data) ──────────**
 
