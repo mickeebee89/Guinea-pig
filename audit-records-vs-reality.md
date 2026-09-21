@@ -2578,6 +2578,36 @@ FIXED ──**
 >
 > **Not tested:** a real resend landing in an inbox, and the rate-limit path
 > against live Supabase. Both need a real unconfirmed account.
+>
+> **✅ TESTED 21 Sep 2026. VERIFIED from Micky's test:** a fresh sign-up, then
+> **"Send the link again" pressed two minutes later**, showed the sent message,
+> and **a second confirmation email arrived**. So the resend reaches a real
+> inbox, and it uses the same template. The rate-limit path is still not
+> exercised against live Supabase.
+>
+> **⚠️ CORRECTED 22 Sep 2026 — "NORMAL USE NEVER MEETS THE LIMIT" IS TOO WIDE.**
+> This note says the cooldown means *"normal use never meets the limit"*, and
+> *"nobody using the page ever sees"* the rate-limit answer. Both are left as
+> written, and both are wrong. The same over-wide claim is in the code comments
+> at `site/app/(auth)/ResendConfirmation.tsx:12-13` and
+> `site/app/(auth)/resend.ts:22`, which are unchanged.
+>
+> **Why.** The button's 60-second cooldown starts only after a *resend*.
+> Supabase's 60 seconds start from the **original sign-up email**. So someone
+> who presses "Send the link again" **straight after signing up** — the most
+> natural moment to do it — is refused, and sees *"We've only just sent one.
+> Give it a minute, then try again if it still hasn't arrived."* The same
+> applies on the sign-in panel within a minute of any earlier send.
+>
+> **What that means for the disclosure.** A person who hits this has just
+> signed up, so it tells them nothing they didn't know. The rest of the
+> disclosure note stands: a rate-limit answer is only possible for an address
+> that has an account. It just isn't true that ordinary use never produces one.
+> The copy itself is accurate for this case — one really was only just sent.
+>
+> **Not fixed**, as instructed. The obvious fix, if wanted, is to start the
+> sign-up panel's cooldown when the panel first appears, so the button counts
+> down the first minute rather than inviting a refusal.
 
 **Plainly:** after signing up, the "Check your email" panel says *"Nothing
 arrived? Check spam, or try again."* Clicking **try again** does nothing at
