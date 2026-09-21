@@ -2076,6 +2076,151 @@ was the reason for three workflows rather than one.
 It remains a signal and not a gate. Everything above about branch protection
 still stands.
 
+**62. EMAIL MOVED TO cavybeauty.com, AND AUTH LINKS NOW WORK ON ANY DEVICE —
+DONE 20 Sep 2026 IN THE DASHBOARDS, VERIFIED BY MICKY'S TESTS. REPO SYNCED 21 Sep.
+PLUS: THE SIGN-UP "try again" LINK DOES NOTHING. NOT FIXED.**
+
+**── WHAT CHANGED LIVE, 20 Sep. VERIFIED FROM MICKY'S TESTS AND READINGS ──**
+
+* **Resend:** `cavybeauty.com` added and verified, region `eu-west-1`. DNS
+  went into Cloudflare through Resend's auto-configure: DKIM TXT
+  `resend._domainkey`, and CNAMEs `send` and `rsend`. The optional DMARC record
+  was **not** added. `guineapigapp.co.uk` stays verified alongside it, so
+  reverting the sender is one field.
+* **Cloudflare Email Routing** is on for `cavybeauty.com`, with one rule:
+  `support@cavybeauty.com` forwards to `guineapig.app@gmail.com`. **The
+  catch-all is disabled.** A test email to `support@cavybeauty.com` arrived.
+* **Supabase Auth SMTP sender:** changed from `no-reply@guineapigapp.co.uk`,
+  name "Guinea Pig", to **`no-reply@cavybeauty.com`, name "Cavy"**. Host, port
+  and credentials are unchanged. A signup confirmation arrived from "Cavy".
+* **All five auth templates** changed from `{{ .ConfirmationURL }}` to
+  `token_hash` links, **one link each**:
+
+      Confirm signup  https://cavybeauty.com/auth/confirm?token_hash={{ .TokenHash }}&type=signup&next=/dashboard
+      Reset password  https://cavybeauty.com/auth/reset?token_hash={{ .TokenHash }}
+      Magic link      https://cavybeauty.com/auth/confirm?token_hash={{ .TokenHash }}&type=magiclink&next=/dashboard
+      Invite          https://cavybeauty.com/auth/confirm?token_hash={{ .TokenHash }}&type=invite&next=/dashboard
+      Change email    https://cavybeauty.com/auth/confirm?token_hash={{ .TokenHash }}&type=email_change&next=/settings
+
+* **The change-email template's variable list** shows one `.TokenHash` and a
+  `.NewEmail`, with **no second token variable**. That settles the open
+  question from the 20 Sep report about a second token for "Secure email
+  change".
+
+**── THE TESTS, AND HOW FAR THEY REACH ──**
+
+* **Before:** a reset requested on the laptop and opened on a phone failed with
+  *"PKCE code verifier not found in storage"*. That was expected: the PKCE
+  verifier is a cookie in the requesting browser (`site/lib/supabase-server.ts`,
+  `forgot-password/actions.ts:29-32`), and `auth/reset/route.ts:31-32` needs it.
+* **After:** a reset requested on the laptop and opened on the phone **let the
+  password be changed**. A signup made on the laptop and confirmed on the phone
+  **landed on the dashboard**.
+
+**What that sample covers:** two flows, reset and signup confirmation, both
+started on the web on a laptop. **Not tested:** magic link, invite and change
+email; any flow started in the **mobile app**; and any template's link opened
+in an email client that strips or rewrites links.
+
+**What it means for the shipped mobile app.** The templates are project-wide,
+and the new links are hardcoded to `cavybeauty.com`. So mobile's
+`emailRedirectTo` (`SignupScreen.tsx:170`) and `redirectTo`
+(`ForgotPasswordScreen.tsx:53`) are **no longer used at all** — they only ever
+shaped the `redirect_to` inside `{{ .ConfirmationURL }}`. A mobile signup or
+reset now completes on the website, then the person signs in on the phone.
+`guineapigapp.co.uk/auth/confirmed` and `/auth/reset` receive no new traffic.
+Links already sitting in inboxes still go via Supabase and still work until
+they expire. Inferred from the templates and the code; not tested from the
+app.
+
+**── THE REPO, SYNCED 21 Sep ──**
+
+`supabase/email-templates/build.mjs` now gives each template its own `url`,
+the exact live href, and uses it for **both** the button and the visible
+fallback link. The five `.html` files were rebuilt: each changed in exactly
+those two places, and a check confirmed every file carries its live href twice
+and no `ConfirmationURL`.
+
+**One thing the rebuild had to handle:** `&` is written `&amp;` in the HTML.
+In an attribute a raw `&` survives. But the fallback URL is **text**, and in
+text `&not` decodes to "¬" even without a semicolon. So `&next=/dashboard`
+would have displayed as "¬ext=/dashboard", and a copied link would have lost
+its `next` — which for change-email means landing on `/dashboard` instead of
+`/settings`. Browsers decode `&amp;` back to `&`.
+
+**⚠️ THE LIVE TEMPLATES ARE NOT WHAT THE SCRIPT BUILDS.** What is live is
+**plain HTML with a single link**. The styled versions `build.mjs` produces
+have **never been pasted**. So pasting the built files would be a **deliberate
+change** to what people receive, not a sync. `build.mjs`'s header now says so,
+and so does its console output. Before anyone pastes them:
+* **Footer:** the built footer says *"Reply to this email or write to …"*. The
+  sender is now `no-reply@cavybeauty.com`, and Cloudflare routes only
+  `support@` with the catch-all disabled. **A reply to `no-reply@` is INFERRED
+  to bounce.** Whether the live plain templates say "reply" is not recorded.
+* **Test one real send per template**, before and after, as `HANDOVER.md:45`
+  already asked.
+
+**── WHAT DID NOT CHANGE ──**
+
+**Every support address in both apps still reads `support@guineapigapp.co.uk`**
+— which Micky reports still works (stated, not tested in this item):
+* the `SUPPORT` constant at `supabase/email-templates/build.mjs:49`, used in the
+  built footers;
+* `SUPPORT_EMAIL` at `site/lib/site.ts:6`, which feeds the footer, the error
+  page, and the Terms and Privacy — **including the published child-safety
+  (CSAE) contact** at `site/content/legal.ts:295`;
+* the web literals, `stripe-payment`'s two error strings, and all eleven mobile
+  literals, as listed in the 20 Sep report.
+
+`support@cavybeauty.com` now exists and forwards (tested), so the code can move
+when that is decided. Moving it is a code change on web, a function redeploy,
+and a store build on mobile. The CSAE contact is also a declaration to Google,
+so it is worth deciding on purpose rather than sweeping.
+
+**Now stale, not edited here (item 47's pattern):** `CLAUDE.md:42-43` still
+says the sender is `no-reply@guineapigapp.co.uk` and *"not yet moved to
+cavybeauty.com"*. `HANDOVER.md:45` still lists the sender move and the
+never-tested templates as outstanding. The first half of that row is now done;
+the second half is two templates down, three to go.
+
+**Not done, and worth knowing:** there is no DMARC record for
+`cavybeauty.com`. At current volume that is advisory rather than a block.
+INFERRED: the large mailbox providers' bulk-sender rules require DMARC above a
+volume threshold, and a new domain earns reputation faster with one.
+
+**── AND: THE SIGN-UP "try again" LINK IS DEAD. VERIFIED FROM CODE, 20 Sep. NOT
+FIXED ──**
+
+**Plainly:** after signing up, the "Check your email" panel says *"Nothing
+arrived? Check spam, or try again."* Clicking **try again** does nothing at
+all. No request, no message, no change. Reported by Micky and explained by
+the code.
+
+* **It is a plain link to the page it is already on:** `<Link
+  href="/sign-up">` at `site/app/(auth)/sign-up/SignUpForm.tsx:50-54`. The panel
+  is rendered by that same component when `state.sentTo` is set (`:38`). A link
+  to the current route is a soft navigation that does not remount the
+  component, so the `useActionState` state (`:30`) survives and the same panel
+  stays. Nothing is called, and nothing renders.
+* **There is no resend anywhere in `site/`.** No `auth.resend` call exists. The
+  only one in the repo is mobile's (`mobile/src/screens/auth/ConfirmEmailScreen.tsx:91`).
+* **The 60-second interval was never the cause.** Nothing reaches the server to
+  be refused, which is why waiting changed nothing.
+* **The only route to another email is re-filling the whole form.** If that
+  lands inside the interval, the raw GoTrue message is shown as the form error
+  (`sign-up/actions.ts:112`), untranslated. Whether an **unconfirmed** address
+  instead takes the "already registered" branch (`:109-110`), which sends the
+  person to sign in, depends on GoTrue behaviour and is **not established**.
+* **The same shape, one level up:** `site/app/(auth)/sign-in/SignInForm.tsx:25-30`
+  offers *"Sign up again to resend it"*, also a link to `/sign-up`. From
+  sign-in it at least navigates somewhere, but to a blank form, not a resend.
+* **The reset flow is clean on this point.** Its success panel offers only
+  "Back to sign in" (`forgot-password/ForgotForm.tsx:10-22`). Note
+  `forgot-password/actions.ts:34-38` deliberately reports success on every
+  failure, a rate limit or an SMTP outage included, so an address can't be
+  tested for an account. A reset that never arrives looks exactly like one
+  that was sent.
+
 **61. `anon` AND `authenticated` HOLD DELETE ON `public.messages`, AND NO DELETE
 POLICY EXISTS — SEEN 20 Sep 2026 IN `0043`'s BLOCK A. READ-ONLY; NOT FIXED. ONE
 QUERY DECIDES WHETHER IT IS INERT OR SERIOUS.**
