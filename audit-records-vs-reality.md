@@ -2197,6 +2197,20 @@ CONSOLE SAY THEY'RE ACTIVE. NOT REPAIRED; PLAN BELOW.**
 > **Still open, and not part of this change:** `/subscribe` and
 > `create_subscription` accept a stylist. Whether a stylist should be able to
 > buy the models' membership at all is a product decision.
+>
+> **SETTLED 21 Sep 2026. VERIFIED from Micky's live query:** grouped by role
+> and status, `subscriptions` holds **model / active: 1** and **model /
+> expired: 12**, and **no provider rows at all**. **No stylist has ever held a
+> subscription.** So the models-plus-live-subscribers rule on web Settings
+> changes nothing for any real account today; it only guards a case that has
+> never happened.
+>
+> **DECISION, Micky, 21 Sep 2026:** stylists can still reach `/subscribe` by
+> typing the URL, and they are not blocked. **Accepted**, because no link leads
+> there for them: the Settings link now shows only to models or live
+> subscribers, and the dashboard link sits in the models-only branch. Neither
+> `/subscribe` nor `create_subscription` checks role, and both are left as
+> they are.
 
 **The evidence. VERIFIED from Micky's query, 21 Sep**, grouping
 `subscriptions.status`, whether `current_period_end` is in the future, and
