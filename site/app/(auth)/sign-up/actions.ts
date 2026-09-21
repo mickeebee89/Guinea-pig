@@ -2,6 +2,7 @@
 
 import { headers } from 'next/headers'
 import { createSupabaseServerClient } from '@/lib/supabase-server'
+import { isRateLimited } from '@/lib/authErrors'
 import {
   buildSignupMetadata,
   validateSignup,
@@ -109,7 +110,26 @@ export async function signUp(_prev: SignUpState | null, formData: FormData): Pro
     if (/already registered|already been registered/i.test(error.message)) {
       return { errors: { email: 'There is already an account with this email. Try signing in instead.' } }
     }
-    return { errors: { form: error.message } }
+    // Everything else used to be `{ form: error.message }` — Supabase's own
+    // developer-facing wording shown to the person (item 62). Now it is decided
+    // by code and status, and the raw message goes only to the log.
+    console.error('[sign-up] signUp failed', {
+      status: error.status, code: error.code, message: error.message,
+    })
+    if (isRateLimited(error)) {
+      return { errors: { form: 'Too many attempts just now. Please wait a minute, then try again.' } }
+    }
+    if (error.code === 'weak_password') {
+      return { errors: { password: 'Choose a stronger password — that one is too easy to guess.' } }
+    }
+    if (error.code === 'email_address_invalid') {
+      return { errors: { email: 'That email address doesn’t look right.' } }
+    }
+    return {
+      errors: {
+        form: 'We couldn’t create your account just now. Please try again in a moment, or contact support if it keeps happening.',
+      },
+    }
   }
 
   return { sentTo: email }

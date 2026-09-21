@@ -7,6 +7,8 @@ export interface SignInState {
   error?: string
   /** Set when the account exists but the email was never confirmed. */
   needsConfirmation?: boolean
+  /** The address typed, returned with needsConfirmation so the panel can resend to it. */
+  email?: string
 }
 
 /**
@@ -32,7 +34,12 @@ export async function signIn(_prev: SignInState | null, formData: FormData): Pro
     // has a different fix, so it gets its own path rather than the generic
     // message. Everything else is deliberately indistinguishable — see below.
     if (/email not confirmed|not confirmed/i.test(error.message)) {
-      return { needsConfirmation: true }
+      // The email goes back so the panel can offer a resend. That address is
+      // the one the person just typed, so returning it discloses nothing new.
+      // (This branch itself already tells them the account exists. As GoTrue's
+      // token handler is written, "not confirmed" comes only after the password
+      // has matched — understood from GoTrue, not verified here.)
+      return { needsConfirmation: true, email }
     }
 
     // ONE message for wrong password AND unknown account, on purpose. Saying

@@ -3,6 +3,7 @@
 import { useActionState } from 'react'
 import Link from 'next/link'
 import { signIn, type SignInState } from './actions'
+import { ResendConfirmation } from '../ResendConfirmation'
 
 export function SignInForm({ next }: { next: string }) {
   const [state, formAction, pending] = useActionState<SignInState | null, FormData>(signIn, null)
@@ -22,12 +23,8 @@ export function SignInForm({ next }: { next: string }) {
           Your account exists, but the email address hasn’t been confirmed yet. Open the link we
           sent when you signed up — check spam if it isn’t in your inbox.
         </p>
-        <Link
-          href="/sign-up"
-          className="mt-4 inline-flex min-h-11 items-center rounded-[999px] bg-soft-pink px-5 text-sm font-bold text-rose"
-        >
-          Sign up again to resend it
-        </Link>
+        {/* Was a link to /sign-up: a blank form, not a resend (item 62). */}
+        {state.email && <ResendConfirmation email={state.email} />}
       </div>
     )
   }

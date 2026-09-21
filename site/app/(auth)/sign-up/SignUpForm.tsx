@@ -3,6 +3,7 @@
 import { useActionState, useState } from 'react'
 import Link from 'next/link'
 import { signUp, type SignUpState } from './actions'
+import { ResendConfirmation } from '../ResendConfirmation'
 import type { SignupRole } from '@/lib/signup'
 
 const ROLES: { value: SignupRole; label: string; blurb: string }[] = [
@@ -46,13 +47,10 @@ export function SignUpForm({
           We’ve sent a confirmation link to <strong className="text-warm-dark">{state.sentTo}</strong>.
           Open it and your account is ready.
         </p>
-        <p className="mt-4 text-sm text-muted">
-          Nothing arrived? Check spam, or{' '}
-          <Link href="/sign-up" className="text-rose underline decoration-rose/30 underline-offset-2">
-            try again
-          </Link>
-          .
-        </p>
+        {/* Was a <Link href="/sign-up"> — a link to the page it sits on, which
+            soft-navigates without remounting, so it did nothing (item 62). */}
+        <p className="mt-4 text-sm text-muted">Nothing arrived? Check spam, or send it again.</p>
+        <ResendConfirmation email={state.sentTo} />
       </div>
     )
   }
