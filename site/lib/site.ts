@@ -28,7 +28,7 @@ export const SUPPORT_EMAIL = 'support@cavybeauty.com'
  * (app/layout.tsx).
  *
  * ── "PREVIEW DEPLOYMENTS MUST NEVER BE LIVE" — NOW ENFORCED, NOT HOPED FOR ──
- * Until 22 Sep 2026 this file stated that rule and then read PUBLIC_SITE_MODE
+ * Until 21 Sep 2026 this file stated that rule and then read PUBLIC_SITE_MODE
  * alone, while the Vercel variable was scoped to Production and Preview
  * together (audit item 52). The day Production was set to 'live', every
  * preview deployment would have gone live with it. Condition 2 makes the rule
@@ -40,7 +40,7 @@ export const SUPPORT_EMAIL = 'support@cavybeauty.com'
  * 'preview'. A build that somehow ran without it would be hidden, which is the
  * safe direction.
  *
- * Stays non-live until (a) the test accounts are cleared — decided 22 Sep 2026
+ * Stays non-live until (a) the test accounts are cleared — decided 21 Sep 2026
  * — and (b) there is real inventory worth indexing.
  */
 export const IS_LIVE =

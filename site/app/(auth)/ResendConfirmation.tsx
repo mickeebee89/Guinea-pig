@@ -25,7 +25,7 @@ import { resendConfirmation, type ResendOutcome } from './resend'
  *   earlier, in another tab), the first press is refused and shows the
  *   rate-limit copy, which is true — and then the countdown runs.
  *
- * Until 22 Sep this said the cooldown meant "someone using the page normally
+ * Until 21 Sep this said the cooldown meant "someone using the page normally
  * never runs into the rate limit at all". That was wrong: pressing resend
  * straight after signing up hit it every time (item 62).
  */

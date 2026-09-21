@@ -85,7 +85,7 @@ export function MembershipSection({ view }: { view: MembershipView }) {
     <div className="space-y-3">
       {pastDue && (
         // ⚠️ NO CARD-UPDATE ROUTE EXISTS, so this does not offer one. Searched
-        // 22 Sep across site, mobile, admin and both edge functions: no billing
+        // 21 Sep across site, mobile, admin and both edge functions: no billing
         // portal, no SetupIntent, no payment-method change anywhere. The honest
         // instruction is the support address. If a way to change a card is ever
         // built, this is the sentence to change.

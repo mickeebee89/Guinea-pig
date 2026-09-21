@@ -23,7 +23,7 @@ export type ResendOutcome = 'sent' | 'rate_limited'
  * panel it counts down the minute after the sign-up email, and after every
  * resend it counts down again. It can still happen on the sign-in panel if an
  * email went out within the last minute — and then the person seeing it is the
- * one who triggered that email, so it tells them nothing. (Until 22 Sep this
+ * one who triggered that email, so it tells them nothing. (Until 21 Sep this
  * said nobody using the page "ever sees it", which was wrong: resending
  * straight after signing up hit it every time, item 62.) And the sign-up form
  * already says "There is already an account with this email"
