@@ -40,7 +40,19 @@ _This file is read automatically at the start of every Claude Code session. It h
   `portfolio-photos`, `verification-selfies`. Cloudinary is named in older notes
   and is called by no code in any of the three apps.
 - **Email:** Supabase Auth SMTP via Resend, sending from
-  `no-reply@guineapigapp.co.uk` — not yet moved to cavybeauty.com.
+  **`no-reply@cavybeauty.com`, sender name "Cavy"** — moved 20 Sep 2026 and
+  verified by a real signup email (audit item 62). Host, port and credentials
+  unchanged. `guineapigapp.co.uk` stays verified in Resend, so reverting is one
+  field. `support@cavybeauty.com` forwards to `guineapig.app@gmail.com` through
+  Cloudflare Email Routing, one rule, catch-all off — so `no-reply@` receives
+  nothing. The five auth templates use `token_hash` links to
+  `cavybeauty.com/auth/confirm` and `/auth/reset`, not `{{ .ConfirmationURL }}`,
+  so links work on any device. The live templates are plain HTML, not what
+  `supabase/email-templates/build.mjs` builds.
+  ~~`no-reply@guineapigapp.co.uk` — not yet moved to cavybeauty.com.~~
+  *Superseded 20 Sep 2026; kept so the old value is recognisable in older notes.*
+  Support addresses in both apps still read `support@guineapigapp.co.uk`, which
+  still works; moving them is a separate decision.
 - **Repo:** github.com/mickeebee89/Guinea-pig — commit direct to `main`.
 - **Repo root (Windows):** `C:\Users\micky\Documents\Guinea-pig` — **no app lives at the root.**
   Three sibling apps: `admin\` (Next.js console), `site\` (public website), `mobile\` (Expo).

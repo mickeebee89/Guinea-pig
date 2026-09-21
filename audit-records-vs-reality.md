@@ -2157,6 +2157,11 @@ and so does its console output. Before anyone pastes them:
   sender is now `no-reply@cavybeauty.com`, and Cloudflare routes only
   `support@` with the catch-all disabled. **A reply to `no-reply@` is INFERRED
   to bounce.** Whether the live plain templates say "reply" is not recorded.
+
+  > **SETTLED 21 Sep 2026 (Micky, from the dashboard as seen on 20 Sep):** the
+  > five live templates contain **no "reply to this email" line**. So the
+  > bounce risk applies **only if the styled `build.mjs` versions are pasted**.
+  > It doesn't apply to what people receive today.
 * **Test one real send per template**, before and after, as `HANDOVER.md:45`
   already asked.
 
@@ -2182,6 +2187,13 @@ says the sender is `no-reply@guineapigapp.co.uk` and *"not yet moved to
 cavybeauty.com"*. `HANDOVER.md:45` still lists the sender move and the
 never-tested templates as outstanding. The first half of that row is now done;
 the second half is two templates down, three to go.
+
+> **UPDATED 21 Sep 2026.** Both files are corrected, with the old value
+> struck through and marked superseded rather than deleted. `CLAUDE.md`'s
+> Email line now gives the sender as `no-reply@cavybeauty.com`, name "Cavy",
+> with the routing, the `token_hash` links and the plain-versus-built note.
+> `HANDOVER.md`'s Sender domain row marks the move done, and leaves open the
+> three untested templates and the support address.
 
 **Not done, and worth knowing:** there is no DMARC record for
 `cavybeauty.com`. At current volume that is advisory rather than a block.

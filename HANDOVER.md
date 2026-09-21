@@ -42,7 +42,7 @@ call or an afternoon.
 | **Teardown** | `teardown.mjs` matches `@seed.guineapig.invalid` and refuses any other suffix, by design | The hand-made accounts (`@acoxs.com`, `@bevriz.com`, gmail, hotmail) cleared **separately** |
 | **CSAE wording** | Play declaration recorded done; the **submitted text** has never been read against what the product does | A check, ~20 minutes |
 | **Listing bar** | Six SEO treatment pages render zero stylists | **One real stylist with a 40-character bio.** Not an inventory problem — see item 11 for the query that says which bar each stylist fails |
-| **Sender domain** | Still `no-reply@guineapigapp.co.uk`; five auth templates never tested against a real inbox | The Resend move, and one test send each |
+| **Sender domain** | ✅ **Moved 20 Sep 2026:** sending as `no-reply@cavybeauty.com`, name "Cavy", verified by a real signup email. Templates now use `token_hash` links, so they work on any device. **Still open:** 3 of the 5 templates untested against a real inbox (magic link, invite, change email), and support addresses in both apps still read `support@guineapigapp.co.uk`. ~~Still `no-reply@guineapigapp.co.uk`; five auth templates never tested against a real inbox~~ *(superseded 20 Sep; audit item 62)* | One test send each for the remaining three. Moving the support address is a separate decision |
 
 ---
 
