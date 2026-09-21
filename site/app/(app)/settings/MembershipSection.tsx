@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import { SUPPORT_EMAIL } from '@/lib/site'
 import { cancelMembership } from './actions'
 
 /**
@@ -35,6 +36,11 @@ export function MembershipSection({ view }: { view: MembershipView }) {
 
   const endsOn = fmt(view.renewsOn)
   const cancelling = view.status === 'cancelling'
+  // A renewal payment has failed. The gate still grants access to the end of
+  // the paid period (site/lib/verification.ts:98), which is right — but this
+  // used to read "Active … renewing on {date}", telling someone whose card is
+  // failing that all was well.
+  const pastDue = view.status === 'past_due'
 
   async function doCancel() {
     setBusy(true)
@@ -77,8 +83,35 @@ export function MembershipSection({ view }: { view: MembershipView }) {
 
   return (
     <div className="space-y-3">
+      {pastDue && (
+        // ⚠️ NO CARD-UPDATE ROUTE EXISTS, so this does not offer one. Searched
+        // 22 Sep across site, mobile, admin and both edge functions: no billing
+        // portal, no SetupIntent, no payment-method change anywhere. The honest
+        // instruction is the support address. If a way to change a card is ever
+        // built, this is the sentence to change.
+        <div role="status" className="rounded-lg border border-hairline bg-input-bg p-3 text-sm text-warm-dark">
+          <p className="font-bold">Your last payment didn’t go through.</p>
+          <p className="mt-1">
+            {endsOn
+              ? `You keep your membership until ${endsOn}.`
+              : 'You keep your membership until the end of the period you’ve paid for.'}
+            {' '}There’s no way to change your card on Cavy yet, so if your card has changed or
+            expired, email us at{' '}
+            <a href={`mailto:${SUPPORT_EMAIL}`} className="font-bold text-rose hover:underline">
+              {SUPPORT_EMAIL}
+            </a>
+            .
+          </p>
+        </div>
+      )}
+
       <p className="text-sm text-muted">
-        {cancelling
+        {/* Not "paid up to": on a failed renewal Stripe has already moved the
+            period on, so current_period_end is the end of the UNPAID period.
+            The box above says the true thing — access runs to that date. */}
+        {pastDue
+          ? '£4.99 a month.'
+          : cancelling
           ? endsOn
             ? `Ends on ${endsOn}. It will not renew, and you keep access until then.`
             : 'Ending — it will not renew, and you keep access until the end of the period you paid for.'

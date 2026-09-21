@@ -64,8 +64,9 @@ export default async function SubscribePage() {
     <Wrap>
       <h2 className="font-display text-xl text-warm-dark">£4.99 a month</h2>
       <p className="mt-1 text-sm text-muted">
-        Membership is what lets you apply for sessions. Cancel any time — in the Cavy app for now,
-        and on the web shortly.
+        Membership is what lets you apply for sessions. Cancel any time in{' '}
+        <Link href="/settings" className="font-bold text-rose hover:underline">Settings</Link>
+        {' '}— you keep access until the end of the month you’ve paid for.
       </p>
       <ul className="mt-3 space-y-1 text-sm text-muted">
         <li>· Apply for as many sessions as you like</li>

@@ -56,6 +56,22 @@ export default async function SettingsPage() {
     renewsOn: (subRow as { current_period_end?: string } | null)?.current_period_end ?? null,
   }
 
+  // ── WHO SEES THE MEMBERSHIP SECTION ─────────────────────────────────────
+  // Models, as on mobile (settings.tsx:650 — `isModel`, which counts 'both').
+  // A stylist was being shown "No membership on this account… join here", a
+  // pitch for a membership that only matters to someone applying for sessions.
+  //
+  // ⚠️ PLUS anyone holding a subscription that has not expired, whatever their
+  // role. Nothing stops a stylist paying — /subscribe and create_subscription
+  // check no role — so hiding the section by role alone would hide the CANCEL
+  // control from someone who is being billed. "Cancel any time" has to be true
+  // for whoever is actually paying.
+  const { data: me } = await supabase.from('users').select('role').eq('id', user.id).maybeSingle()
+  const role = (me as { role?: string } | null)?.role
+  const isModel = role === 'model' || role === 'both'
+  const holdsSubscription = !!membership.status && membership.status !== 'expired'
+  const showMembership = isModel || holdsSubscription
+
   const { data: rows } = await supabase
     .from('blocks')
     .select('blocked_id, created_at')
@@ -110,10 +126,12 @@ export default async function SettingsPage() {
         </section>
       )}
 
-      <section className="mb-8">
-        <h2 className="mb-2 font-display text-lg text-warm-dark">Membership</h2>
-        <MembershipSection view={membership} />
-      </section>
+      {showMembership && (
+        <section className="mb-8">
+          <h2 className="mb-2 font-display text-lg text-warm-dark">Membership</h2>
+          <MembershipSection view={membership} />
+        </section>
+      )}
 
       <section>
         <h2 className="mb-2 font-display text-lg text-warm-dark">Blocked people</h2>
