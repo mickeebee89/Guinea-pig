@@ -6,15 +6,39 @@ export const SITE_TAGLINE = 'Be the guinea pig, get the glow.'
 export const SUPPORT_EMAIL = 'support@guineapigapp.co.uk'
 
 /**
- * 'live' turns indexing on. Anything else (including unset) means robots.txt
- * disallows everything, the sitemap is empty, and every page emits
- * `noindex, nofollow`.
+ * Whether search engines may index THIS deployment. Both must hold:
  *
- * Stays non-live until (a) `node seed/teardown.mjs` has run so seeded demo
- * stylists cannot be indexed, and (b) there is real inventory worth indexing.
- * Vercel preview deployments must never be 'live'.
+ *   1. PUBLIC_SITE_MODE === 'live' — exactly. 'preview', unset, 'Live', a typo:
+ *      anything else is hidden.
+ *   2. VERCEL_ENV === 'production'. Vercel sets it per deployment: 'production'
+ *      for the production deployment, 'preview' for branch and PR deploys,
+ *      'development' under `vercel dev`. It is UNSET in local `next dev` /
+ *      `next build` and in GitHub Actions, so those are hidden whatever
+ *      PUBLIC_SITE_MODE says. (The cost: checking the live SEO output locally
+ *      now needs VERCEL_ENV=production set by hand as well.)
+ *
+ * When false: robots.txt disallows everything (app/robots.ts), the sitemap is
+ * empty (app/sitemap.ts), and every page emits `noindex, nofollow`
+ * (app/layout.tsx).
+ *
+ * ── "PREVIEW DEPLOYMENTS MUST NEVER BE LIVE" — NOW ENFORCED, NOT HOPED FOR ──
+ * Until 22 Sep 2026 this file stated that rule and then read PUBLIC_SITE_MODE
+ * alone, while the Vercel variable was scoped to Production and Preview
+ * together (audit item 52). The day Production was set to 'live', every
+ * preview deployment would have gone live with it. Condition 2 makes the rule
+ * true in code, however the variable is scoped.
+ *
+ * Read at BUILD time for the prerendered robots.txt and sitemap. Vercel exposes
+ * VERCEL_ENV to the build as well as at runtime ("Automatically expose System
+ * Environment Variables" is on for the project), so a preview build sees
+ * 'preview'. A build that somehow ran without it would be hidden, which is the
+ * safe direction.
+ *
+ * Stays non-live until (a) the test accounts are cleared — decided 22 Sep 2026
+ * — and (b) there is real inventory worth indexing.
  */
-export const IS_LIVE = process.env.PUBLIC_SITE_MODE === 'live'
+export const IS_LIVE =
+  process.env.PUBLIC_SITE_MODE === 'live' && process.env.VERCEL_ENV === 'production'
 
 /**
  * Treatment landing pages. The URL slug is deliberately NOT the database slug:

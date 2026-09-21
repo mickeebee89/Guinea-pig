@@ -38,7 +38,8 @@ export const metadata: Metadata = {
     locale: 'en_GB',
   },
   // Belt and braces with robots.ts: that governs crawling, this governs
-  // indexing of a page already fetched. Both are driven by PUBLIC_SITE_MODE.
+  // indexing of a page already fetched. Both are driven by IS_LIVE, which needs
+  // PUBLIC_SITE_MODE=live AND a production deployment (lib/site.ts).
   robots: IS_LIVE
     ? { index: true, follow: true }
     : { index: false, follow: false, nocache: true },
