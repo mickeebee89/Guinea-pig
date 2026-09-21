@@ -2076,6 +2076,183 @@ was the reason for three workflows rather than one.
 It remains a signal and not a gate. Everything above about branch protection
 still stands.
 
+**63. SEVEN ACCOUNTS READ AS PAYING MEMBERS WITH A PAID PERIOD LONG ENDED —
+FOUND 21 Sep 2026. THE APPLY GATES DON'T GRANT THEM; MOBILE SETTINGS AND THE
+CONSOLE SAY THEY'RE ACTIVE. NOT REPAIRED; PLAN BELOW.**
+
+**The evidence. VERIFIED from Micky's query, 21 Sep**, grouping
+`subscriptions.status`, whether `current_period_end` is in the future, and
+`users.subscription_status`:
+
+| `subscriptions.status` | period end | `users.subscription_status` | rows |
+|---|---|---|---|
+| `active` | **past** | `active` | **7** |
+| `active` | future | `active` | 1 |
+| `cancelling` | past | `cancelling` | 1 |
+| `expired` | past | `none` | 3 |
+| `expired` | null | `none` | 1 |
+
+Stripe's live dashboard shows **one** active subscriber, which matches the
+single future-dated row. The seven rows date from 8–17 Jul 2026, before the
+webhook existed (25 Aug), so no event ever arrived to expire them. **The
+`cancelling` row with a past end is the same condition** — lapsed, and still
+naming a live-sounding status — so the affected set is **eight rows**, seven
+`active` plus one `cancelling`.
+
+**── 1. DOES MOBILE TREAT `users.subscription_status = 'active'` AS A MEMBER? ──**
+
+**The apply gate: NO. VERIFIED.** `mobile/src/lib/verification.ts:42-88` reads
+the **`subscriptions`** table, not the `users` copy. For these rows:
+* the fast path needs a future period end (`:67-70`), so it fails;
+* the status is in the live list, so it isn't dismissed either (`:73`);
+* **so it asks Stripe** through `sync_subscription` (`:76-79`). Stripe has no
+  live subscription for them, so the answer is "not a member", and the row is
+  expired on the way (`stripe-payment/index.ts`, the no-live-subscription
+  branch of `syncSubscription`).
+
+**The caveat, and it is a real one:** the gate fails OPEN. If Stripe can't be
+reached, or the sync call errors, it returns **true** (`:83`, `:84-87`). So for
+these seven, the gate's answer is only as good as the Stripe call on that
+occasion.
+
+**Mobile Settings: YES, it shows them as members. VERIFIED.** It reads the
+`users` copy: `isPaid` is `['active', 'trialling', 'cancelling'].includes(subscription_status)`
+(`mobile/src/app/(app)/settings.tsx:551`). So these seven see **"✨ Premium"**,
+**"Next billing"** with a July date (`:661-667`), and a **"Cancel subscription"**
+row (`:682-690`). Pressing it calls `cancel_subscription`, which tries to set
+`cancel_at_period_end` on a subscription Stripe no longer bills. INFERRED: that
+fails, and they see *"Couldn't cancel"*. Display, not access — but a false
+statement about money, made to the account holder.
+
+**The web gate** (`site/lib/verification.ts:67-116`) has the same shape as
+mobile's and asks Stripe the same way (`:104-116`), with the same fail-open
+(`:112`, `:115`). It never reads the `users` copy.
+
+**── 2. THE READ-TIME RECONCILE: WHERE IT IS, AND WHY IT HASN'T REPAIRED THESE ──**
+
+**Where:** `sync_subscription`, i.e. `syncSubscription` in
+`supabase/functions/stripe-payment/index.ts` (the body starting at `:729`). It
+reads our row, asks Stripe, and writes the truth back through
+`apply_subscription_state`.
+
+**Who runs it — narrower than the webhook header says.**
+`stripe-webhook/index.ts:14-15` says *"when someone opens Cavy we ask Stripe
+what is true and repair our row"*. **That is not what happens.** It runs only
+when a caller evaluates the subscription gate **and** the row is ambiguous
+(lapsed date, or no customer id):
+* **Web:** `getGateState` on `/dashboard`, for **models only**
+  (`site/app/(app)/dashboard/page.tsx:175`, `isProvider ? null`), on
+  `/settings` (`settings/page.tsx:46`) and on `/subscribe` (`subscribe/page.tsx:42`).
+* **Mobile:** when a model starts an application (`apply-session.tsx:207`),
+  and in the subscribe flow (`subscribe.tsx:141-144`). **Opening the app does
+  not run it**, and mobile Settings — the screen that shows the wrong status —
+  never calls it.
+* **Per person, and only their own row.** The user id comes from the caller's
+  token (`stripe-payment/index.ts:64-67`). Nobody else's visit repairs anyone.
+
+**Why these seven are unrepaired. INFERRED — the repo can't show visits:**
+their owners have not loaded any of those screens since the gates became
+date-aware (mobile 24 Aug, web 14 Sep). They are July accounts. The other way
+it could fail is quiet: if the expire write errors, `syncSubscription` returns
+500 (the two `sync_subscription expire failed` branches, `:788`, `:811`). The
+client then falls back to **granting** (`verification.ts:84-87` mobile,
+`:113-115` web), and the row stays as it was. There's no record of which
+happened for any of the seven.
+
+**── ⚠️ AND A CONTRADICTION FOUND ON THE WAY. VERIFIED ──**
+
+Two web comments state a 14 Sep decision that **the web gate reconciles
+read-only**: `site/app/(app)/settings/actions.ts:61-63` (*"that decision is
+about the GATE, which reads on every page load"*) and
+`site/app/(app)/subscribe/actions.ts:96`. **The web gate does not do that.** It
+calls `sync_subscription` (`site/lib/verification.ts:106-107`), which **writes**.
+Either the decision was never implemented, or it was reversed and the comments
+weren't. Ironically, the write is what would repair these rows when their
+owners visit. Recorded as a contradiction, not resolved here.
+
+**── 3. ANYTHING ELSE TRUSTING THE `users` COPY WITHOUT A DATE CHECK ──**
+
+VERIFIED by search of `site`, `mobile/src`, `admin` and every migration and
+SQL file in the repo:
+* **Mobile Settings**, as above (`settings.tsx:551-555, 661-690`).
+* **The admin console's users page** shows `u.subscription_status` as the
+  plan column (`admin/app/users/page.tsx:19, 323`). So **Micky sees these seven
+  as active in the console.**
+* **Nothing in SQL.** No RLS policy and no function in the repo reads
+  `users.subscription_status` to decide anything. Every mention is
+  `apply_subscription_state` writing it, a migration's measurement, the
+  constraint, or `0040`'s self-write guard.
+* **No notification** reads it.
+* **The website never reads the `users` copy at all.**
+
+**The limit of that search:** functions that exist live but not in the repo
+(item 52 found three objects in that state) wouldn't show up. This settles it
+from the database's side:
+
+    select p.proname
+    from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public' and p.prosrc ilike '%subscription_status%'
+    order by 1;
+
+    select policyname, tablename, qual, with_check
+    from pg_policies
+    where schemaname = 'public'
+      and (qual ilike '%subscription_status%' or with_check ilike '%subscription_status%');
+
+**── 4. THE REPAIR — PLANNED, NOT RUN ──**
+
+**Identify them, read-only, with no emails:**
+
+    select s.user_id, s.status as sub_status, s.current_period_end,
+           s.stripe_customer_id, s.stripe_subscription_id,
+           u.subscription_status as users_copy, u.subscription_next_billing,
+           u.subscription_waived, s.created_at
+    from public.subscriptions s
+    join public.users u on u.id = s.user_id
+    where s.status in ('active', 'cancelling', 'past_due')
+      and (s.current_period_end is null or s.current_period_end <= now())
+    order by s.created_at;
+
+Expect eight rows: seven `active` and one `cancelling`. The one live subscriber
+has a future end, so it is excluded by construction.
+
+**The plan:**
+1. **Read Stripe's view first, and change nothing.** The console's reconcile
+   button runs `reconcile_audit`, which is read-only and admin-gated. ⚠️ Its
+   `lapsedButStillGranting` list only takes `status = 'active'`
+   (`stripe-payment/index.ts:650-652`), so it will show **seven, not eight**,
+   and miss the `cancelling` row. Check that row in the Stripe dashboard by
+   its `stripe_subscription_id`.
+2. **Repair through Stripe's truth, per user, via `apply_subscription_state`.**
+   Never set a value directly. For each user id: retrieve the stored
+   subscription from Stripe, or, if there is none, search customers by
+   `metadata.user_id`, as `syncSubscription` already does. Map Stripe's status
+   with the **same** rules as the webhook's `mapStatus`, where
+   `cancel_at_period_end` means `cancelling`, `canceled` or missing means
+   `expired`, and `past_due`/`unpaid` means `past_due`. Pass Stripe's own
+   period dates. For the expected outcome, `expired`, the function writes
+   `subscriptions.status = 'expired'` and `users.subscription_status = 'none'`
+   and clears `subscription_next_billing` in one transaction (`0024`).
+3. **The mechanism is a choice:**
+   * **A one-off service-role script** under `scripts/`: dry run by default,
+     printing each planned change, and writing only with `--apply`. Nothing
+     permanent is added.
+   * **An admin-only `repair_subscription(user_id)` action** in
+     `stripe-payment`, gated like `reconcile_audit` (`:549-550`), running
+     `syncSubscription`'s body for a named user. That's reusable, but it's a
+     new permanent admin write path.
+   The script fits a one-off better.
+4. **Verify afterwards:** the identifying query returns 0 rows; the 21 Sep
+   grouping shows no `active` or `cancelling` row with a past end; the one live
+   subscriber's row is unchanged; and mobile Settings for one of the seven
+   shows "Free Plan".
+
+**Why the repair doesn't end the finding:** any row that falls behind Stripe
+the same way again — a missed event, or a `'failed'` webhook row — waits for
+its owner to open a gated screen, and mobile Settings keeps displaying the
+`users` copy as fact until then. The durable fixes are separate decisions: a
+scheduled reconcile, and mobile Settings reading the date as the gates do.
+
 **62. EMAIL MOVED TO cavybeauty.com, AND AUTH LINKS NOW WORK ON ANY DEVICE —
 DONE 20 Sep 2026 IN THE DASHBOARDS, VERIFIED BY MICKY'S TESTS. REPO SYNCED 21 Sep.
 PLUS: THE SIGN-UP "try again" LINK DOES NOTHING. NOT FIXED.**
@@ -3121,6 +3298,14 @@ has reached the new handler. The first will be the first live £14.99 ever paid.
   has null period dates, and every row since has both set. One row is
   `active`, dated 14 Sep 2026.
 
+  > **⚠️ CORRECTED 21 Sep 2026: "one row is `active`" WAS WRONG. THERE WERE 8.**
+  > The bullet was written from **Micky's chat**, not from the query. The
+  > 18 Sep query result showed **8 rows with status `active`**. The 13-row
+  > total stands: the 21 Sep grouping below adds to 7 + 1 + 1 + 3 + 1 = 13. What
+  > was true is narrower: **one** of those 8 has a period end in the future, and
+  > Stripe shows one live subscriber. The other seven are item 63. The line
+  > above is left as written.
+
 **⚠️ WITHDRAWN: AN INFERENCE OF CLAUDE'S, MADE IN CHAT ON 18 Sep AND NEVER
 WRITTEN HERE.** The final audit report said that from Stripe's 2025 API
 versions onward, the period dates moved off the subscription object. It said
@@ -3760,6 +3945,15 @@ subscription surface — where someone will otherwise be tempted to wire it up.
 **47. A JUSTIFICATION THAT OUTLIVED ITS REASON — "THERE IS NO WEBHOOK" SURVIVED
 IN NINE PLACES FOR THREE WEEKS AFTER THE WEBHOOK WENT LIVE. FOUND AND CORRECTED
 14 Sep 2026.**
+
+> **⚠️ 21 Sep 2026: THE SWEEP WAS NOT EXHAUSTIVE. A TENTH COPY IS STILL LIVE.**
+> `mobile/src/lib/verification.ts:26-30` still reads *"There is no webhook, so
+> current_period_end is written only by confirm_subscription at initial
+> subscribe. Stripe renews; our row does not move."* Its web port,
+> `site/lib/verification.ts:45-51`, was corrected on 14 Sep. The mobile
+> original was not. "ALL NINE CORRECTED" was true of the nine found, and
+> should not be read as "every copy". Found while reading the mobile gate for
+> item 63. Not changed.
 
 > **── 18 Sep 2026: THE SAME PATTERN, FOR THE FEE — AND ONE COPY THAT CANNOT BE
 > CORRECTED ──**
