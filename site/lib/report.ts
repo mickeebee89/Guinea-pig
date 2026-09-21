@@ -1,3 +1,4 @@
+import { SUPPORT_EMAIL } from '@/lib/site'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { ReportReason } from './reportReasons'
 
@@ -38,11 +39,11 @@ export type SafetyResult =
 
 const GENERIC_FAILURE =
   'We couldn’t send that just now. Please try again — if it keeps failing, ' +
-  'email support@guineapigapp.co.uk.'
+  `email ${SUPPORT_EMAIL}.`
 
 const GONE =
   'We couldn’t find that account — it may have been deleted. If you still want to ' +
-  'tell us what happened, email support@guineapigapp.co.uk.'
+  `tell us what happened, email ${SUPPORT_EMAIL}.`
 
 async function resolveUserId(
   supabase: SupabaseClient,

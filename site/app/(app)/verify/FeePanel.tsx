@@ -1,5 +1,7 @@
 'use client'
 
+import { SUPPORT_EMAIL } from '@/lib/site'
+
 import { useState } from 'react'
 import { PayForm } from '@/components/PayForm'
 import { startFeePayment, confirmFeePayment } from './actions'
@@ -80,7 +82,7 @@ export function FeePanel() {
   if (state.kind === 'error') {
     return (
       <div className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800">
-        {state.error} If it keeps happening, email support@guineapigapp.co.uk.
+        {state.error} If it keeps happening, email {SUPPORT_EMAIL}.
       </div>
     )
   }
@@ -95,7 +97,7 @@ export function FeePanel() {
         <h3 className="font-display text-lg text-warm-dark">Already paid</h3>
         <p className="mt-1 text-sm text-muted">
           We have your £14.99 on record, so there is nothing to pay. Reload this page to carry on
-          with the ID check — and email support@guineapigapp.co.uk if it still asks.
+          with the ID check — and email {SUPPORT_EMAIL} if it still asks.
         </p>
       </div>
     )

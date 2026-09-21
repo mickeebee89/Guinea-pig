@@ -1,3 +1,4 @@
+import { SUPPORT_EMAIL } from '@/constants/support'
 import { supabase } from './supabase'
 import type { ReportReason } from './reportReasons'
 
@@ -44,7 +45,7 @@ export type SafetyResult =
 /** The failure text is what a distressed person reads, so it says what to do next. */
 const GENERIC_FAILURE =
   'We couldn’t send that just now. Please check your connection and try again — ' +
-  'if it keeps failing, email support@guineapigapp.co.uk.'
+  `if it keeps failing, email ${SUPPORT_EMAIL}.`
 
 /**
  * Turn whichever id the caller holds into the auth user id the tables want, and
@@ -94,7 +95,7 @@ export async function reportUser(args: {
       ok: false,
       message:
         'We couldn’t find that account — it may have been deleted. If you still want to ' +
-        'tell us what happened, email support@guineapigapp.co.uk.',
+        `tell us what happened, email ${SUPPORT_EMAIL}.`,
     }
   }
 

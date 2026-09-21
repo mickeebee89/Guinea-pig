@@ -1,3 +1,4 @@
+import { SUPPORT_EMAIL } from '@/constants/support'
 import { useState } from 'react'
 import {
   View,
@@ -564,7 +565,7 @@ export default function VerifyPaymentScreen() {
             <Ionicons name="refresh" size={20} color={Colors.white} />
             <Text style={styles.primaryBtnText}>Retry</Text>
           </TouchableOpacity>
-          <Text style={styles.legalNote}>If this keeps happening, contact support@guineapigapp.co.uk — your payment is safe.</Text>
+          <Text style={styles.legalNote}>If this keeps happening, contact {SUPPORT_EMAIL} — your payment is safe.</Text>
         </View>
       )}
 

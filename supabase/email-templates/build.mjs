@@ -77,7 +77,7 @@ const C = {
 }
 
 const SITE = 'https://cavybeauty.com'
-const SUPPORT = 'support@guineapigapp.co.uk'
+const SUPPORT = 'support@cavybeauty.com'
 
 /** `&` → `&amp;` for HTML attribute AND text use. See the header. */
 const html = (s) => s.replace(/&/g, '&amp;')

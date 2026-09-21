@@ -1,5 +1,7 @@
 'use client'
 
+import { SUPPORT_EMAIL } from '@/lib/site'
+
 import { useState } from 'react'
 import Link from 'next/link'
 import { PayForm } from '@/components/PayForm'
@@ -65,7 +67,7 @@ export function SubscribePanel() {
   if (state.kind === 'error') {
     return (
       <div className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800">
-        {state.error} If it keeps happening, email support@guineapigapp.co.uk.
+        {state.error} If it keeps happening, email {SUPPORT_EMAIL}.
       </div>
     )
   }
@@ -80,8 +82,8 @@ export function SubscribePanel() {
           <h3 className="font-display text-lg text-warm-dark">Stripe already has your membership</h3>
           <p className="mt-1 text-sm text-muted">
             Stripe shows a membership on this account that is paid or being paid, and our records are
-            still catching up. Do not pay again. Refresh this page in a minute or two — and email
-            support@guineapigapp.co.uk if it still asks you to pay.
+            still catching up. Do not pay again. Refresh this page in a minute or two — and email{' '}
+            {SUPPORT_EMAIL} if it still asks you to pay.
           </p>
         </div>
       )
@@ -96,7 +98,7 @@ export function SubscribePanel() {
         <h3 className="font-display text-lg text-warm-dark">You already have a membership</h3>
         <p className="mt-1 text-sm text-muted">
           Our records show a membership on this account, so there is nothing to pay. Open your
-          dashboard — if it still asks you to subscribe, email support@guineapigapp.co.uk rather
+          dashboard — if it still asks you to subscribe, email {SUPPORT_EMAIL} rather
           than paying twice.
         </p>
         <Link href="/dashboard" className="mt-3 inline-block text-sm font-medium text-rose underline">

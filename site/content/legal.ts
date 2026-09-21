@@ -146,7 +146,7 @@ export const TERMS: LegalDoc = {
   metaTitle: 'Terms of Service',
   metaDescription:
     'The terms that govern your use of the Cavy website, waitlist and mobile app.',
-  updated: '12 July 2026',
+  updated: '21 September 2026',
   sections: [
     {
       n: '1',
@@ -355,7 +355,7 @@ export const PRIVACY: LegalDoc = {
   metaTitle: 'Privacy Policy',
   metaDescription:
     'What Cavy does with your information across the website, the waitlist and the app, and your rights over it.',
-  updated: '8 August 2026',
+  updated: '21 September 2026',
   sections: [
     {
       n: '1',
@@ -630,7 +630,7 @@ export const COMMUNITY: LegalDoc = {
   metaTitle: 'Community Guidelines',
   metaDescription:
     'How Cavy keeps things kind, safe and honest — for stylists and models alike.',
-  updated: '11 July 2026',
+  updated: '21 September 2026',
   intro:
     'Cavy only works if it’s a place people feel good about. These guidelines keep it kind, safe and honest for everyone — stylists and models alike. By using Cavy, you agree to follow them. Breaking them can mean losing access.',
   sections: [
@@ -816,7 +816,7 @@ export const DELETE_ACCOUNT: LegalDoc = {
     'How to delete your Cavy account and the data we hold about you.',
   // Bumped with the retained-reports clause. A legal page whose substance
   // changed under an unchanged revision date is its own small misstatement.
-  updated: '8 August 2026',
+  updated: '21 September 2026',
   intro:
     'You’re always in control of your data. Here’s how to remove your Cavy account and everything we hold about you.',
   sections: [

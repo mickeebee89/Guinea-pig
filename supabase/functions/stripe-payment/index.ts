@@ -224,7 +224,7 @@ async function createSubscription(userId: string, email: string) {
           })
           return respond({
             error: 'Your membership is part-way set up and we could not pick it up again. Nothing new has been '
-              + 'charged — please email support@guineapigapp.co.uk.',
+              + 'charged — please email support@cavybeauty.com.',
           }, 409)
         }
 
@@ -253,7 +253,7 @@ async function createSubscription(userId: string, email: string) {
           })
           return respond({
             error: 'There is already a membership on this account that we cannot change here. Nothing has been '
-              + 'charged — please email support@guineapigapp.co.uk.',
+              + 'charged — please email support@cavybeauty.com.',
           }, 409)
       }
     }

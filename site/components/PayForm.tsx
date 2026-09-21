@@ -1,5 +1,7 @@
 'use client'
 
+import { SUPPORT_EMAIL } from '@/lib/site'
+
 import { useState } from 'react'
 import { loadStripe } from '@stripe/stripe-js'
 import { Elements, PaymentElement, useElements, useStripe } from '@stripe/react-stripe-js'
@@ -100,7 +102,7 @@ function Inner({ onConfirm, submitLabel, successTitle, successBody }: Omit<PayFo
         tone: 'warn',
         title: 'Still processing',
         text: 'Your payment has not finished yet. Do not pay again — check back in a few minutes, '
-          + 'and email support@guineapigapp.co.uk if it has not completed.',
+          + `and email ${SUPPORT_EMAIL} if it has not completed.`,
       })
       setBusy(false)
       return
@@ -127,13 +129,13 @@ function Inner({ onConfirm, submitLabel, successTitle, successBody }: Omit<PayFo
             title: 'Payment taken, still finishing',
             text: 'Your card was charged and that part worked. We are finishing the last step at our '
               + 'end. Do not pay again — reload this page in a minute or two, and email '
-              + 'support@guineapigapp.co.uk if it still looks wrong.',
+              + `${SUPPORT_EMAIL} if it still looks wrong.`,
           }
         : {
             tone: 'error',
             title: 'Payment taken, not set up',
             text: `Your card was charged but we could not complete this at our end: ${outcome.error}. `
-              + 'Do not pay again — email support@guineapigapp.co.uk and we will either finish it or '
+              + `Do not pay again — email ${SUPPORT_EMAIL} and we will either finish it or `
               + 'refund you.',
           },
     )

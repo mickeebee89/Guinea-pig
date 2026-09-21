@@ -3,7 +3,13 @@
 export const SITE_URL = 'https://cavybeauty.com'
 export const SITE_NAME = 'Cavy'
 export const SITE_TAGLINE = 'Be the guinea pig, get the glow.'
-export const SUPPORT_EMAIL = 'support@guineapigapp.co.uk'
+/**
+ * The support address everywhere on the web, including the Terms, Privacy and
+ * child-safety (CSAE) contact in content/legal.ts. Moved 21 Sep 2026 from
+ * support@guineapigapp.co.uk, which keeps working: support@cavybeauty.com
+ * forwards through Cloudflare Email Routing (audit item 62). Change it here only.
+ */
+export const SUPPORT_EMAIL = 'support@cavybeauty.com'
 
 /**
  * Whether search engines may index THIS deployment. Both must hold:

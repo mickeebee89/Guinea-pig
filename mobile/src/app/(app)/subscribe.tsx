@@ -1,3 +1,4 @@
+import { SUPPORT_EMAIL } from '@/constants/support'
 import { useState, useCallback, useEffect } from 'react'
 import {
   View,
@@ -161,7 +162,7 @@ export default function SubscribeScreen() {
           Alert.alert(
             'Payment taken, membership not set up',
             'Your card was charged but the membership did not activate. Do not pay again — '
-            + 'email support@guineapigapp.co.uk and we will either activate it or refund you.',
+            + `email ${SUPPORT_EMAIL} and we will either activate it or refund you.`,
           )
           return
         }
@@ -172,7 +173,7 @@ export default function SubscribeScreen() {
           'Your card was charged. We could not confirm your membership just now, which is a '
           + 'problem at our end rather than with your payment. Open Settings in a few minutes — '
           + 'it should appear on its own. Do not pay again; if it has not appeared, email '
-          + 'support@guineapigapp.co.uk.',
+          + `${SUPPORT_EMAIL}.`,
         )
         return
       }

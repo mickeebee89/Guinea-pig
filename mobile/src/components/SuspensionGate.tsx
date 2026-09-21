@@ -1,3 +1,4 @@
+import { SUPPORT_EMAIL } from '@/constants/support'
 import { useEffect, useState, ReactNode } from 'react'
 import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
@@ -95,7 +96,7 @@ function SuspendedScreen({ suspension }: { suspension: Suspension }) {
         ) : null}
 
         <Text style={styles.appeal}>
-          If you think this is a mistake, email support@guineapigapp.co.uk and we’ll take another look.
+          If you think this is a mistake, email {SUPPORT_EMAIL} and we’ll take another look.
         </Text>
 
         <TouchableOpacity style={styles.btn} onPress={handleSignOut} activeOpacity={0.85}>

@@ -1,3 +1,4 @@
+import { SUPPORT_EMAIL } from '@/constants/support'
 import { useState, useCallback, useEffect, useRef } from 'react'
 import {
   View,
@@ -347,7 +348,7 @@ export default function ProviderDashboardScreen() {
           console.error('provider-dashboard: providers insert failed:', insertErr)
           Alert.alert(
             'Couldn’t finish setting up your shop',
-            'Please pull down to refresh. If this keeps happening, contact support@guineapigapp.co.uk.',
+            `Please pull down to refresh. If this keeps happening, contact ${SUPPORT_EMAIL}.`,
           )
         }
 

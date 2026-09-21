@@ -1,3 +1,4 @@
+import { SUPPORT_EMAIL } from '@/constants/support'
 import { useState } from 'react'
 import {
   View,
@@ -511,7 +512,7 @@ export default function SettingsScreen() {
                       }
                       await signOut()
                     } catch {
-                      Alert.alert('Error', 'Could not delete account. Please try again or contact support@guineapigapp.co.uk.')
+                      Alert.alert('Error', `Could not delete account. Please try again or contact ${SUPPORT_EMAIL}.`)
                     }
                   },
                 },
@@ -820,10 +821,12 @@ export default function SettingsScreen() {
               await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
               // Fall back to showing the address if the device has no mail app,
               // so this never silently does nothing.
-              // Address stays on the guineapigapp.co.uk mailbox that actually exists;
-              // only the subject line carries the new brand.
-              Linking.openURL('mailto:support@guineapigapp.co.uk?subject=Cavy%20support')
-                .catch(() => Alert.alert('Contact support', 'Email us at support@guineapigapp.co.uk'))
+              // support@cavybeauty.com since 21 Sep 2026: it exists and forwards
+              // (Cloudflare Email Routing). This used to say the address stayed on
+              // the guineapigapp.co.uk mailbox because that was the only one that
+              // existed — true until then, and that address still works.
+              Linking.openURL(`mailto:${SUPPORT_EMAIL}?subject=Cavy%20support`)
+                .catch(() => Alert.alert('Contact support', `Email us at ${SUPPORT_EMAIL}`))
             }}
             rightEl={<Ionicons name="open-outline" size={15} color={Colors.muted} />}
             last

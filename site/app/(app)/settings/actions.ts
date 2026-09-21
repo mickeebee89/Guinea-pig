@@ -1,5 +1,7 @@
 'use server'
 
+import { SUPPORT_EMAIL } from '@/lib/site'
+
 import { revalidatePath } from 'next/cache'
 import { createSupabaseServerClient, requireUser } from '@/lib/supabase-server'
 
@@ -85,7 +87,7 @@ export async function cancelMembership(): Promise<CancelResult> {
     return {
       ok: false,
       error: 'We could not cancel it just now. Nothing has changed, and you have not been charged '
-        + 'anything extra. Try again, or email support@guineapigapp.co.uk.',
+        + `anything extra. Try again, or email ${SUPPORT_EMAIL}.`,
     }
   }
 
@@ -99,7 +101,7 @@ export async function cancelMembership(): Promise<CancelResult> {
     return {
       ok: false,
       error: 'Stripe has stopped the renewal, but we could not update our own records. Do not pay '
-        + 'again — email support@guineapigapp.co.uk so we can put it right.',
+        + `again — email ${SUPPORT_EMAIL} so we can put it right.`,
     }
   }
 
