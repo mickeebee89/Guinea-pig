@@ -3816,6 +3816,31 @@ add its own noindex header to preview URLs. That has not been checked.
 >
 > **The Vercel variable itself is untouched**: it is stored as Sensitive, and
 > Micky will recreate it as a readable value (see the chat of 22 Sep).
+>
+> **✅ DONE IN VERCEL, 21 Sep 2026. VERIFIED from Micky's report:** the
+> Sensitive `PUBLIC_SITE_MODE` was **removed and re-added as a readable
+> (non-Sensitive) variable, value `preview`, scoped to Production only.**
+> Production was redeployed.
+>
+> **The two checks, and what each proves:**
+> * **`robots.txt` still shows `Disallow: /`.** This **cannot tell the old
+>   value from the new one**, because the old value hid the site too. It proves
+>   only that the redeploy didn't expose anything.
+> * **The dashboard now shows the variable readable, reading `preview`.** That
+>   is the real confirmation of what Production holds.
+>
+> **The scoping has also changed.** The variable used to cover Production and
+> Preview together. It now covers **Production only**, so Preview deployments
+> have it unset. They were already hidden in code by the `VERCEL_ENV` check,
+> and now the variable agrees.
+>
+> **Also noted, not changed:** `NEXT_PUBLIC_SUPABASE_URL`,
+> `NEXT_PUBLIC_SUPABASE_ANON_KEY` and `SUPABASE_ANON_KEY` are also stored as
+> **Sensitive**, although all three are public by design. The anon key ships in
+> every mobile bundle and in the browser bundle, and the URL is in the page's
+> CSP. So Sensitive storage protects nothing, and costs the ability to read
+> back which value is actually deployed — the same blindness this change just
+> removed for `PUBLIC_SITE_MODE`.
 
 **51. NOTHING GATES `main`, AND "PRODUCTION WAS BLOCKED FOR FIVE WEEKS" WAS SIX
 DAYS — RECORDED 18 Sep 2026. CORRECTS ITEM 45'S TITLE AND THE 15 Sep HANDOFF.**
