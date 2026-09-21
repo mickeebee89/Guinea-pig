@@ -2645,6 +2645,10 @@ FIXED ──**
 > **Both comments now describe what is true for both panels, and say what they
 > used to claim:** `ResendConfirmation.tsx:13-30` and `resend.ts:22-31`
 > ("keeps it rare rather than impossible").
+>
+> **✅ TESTED 21 Sep 2026. VERIFIED from Micky's test:** a fresh sign-up opened
+> the "Check your email" panel with the button counting down from 60s, and it
+> became *"Send the link again"* at zero.
 
 **Plainly:** after signing up, the "Check your email" panel says *"Nothing
 arrived? Check spam, or try again."* Clicking **try again** does nothing at
@@ -3762,6 +3766,56 @@ deploy is also `live`.** `site/lib/site.ts:15` says *"Vercel preview
 deployments must never be 'live'."* The current scoping makes that rule false
 at exactly the moment it starts to matter. INFERRED, not relied on: Vercel may
 add its own noindex header to preview URLs. That has not been checked.
+
+> **✅ FIXED IN CODE 22 Sep 2026 (`a9e0e82`). DECISION, Micky: preview deploys
+> are always hidden in code, and Production stays hidden until the test
+> accounts are cleared.**
+>
+> **What `PUBLIC_SITE_MODE` accepts.** One value matters: **`live`**, compared
+> exactly. Everything else — `preview`, unset, `Live`, a typo — hides the site.
+> "Hidden" means three things:
+> * `robots.txt` disallows everything (`site/app/robots.ts:8-10`);
+> * the sitemap is empty (`site/app/sitemap.ts:19`);
+> * every page emits `noindex, nofollow` (`site/app/layout.tsx:43-45`).
+>
+> Nothing else in the codebase reads it.
+>
+> **The change.** `IS_LIVE` now needs **both** `PUBLIC_SITE_MODE === 'live'`
+> **and** `VERCEL_ENV === 'production'` (`site/lib/site.ts`). Vercel sets
+> `VERCEL_ENV` per deployment: `production`, `preview` for branch and PR
+> deploys, `development` under `vercel dev`. It is **unset** in local `next
+> dev` / `next build` and in GitHub Actions, so **local dev and CI are hidden
+> whatever `PUBLIC_SITE_MODE` says.** The rule at `lib/site.ts:15` —
+> *"preview deployments must never be 'live'"* — is now enforced in code rather
+> than depending on how the Vercel variable is scoped. The comments in
+> `lib/site.ts`, `layout.tsx` and `robots.ts` say so.
+>
+> **VERIFIED by three `next build`s, reading the prerendered `robots.txt`:**
+>
+> | Build | `robots.txt` |
+> |---|---|
+> | normal: `.env.local` says `preview` | `Disallow: /` |
+> | `PUBLIC_SITE_MODE=live`, `VERCEL_ENV` unset (the local and CI case) | `Disallow: /` |
+> | `PUBLIC_SITE_MODE=live` **and** `VERCEL_ENV=production` | `Allow: /`, plus `Host` and `Sitemap` |
+>
+> So the gate is closed without a production deployment, and opens only with
+> both. A final normal build restored `.next` (`Disallow: /`).
+>
+> **INFERRED, from Vercel's documentation, not tested here:** with
+> "Automatically expose System Environment Variables" on — Micky confirms it
+> is — `VERCEL_ENV` is available at **build** time. That matters because
+> `robots.txt` and the sitemap are prerendered. If it ever weren't available, a
+> build would read it as unset and hide the site: the safe direction.
+>
+> **The cost:** checking the live SEO output locally now also needs
+> `VERCEL_ENV=production` set by hand.
+>
+> **Still stale, not changed here:** `site/README.md:36, 186` describe
+> `PUBLIC_SITE_MODE` as the whole switch. They don't mention the production
+> condition.
+>
+> **The Vercel variable itself is untouched**: it is stored as Sensitive, and
+> Micky will recreate it as a readable value (see the chat of 22 Sep).
 
 **51. NOTHING GATES `main`, AND "PRODUCTION WAS BLOCKED FOR FIVE WEEKS" WAS SIX
 DAYS — RECORDED 18 Sep 2026. CORRECTS ITEM 45'S TITLE AND THE 15 Sep HANDOFF.**
