@@ -2512,6 +2512,73 @@ volume threshold, and a new domain earns reputation faster with one.
 **── AND: THE SIGN-UP "try again" LINK IS DEAD. VERIFIED FROM CODE, 20 Sep. NOT
 FIXED ──**
 
+> **✅ FIXED 22 Sep 2026 (`7785c81`). next build passes; not yet exercised
+> against a real inbox.**
+>
+> **Both dead links are now a real resend.** A server action,
+> `resendConfirmation` (`site/app/(auth)/resend.ts`), calls
+> `supabase.auth.resend({ type: 'signup', email })` (`:40`) for the address
+> already on screen. The button lives in `site/app/(auth)/ResendConfirmation.tsx`.
+> * **Sign-up panel:** *"Nothing arrived? Check spam, or send it again."*, then
+>   the button (`sign-up/SignUpForm.tsx:52-53`).
+> * **Sign-in "Confirm your email first" panel:** the button in place of "Sign
+>   up again to resend it" (`sign-in/SignInForm.tsx:27`). The sign-in action now
+>   returns the typed email with `needsConfirmation`, which it didn't before, so
+>   the panel has an address to send to (`sign-in/actions.ts`).
+>
+> **The button.** It reads *"Send the link again"*, then *"Sending…"* while
+> the request runs. After any answer it stays disabled for 60 seconds
+> (`ResendConfirmation.tsx:15`), reading *"Sent — you can send another in a
+> minute"*, or *"Try again in a minute"* after a rate limit (`:57-61`). That
+> stops a double click sending twice, and matches Supabase's one-email-a-minute
+> interval, so normal use never meets the limit.
+>
+> **The two outcomes** (`ResendConfirmation.tsx:18-22`):
+> * **Sent, and every error except a rate limit:** *"If that address has an
+>   account waiting to be confirmed, we've sent a new link. It can take a few
+>   minutes to arrive — check spam too."* The copy is conditional, so it never
+>   says whether an account exists (`resend.ts:37, 45-47`). A thrown action
+>   gets the same answer.
+> * **Rate limited:** *"We've only just sent one. Give it a minute, then try
+>   again if it still hasn't arrived."*
+>
+> **⚠️ The one disclosure, stated in `resend.ts`:** Supabase's 60-second
+> interval is per user, so a rate-limit answer only happens for an address
+> that has an account. Someone calling the action twice in a row directly could
+> tell. The button's own cooldown means nobody using the page ever sees it, and
+> sign-up already says *"There is already an account with this email"*, so
+> this discloses nothing new. Kept because telling a real person to wait
+> matters more than hiding it.
+>
+> **Rate limits are read by code and status, never by wording**
+> (`site/lib/authErrors.ts`): status 429, or code `over_email_send_rate_limit`
+> / `over_request_rate_limit`, with a wording test as a backstop only.
+>
+> **No `emailRedirectTo`, and none is needed.** The link is built by the
+> Confirm signup template from `{{ .TokenHash }}`, hardcoded to
+> `cavybeauty.com/auth/confirm`. A resend of type `signup` sends that same
+> template (INFERRED from Supabase's behaviour, not tested yet), so a redirect
+> would be ignored.
+>
+> **The raw-message problem at `sign-up/actions.ts:112` is fixed too.** It
+> used to pass `error.message` — Supabase's developer wording — straight to the
+> form. Now the raw message goes to the server log only (`:113-116`), and the
+> person sees:
+> * rate limit: *"Too many attempts just now. Please wait a minute, then try
+>   again."* (`:120`);
+> * `weak_password`: *"Choose a stronger password — that one is too easy to
+>   guess."*, on the password field (`:123`);
+> * `email_address_invalid`: *"That email address doesn't look right."*, on the
+>   email field (`:126`);
+> * anything else: *"We couldn't create your account just now. Please try again
+>   in a moment, or contact support if it keeps happening."* (`:130`).
+>
+> The "already registered" branch and the auth-trigger branch above it are
+> unchanged.
+>
+> **Not tested:** a real resend landing in an inbox, and the rate-limit path
+> against live Supabase. Both need a real unconfirmed account.
+
 **Plainly:** after signing up, the "Check your email" panel says *"Nothing
 arrived? Check spam, or try again."* Clicking **try again** does nothing at
 all. No request, no message, no change. Reported by Micky and explained by
