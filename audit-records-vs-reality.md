@@ -2608,6 +2608,43 @@ FIXED ──**
 > **Not fixed**, as instructed. The obvious fix, if wanted, is to start the
 > sign-up panel's cooldown when the panel first appears, so the button counts
 > down the first minute rather than inviting a refusal.
+>
+> **✅ FIXED 22 Sep 2026 (`2bce505`). `next build` passes; not yet exercised
+> in a browser.**
+>
+> **Sign-up panel.** `ResendConfirmation` now takes `startCoolingDown`
+> (`site/app/(auth)/ResendConfirmation.tsx:51`), and the sign-up panel passes
+> it (`sign-up/SignUpForm.tsx:55`). The panel appears the moment `signUp()` has
+> sent the first email, so the button opens counting down that minute instead
+> of inviting a press Supabase will refuse. Our count starts a fraction after
+> Supabase's, so it ends on the safe side.
+>
+> **The labels now show the seconds left** (`ResendConfirmation.tsx:86-93`):
+> * *"You can send it again in {n}s"* — the opening countdown, before any press;
+> * *"Sending…"*;
+> * *"Sent — you can send another in {n}s"*;
+> * *"Try again in {n}s"* — after a rate limit;
+> * *"Send the link again"* — when it's ready.
+>
+> The two outcome messages are unchanged.
+>
+> **Sign-in panel: left without an opening countdown, and that is right.** It
+> appears after a sign-in attempt, not after a send, so there is usually no
+> recent email to wait for, and a countdown would only delay everyone. The
+> exception is an email sent within the last minute — a sign-up moments
+> earlier in another tab, say. Then the first press is refused, shows the
+> rate-limit copy (which is true), and the countdown runs from there. Getting
+> that panel far enough to see the button needs the right password, so the
+> person who sees the refusal is the one who caused the recent email.
+>
+> **How the countdown is built.** It's a seconds counter that ticks in a timer
+> callback: there is no clock read during render, and no synchronous state
+> update inside an effect. A background tab may slow the ticks, which only
+> makes the wait longer — the safe direction.
+>
+> **Both comments now describe what is true for both panels, and say what they
+> used to claim:** `ResendConfirmation.tsx:13-30` and `resend.ts:22-31`
+> ("keeps it rare rather than impossible").
 
 **Plainly:** after signing up, the "Check your email" panel says *"Nothing
 arrived? Check spam, or try again."* Clicking **try again** does nothing at
