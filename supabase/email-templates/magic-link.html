@@ -34,13 +34,13 @@
 <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:28px 0 20px 0;">
 <tr>
 <td align="center" bgcolor="#DB4B86" style="border-radius:999px;">
-<a href="{{ .ConfirmationURL }}" style="display:inline-block; padding:14px 32px; font-family:Helvetica,Arial,sans-serif; font-size:16px; font-weight:bold; color:#FFFFFF; text-decoration:none; border-radius:999px;">Sign in to Cavy</a>
+<a href="https://cavybeauty.com/auth/confirm?token_hash={{ .TokenHash }}&amp;type=magiclink&amp;next=/dashboard" style="display:inline-block; padding:14px 32px; font-family:Helvetica,Arial,sans-serif; font-size:16px; font-weight:bold; color:#FFFFFF; text-decoration:none; border-radius:999px;">Sign in to Cavy</a>
 </td>
 </tr>
 </table>
 
 <p style="margin:0 0 6px 0; font-family:Helvetica,Arial,sans-serif; font-size:13px; line-height:20px; color:#6E6675;">Or paste this into your browser:</p>
-<p style="margin:0 0 20px 0; font-family:Helvetica,Arial,sans-serif; font-size:13px; line-height:20px; color:#DB4B86; word-break:break-all;">{{ .ConfirmationURL }}</p>
+<p style="margin:0 0 20px 0; font-family:Helvetica,Arial,sans-serif; font-size:13px; line-height:20px; color:#DB4B86; word-break:break-all;">https://cavybeauty.com/auth/confirm?token_hash={{ .TokenHash }}&amp;type=magiclink&amp;next=/dashboard</p>
 
 <p style="margin:0; padding:14px 16px; background-color:#FFE3EF; border-radius:10px; font-family:Helvetica,Arial,sans-serif; font-size:13px; line-height:20px; color:#2B2531;">If you didn’t ask to sign in, ignore this email. Nobody can use this link but you.</p>
 

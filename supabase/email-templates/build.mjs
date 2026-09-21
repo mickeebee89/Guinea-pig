@@ -23,7 +23,38 @@
  *     clients strip buttons and because a visible link is a trust signal.
  *   * A real postal identity in the footer. Its absence is a spam signal.
  *
- * {{ .ConfirmationURL }} IS SUPABASE'S TOKEN — leave it exactly as written.
+ * ── THE LINKS ARE token_hash LINKS, NOT {{ .ConfirmationURL }} (21 Sep 2026) ──
+ * {{ .ConfirmationURL }} produced a PKCE `?code=` link. The verifier for that
+ * code is a cookie in the browser that REQUESTED the email, so the link failed
+ * on any other device with "PKCE code verifier not found in storage" — proven
+ * on 20 Sep, with a reset requested on a laptop and opened on a phone.
+ *
+ * Each template now carries its own `url`, built from {{ .TokenHash }} and
+ * pointing at the route that verifies it:
+ *   /auth/confirm   site/app/(auth)/auth/confirm/route.ts:51-57, reads `type`
+ *                   and `next`
+ *   /auth/reset     site/app/(auth)/auth/reset/route.ts:28, 33-34 — hardcodes
+ *                   type 'recovery' and reads no `next`
+ * These are the exact hrefs live in the Supabase dashboard since 20 Sep. They
+ * are used for BOTH the button and the visible fallback link — a fallback left
+ * on {{ .ConfirmationURL }} would quietly send people back down the PKCE path.
+ *
+ * `&` is written `&amp;` in the HTML. In an attribute a raw `&` survives, but
+ * the fallback URL is TEXT, where `&not` decodes to "¬" even without a
+ * semicolon — so `&next=/dashboard` would display as "¬ext=/dashboard" and a
+ * copied link would lose its `next`. Browsers decode `&amp;` back to `&`.
+ *
+ * ── ⚠️ THE LIVE TEMPLATES ARE NOT WHAT THIS SCRIPT BUILDS ──────────────────
+ * What is in the Supabase dashboard since 20 Sep is PLAIN HTML with ONE link
+ * each — the token_hash hrefs above, and nothing else from this file. The
+ * styled versions this script builds have NEVER been pasted.
+ *
+ * So running this and pasting the output is a DELIBERATE CHANGE to what people
+ * receive, not a sync. Test one real send per template before and after. And
+ * read the footer first: it says "Reply to this email", but the sender is now
+ * no-reply@cavybeauty.com, and Cloudflare Email Routing on cavybeauty.com has
+ * one rule (support@) with the catch-all disabled — so a reply to no-reply@
+ * is INFERRED to bounce. Audit item 62.
  */
 
 import { writeFileSync, mkdirSync } from 'node:fs'
@@ -48,7 +79,10 @@ const C = {
 const SITE = 'https://cavybeauty.com'
 const SUPPORT = 'support@guineapigapp.co.uk'
 
-const shell = ({ preheader, heading, body, cta, afterCta }) => `<!DOCTYPE html>
+/** `&` → `&amp;` for HTML attribute AND text use. See the header. */
+const html = (s) => s.replace(/&/g, '&amp;')
+
+const shell = ({ preheader, heading, body, cta, url, afterCta }) => `<!DOCTYPE html>
 <html lang="en-GB">
 <head>
 <meta charset="utf-8">
@@ -84,13 +118,13 @@ ${body}
 <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:28px 0 20px 0;">
 <tr>
 <td align="center" bgcolor="${C.rose}" style="border-radius:999px;">
-<a href="{{ .ConfirmationURL }}" style="display:inline-block; padding:14px 32px; font-family:Helvetica,Arial,sans-serif; font-size:16px; font-weight:bold; color:${C.white}; text-decoration:none; border-radius:999px;">${cta}</a>
+<a href="${html(url)}" style="display:inline-block; padding:14px 32px; font-family:Helvetica,Arial,sans-serif; font-size:16px; font-weight:bold; color:${C.white}; text-decoration:none; border-radius:999px;">${cta}</a>
 </td>
 </tr>
 </table>
 
 <p style="margin:0 0 6px 0; font-family:Helvetica,Arial,sans-serif; font-size:13px; line-height:20px; color:${C.muted};">Or paste this into your browser:</p>
-<p style="margin:0 0 20px 0; font-family:Helvetica,Arial,sans-serif; font-size:13px; line-height:20px; color:${C.rose}; word-break:break-all;">{{ .ConfirmationURL }}</p>
+<p style="margin:0 0 20px 0; font-family:Helvetica,Arial,sans-serif; font-size:13px; line-height:20px; color:${C.rose}; word-break:break-all;">${html(url)}</p>
 
 ${afterCta}
 
@@ -137,6 +171,7 @@ const TEMPLATES = {
       p('Welcome to Cavy — the place where hair and beauty stylists building their portfolios meet people who want the treatment.') +
       p('Confirm your email address and your account is ready.'),
     cta: 'Confirm my email',
+    url: `${SITE}/auth/confirm?token_hash={{ .TokenHash }}&type=signup&next=/dashboard`,
     afterCta: note('If you didn’t create a Cavy account, you can ignore this email — nothing will be set up.'),
   }),
 
@@ -147,6 +182,10 @@ const TEMPLATES = {
       p('We received a request to reset the password on your Cavy account.') +
       p('Use the button below to choose a new one. The link works once, and expires after a short time.'),
     cta: 'Choose a new password',
+    // /auth/reset, NOT /auth/confirm: the reset route always goes on to
+    // /auth/new-password. /auth/confirm would verify and send the person to
+    // `next`, signed in and never asked for a new password.
+    url: `${SITE}/auth/reset?token_hash={{ .TokenHash }}`,
     afterCta: note('If you didn’t ask for this, you can safely ignore it — your password stays as it is, and nobody has access to your account.'),
   }),
 
@@ -157,6 +196,7 @@ const TEMPLATES = {
       p('Use the button below to sign in to Cavy. No password needed.') +
       p('The link works once, and expires after a short time.'),
     cta: 'Sign in to Cavy',
+    url: `${SITE}/auth/confirm?token_hash={{ .TokenHash }}&type=magiclink&next=/dashboard`,
     afterCta: note('If you didn’t ask to sign in, ignore this email. Nobody can use this link but you.'),
   }),
 
@@ -167,6 +207,9 @@ const TEMPLATES = {
       p('You asked to change the email address on your Cavy account.') +
       p('Confirm the new address below. Until you do, your account keeps using the old one.'),
     cta: 'Confirm new address',
+    // One {{ .TokenHash }} only. The live template's variable list shows one
+    // .TokenHash and a .NewEmail, with no second token variable (20 Sep).
+    url: `${SITE}/auth/confirm?token_hash={{ .TokenHash }}&type=email_change&next=/settings`,
     afterCta: note('If you didn’t request this change, ignore this email and contact us — your account keeps its current address.'),
   }),
 
@@ -177,6 +220,7 @@ const TEMPLATES = {
       p('Cavy connects hair and beauty stylists building their portfolios with people who want treatments free or discounted.') +
       p('Accept the invitation below to set up your account.'),
     cta: 'Accept invitation',
+    url: `${SITE}/auth/confirm?token_hash={{ .TokenHash }}&type=invite&next=/dashboard`,
     afterCta: note('If you weren’t expecting this, you can ignore it — no account is created until you accept.'),
   }),
 }
@@ -189,4 +233,5 @@ for (const [name, html] of Object.entries(TEMPLATES)) {
   const warn = bytes > 102400 ? '  ⚠ over 102KB — Gmail will clip it' : ''
   console.log(`  ${name.padEnd(16)} ${String(bytes).padStart(5)} bytes${warn}`)
 }
-console.log('\nPaste each into Supabase → Authentication → Email Templates.')
+console.log('\nThese are the STYLED versions. What is live is plain HTML with one link each.')
+console.log('Pasting these is a deliberate change, not a sync — read the header first.')
