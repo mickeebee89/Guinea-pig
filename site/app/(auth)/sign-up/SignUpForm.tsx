@@ -50,7 +50,9 @@ export function SignUpForm({
         {/* Was a <Link href="/sign-up"> — a link to the page it sits on, which
             soft-navigates without remounting, so it did nothing (item 62). */}
         <p className="mt-4 text-sm text-muted">Nothing arrived? Check spam, or send it again.</p>
-        <ResendConfirmation email={state.sentTo} />
+        {/* startCoolingDown: signUp() has just sent the first email, and
+            Supabase refuses another for 60 s from then. */}
+        <ResendConfirmation email={state.sentTo} startCoolingDown />
       </div>
     )
   }

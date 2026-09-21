@@ -19,9 +19,15 @@ export type ResendOutcome = 'sent' | 'rate_limited'
  * ⚠️ THE RATE-LIMIT ANSWER IS THE ONE EXCEPTION, AND IT IS A SMALL ONE.
  * GoTrue's 60-second interval is per user, so a 429 only happens for an address
  * that has an account. Someone calling this twice in a row could tell the
- * difference. The button's own 60-second cooldown means nobody using the page
- * normally ever sees it. And the sign-up form already says "There is already an
- * account with this email" (sign-up/actions.ts), so this discloses nothing new.
+ * difference. The button keeps it rare rather than impossible: on the sign-up
+ * panel it counts down the minute after the sign-up email, and after every
+ * resend it counts down again. It can still happen on the sign-in panel if an
+ * email went out within the last minute — and then the person seeing it is the
+ * one who triggered that email, so it tells them nothing. (Until 22 Sep this
+ * said nobody using the page "ever sees it", which was wrong: resending
+ * straight after signing up hit it every time, item 62.) And the sign-up form
+ * already says "There is already an account with this email"
+ * (sign-up/actions.ts), so this discloses nothing new.
  * Kept because telling a real person to wait is worth more than hiding it.
  *
  * ── NO emailRedirectTo ──────────────────────────────────────────────────
