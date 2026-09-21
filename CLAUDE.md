@@ -51,8 +51,11 @@ _This file is read automatically at the start of every Claude Code session. It h
   `supabase/email-templates/build.mjs` builds.
   ~~`no-reply@guineapigapp.co.uk` — not yet moved to cavybeauty.com.~~
   *Superseded 20 Sep 2026; kept so the old value is recognisable in older notes.*
-  Support addresses in both apps still read `support@guineapigapp.co.uk`, which
-  still works; moving them is a separate decision.
+  **Support address: `support@cavybeauty.com` everywhere since 21 Sep 2026** —
+  `SUPPORT_EMAIL` in `site/lib/site.ts` (web and all legal documents) and in
+  `mobile/src/constants/support.ts`; change both together. The old address still
+  works. ~~Support addresses in both apps still read `support@guineapigapp.co.uk`,
+  which still works; moving them is a separate decision.~~ *Superseded 21 Sep 2026.*
 - **Repo:** github.com/mickeebee89/Guinea-pig — commit direct to `main`.
 - **Repo root (Windows):** `C:\Users\micky\Documents\Guinea-pig` — **no app lives at the root.**
   Three sibling apps: `admin\` (Next.js console), `site\` (public website), `mobile\` (Expo).

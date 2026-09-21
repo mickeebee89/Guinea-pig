@@ -2680,6 +2680,96 @@ the code.
   tested for an account. A reset that never arrives looks exactly like one
   that was sent.
 
+**── 21 Sep 2026: THE SUPPORT ADDRESS MOVED TO support@cavybeauty.com (`4b7b596`) ──**
+
+`support@cavybeauty.com` exists and forwards to `guineapig.app@gmail.com`
+(tested 20 Sep, above). **`support@guineapigapp.co.uk` keeps working**, and it
+stays wherever it explains history: this file, the comments that record the
+move, and the `CLAUDE.md` and `HANDOVER.md` lines marked superseded.
+
+**What changed. `next build` exit 0; mobile `tsc --noEmit` exit 0, 0 errors.**
+* **Web — one constant.** `SUPPORT_EMAIL` now reads `support@cavybeauty.com`
+  (`site/lib/site.ts:12`, with a comment saying where it's used). All 12
+  hardcoded copies in `site/` now use it:
+  * `site/app/(app)/settings/actions.ts:90, 104`
+  * `site/app/(app)/subscribe/SubscribePanel.tsx:70, 86, 101`
+  * `site/app/(app)/verify/FeePanel.tsx:85, 100`
+  * `site/components/PayForm.tsx:105, 132, 138`
+  * `site/lib/report.ts:42, 46`
+* **Mobile — one new constant.** `mobile/src/constants/support.ts` replaces
+  every literal:
+  * `provider-dashboard.tsx:351`
+  * `settings.tsx:515, 828, 829`
+  * `subscribe.tsx:165, 176`
+  * `verify-payment.tsx:568`
+  * `components/SuspensionGate.tsx:99`
+  * `lib/report.ts:48, 98`
+* **The `settings.tsx` comment** that said the address *"stays on the
+  guineapigapp.co.uk mailbox that actually exists"* now says the new address
+  exists and forwards, and that the old statement was true until then.
+* **`supabase/functions/stripe-payment/index.ts:227, 256`** — two error
+  strings. **Not live until deployed:** `npx supabase functions deploy
+  stripe-payment`, from the repo root, without `--no-verify-jwt`.
+* **Email templates:** `SUPPORT` in `build.mjs:80` changed, and all five
+  files rebuilt: 5 of 5 carry the new address, 0 the old. **No dashboard
+  change is needed.** The live templates are plain, with a single link, and
+  per Micky carry no support address — consistent with this item's 20 Sep
+  record, not re-read from the dashboard.
+
+**⚠️ CORRECTION: TEN MOBILE LITERALS, NOT ELEVEN.** The 20 Sep report, and
+this item's "all eleven mobile literals", both said eleven. There were ten,
+confirmed by the replacement script's count.
+
+**The legal documents.** They already read the address from `SUPPORT_EMAIL`,
+so every contact line changed with the constant:
+* **Terms:** contact `site/content/legal.ts:157`; refunds `:261`;
+  **child-safety (CSAE) point of contact `:295`**; questions `:345`.
+* **Privacy:** data controller `:366`; your-rights requests `:580`;
+  questions and complaints `:620`.
+* **Community Guidelines:** child-safety reporting contact `:710`;
+  report-it `:737`.
+* **Account deletion page:** `:828`, `:880`.
+
+**The documents carry "last updated" dates, and all four were changed to 21
+September 2026:** Terms `:149` (was 12 July), Privacy `:358` (was 8 August),
+Community Guidelines `:633` (was 11 July), Account deletion `:819` (was 8
+August). Terms `:325` promises to update that date on a significant change.
+
+**⚠️ ONE LINE NEEDED A HAND FIX.** In JSX, plain text wraps across a line
+break with a space, but an expression that starts a line loses that space.
+`SubscribePanel.tsx:86` would have rendered "and emailsupport@…". It now has
+`{' '}`. Every other `{SUPPORT_EMAIL}` sits mid-line (checked).
+
+**── STILL TO DO BY HAND: THE PLAY CONSOLE CHILD-SAFETY CONTACT ──**
+
+The Play Console CSAE declaration names a contact address, and its text isn't
+in the repo. It must now match what the published documents say:
+* **Terms `site/content/legal.ts:295`:** *"…You can report any concern in the
+  app or to our child-safety point of contact at support@cavybeauty.com."*
+* **Community Guidelines `:710`:** *"…email our child-safety point of contact
+  directly at support@cavybeauty.com."*
+
+The declaration should name **support@cavybeauty.com**. `HANDOVER.md:43`
+already records that the submitted declaration text has never been read
+against what the product does, so this is a good moment to do both.
+
+**── ⚠️ CORRECTION: WORK DONE ON 21 Sep WAS STAMPED "22 Sep" ──**
+
+Several notes in this file written on **21 Sep 2026** say **22 Sep**. It is
+the same mistake the 19 Aug audit caught with "14 August": a date carried in
+the head instead of read from the clock. The notes are left as written. Read
+each "22 Sep" below as 21 Sep:
+* item 63 — *"22 Sep 2026: TWO WEB SETTINGS GAPS … FIXED"*;
+* item 62 — *"FIXED 22 Sep 2026 (`7785c81`)"*, *"CORRECTED 22 Sep 2026 —
+  'NORMAL USE…'"*, *"FIXED 22 Sep 2026 (`2bce505`)"*;
+* item 55 — *"22 Sep 2026: THE CARD CLAIM IS UNTRUE FOR RENEWALS TOO"* and
+  *"FIXED 22 Sep 2026 (`c1cf660`)"*;
+* item 52 — *"FIXED IN CODE 22 Sep 2026 (`a9e0e82`)"* and *"see the chat of
+  22 Sep"*.
+
+The commits themselves carry the true time: all 21 Sep 2026, between 20:26
+and 21:10. The same stamp in five code comments was corrected in `c951ff4`.
+
 **61. `anon` AND `authenticated` HOLD DELETE ON `public.messages`, AND NO DELETE
 POLICY EXISTS — SEEN 20 Sep 2026 IN `0043`'s BLOCK A. READ-ONLY; NOT FIXED. ONE
 QUERY DECIDES WHETHER IT IS INERT OR SERIOUS.**
