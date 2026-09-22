@@ -136,7 +136,10 @@ export default async function SessionsPage() {
     <>
       <h1 className="mb-6 font-display text-3xl text-warm-dark">Bookings</h1>
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,18rem)]">
+      {/* grid-cols-[minmax(0,1fr)] on phones: without it the single column is 'auto'
+          and grows to its widest unbreakable content, e.g. a truncated message
+          preview's FULL text, pushing the page wider than the screen (audit item 73). */}
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,18rem)]">
         <div className="min-w-0">
           {rows === null ? (
             <LoadError what="bookings" />

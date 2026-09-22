@@ -2260,6 +2260,49 @@ refused by demo mode, or was Block B's rolled-back insert from the SQL editor.
    (`recompute_provider_rating`);
 4. check the review shows on their profile.
 
+**73. THE MODEL DASHBOARD WAS WIDER THAN A PHONE — FOUND AND FIXED 22 Sep
+2026, WHILE RETAKING SCREENSHOTS. `next build` EXIT 0.**
+
+**Plainly:** on a phone, the model dashboard laid out at 743 pixels wide
+inside a 390-pixel screen. A phone then either scrolls sideways or zooms the
+whole page out. Found because the "Example screen" label, fixed to the right
+edge, fell outside the picture on that screen alone.
+
+**The cause. VERIFIED on the demo server at 390px:**
+* **The dashboard's layout** is `grid gap-6 lg:grid-cols-[…]`. Below `lg`
+  there's no column definition, so the grid's single column is `auto`, and an
+  `auto` column grows to its widest unbreakable content.
+* **Removing the "Leave a review" panel** (new today) left the page at 743,
+  so it isn't the cause.
+* **Capping the column at `minmax(0,1fr)`** brought the page to exactly 390,
+  with nothing else overflowing.
+* **INFERRED trigger:** the Messages panel's one-line previews use `truncate`.
+  Their shortened look doesn't stop an `auto` column sizing itself to the
+  FULL text. The model's long last message ("Lovely, Thursday at 5 it is.
+  Come with dry, unwashed hair…") did it; the stylist's shorter one didn't.
+* **So the live site does the same** for any member whose latest message is
+  long. It isn't a demo artefact.
+
+**The fix:** `grid-cols-[minmax(0,1fr)]` below `lg`, on the three pages with
+this pattern:
+* `dashboard/page.tsx`;
+* `bookings/page.tsx`;
+* `availability/page.tsx`.
+
+The desktop columns are unchanged. Bookings and availability fitted at the
+time, but used the same uncapped column.
+
+**Checked afterwards:** 19 screens measured at 390px, all exactly 390 wide:
+* signed out: home, hair, for-stylists;
+* as the model: browse, stylist profile, dashboard, bookings, messages, a
+  thread, the review page, settings, notifications;
+* as the stylist: dashboard, bookings, a thread, shop, availability, an
+  availability day, a model profile.
+
+**Screenshots:** the model dashboard was retaken in both sets, labelled and
+unlabelled. The earlier unlabelled copy had been taken from the too-wide
+page. Both zips were rebuilt.
+
 **72. A PRODUCTION BUILD FAILED FETCHING A GOOGLE FONT — 22 Sep 2026, ABOUT
 09:03. TRANSIENT. REPORT ONLY; NOTHING CHANGED.**
 

@@ -398,7 +398,10 @@ export default async function DashboardPage({
         </section>
       )}
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
+      {/* grid-cols-[minmax(0,1fr)] on phones: without it the single column is 'auto'
+          and grows to its widest unbreakable content, e.g. a truncated message
+          preview's FULL text, pushing the page wider than the screen (audit item 73). */}
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
         <div className="space-y-6">
           {data.kind === 'model' ? (
             <>
