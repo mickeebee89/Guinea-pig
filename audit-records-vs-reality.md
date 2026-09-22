@@ -2226,6 +2226,87 @@ Not from the structured prompts Micky pastes. The sequence in this session,
 follow-ups. The reviews feature answered an instruction, but a real feature
 was more than that instruction needed, as the clarification showed.
 
+**── 22 Sep 2026: 0046 APPLIED. VERIFIED FROM PASTED OUTPUT ──**
+* **Block A:** `trigger_on` true, `reviews_total` 16, `wrong_person_before`
+  0. None of the 16 existing reviews names the wrong person.
+* **Block B:** the wrong person (Micky B reviewing himself) was refused with
+  23514; the booking's model was inserted; the block rolled back.
+* **⚠️ What Block B did and didn't test.** It ran in the SQL editor as the
+  database owner, so it tested the TRIGGER, not row security. The RLS
+  policies ("write own review for own session", `reviews_not_suspended`) were
+  not exercised by it. They're unchanged by 0046.
+
+**── 22 Sep 2026: web-reviews MERGED INTO main (`next build` EXIT 0) ──**
+* **Exactly one conflict,** the empty treatment-page line, resolved to
+  `main`'s: *"No one is offering {treatment} on Cavy yet. Sign up below and
+  you'll see stylists here as they join."*
+* **The homepage merged cleanly:** both sides made the identical "Now open in
+  the UK" change.
+* **Nothing else from the branch touches today's launch copy.** The branch
+  changed the review page, the bookings and dashboard pages, `sessions.ts`,
+  `review.ts`, the demo engine, `check-links.mjs`, 0046 (identical on both
+  sides; the merge left it unchanged) and the two public lines above.
+* **After the merge:** `WaitlistForm.tsx` and `/api/waitlist` are still
+  removed, and no "join the waitlist" or "launching soon" copy remains.
+* **`npm run checks` exit 0,** not a build claim. The review route now counts
+  as linked (29 linked exactly, up from 27).
+
+**⚠️ NO REAL REVIEW HAS BEEN SAVED FROM THE WEB YET.** Every write so far was
+refused by demo mode, or was Block B's rolled-back insert from the SQL editor.
+**The first completed booking should test it:**
+1. leave a review from `/bookings/<id>/review`;
+2. check the row, including that `reviewee_id` is the other party;
+3. check the stylist's `rating` and `review_count` moved
+   (`recompute_provider_rating`);
+4. check the review shows on their profile.
+
+**72. A PRODUCTION BUILD FAILED FETCHING A GOOGLE FONT — 22 Sep 2026, ABOUT
+09:03. TRANSIENT. REPORT ONLY; NOTHING CHANGED.**
+
+**What happened (Micky):** the Production build for `ab36812` failed with
+*"Module not found: Can't resolve
+'@vercel/turbopack-next/internal/font/google/font'"* while fetching the
+Fredoka Google font. A redeploy of the same commit succeeded, so it was a
+transient font download failure, not a code fault.
+
+**Why a build can fail on this at all.** `site/app/layout.tsx` loads Fredoka
+(500, 600) and Quicksand (400, 500, 700) through `next/font/google`.
+* **At RUNTIME it's self-hosted.** The layout's comment says so: no request
+  to Google from a visitor's browser.
+* **At BUILD time, next/font/google downloads the files from Google Fonts.**
+  If that download fails, Turbopack can't produce its virtual font module,
+  and the error names that module rather than the network.
+
+So every build depends on Google Fonts being reachable from Vercel's build
+machine. INFERRED from how next/font/google works and the module named in the
+error. The failed build's full log wasn't read.
+
+**Would `next/font/local` remove the risk? Yes, for this failure.** A local
+font has nothing to download, so the build no longer depends on
+fonts.googleapis.com.
+
+**What it would take (VERIFIED that the files exist):**
+* **The files are already installed.** `@fontsource/fredoka` and
+  `@fontsource/quicksand` 5.3.0 are dependencies (`site/package.json:14-15`),
+  and `node_modules` holds exactly the weights in use:
+  `fredoka-latin-500/600-normal.woff2` and
+  `quicksand-latin-400/500/700-normal.woff2`. `app/opengraph-image.tsx:30`
+  already reads its fonts from the same packages.
+* **The change is one file, `app/layout.tsx`:** replace the two
+  `next/font/google` calls with `localFont({ src: [...], variable, display:
+  'swap' })` pointing at those five files. The CSS variable names
+  (`--font-fredoka`, `--font-quicksand`) stay the same, so no other file
+  changes.
+* **Differences to check before shipping:**
+  * The latin subset is the same range as today's `subsets: ['latin']`.
+  * `next/font/local` still generates a size-adjusted fallback font, but not
+    from Google's metrics, so the text shift while loading could differ
+    slightly. Compare before and after at phone width.
+  * Fonts would then update only when the `@fontsource` package is updated,
+    not when Google changes them.
+* **Not affected:** runtime behaviour. Both ways serve the fonts from
+  cavybeauty.com.
+
 **71. CAVY IS OPEN: THE WAITLIST CLOSES, SIGN-UP REPLACES IT, AND THE EARLY-
 STYLIST PROMISE IS KEPT BY LINK — 22 Sep 2026. `next build` EXIT 0.**
 
