@@ -2340,6 +2340,118 @@ TOGGLE HAS A GAP THIS ONE CLOSES.**
 > * cancel their upcoming bookings where they are the model;
 > * notify each stylist with a neutral line;
 > * leave them out of `nearby_models` while suspended.
+>
+> **── 22 Sep 2026: 0044 APPLIED. VERIFIED FROM PASTED OUTPUT ──**
+>
+> **Block E, before applying:** one row, nahitih259@bevriz.com, with 0 live
+> shops and 0 upcoming bookings as stylist. **So the backfill notified
+> nobody.**
+>
+> **Block A:**
+> * `suspend_ban_call_it` true, `revoke_calls_it` true.
+> * `revoke_still_has_old_loop` false.
+> * `autopublish_checks_suspension` true.
+> * `anon_can_run` false, `authed_can_run` false.
+> * `suspended_before` 1.
+>
+> **Block B:** the reason appears only in `by_stylist` and `by_model`.
+> `withdrawn` names neither suspension nor revocation, and gives
+> support@cavybeauty.com.
+>
+> **Block C** (Micky B's shop, rolled back):
+> * `is_admin` true.
+> * **Before:** published true, upcoming 0, completed 11.
+> * **Suspended:** result `{"shops_hidden": 1, "cancelled_bookings": 0}`,
+>   published false, stamped true, completed 11, notices 0.
+> * **Reinstated:** published false.
+>
+> **Block D:** suspended true, verified true, publishable true; after the
+> auto-publish attempt, published false. Verified and publishable were both
+> true, so **the suspension check is what refused it**, not the other rules.
+>
+> **⚠️ THE CANCEL-AND-NOTIFY PATH IS UNTESTED.** Block C couldn't exercise it:
+> Micky B has no upcoming bookings, so `cancelled_bookings` was 0 and no
+> notice was sent. That is the half of 0044 that reaches real models. Verified
+> so far: the hide, the stamp, no republish on reinstate, completed bookings
+> untouched, and the wording in isolation (Block B). **Not yet seen:** a
+> booking actually cancelled by a suspension, and the notice a model actually
+> receives. Block F below exists for that. Until it's run, the path is
+> written and applied, but not observed.
+>
+> **Block F — cancel and notify, end to end. Run once; it rolls itself back.**
+> Not part of the migration, so 0044's checksum is unchanged.
+>
+> It creates one upcoming pending booking, 400 days out at 10:00, between the
+> model test account (micky.buckfield@hotmail.co.uk, `b0df9c2f…`) and Micky B's
+> shop. It then suspends Micky B through `admin_act_on_user`, and reports that
+> booking's status and `cancelled_at`, plus the full title and body of the
+> notice the model received. Nothing else is printed. The admin and data
+> checks raise instead of printing, so a claim that didn't carry, or a shop
+> with no categorised treatment, reads as "nothing tested", never as a
+> result.
+>
+> The notice fires `notify_push` (`push-setup.sql:62`), which queues through
+> pg_net. **INFERRED, as in 0042:** that queue is transactional, so the
+> rollback discards the push. If it isn't, the model test account's phone
+> gets one notification, and nobody else's.
+>
+>     do $$
+>     declare
+>       v_admin constant uuid := 'ff06d568-8936-45fa-ad5f-0b88c150ec30';
+>       v_model constant uuid := 'b0df9c2f-02c5-4fef-afb0-9b184c3b9130';
+>       v_date  constant date := current_date + 400;
+>       v_prov uuid; v_treat uuid; v_sess uuid;
+>       v_status text; v_at timestamptz; v_title text; v_body text;
+>     begin
+>       perform set_config('request.jwt.claims',
+>         format('{"sub":"%s","role":"authenticated"}', v_admin), true);
+>       if not public.is_admin() then
+>         raise exception 'Block F: the admin claim did not carry. Nothing was tested.';
+>       end if;
+>
+>       select id into v_prov from public.providers where user_id = v_admin;
+>       select id into v_treat from public.provider_treatments
+>        where provider_id = v_prov and category is not null order by id limit 1;
+>       if v_prov is null or v_treat is null then
+>         raise exception 'Block F: Micky B has no shop or no categorised treatment. Nothing was tested.';
+>       end if;
+>
+>       insert into public.sessions (
+>         provider_id, model_user_id, model_id, date, start_time, end_time,
+>         scheduled_at, duration_minutes, treatment_id, status
+>       ) values (
+>         v_prov, v_model, v_model, v_date, time '10:00', time '11:00',
+>         v_date + time '10:00', 60, v_treat, 'pending'
+>       ) returning id into v_sess;
+>
+>       perform public.admin_act_on_user(v_admin, 'suspend', 'verify 0044 block F, rolled back', 1);
+>
+>       select status, cancelled_at into v_status, v_at
+>       from public.sessions where id = v_sess;
+>       select n.title, n.body into v_title, v_body
+>       from public.notifications n
+>       where n.session_id = v_sess and n.user_id = v_model and n.type = 'session_cancelled';
+>
+>       raise exception E'ROLLED BACK ON PURPOSE.\nstatus: %\ncancelled_at: %\ntitle: %\nbody:\n%',
+>         v_status, v_at, v_title, v_body;
+>     end $$;
+>
+> **Expect:**
+> * status `cancelled`, with a `cancelled_at`;
+> * title *"Your booking on {date} at 10am has been cancelled"*;
+> * the `withdrawn` body naming Micky B's shop and the treatment, with no
+>   reason and no "suspended".
+>
+> A null title means no notice was written, and is a failure. If the insert
+> itself is refused, the error names the column or guard. That is a problem
+> with the fixture, not with 0044, and the block says nothing about 0044.
+>
+> **── FOR LATER: THE `withdrawn` WORDING READS AS TEMPORARY FOR A BAN ──**
+>
+> *"They can't take bookings on Cavy at the moment"* implies the stylist may
+> come back, which is slightly misleading after a ban. **Accepted (Micky, 22
+> Sep):** one message for revocation, suspension and ban is the point, and a
+> ban-specific line would tell the model which one it was.
 
 **Plainly:** until now the only way for a stylist to hide their shop was the
 switch on mobile's Provider Dashboard. The web had none. `/shop` now has one.
