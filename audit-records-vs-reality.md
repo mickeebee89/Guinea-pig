@@ -2217,6 +2217,48 @@ This is my reading, not legal advice.
 **Not yet seen:** a page view counted in the Vercel dashboard. That needs the
 Production deploy.
 
+**── 22 Sep 2026: IDS IN THE PATH ARE REPLACED TOO. `next build` EXIT 0 ──**
+
+Stripping the query string didn't cover ids in the address itself. **Every
+member-area route with a dynamic segment**, found from the folder names under
+`site/app` (`find app -type d -name "[*"`):
+
+| Real address | Reported as | Route |
+|---|---|---|
+| `/messages/<booking id>` | `/messages/[sessionId]` | `app/(app)/messages/[sessionId]` |
+| `/model/<user id>` | `/model/[id]` | `app/(app)/model/[id]` |
+| `/stylist/<provider id>` | `/stylist/[id]` | `app/(app)/stylist/[id]` |
+
+The only other dynamic route, `/[treatment]`, is public: six fixed slugs, no
+id. It's reported as it is, because which treatment page was visited is the
+useful part.
+
+**How:** `reportedUrl` in `site/components/SiteAnalytics.tsx` rewrites the
+page address in `beforeSend`, before anything leaves the browser.
+* **What's kept:** the origin and path only.
+* **The three routes above** become their patterns.
+* **A safety net:** any path segment shaped like a UUID becomes `[id]`, for a
+  dynamic route added later and not yet in the list. Every id in this schema
+  is a UUID.
+
+**Why that covers it, read from the served script and the package:**
+* **The address the script sends** is built from `location.href`, and passed
+  through `beforeSend` first.
+* **The route field (`dp`)** is computed by the Next component from the
+  params, so it's already a pattern.
+* **The referrer** is only sent when it comes from another site.
+
+**Checked:** after the build, the function was run on sample addresses.
+* `/messages/<uuid>?x=1#top` became `/messages/[sessionId]`.
+* `/model/<uuid>` became `/model/[id]`, and `/stylist/<uuid>` became
+  `/stylist/[id]`.
+* `/browse?place=Bromley` became `/browse`.
+* `/hair-models` was unchanged.
+* An unknown `/future/<uuid>/edit` became `/future/[id]/edit`.
+* `/messages/abc` (not a UUID) became `/messages/[sessionId]`.
+
+**Not yet seen:** what the dashboard actually receives, after the deploy.
+
 **66. STYLISTS CAN PUBLISH AND HIDE THEIR SHOP ON THE WEB — BUILT 22 Sep
 2026. `next build` EXIT 0. NOT EXERCISED AGAINST THE LIVE DATABASE; MOBILE'S
 TOGGLE HAS A GAP THIS ONE CLOSES.**
@@ -3931,6 +3973,10 @@ checksummed.
 READING. EACH PIECE VERIFIED; THE END-TO-END ROUTE IS UNTESTED. ENFORCEMENT
 DEFERRED BY DECISION.**
 
+> **✅ CLOSED 22 Sep 2026 by migration 0045, applied and verified (below).**
+> The heading is left as it was written. One case is still unexercised: the
+> PAID path, because no stylist has a payment row yet.
+
 **Plainly:** paying the £14.99 is required only by the screens. Nothing in the
 database requires it. A stylist who writes their verification request straight
 to the database, without paying, can be approved and published by an admin.
@@ -4090,6 +4136,43 @@ approving an unpaid account on the live database.
 >
 > Also worth knowing: the admin verification queue page shows no fee state
 > of its own. After 0045 it doesn't need to, because the approve refuses.
+>
+> **── 22 Sep 2026: 0045 APPLIED. VERIFIED FROM PASTED OUTPUT ──**
+>
+> **Block A:**
+> * `approve_gated` true, `verify_gated` true.
+> * `suspend_still_withdraws` true, so 0044's behaviour survived the
+>   replacement.
+> * `anon_can_run` false, `authed_can_run` false.
+> * `verified_unpaid_before` **0**, `pending_unpaid_before` **0**. No stylist
+>   was verified without the fee, and none was waiting unpaid.
+>
+> **Block B:** micky.buckfield@gmail.com and nahitih259@bevriz.com both show
+> `has_payment` false, `is_founding_provider` false, `provider_fee_waived`
+> true, and `settled` true. The function agrees with the three-way rule on
+> both rows.
+>
+> **Block C, on nahitih259:**
+> * role `provider`;
+> * paid: **SKIPPED**, no payment row;
+> * unpaid: **refused, CV002**;
+> * declining while unpaid: **rejected**, so a decline is never blocked;
+> * the Verify button while unpaid: **refused, CV002**, so the button can't
+>   get round the queue;
+> * waived: **approved**;
+> * founding: **approved**.
+>
+> **⚠️ THE PAID CASE IS UNTESTED.** No stylist on the live database has a
+> `verification_payments` row. Both are fee-waived, which is how Block B reads.
+> So "a real payment settles the fee" is shown by the function's code and by
+> Block B's rule check, but no one has ever paid. **The first real £14.99
+> payment will exercise it.** After that payment, the stylist's request should
+> approve without a waiver. If it's refused with CV002, the payment row isn't
+> being written for them (see items 53 and 55 on how that row gets written).
+>
+> **Not yet seen:** the console's plain CV002 message in a browser. Block C
+> proved the code comes back as `CV002` from SQL. That PostgREST passes it
+> through as `error.code` is still INFERRED, as it was for CV001.
 
 **55. RELOADING /subscribe CAN CANCEL A SUBSCRIPTION THE PERSON HAS JUST PAID
 FOR — AND A FAILED FIRST PAYMENT GRANTS ACCESS AND SENDS A NOTICE THAT IS FALSE.
