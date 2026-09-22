@@ -2370,6 +2370,30 @@ from the same row becoming readable and all four are reasoned from the code
 but reasoning is not evidence, and the code path that returns the name is not
 the code path that was just proved.
 
+**✅ ITEM 76 CLOSED — 22 Sep 2026, VERIFIED from Micky's checks.**
+
+0048 applied. Blocks A, B and D pass — D's mismatch explained and not a leak:
+the member it picked owns a hidden shop and saw their own, which the owner
+clause has always allowed.
+
+**Live, signed in as `micky.buckfield@hotmail.co.uk`, against the hidden
+stylist:**
+* the profile **opens instead of 404ing**;
+* **the real name shows in bookings and messages**, not "Stylist";
+* **block and report both work** — `thread.ts:76` resolves a subject now.
+
+Signed out, the page redirects to sign-in: the member area gates before the
+lookup, so the anon path never reaches this policy. Confirmed rather than
+assumed.
+
+**So the four things recorded as "not claimed" an hour ago are now four things
+checked.** The reasoning was right, and it was still worth checking: the code
+path that returns the name is not the code path Block B proved.
+
+**What this closes, in plain terms:** a model can see who she is booked with,
+message them, look them up, and report them, whether or not that stylist is
+still trading. That was the point.
+
 **75. A CHECK COULD STOP THE WEBSITE UPDATING, AND NOTHING NOTICED IT HAD —
 CHANGED 22 Sep 2026. `npm run verify` EXIT 0.**
 
@@ -2895,6 +2919,25 @@ refused by demo mode, or was Block B's rolled-back insert from the SQL editor.
 3. check the stylist's `rating` and `review_count` moved
    (`recompute_provider_rating`);
 4. check the review shows on their profile.
+
+**✅ THE FIRST REAL WEB REVIEW HAS BEEN SAVED — 22 Sep 2026, VERIFIED from
+Micky's checks. ITEM 70's LAST OPEN THREAD IS CLOSED.**
+
+A 5-star review left on the web, on a completed booking, wrote a `reviews` row
+at **21:03:41**, and the provider's aggregates updated to **rating 3.78 across
+9 reviews**.
+
+**Why this mattered enough to carry as open.** The feature merged on 22 Sep
+and every check of it until now had been a build, a screenshot or a rollback
+block. The record said so, in those words: no review had ever been saved from
+the web against the live database. Two things were unproven by everything that
+had been done — that the INSERT survives `write own review for own session`
+and the `reviews_not_suspended` RESTRICTIVE policy as an ordinary member
+rather than as the SQL editor's owner, and that the rating aggregate actually
+moves. Both are now shown by the same row: 9 reviews and a recomputed average
+is the trigger having run.
+
+So the web can now do the thing the app does, end to end, on live data.
 
 **73. THE MODEL DASHBOARD WAS WIDER THAN A PHONE — FOUND AND FIXED 22 Sep
 2026, WHILE RETAKING SCREENSHOTS. `next build` EXIT 0.**
@@ -8497,9 +8540,8 @@ platforms each failed it differently.
 | 12 | Stylist banners cannot be set — read in four places, written nowhere | No |
 | 13 | Cancellation wording, and no cancel path exists at all | **Yes** — "I need to cancel" is inevitable |
 | 14 | Admin revoke UI — `0027` ships the mechanism, nothing calls it | No, but revocation is SQL-only until then |
-| 74 | Email notifications built but **not applied, not deployed, nothing sent**; mobile has no email switch | **Yes** for the deploy — a web-only member currently hears nothing |
+| 74 | Email notifications **proven end to end on live data**. Open: mobile has no email switch | No |
 | 75 | Drift check is new and unproven — its first real test is the next failed or skipped deploy | No |
-| 76 | 0048 applied and verified. Untested: block, report, review, and the real name in bookings and messages | No |
 | 77 | **No published shop exists at all** — `/browse` and every public treatment page are empty while the site is open and indexed | **Yes** |
 
 Carried in from before the audit, unchanged by it:
