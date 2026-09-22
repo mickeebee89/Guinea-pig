@@ -8,6 +8,48 @@ import { createSupabaseServerClient, requireUser } from '@/lib/supabase-server'
 type Result = { ok: true } | { ok: false; error: string }
 
 /**
+ * Turn notification emails on or off. Audit item 74.
+ *
+ * Stored in users.notification_preferences, the jsonb column that already
+ * existed and that the Privacy policy already describes, as
+ * `{"email": {"enabled": false}}`. Merged rather than replaced, so anything
+ * added to that column later survives.
+ *
+ * DEFAULT IS ON, without a backfill: the send-email function treats a null
+ * column, a missing key, and anything but an explicit `false` as yes. Only
+ * someone who turns it off is written to at all.
+ *
+ * The member's own session writes their own row — notification_preferences is
+ * not one of 0040's protected columns, so no privileged path is needed.
+ */
+export async function setEmailNotifications(enabled: boolean): Promise<Result> {
+  const user = await requireUser()
+  const supabase = await createSupabaseServerClient()
+
+  const { data: row } = await supabase
+    .from('users').select('notification_preferences').eq('id', user.id).maybeSingle()
+  const current = ((row as { notification_preferences?: Record<string, unknown> } | null)
+    ?.notification_preferences) ?? {}
+
+  const { data, error } = await supabase
+    .from('users')
+    .update({ notification_preferences: { ...current, email: { enabled } } })
+    .eq('id', user.id)
+    .select('id')
+    .maybeSingle()
+
+  if (error) {
+    console.error('[settings] email preference save failed', { code: error.code, message: error.message })
+    return { ok: false, error: 'That didn’t save. Your setting is unchanged — try again in a moment.' }
+  }
+  // No row back and no error is RLS filtering the update out, e.g. a suspension.
+  if (!data) return { ok: false, error: `That couldn’t be saved from your account. Email ${SUPPORT_EMAIL} and we’ll look into it.` }
+
+  revalidatePath('/settings')
+  return { ok: true }
+}
+
+/**
  * Remove a block YOU created.
  *
  * Scoped to blocker_id = the signed-in user, matching the blocks_delete_own

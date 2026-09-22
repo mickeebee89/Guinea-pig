@@ -2116,6 +2116,100 @@ was the reason for three workflows rather than one.
 It remains a signal and not a gate. Everything above about branch protection
 still stands.
 
+**74. NOBODY WAS EVER EMAILED WHEN SOMETHING HAPPENED ON CAVY — BUILT 22 Sep
+2026. `next build` EXIT 0. NOT APPLIED, NOT DEPLOYED, NOTHING SENT YET.**
+
+**Plainly:** a web-only member could be applied to, accepted, declined,
+cancelled on, messaged, verified, warned or have a payment fail, and hear
+nothing at all unless they happened to open the site. Push notifications exist
+(`send-push`), but a push needs the app, and the web has no app. The only
+email the product has ever sent is Supabase Auth's (confirm, reset).
+
+**Decisions (Micky, 22 Sep):** from `notifications@cavybeauty.com`, reply-to
+`support@cavybeauty.com`; email everyone, app or not; one on/off preference in
+the existing `users.notification_preferences`, defaulting to ON; signed
+unsubscribe link; **no open or click tracking**, because Privacy says there is
+none and this is exactly where that could quietly become false.
+
+**Emailed (seven notification types + chat):** `session_applied`,
+`session_accepted`, `session_declined`, `session_cancelled`, `verification`,
+`payment_failed`, `admin_warning`, and a new chat message.
+**Not emailed:** `new_availability` (one per favouriter — a mass send),
+`stylist_invite`, `admin_message`, `session_completed`.
+
+The list lives in the trigger's `WHEN` clause, so an unlisted type never
+reaches the function. **This is the shape item 30 named** — a hand-written
+allowlist that silently stops covering — so it is deliberately in ONE place,
+checked by the database, and the answer to "who adds the next type" is: the
+migration that adds the type, or it gets no email.
+
+**── WHAT WAS BUILT ──**
+* `supabase/functions/send-email/index.ts` — one template, Resend REST.
+* `supabase/migrations/0047_email_notifications.sql`
+  (checksum `29a82a50b963fa41370193e9342a5721d7132a42ee0653a0fd02bd29b91794f3`,
+  computed by hand — `--stamp` was NOT run, item 60).
+* `public.email_sends` — every attempt: sent, failed, or deliberately
+  **skipped**. One table doing three jobs on purpose: the chat throttle reads
+  it; a partial unique index makes a second email for one notification
+  impossible; the nightly reconcile compares it against `notifications`.
+* `public.email_unsubscribe_tokens` + `email_unsubscribe_token()` and
+  `unsubscribe_email()` (SECURITY DEFINER). The token can only turn email
+  **off**; turning it back on needs a sign-in.
+* `site/app/email/unsubscribe/` — a GET page that asks first, and a POST
+  route that also serves Gmail/Yahoo one-click.
+* Settings → **Emails**, one switch (`EmailNotificationsSection.tsx` +
+  `setEmailNotifications`).
+* `email_reconcile_runs` + `run_email_reconcile()`, nightly cron 04:10.
+* `scripts/install-email-secret.mjs`, `scripts/send-test-email.mjs`.
+
+**── THE SHARED SECRET INSTALLS ITSELF. NOBODY HOLDS THE VALUE ──**
+
+`EMAIL_HOOK_SECRET` has to match in two places — the edge function and Vault —
+and Micky set it as a function secret and cleared it from his screen, so **he
+does not have it**. Rather than ask for it back, the FUNCTION writes its own
+secret into Vault: `POST {"kind":"install-secret"}` authenticated with the
+service-role key, which calls `install_email_hook_secret()`. The wrapper script
+prints only `created`/`updated` and the secret's LENGTH.
+
+**This is item 36 not repeated.** `push_hook_secret` had to be pasted into two
+places, and that is how a live secret ended up in `pg_proc`. A value nobody
+types cannot be pasted into the wrong window, logged by a shell, or left in a
+migration.
+
+**── WHAT THE FUNCTION WILL NOT DO ──**
+* Never writes `notifications` or `messages` — an email cannot cause an email.
+* **Never takes a recipient address from the caller.** The address is looked up
+  from `users.email` by `user_id`, so a forged payload cannot redirect mail.
+* **Never puts a chat message's text in an email.** It says a message is
+  waiting. The message stays in the app, where block and report are.
+
+**── THE RETENTION PROMISE WAS ADDED AND THEN ALMOST NOT KEPT ──**
+
+Privacy §9 now says the record that we emailed you is *"kept for 90 days"*.
+When that paragraph was written, **nothing deleted `email_sends`** — the same
+class of defect as items 4 and 5 (a published retention claim with no
+mechanism), caught within the same build rather than months later. The delete
+is now the first statement in `run_email_reconcile()`, so it runs nightly
+rather than waiting for the monthly purge.
+
+**── PRIVACY, CHANGED ──** (`site/content/legal.ts`, last-updated already
+22 September 2026 from item 67, so unchanged)
+* **§6:** *"Emails about your bookings"* — what we send, that it comes from
+  `notifications@cavybeauty.com`, that it can be turned off in Settings or by
+  the link in any of them, and that account emails still arrive.
+* **§9:** the 90-day record above.
+
+**── WHAT IS STILL OPEN ──**
+* **Mobile has no email preference UI.** A member with the app can only turn
+  these off on the website or by the link. The column is shared, so the switch
+  works either way once built.
+* **Nothing has been sent.** The order is: deploy the function → apply 0047 →
+  install the secret → **one test email to a real address** → Block A.
+* **`verification` picks its subject by matching `/not approved/i` on the
+  notification's title.** That is a string test against copy set elsewhere; if
+  that wording ever changes, a rejection gets the "You're verified" subject.
+  Narrow, but it is another hand-written match.
+
 **70. REVIEW-LEAVING ON THE WEB, AND "LAUNCHING SOON" — BUILT 22 Sep 2026,
 HELD ON BRANCH `web-reviews`, NOT ON `main`. NOT DEPLOYED, 0046 NOT APPLIED.**
 
@@ -7861,6 +7955,7 @@ platforms each failed it differently.
 | 12 | Stylist banners cannot be set — read in four places, written nowhere | No |
 | 13 | Cancellation wording, and no cancel path exists at all | **Yes** — "I need to cancel" is inevitable |
 | 14 | Admin revoke UI — `0027` ships the mechanism, nothing calls it | No, but revocation is SQL-only until then |
+| 74 | Email notifications built but **not applied, not deployed, nothing sent**; mobile has no email switch | **Yes** for the deploy — a web-only member currently hears nothing |
 
 Carried in from before the audit, unchanged by it:
 
@@ -7869,7 +7964,7 @@ Carried in from before the audit, unchanged by it:
 | **IAP — Apple's #1 rejection risk** | **UNRESOLVED.** Stripe for a digital unlock consumed in-app. Decide before iOS submit; consider asking App Review directly |
 | **Test-account teardown** | `teardown.mjs` reaches `@seed.guineapig.invalid` only, BY DESIGN. The hand-made accounts must be cleared separately |
 | **Play Console CSAE declaration** | Recorded done; **the submitted wording has never been checked against what the product does** |
-| `support@` / Resend sender | Not started; five templates never tested against a real inbox |
+| `support@` / Resend sender | **Done** — auth mail from `no-reply@cavybeauty.com` (20 Sep), `support@` everywhere (21 Sep), notification mail from `notifications@` (item 74). The five auth templates are live plain HTML and a real signup email was seen |
 | Build-fails-on-lint | site **0 errors** and could be switched on today; admin 22; mobile 73 + 6 tsc |
 | Mobile member-area layout | 2 of 12 routes checked at 375px |
 | Admin approval at scale | One at a time; no bulk path |

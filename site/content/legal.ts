@@ -501,6 +501,13 @@ export const PRIVACY: LegalDoc = {
         },
         {
           type: 'p',
+          // Added 22 Sep 2026 with notification emails (audit item 74). Until
+          // then nothing in this policy said we email people about activity,
+          // because nothing did.
+          text: 'Emails about your bookings. We email you when something happens that you’d want to know about — someone applies for your session, a booking is accepted, declined or cancelled, a new message arrives, your identity check is decided, a payment fails, or we send you a formal warning. These are service emails, not marketing: our basis is providing the service you signed up for. You can turn them off at any time in Settings, or from the unsubscribe link in any of them. We’ll still email you about your account itself, such as confirming your address or resetting your password.',
+        },
+        {
+          type: 'p',
           text: 'Where we ask your permission — notifications, your device location, marketing emails, and the sensitive information in section 7 — our basis is your consent, and you can withdraw it at any time without affecting anything done beforehand.',
         },
         {
@@ -580,6 +587,11 @@ export const PRIVACY: LegalDoc = {
           // Until 22 Sep 2026: "until Cavy launches and we've told you, or until
           // you unsubscribe or ask us to delete them — whichever comes first."
           text: 'Waitlist details: only long enough to tell you Cavy is open, then deleted. If you’d like them deleted sooner, unsubscribe or email us.',
+        },
+        {
+          type: 'p',
+          // Added with notification emails (audit item 74). email_sends, 0047.
+          text: 'A record that we sent you an email: who it went to, which kind, and whether it was delivered, kept for 90 days so we can tell whether an email you were expecting was actually sent.',
         },
       ],
     },

@@ -5,6 +5,7 @@ import { getStylistSetup } from '@/lib/queries/shop'
 import { BlockedList, type BlockedPerson } from './BlockedList'
 import { getGateState } from '@/lib/verification'
 import { MembershipSection, type MembershipView } from './MembershipSection'
+import { EmailNotificationsSection } from './EmailNotificationsSection'
 
 export const metadata = { title: 'Settings' }
 
@@ -66,8 +67,13 @@ export default async function SettingsPage() {
   // check no role — so hiding the section by role alone would hide the CANCEL
   // control from someone who is being billed. "Cancel any time" has to be true
   // for whoever is actually paying.
-  const { data: me } = await supabase.from('users').select('role').eq('id', user.id).maybeSingle()
+  const { data: me } = await supabase
+    .from('users').select('role, notification_preferences').eq('id', user.id).maybeSingle()
   const role = (me as { role?: string } | null)?.role
+  // Default ON: null, a missing key, or anything but an explicit false (item 74).
+  const emailNotifications =
+    (me as { notification_preferences?: { email?: { enabled?: boolean } } } | null)
+      ?.notification_preferences?.email?.enabled !== false
   const isModel = role === 'model' || role === 'both'
   const holdsSubscription = !!membership.status && membership.status !== 'expired'
   const showMembership = isModel || holdsSubscription
@@ -132,6 +138,11 @@ export default async function SettingsPage() {
           <MembershipSection view={membership} />
         </section>
       )}
+
+      <section className="mb-8">
+        <h2 className="mb-2 font-display text-lg text-warm-dark">Emails</h2>
+        <EmailNotificationsSection enabled={emailNotifications} />
+      </section>
 
       <section>
         <h2 className="mb-2 font-display text-lg text-warm-dark">Blocked people</h2>
