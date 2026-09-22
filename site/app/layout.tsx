@@ -1,22 +1,49 @@
 import type { Metadata } from 'next'
-import { Fredoka, Quicksand } from 'next/font/google'
+import localFont from 'next/font/local'
 import { IS_LIVE, SITE_NAME, SITE_TAGLINE, SITE_URL } from '@/lib/site'
 import { SiteAnalytics } from '@/components/SiteAnalytics'
 import { DemoLabel } from '@/components/DemoLabel'
 import './globals.css'
 
-// Self-hosted at build time by next/font — no runtime request to Google, so no
-// third-party connection and no layout shift.
-const fredoka = Fredoka({
-  subsets: ['latin'],
-  weight: ['500', '600'],
+// Self-hosted by next/font from the @fontsource packages already installed —
+// no request to Google at build time or at runtime.
+//
+// Until 22 Sep 2026 these came from next/font/google, which serves the files
+// from this site but DOWNLOADS them from Google Fonts during every build. When
+// that download failed, the Production build for ab36812 failed with
+// "Can't resolve '@vercel/turbopack-next/internal/font/google/font'" (audit
+// item 72). Local files take the network out of the build.
+//
+// Same weights and the same latin subset as before, and the same CSS variable
+// names, so globals.css and everything using --font-display / --font-sans is
+// unchanged. The size-adjusted Arial fallback (adjustFontFallback, the default)
+// is generated from these files' own metrics; item 72 records the comparison
+// with what Google's metrics produced.
+//
+// The paths are literals on purpose: next/font resolves them at build time and
+// cannot follow a helper function.
+const fredoka = localFont({
+  src: [
+    { path: '../node_modules/@fontsource/fredoka/files/fredoka-latin-500-normal.woff2', weight: '500', style: 'normal' },
+    { path: '../node_modules/@fontsource/fredoka/files/fredoka-latin-600-normal.woff2', weight: '600', style: 'normal' },
+  ],
   variable: '--font-fredoka',
   display: 'swap',
+  // The fallback is declared by hand in globals.css ('Fredoka Fallback Metrics')
+  // with the values next/font/google produced, because those matched Fredoka's
+  // widths better than the ones next/font/local derives from these files:
+  // 1.08% mean width error against 1.93%, measured 22 Sep 2026 (audit item 72).
+  // Quicksand keeps the generated fallback, which measured slightly BETTER.
+  adjustFontFallback: false,
+  fallback: ['Fredoka Fallback Metrics', 'ui-rounded', 'system-ui', 'sans-serif'],
 })
 
-const quicksand = Quicksand({
-  subsets: ['latin'],
-  weight: ['400', '500', '700'],
+const quicksand = localFont({
+  src: [
+    { path: '../node_modules/@fontsource/quicksand/files/quicksand-latin-400-normal.woff2', weight: '400', style: 'normal' },
+    { path: '../node_modules/@fontsource/quicksand/files/quicksand-latin-500-normal.woff2', weight: '500', style: 'normal' },
+    { path: '../node_modules/@fontsource/quicksand/files/quicksand-latin-700-normal.woff2', weight: '700', style: 'normal' },
+  ],
   variable: '--font-quicksand',
   display: 'swap',
 })

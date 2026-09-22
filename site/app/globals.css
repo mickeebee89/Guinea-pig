@@ -1,5 +1,19 @@
 @import "tailwindcss";
 
+/* Fredoka's fallback while the real font loads: Arial, resized to Fredoka's
+   metrics. These are the exact values next/font/google generated before the
+   switch to local font files (app/layout.tsx), kept because they matched
+   Fredoka's widths better than next/font/local's own: 1.08% mean width error
+   against 1.93%, measured 22 Sep 2026 (audit item 72). */
+@font-face {
+  font-family: 'Fredoka Fallback Metrics';
+  src: local('Arial');
+  ascent-override: 95.64%;
+  descent-override: 23.17%;
+  line-gap-override: 0%;
+  size-adjust: 101.84%;
+}
+
 /* ---------------------------------------------------------------------------
    Design tokens, mirrored from mobile/src/constants/Colors.ts, which is the
    canonical palette for the product.

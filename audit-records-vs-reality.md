@@ -2307,6 +2307,81 @@ fonts.googleapis.com.
 * **Not affected:** runtime behaviour. Both ways serve the fonts from
   cavybeauty.com.
 
+**── DONE 22 Sep 2026: SWITCHED TO next/font/local. `next build` EXIT 0 ──**
+
+**The change (decision: Micky):**
+* **`site/app/layout.tsx`** now loads both fonts with `localFont` from the
+  `@fontsource` files:
+  * Fredoka 500 and 600;
+  * Quicksand 400, 500 and 700.
+
+  These are the same weights, the same latin subset, and the same CSS
+  variables (`--font-fredoka`, `--font-quicksand`). No `next/font/google`
+  import remains in `app/`, `components/` or `lib/`.
+* **Nothing else refers to the fonts by name,** except `PayForm.tsx:211`,
+  which names "Quicksand" in Stripe's card-field styling. That renders in
+  Stripe's own frame and isn't affected.
+
+**The build no longer contacts Google Fonts. VERIFIED by an A/B test:** every
+build was run with `HTTPS_PROXY`/`HTTP_PROXY` set to a dead address
+(`http://127.0.0.1:9`). `next/font/google` sends its downloads through that
+setting.
+* **The old layout (`git show HEAD`), dead proxy:** exit 1, *"There was an
+  issue establishing a connection while requesting
+  https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600&display=swap"*.
+  This is the same failure as the 09:03 Production build, reproduced on
+  demand.
+* **The new layout, dead proxy:** exit 0, twice (before and after the
+  fallback change below).
+* **No `fonts.googleapis.com` or `fonts.gstatic.com` address** appears
+  anywhere in `.next/static` or `.next/server`.
+* **Out of scope:** the proxy test proves the FONT step doesn't touch the
+  network. Prerendering the public pages still reads Supabase, which Node's
+  fetch doesn't route through `HTTPS_PROXY`.
+
+**The fallback sizing: what was checked.** The fallback is the Arial that
+shows until the real font arrives. It's resized so the swap moves as little
+as possible.
+
+1. **Baseline, from the last Google build's CSS:**
+   * `Fredoka Fallback`: size-adjust 101.84%, ascent 95.64%, descent 23.17%;
+   * `Quicksand Fallback`: 104.31%, 95.87%, 23.97%.
+2. **What next/font/local derives from the files:**
+   * Fredoka: 102.7%, 94.84%, 22.98%;
+   * Quicksand: 105.58%, 94.71%, 23.68%.
+3. **Measured, not assumed.** On the demo dev server, eight real site strings
+   (four headings in Fredoka, four body lines in Quicksand, 14–40px, weights
+   400–700) were set in the real font and in each fallback. The comparison
+   covered width on one line, and the height of the same text wrapped at
+   340px (phone width).
+
+| | Width error vs the real font (mean) | Wrapped-block height |
+|---|---|---|
+| Fredoka, Google's values | **1.08%** | identical |
+| Fredoka, local's values | 1.93% | identical |
+| Quicksand, Google's values | 1.59% | identical |
+| Quicksand, local's values | **1.25%** | identical |
+
+4. **So Fredoka is pinned to Google's values,** and Quicksand keeps the
+   local ones. Fredoka uses `adjustFontFallback: false` with
+   `fallback: ['Fredoka Fallback Metrics', …]`. That face is declared in
+   `app/globals.css` with the exact baseline values above.
+5. **Re-measured on the page's real font stacks after the change:**
+   * Fredoka 1.08%, the same as before the switch;
+   * Quicksand 1.25%, better than the 1.59% before;
+   * block heights identical for both.
+
+   **So the shift while fonts load is the same for headings, slightly
+   smaller for body text, and there's no vertical jump for either.**
+
+**Limits of that check:**
+* **It uses the machine's Arial** (Windows).
+* **An iPhone substitutes its own Arial-metric font.** The fallback values
+  are the same either way, but the absolute widths could differ a little.
+* **It measured eight strings,** not every page.
+
+`npm run checks` exit 0 (not a build claim).
+
 **71. CAVY IS OPEN: THE WAITLIST CLOSES, SIGN-UP REPLACES IT, AND THE EARLY-
 STYLIST PROMISE IS KEPT BY LINK — 22 Sep 2026. `next build` EXIT 0.**
 
