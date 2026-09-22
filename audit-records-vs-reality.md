@@ -2116,6 +2116,94 @@ was the reason for three workflows rather than one.
 It remains a signal and not a gate. Everything above about branch protection
 still stands.
 
+**76. HIDING A SHOP ERASES THE STYLIST FROM THE PEOPLE ALREADY BOOKED WITH
+THEM — FOUND 22 Sep 2026 WHILE TESTING EMAIL. REPORT ONLY, NOT FIXED.**
+
+**Plainly:** if a stylist hides their shop — or is suspended, which hides it
+for them — a model who already has a booking with them can no longer open
+their profile, sees them as the word "Stylist" everywhere, and **cannot leave
+a review**. The booking still exists. The person it is with disappears.
+
+**── 1. THE 404 ON `/stylist/09c6d70c-…` ──**
+
+**One condition causes it: `is_published = false`.** Not suspension.
+
+* `site/lib/queries/stylist.ts:68-74` selects from `providers` with **no
+  filter of its own** — no `is_published`, no suspension check. The filtering
+  is entirely RLS.
+* The policy is **`providers readable when published`**:
+  `USING (is_published = true OR auth.uid() = user_id)`, plus
+  `providers_select_admin` for admins (policy snapshot of 8 Aug,
+  `supabase/schema-snapshot-2026-08-08-policies.sql:163,165`).
+* `providers_not_suspended` is **UPDATE only** (`:164`) — it filtered the
+  failed hide in item 66 and has nothing to do with SELECT.
+* No row → `getStylistProfile` returns null → `app/(app)/stylist/[id]/page.tsx:34`
+  calls `notFound()`. The comment there says "not found and not visible to you
+  both land here, on purpose" — right for a stranger, and exactly what is
+  wrong for a customer.
+
+**Suspension reaches the same place by a different road:** `0044:312-316` sets
+`is_published = false` when a stylist is suspended. So suspension causes the
+hide, and the hide causes the 404. Two mechanisms, one symptom, and only one
+of them is about moderation.
+
+**── 2. WHAT A MODEL WITH A BOOKING ACTUALLY SEES ──**
+
+Read from the code, not assumed:
+
+| | What happens | Where |
+|---|---|---|
+| Open the profile | **404** | `stylist/[id]/page.tsx:34` |
+| Bookings list | The booking is there; the stylist is **"Stylist"** | `lib/queries/sessions.ts:117` (`prov?.name ?? 'Stylist'`) |
+| Messages list | Thread is there, named **"Stylist"** — and it still **links to the profile**, so the link 404s | `lib/queries/conversations.ts:152,154` |
+| Open the thread | Works. Header reads **"Stylist"**, no picture | `lib/queries/thread.ts:71-80` |
+| Send a message | **Works** — the insert is keyed on the session and never reads `providers` | `ChatThread.tsx:95` |
+| Block or report them | `otherUserId` is null in the thread, so the safety controls have no subject | `lib/queries/thread.ts:76` |
+| **Leave a review** | **404** | see 3 below |
+
+So they can still talk to them, and they cannot see who they are, look them
+up, report them, or review them. **The one thing that still works is the one
+thing that carries risk; the things that would let a model check who she is
+dealing with, or raise a concern, are the ones that fail.**
+
+**── 3. THE REVIEW 404 IS THE SAME CAUSE, NOT THE WEB REVIEWS MERGE ──**
+
+`lib/queries/review.ts:99` reads the `providers` row for the booking. Hidden →
+null → `:119` `if (isModel && !prov?.user_id) return null` → the page's
+`notFound()` at `app/(app)/bookings/[sessionId]/review/page.tsx:27`.
+
+That line is not a fault in today's merge. It was written for "a stylist with
+no account behind it: nobody to review", which is a real case and the right
+answer for it. **It cannot tell "this stylist has no user account" from "RLS
+will not show me this row",** because both arrive as `prov = null`. The review
+feature merged today works correctly against a published stylist.
+
+**The shape, again (item 30's list):** a check correct for the cases present
+when it was written. `prov = null` had one meaning in August, when nothing hid
+a provider from a member who had booked them. It has two now.
+
+**── WHAT I THINK SHOULD HAPPEN ──**
+
+**Hiding is a marketing action, not a relationship one.** "Stop new people
+finding me" should not mean "vanish from the people I already owe a
+treatment". Suspension is a moderation action and should stop new exposure and
+new bookings — but leaving the *model* unable to see or review the stylist
+punishes the wrong person, and removes the trail she would need in order to
+report them. **Moderation that erases the evidence is backwards.**
+
+Concretely, for a decision rather than for building today:
+1. Widen the SELECT policy so a member who **shares a session** with the
+   provider can read that row — through a SECURITY DEFINER helper such as
+   `has_session_with_provider(uuid)`, the way `is_admin()` is done, rather
+   than an inline subquery that drags `sessions` RLS along behind it.
+2. The profile page then renders, with a line saying this stylist is not
+   taking new bookings, instead of a 404. The existence oracle stays closed
+   for everyone else, which is what `notFound()` was protecting.
+3. Reviewing should not depend on the provider row being visible at all — it
+   needs `providers.user_id` and nothing more.
+4. Either way, `conversations.ts:154` should not link to a profile the viewer
+   cannot open.
+
 **75. A CHECK COULD STOP THE WEBSITE UPDATING, AND NOTHING NOTICED IT HAD —
 CHANGED 22 Sep 2026. `npm run verify` EXIT 0.**
 
@@ -2466,6 +2554,26 @@ input; not confirmed, `gh` is not installed here). The signal existed. Nobody
 was told. That is the same shape as the five weeks recorded in that workflow's
 own header, inverted: there, a green tick hid red deploys; here, a red deploy
 hid behind nothing at all.
+
+**── PROVEN END TO END — 22 Sep 2026, VERIFIED from Micky's pasted output ──**
+
+* A message sent **on the web** from `micky.buckfield@hotmail.co.uk` produced
+  an `email_sends` row: kind `chat`, event `chat`, status `sent`, `reason`
+  null, 20:33:24.
+* Resend shows *"New message from Micky B."* **Delivered** to
+  `nahitih259@bevriz.com`.
+* Both test emails to `micky.buckfield@gmail.com` also show **Delivered**.
+
+So the whole chain works on live infrastructure: web message → `messages`
+insert → `tg_message_push` → pg_net → `send-email` → Vault secret accepted →
+Resend → an inbox. The chat throttle, the preference check and the log all sit
+on that path.
+
+**CORRECTION — the column is `reason`, not `error`.** I described it as `error`
+in conversation. `email_sends` is: `id, user_id, kind, ref_id, event, status,
+reason, provider_id, created_at` — as the migration has always had it. The
+wrong name never reached the repo; it is corrected here so it does not survive
+in notes taken from that conversation.
 
 **── WHAT IS STILL OPEN ──**
 * **Mobile has no email preference UI.** A member with the app can only turn
@@ -8225,6 +8333,7 @@ platforms each failed it differently.
 | 14 | Admin revoke UI — `0027` ships the mechanism, nothing calls it | No, but revocation is SQL-only until then |
 | 74 | Email notifications built but **not applied, not deployed, nothing sent**; mobile has no email switch | **Yes** for the deploy — a web-only member currently hears nothing |
 | 75 | Drift check is new and unproven — its first real test is the next failed or skipped deploy | No |
+| 76 | A hidden or suspended stylist vanishes from models already booked with them; no review possible | **Yes** — a completed booking with a hidden stylist cannot be reviewed at all |
 
 Carried in from before the audit, unchanged by it:
 
