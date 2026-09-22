@@ -43,7 +43,9 @@ export function ShopVisibility({
   }
 
   return (
-    <section className="rounded-lg border border-hairline bg-white p-5 shadow-soft">
+    // The id is the target of the setup panel's "Publish it from your shop"
+    // link, which on /shop itself would otherwise point at the page it is on.
+    <section id="visibility" className="scroll-mt-6 rounded-lg border border-hairline bg-white p-5 shadow-soft">
       <div className="flex flex-wrap items-center gap-3">
         <h2 className="font-display text-xl text-warm-dark">Who can see your shop</h2>
         <span

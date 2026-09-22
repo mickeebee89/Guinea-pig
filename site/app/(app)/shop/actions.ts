@@ -282,10 +282,34 @@ export async function setShopPublished(publish: boolean): Promise<VisibilityResu
   const user = await requireUser()
   const supabase = await createSupabaseServerClient()
 
-  const setup = await getStylistSetup(supabase, user.id)
+  // The suspension is read alongside the setup, not after a failed write: a
+  // suspended owner's UPDATE is filtered to zero rows by the RESTRICTIVE
+  // providers_not_suspended, with no error, so the write alone cannot say why
+  // (item 66, nahitih259 on 22 Sep). One extra request, made in parallel, and
+  // only by this action. my_suspension() returns the caller's own ACTIVE
+  // suspension and nothing about anyone else (suspension-enforcement.sql:73-88).
+  const [setup, suspension] = await Promise.all([
+    getStylistSetup(supabase, user.id),
+    supabase.rpc('my_suspension'),
+  ])
   const providerId = setup.providerId
   if (!providerId) return { ok: false, error: 'Only a stylist account has a shop to publish.' }
   if (setup.isPublished === publish) return { ok: true, published: publish }
+
+  // An RPC error is not treated as "not suspended" OR as suspended: the write
+  // below goes ahead, and the database still decides.
+  const active = (suspension.data as { banned: boolean; suspended_until: string | null }[] | null)?.[0]
+  if (active) {
+    const until = active.suspended_until
+      ? new Date(active.suspended_until).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
+      : null
+    return {
+      ok: false,
+      error: active.banned || !until
+        ? `Your account has been banned, so your shop can’t be changed. If you think this is a mistake, email ${SUPPORT_EMAIL}.`
+        : `Your account is suspended until ${until}, so your shop can’t be changed until then. If you think this is a mistake, email ${SUPPORT_EMAIL}.`,
+    }
+  }
 
   if (publish) {
     const refusal = publishRefusal(setup)
@@ -317,7 +341,8 @@ export async function setShopPublished(publish: boolean): Promise<VisibilityResu
   }
 
   // No row back and no error is RLS filtering the update out. Of the policies
-  // above, only a suspension does that to an owner.
+  // above, only a suspension does that to an owner, and that was checked
+  // above; reaching here means something else did it, so this stays general.
   if (!data) {
     return { ok: false, error: `Your shop couldn’t be changed from this account. Email ${SUPPORT_EMAIL} and we’ll look into it.` }
   }
@@ -330,10 +355,18 @@ export async function setShopPublished(publish: boolean): Promise<VisibilityResu
   revalidatePath('/dashboard')
   revalidatePath('/browse')
   revalidatePath(`/stylist/${providerId}`)
-  // The public pages are ISR (900s and 3600s). Revalidate them so a hidden shop
-  // leaves on the next request rather than up to an hour later.
+  // The public pages are ISR (900s and 3600s). Revalidate them so the change
+  // shows on the next request rather than up to an hour later, whichever way
+  // it went: a publish needs it as much as a hide.
+  //
+  // ⚠️ THE ROUTE GROUP IS PART OF THE PATTERN. Next tags a page by its route
+  // FILE path, group included (next/dist/server/lib/implicit-tags.js), so the
+  // six treatment pages carry `_N_T_/(public)/[treatment]/page`. Until 22 Sep
+  // this said '/[treatment]', which matches no tag: nothing was purged and the
+  // pages waited out their 900s (item 66). '/' needs no group — it matches the
+  // home page's pathname tag.
   revalidatePath('/')
-  revalidatePath('/[treatment]', 'page')
+  revalidatePath('/(public)/[treatment]', 'page')
 
   if (nowPublished !== publish) {
     console.error('[shop] visibility did not stick', { wanted: publish, got: nowPublished })

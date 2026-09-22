@@ -132,7 +132,9 @@ export function StylistSetupPanel({ setup }: { setup: StylistSetup }) {
           so you can publish it again whenever you’re ready.
         </p>
         <p className="mt-3">
-          <Link href="/shop" className="text-sm font-bold text-rose hover:underline">
+          {/* To the control itself, not just the page: on /shop a plain "/shop"
+              link went nowhere (item 66). Elsewhere it lands on the same place. */}
+          <Link href="/shop#visibility" className="text-sm font-bold text-rose hover:underline">
             Publish it from your shop →
           </Link>
         </p>

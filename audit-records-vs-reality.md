@@ -2146,6 +2146,94 @@ TOGGLE HAS A GAP THIS ONE CLOSES.**
 > link is right on `/dashboard`, `/settings` and `/verify`, which render the
 > same panel. For the fix: drop the link on `/shop`, or point it at the
 > visibility section.
+>
+> **── 22 Sep 2026: (b) SETTLED — CAUSE 1, A SUSPENSION. VERIFIED ──**
+>
+> Micky ran query C of 22 Sep:
+> * **nahitih259@bevriz.com:** `is_suspended` true, 1 active suspension row.
+> * **micky.buckfield@gmail.com:** not suspended.
+>
+> So the RESTRICTIVE `providers_not_suspended` filtered the update to zero
+> rows. Candidates 2 and 3 were never needed. Micky then hid nahitih259's shop
+> directly, as admin, in the SQL editor. Its `first_published_at` is set, so
+> auto-publish can't undo that.
+>
+> **Could a real stylist hit it? Only a suspended one**, and the refusal is
+> correct: a suspended owner is meant to be unable to change their shop
+> (`suspension-enforcement.sql:63-68`). The fault was the message, fixed below.
+>
+> **── FIXED 22 Sep 2026. `next build` EXIT 0. NOT RE-TESTED ON THE LIVE SITE ──**
+> * **(a) Revalidation.** `setShopPublished` now calls
+>   `revalidatePath('/(public)/[treatment]', 'page')`. That's the tag the six
+>   treatment pages actually carry. `revalidatePath('/')` was already right.
+>   **Publishing needed the same fix and has it**: both directions go through
+>   the one function and the same revalidate calls. **Not covered, and outside
+>   this item:** editing name, bio or treatments on `/shop` changes the public
+>   cards too, and `saveShopDetails` and the treatment save revalidate only
+>   member pages. Those changes still wait for the 900 s / 3600 s rebuild.
+> * **(b) The suspended message.** `setShopPublished` now calls
+>   `my_suspension()` in parallel with `getStylistSetup`. It's one extra
+>   request, but no extra wait. It returns only the caller's own active
+>   suspension (`suspension-enforcement.sql:73-88`). With an active
+>   suspension, the action stops before the write and says so plainly:
+>   * **Suspended:** *"Your account is suspended until {date}, so your shop
+>     can't be changed until then…"*
+>   * **Banned:** *"Your account has been banned, so your shop can't be
+>     changed…"*
+>
+>   Both give the support address. **It can't be told from the update's own
+>   response**: a filtered update returns no row and no error, which is
+>   identical to any other RLS filter. The general message stays for anything
+>   else that filters the row.
+> * **(c) The link.** It now goes to `/shop#visibility`, the control's own
+>   anchor. On `/shop` it scrolls to the control; elsewhere it lands in the
+>   same place.
+>
+> **── 22 Sep 2026: SUSPENDING A STYLIST DOES NOT HIDE THEIR SHOP ANYWHERE.
+> READ, NOT FIXED ──**
+>
+> **Plainly:** a suspended stylist stays visible and bookable everywhere a
+> model looks. The suspension stops them changing their shop, and stops them
+> hiding it too. VERIFIED by reading. The live view and policies were not
+> re-read, except `is_suspended` itself.
+> * **Suspend doesn't touch the shop.** `admin_act_on_user`'s `suspend` and
+>   `ban` branches (`0039:263-280`) replace the `suspensions` row and do
+>   nothing else: no `is_published` change, no booking cancellation. (Compare
+>   revocation, which unpublishes and cancels, `0027`/`0040:380-395`.)
+> * **`public_stylists`** (`0034:209-265`, the latest definition; no later
+>   migration redefines it) filters on published, a name, a 40-character bio,
+>   a category and not-a-seed-account. **No suspension check.** So the public
+>   treatment pages and the home page's featured stylists show a suspended
+>   stylist.
+> * **Web browse** (`site/lib/queries/browse.ts:58-61`) reads `providers`
+>   with `is_published = true` and filters blocked users. **No suspension
+>   check.** Nor does the stylist profile page (`site/lib/queries/stylist.ts:67-73`).
+> * **Mobile browse** (`mobile/src/app/(app)/index.tsx:227-229`) reads
+>   `providers` with `is_published = true`. **No suspension check.** A grep
+>   for "suspen" across mobile's browse, provider profile and apply screens
+>   finds none.
+> * **RLS doesn't do it either.** The providers SELECT policies in the 8 Aug
+>   snapshot (`:163, :165`) are published-or-own and admin. None mentions
+>   suspension. `is_suspended` appears only in the five RESTRICTIVE policies
+>   of `suspension-enforcement.sql`, and none is on a SELECT.
+> * **No database function lists shops.** The only listing RPC is
+>   `nearby_models` (`0018:132`), which lists models.
+> * **Still bookable.** A model's application goes through
+>   `create_session_with_consent`, SECURITY INVOKER (`0009:68`, called at
+>   `mobile/src/app/(app)/apply-session.tsx:570`). `sessions_not_suspended` checks the
+>   APPLICANT (`auth.uid()`), not the stylist. So a model can apply to a
+>   suspended stylist.
+>   * **INFERRED from the snapshot:** the stylist can still accept it. No
+>     suspension policy covers `sessions` UPDATE.
+>   * The stylist can't send messages (`messages_not_suspended`), so the
+>     model is booked with someone who can't reply.
+>
+> **Why this matters more than the message:** suspension is the tool for a
+> stylist the platform has decided to hold back. Today it keeps them listed
+> and bookable, and it takes away their own ability to hide.
+>
+> **Not decided:** whether suspend should unpublish, and whether to use the
+> revocation pattern, cancelling live bookings too.
 
 **Plainly:** until now the only way for a stylist to hide their shop was the
 switch on mobile's Provider Dashboard. The web had none. `/shop` now has one.
