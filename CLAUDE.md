@@ -103,8 +103,9 @@ _This file is read automatically at the start of every Claude Code session. It h
   (`provider_fee_settled()`, migration `0045`, audit item 56). Both admin paths
   refuse with SQLSTATE `CV002`: the queue's approve and the Users/Providers Verify
   button. Declining is never gated. To let a stylist in free, waive the fee first
-  (Users → Free fee), then approve. Models have no fee to settle. *Written
-  22 Sep 2026: until the migration ledger shows 0045 applied, this is not yet true.*
+  (Users → Free fee), then approve. Models have no fee to settle. *0045 applied
+  and verified 22 Sep 2026 (item 56, closed).* ~~*Until the migration ledger shows
+  0045 applied, this is not yet true.*~~
   ~~Admin `approve()` unlocks unconditionally (free-account override).~~
   *Superseded by 0045 for stylists, 22 Sep 2026.*
 - Test card: `4242 4242 4242 4242`, exp `12/34`, CVC `123`.
