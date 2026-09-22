@@ -37,6 +37,8 @@ export interface SessionRow {
    */
   otherPartyId: string | null
   otherPartyKind: 'stylist' | 'model'
+  /** A completed booking this user has already reviewed. Drives "Leave a review". */
+  reviewedByMe: boolean
 }
 
 export async function getSessions(
@@ -70,14 +72,20 @@ export async function getSessions(
   const modelIds    = [...new Set(rows.map(r => r.model_user_id))]
   const treatIds    = [...new Set(rows.map(r => r.treatment_id).filter(Boolean) as string[])]
 
-  const [provRes, modelRes, treatRes, blocked] = await Promise.all([
+  const completedIds = rows.filter(r => r.status === 'completed').map(r => r.id)
+
+  const [provRes, modelRes, treatRes, blocked, reviewedRes] = await Promise.all([
     supabase.from('providers').select('id, user_id, name, profile_pic_url').in('id', providerIds),
     supabase.from('public_profiles').select('id, first_name, last_initial, profile_pic_url').in('id', modelIds),
     treatIds.length > 0
       ? supabase.from('provider_treatments').select('id, name, category').in('id', treatIds)
       : Promise.resolve({ data: [], error: null }),
     getBlockedIds(supabase, userId).catch(() => new Set<string>()),
+    completedIds.length > 0
+      ? supabase.from('reviews').select('session_id').eq('reviewer_id', userId).in('session_id', completedIds)
+      : Promise.resolve({ data: [], error: null }),
   ])
+  const reviewed = new Set(((reviewedRes.data ?? []) as { session_id: string }[]).map(r => r.session_id))
 
   const provMap  = indexById<ProviderRef>(provRes.data)
   const modelMap = indexById<ProfileRef>(modelRes.data)
@@ -128,6 +136,7 @@ export async function getSessions(
         // always told the caller which kind it is holding.
         otherPartyId: isModel ? r.provider_id : r.model_user_id,
         otherPartyKind: isModel ? 'stylist' : 'model',
+        reviewedByMe: reviewed.has(r.id),
       }
     })
 }

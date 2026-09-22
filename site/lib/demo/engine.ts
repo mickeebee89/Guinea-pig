@@ -245,6 +245,12 @@ export class DemoQuery implements PromiseLike<Result> {
     if (this.mode !== 'select' && this.store.isView(this.table)) {
       return fail(err(`demo: ${this.table} is a view and cannot be written`))
     }
+    // No review can exist in demo data, not even one typed into the form, so
+    // no screenshot can ever show an invented review (fixtures.ts header,
+    // audit item 69). The form itself can still be shown.
+    if (this.table === 'reviews' && this.mode !== 'select') {
+      return fail(err('Reviews can’t be posted in demo mode, so a screenshot can never show an invented one.'))
+    }
     const rows = this.store.read(this.table)
     const match = (r: Row) => this.preds.every(p => p(r))
 

@@ -65,7 +65,7 @@ export default function Home() {
         </p>
 
         <p className="mt-4 text-sm font-bold uppercase tracking-[0.16em] text-rose">
-          Launching soon in the UK
+          Now open in the UK
         </p>
       </section>
 
