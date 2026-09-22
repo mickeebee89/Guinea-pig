@@ -2214,10 +2214,13 @@ TOGGLE HAS A GAP THIS ONE CLOSES.**
 >   finds none.
 > * **RLS doesn't do it either.** The providers SELECT policies in the 8 Aug
 >   snapshot (`:163, :165`) are published-or-own and admin. None mentions
->   suspension. `is_suspended` appears only in the five RESTRICTIVE policies
->   of `suspension-enforcement.sql`, and none is on a SELECT.
-> * **No database function lists shops.** The only listing RPC is
->   `nearby_models` (`0018:132`), which lists models.
+>   suspension. `is_suspended` appears only in the four RESTRICTIVE policies
+>   of `suspension-enforcement.sql` (sessions, messages and reviews INSERT;
+>   providers UPDATE). None is on a SELECT.
+> * **No database function that lists shops was found.** A search of function
+>   names in `supabase/` for provider, stylist, nearby and search turns up
+>   only `nearby_models` (`0018:132`), which lists models. That's a search by
+>   name, not a read of every function.
 > * **Still bookable.** A model's application goes through
 >   `create_session_with_consent`, SECURITY INVOKER (`0009:68`, called at
 >   `mobile/src/app/(app)/apply-session.tsx:570`). `sessions_not_suspended` checks the
