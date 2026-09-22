@@ -2452,6 +2452,116 @@ TOGGLE HAS A GAP THIS ONE CLOSES.**
 > come back, which is slightly misleading after a ban. **Accepted (Micky, 22
 > Sep):** one message for revocation, suspension and ban is the point, and a
 > ban-specific line would tell the model which one it was.
+>
+> **── 22 Sep 2026: BLOCK F PASSED. THE CANCEL-AND-NOTIFY PATH IS TESTED.
+> VERIFIED FROM PASTED OUTPUT ──**
+>
+> The corrected Block F (below) ran once and rolled back in full. Inside the
+> transaction it created one availability slot and one pending booking between
+> the model test account and Micky B's shop, 400 days out at 10:00, then
+> suspended Micky B through `admin_act_on_user`. Results:
+> * **The booking:** status `cancelled`, with `cancelled_at` set.
+> * **The notice title:** *"Your booking on 27 October at 10am has been
+>   cancelled"*.
+> * **The notice body:** the `withdrawn` message, naming Micky B and the
+>   treatment (Hair). No reason, no mention of suspension, and
+>   support@cavybeauty.com given.
+>
+> **With A to D above, every part of 0044 has now been exercised on the live
+> database:**
+> * the hide;
+> * the stamp;
+> * no republish on reinstate;
+> * completed bookings untouched;
+> * the auto-publish refusal;
+> * the cancellation and the notice a model receives.
+>
+> **Why the first Block F failed.** The first version, above, was refused at
+> the booking insert:
+>
+>     null value in column "availability_id" of relation "sessions" violates not-null constraint
+>
+> That was a fault in the fixture, not in 0044, and the error rolled everything
+> back. The required columns couldn't be read from the repo (next note), so
+> they were listed live first:
+> * **`availability`**, NOT NULL with no default: `provider_id`, `date`,
+>   `start_time`, `end_time`.
+> * **`sessions`**, NOT NULL with no default: `provider_id`, `model_id`,
+>   `treatment_id`, `availability_id`, `scheduled_at`, `duration_minutes`, and
+>   `location_type` (CHECK: provider, model or either).
+>
+> The block that passed:
+>
+>     do $$
+>     declare
+>       v_admin constant uuid := 'ff06d568-8936-45fa-ad5f-0b88c150ec30';
+>       v_model constant uuid := 'b0df9c2f-02c5-4fef-afb0-9b184c3b9130';
+>       v_date  constant date := current_date + 400;
+>       v_prov uuid; v_treat uuid; v_slot uuid; v_sess uuid;
+>       v_status text; v_at timestamptz; v_title text; v_body text;
+>     begin
+>       perform set_config('request.jwt.claims',
+>         format('{"sub":"%s","role":"authenticated"}', v_admin), true);
+>       if not public.is_admin() then
+>         raise exception 'Block F: the admin claim did not carry. Nothing was tested.';
+>       end if;
+>
+>       select id into v_prov from public.providers where user_id = v_admin;
+>       select id into v_treat from public.provider_treatments
+>        where provider_id = v_prov and category is not null order by id limit 1;
+>       if v_prov is null or v_treat is null then
+>         raise exception 'Block F: Micky B has no shop or no categorised treatment. Nothing was tested.';
+>       end if;
+>
+>       insert into public.availability (
+>         provider_id, date, start_time, end_time, active_treatments, is_taken
+>       ) values (
+>         v_prov, v_date, time '10:00', time '11:00', array[v_treat], true
+>       ) returning id into v_slot;
+>
+>       insert into public.sessions (
+>         provider_id, model_user_id, model_id, availability_id, treatment_id,
+>         date, start_time, end_time, scheduled_at, duration_minutes,
+>         location_type, status
+>       ) values (
+>         v_prov, v_model, v_model, v_slot, v_treat,
+>         v_date, time '10:00', time '11:00', v_date + time '10:00', 60,
+>         'either', 'pending'
+>       ) returning id into v_sess;
+>
+>       perform public.admin_act_on_user(v_admin, 'suspend', 'verify 0044 block F, rolled back', 1);
+>
+>       select status, cancelled_at into v_status, v_at
+>       from public.sessions where id = v_sess;
+>       select n.title, n.body into v_title, v_body
+>       from public.notifications n
+>       where n.session_id = v_sess and n.user_id = v_model and n.type = 'session_cancelled';
+>
+>       raise exception E'ROLLED BACK ON PURPOSE.\nstatus: %\ncancelled_at: %\ntitle: %\nbody:\n%',
+>         v_status, v_at, v_title, v_body;
+>     end $$;
+>
+> **── FOR LATER: THE NOTICE'S DATE HAS NO YEAR ──**
+>
+> Every `cancellation_notice` kind formats the date as `FMDD FMMonth` (0030;
+> `withdrawn` in 0044). A booking more than a year ahead therefore reads
+> ambiguously: Block F's booking was 400 days out and read *"27 October"*.
+> Noted, not fixed.
+>
+> **── STILL INFERRED: WHETHER THE ROLLBACK DISCARDED THE PUSH ──**
+>
+> The notice fired `notify_push`, which queues through pg_net. That the
+> rollback discarded the push is still INFERRED (as in 0042), not observed.
+> Micky will say whether the model test account's phone received a
+> notification from the Block F run. If it did, pg_net's queue is not
+> transactional, and every rolled-back verify block that writes a
+> notification sends a real push.
+>
+> **── THE REPO COULD NOT HAVE TOLD US THE REQUIRED COLUMNS ──**
+>
+> `availability` and `sessions` are created by no migration. See the note
+> under item 50's "three objects" (`is_admin()`, `public.admins`,
+> `on_auth_user_created`), where they are now listed with those.
 
 **Plainly:** until now the only way for a stylist to hide their shop was the
 switch on mobile's Provider Dashboard. The web had none. `/shop` now has one.
@@ -4298,6 +4408,25 @@ way"*. **The first was wrong. The second was too cautious.**
 `is_admin()`, `public.admins` and `on_auth_user_created`. Each exists live and
 is recorded in the repo only by an 8 Aug snapshot, or not at all. No migration
 would rebuild any of them.
+
+> **── 22 Sep 2026: TWO MORE — `public.availability` AND `public.sessions` ──**
+>
+> **No migration creates either table, and no file in `supabase/` has a
+> `create table` for them.** VERIFIED by a case-insensitive search for `create
+> table` against both names across `supabase/`, the 8 Aug snapshot included.
+> Migrations only alter them. `0029`, for instance, adds the cancellation
+> columns to `sessions`.
+>
+> Found on 22 Sep because 0044's Block F needed their NOT NULL columns, and
+> the repo couldn't say which those were. The first Block F guessed, and was
+> refused on `sessions.availability_id`. The columns were then listed live
+> (item 66).
+>
+> **So the list is now five:** `is_admin()`, `public.admins`,
+> `on_auth_user_created`, `public.availability` and `public.sessions`. Each
+> exists live, and no migration creates any of them. `sessions` is the
+> product's central table, bookings, so **a rebuild from the migrations would
+> fail at the first migration that touches it** (INFERRED: not attempted).
 
 **`provider_shop_is_publishable()`, live:**
 
