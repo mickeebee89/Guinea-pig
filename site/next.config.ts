@@ -82,7 +82,9 @@ const nextConfig: NextConfig = {
    *
    * ── ⚠️ THIS USED TO SAY "loads nothing external at all" ──────────────────
    * It did, and that was true until 14 Sep 2026. Fonts are still self-hosted by
-   * next/font and there is still no analytics. What changed is Stripe: card
+   * next/font. (This said "there is still no analytics" until 22 Sep 2026, when
+   * Vercel Web Analytics was added — same-origin in production, so it needs no
+   * origin here; see script-src below and audit item 67.) What changed is Stripe: card
    * payments cannot be collected without loading Stripe's script and framing
    * their card field, because the whole point is that card numbers never touch
    * this origin.
@@ -106,6 +108,15 @@ const nextConfig: NextConfig = {
     // is unchanged.
     const isProd = process.env.NODE_ENV === 'production'
     const devEval = isProd ? '' : " 'unsafe-eval'"
+
+    // Vercel Web Analytics (components/SiteAnalytics.tsx). In PRODUCTION its
+    // script is /_vercel/insights/script.js and it reports to /_vercel/insights/*,
+    // both this origin, so 'self' covers them and the shipped policy gains
+    // nothing. In development the package swaps in a debug build from
+    // va.vercel-scripts.com (@vercel/analytics 2.0.1, getScriptSrc), which only
+    // logs to the console; allowing it in dev alone keeps the dev console free
+    // of a CSP error on every page. Audit item 67.
+    const devAnalytics = isProd ? '' : ' https://va.vercel-scripts.com'
 
     // The member area talks to Supabase from the browser: PostgREST over https
     // for sends and reads, and a WebSocket for realtime chat.
@@ -136,7 +147,7 @@ const nextConfig: NextConfig = {
       // js.stripe.com serves Stripe.js. It is the ONLY external script origin
       // on this site, and Stripe requires it be loaded from there rather than
       // bundled — they ship fixes to it without a release on our side.
-      `script-src 'self' 'unsafe-inline' https://js.stripe.com${devEval}`,
+      `script-src 'self' 'unsafe-inline' https://js.stripe.com${devEval}${devAnalytics}`,
       "style-src 'self' 'unsafe-inline'",
       // next/image proxies remote images through /_next/image, so they are
       // same-origin by the time a browser sees them; the Supabase host is

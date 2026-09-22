@@ -231,7 +231,9 @@ the open web; "Premium coming soon" in Settings is false twice over.
 
 **Holding well:** blocking enforcement (`0018`), the 6-year retention bounds, "no
 IP or device recorded", "no analytics", the age gate, first-name-plus-initial,
-human-only moderation decisions.
+human-only moderation decisions. *("No analytics" stopped being true on 22 Sep
+2026, when Vercel Web Analytics was added to the website; the Privacy policy
+was changed with it. See item 67.)*
 
 ---
 
@@ -2113,6 +2115,107 @@ was the reason for three workflows rather than one.
 
 It remains a signal and not a gate. Everything above about branch protection
 still stands.
+
+**67. VERCEL WEB ANALYTICS ON THE WEBSITE — ADDED 22 Sep 2026. `next build`
+EXIT 0. NOT YET DEPLOYED; NO PAGE VIEW OBSERVED.**
+
+**Plainly:** the website now counts page visits with Vercel Web Analytics,
+which is enabled in the Vercel dashboard for the cavy project. The Privacy
+policy says so, and no longer claims there's no analytics.
+
+**⚠️ THIS ENDS A PUBLISHED CLAIM THE AUDIT HAD RECORDED AS HOLDING.** The 19 Aug
+claims pass listed *"no analytics"* under "Holding well" (line 233 above).
+That was true until today. The Privacy policy stated it in two places, and
+both are rewritten below. The mobile app still has no analytics.
+
+**── WHAT WAS BUILT ──**
+* **Package:** `@vercel/analytics` 2.0.1, installed in `site/`.
+* **Component:** `site/components/SiteAnalytics.tsx` wraps `<Analytics />` from
+  `@vercel/analytics/next`. It's rendered once, from the root layout
+  (`site/app/layout.tsx`), so it covers every page, public and member area.
+* **Query strings and fragments are stripped** from the page URL before
+  sending (`beforeSend`). Otherwise `/browse?place=<a town>` would report where
+  members search, which sits badly with "doesn't identify individuals". The
+  wrapper is a client component because `beforeSend` is a function, and a
+  server component can't pass one down.
+* **Auth tokens never reach it.** The two links that carry one-time tokens,
+  `/auth/confirm` and `/auth/reset`, are route handlers, not pages, so they
+  never render the layout or the script.
+
+**── WHAT THE SCRIPT DOES, READ FROM THE PACKAGE AND THE LIVE SCRIPT ──**
+
+VERIFIED from `node_modules/@vercel/analytics/dist/next/index.mjs:84-95` and
+from `https://cavybeauty.com/_vercel/insights/script.js`, as served on 22 Sep
+(4,469 bytes):
+* **Production script:** `/_vercel/insights/script.js`, same origin.
+* **Where it reports:** `/_vercel/insights/<event>`, same origin, by `fetch`
+  POST. There are no external URLs anywhere in the served script.
+* **No cookies.** No `document.cookie` in the script.
+* **localStorage:** it reads one key on load, and writes it only if the site
+  sets a user or group id. This site never does.
+* **Referrer:** sent only when it comes from another host (`!f.includes(location.host)`).
+  So an internal page's query string can't leak through the referrer either.
+* **Browser data read:** `navigator.userAgent` and `navigator.webdriver`,
+  for bot detection.
+* **Development only:** the package swaps in a debug build from
+  `https://va.vercel-scripts.com/v1/script.debug.js`, which logs to the
+  console.
+
+**── THE CSP ──**
+
+**The production policy is unchanged.** It was checked in the built
+`routes-manifest.json`: `script-src 'self' 'unsafe-inline'
+https://js.stripe.com`. The script and its reporting address are both same
+origin, so `'self'` already covers them in `script-src` and `connect-src`.
+
+**One directive changed, in development only:** `script-src` gains
+`https://va.vercel-scripts.com` when `NODE_ENV` isn't `production`
+(`devAnalytics` in `site/next.config.ts`), alongside the existing dev-only
+`'unsafe-eval'`. Without it, the dev console shows a CSP error on every page.
+Nothing else changed.
+
+The `next.config.ts` comment that said *"there is still no analytics"* is
+rewritten, with the old wording kept.
+
+**── THE PRIVACY POLICY (`site/content/legal.ts`), last updated → 22 September 2026 ──**
+* **Section 11, Cookies — new line:** *"We measure page visits with Vercel Web
+  Analytics, which doesn't use cookies or identify individuals."*
+* **Section 3, The short version** — was: *"…and there is no analytics or
+  tracking software in the app or on this site."* Now: *"…and there's no
+  advertising or tracking software in the app or on this site. The website
+  counts page visits without cookies and without identifying anyone —
+  section 11 explains."*
+* **Section 8, Who we share it with** — was: *"There is no advertising or
+  analytics software in our app or on this website."* Now: *"There is no
+  advertising software in our app or on this website, and no analytics in the
+  app. The website counts page visits through our website host — see section
+  11."*
+
+Vercel was already covered by section 8's list of service providers, as
+"our website host". The old wordings are kept as code comments next to each
+line.
+
+**── IS A COOKIE OR CONSENT BANNER NEEDED? NO, ON WHAT THE SCRIPT DOES ──**
+
+This is my reading, not legal advice.
+* **PECR regulation 6** requires consent to store information on, or read
+  information from, a user's device, unless it's strictly necessary. This
+  script sets no cookies, and stores nothing unless a user id is set, which
+  never happens here. Its one read is of a local-storage key this site never
+  writes. That's the only edge case, and it holds nothing. So there's no
+  storage for a banner to ask about.
+* **UK GDPR still applies.** Vercel derives its visitor count from request
+  data, IP address included. That's processing personal data, lawfully on
+  legitimate interests, and it needs transparency: the new Privacy line.
+* **INFERRED:** the Data (Use and Access) Act 2025 also exempts statistics
+  cookies from consent, given clear information and an opt-out. This site
+  doesn't need that exemption. Its commencement wasn't checked.
+* **What would change the answer:** calling Vercel's identify API with a user
+  id, adding any other analytics or advertising tool, or setting any
+  non-essential cookie.
+
+**Not yet seen:** a page view counted in the Vercel dashboard. That needs the
+Production deploy.
 
 **66. STYLISTS CAN PUBLISH AND HIDE THEIR SHOP ON THE WEB — BUILT 22 Sep
 2026. `next build` EXIT 0. NOT EXERCISED AGAINST THE LIVE DATABASE; MOBILE'S

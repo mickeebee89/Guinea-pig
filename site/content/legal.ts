@@ -355,7 +355,7 @@ export const PRIVACY: LegalDoc = {
   metaTitle: 'Privacy Policy',
   metaDescription:
     'What Cavy does with your information across the website, the waitlist and the app, and your rights over it.',
-  updated: '21 September 2026',
+  updated: '22 September 2026',
   sections: [
     {
       n: '1',
@@ -383,7 +383,10 @@ export const PRIVACY: LegalDoc = {
       blocks: [
         {
           type: 'p',
-          text: 'We collect what we need to run a booking service between stylists and models, and nothing for advertising. We don’t sell your data, we don’t share it with advertisers, and there is no analytics or tracking software in the app or on this site.',
+          // Until 22 Sep 2026: "…and there is no analytics or tracking software
+          // in the app or on this site." Untrue once Vercel Web Analytics was
+          // added to the website (audit item 67).
+          text: 'We collect what we need to run a booking service between stylists and models, and nothing for advertising. We don’t sell your data, we don’t share it with advertisers, and there’s no advertising or tracking software in the app or on this site. The website counts page visits without cookies and without identifying anyone — section 11 explains.',
         },
         {
           type: 'p',
@@ -517,7 +520,9 @@ export const PRIVACY: LegalDoc = {
       blocks: [
         {
           type: 'p',
-          text: 'We do not sell your information and we do not share it with advertisers. There is no advertising or analytics software in our app or on this website.',
+          // Until 22 Sep 2026: "There is no advertising or analytics software in
+          // our app or on this website." (audit item 67)
+          text: 'We do not sell your information and we do not share it with advertisers. There is no advertising software in our app or on this website, and no analytics in the app. The website counts page visits through our website host — see section 11.',
         },
         {
           type: 'p',
@@ -588,6 +593,14 @@ export const PRIVACY: LegalDoc = {
         {
           type: 'p',
           text: 'This website doesn’t use tracking or advertising cookies. Our fonts are served from this site rather than a third party, so loading a page doesn’t share your IP address with anyone else. The app uses a login token to keep you signed in, which is not used for tracking.',
+        },
+        {
+          type: 'p',
+          // Added 22 Sep 2026, audit item 67. True as read from the served
+          // script that day: no cookies, and localStorage is written only if a
+          // user id is set, which this site never does. Query strings are
+          // stripped before sending (components/SiteAnalytics.tsx).
+          text: 'We measure page visits with Vercel Web Analytics, which doesn’t use cookies or identify individuals.',
         },
       ],
     },
