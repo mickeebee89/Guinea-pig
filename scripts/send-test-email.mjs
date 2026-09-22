@@ -44,6 +44,9 @@ const body = await res.json().catch(() => null)
 
 if (!res.ok || !body?.ok) {
   console.error(`\nNot sent (HTTP ${res.status}): ${body?.error ?? 'no message'}`)
+  if (res.status === 403) {
+    console.error('403 means the token sent is not a service-role key — the anon key sits beside it and looks the same.')
+  }
   if (String(body?.error ?? '').includes('RESEND_API_KEY')) {
     console.error('RESEND_API_KEY is not set on the function.')
   }

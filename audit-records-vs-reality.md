@@ -2117,7 +2117,8 @@ It remains a signal and not a gate. Everything above about branch protection
 still stands.
 
 **74. NOBODY WAS EVER EMAILED WHEN SOMETHING HAPPENED ON CAVY — BUILT 22 Sep
-2026. `next build` EXIT 0. NOT APPLIED, NOT DEPLOYED, NOTHING SENT YET.**
+2026. `next build` EXIT 0. THE FUNCTION IS DEPLOYED (proved by its own 400 to a
+malformed POST); THE MIGRATION'S STATE IS NOT ESTABLISHED HERE; NOTHING SENT.**
 
 **Plainly:** a web-only member could be applied to, accepted, declined,
 cancelled on, messaged, verified, warned or have a payment fail, and hear
@@ -2198,6 +2199,62 @@ rather than waiting for the monthly purge.
   `notifications@cavybeauty.com`, that it can be turned off in Settings or by
   the link in any of them, and that account emails still arrive.
 * **§9:** the 90-day record above.
+
+**── THE SERVICE-KEY CHECK REFUSED THE REAL SERVICE KEY — 22 Sep 2026, FOUND
+ON THE FIRST RUN OF STEP 3, FIXED THE SAME DAY ──**
+
+**Plainly:** the install step wouldn't run. `install-email-secret.mjs` returned
+*"The function refused (HTTP 403): Forbidden"* while being sent a genuine
+service-role key.
+
+**Established before anything was changed, from two read-only probes:**
+* An unauthenticated POST with a deliberately malformed body returned **400
+  `{"error":"Invalid JSON"}`** — a response only this function's own code can
+  produce. So the gateway was open (`--no-verify-jwt` doing its job) and the
+  403 came from the check inside the function, not from Supabase in front of
+  it. **How to tell them apart from the error alone:** the function answers
+  `{"error":"Forbidden"}`; the gateway answers **401** with the text under
+  `message`, not `error`. The script prints `body.error`, and it printed
+  "Forbidden".
+* Decoding only the claims of the key being sent (never the signature) gave
+  `role: service_role`, `ref: ptluekkhiopowuyvkgnd`, expiry 2036 — the right
+  key for the right project.
+
+**Cause:** the check was `given !== Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')`
+— byte-for-byte equality against the string Supabase injects. The injected
+string and the dashboard's string were not the same string. **Equality cannot
+tell "a different credential" from "a different spelling of the same
+authority",** and it would have failed again on the next key rotation and again
+on the move to `sb_secret_…` keys, each time as an unexplained "Forbidden".
+
+Why it was never caught: the two secrets this function needs were treated as
+the same kind of thing. `EMAIL_HOOK_SECRET` genuinely IS a shared string, so
+comparing it is right. The service-role key is a *credential*, and the question
+about a credential is what it can do.
+
+**The fix — ask, don't match.** `isServiceRole()` makes one GET to the Auth
+admin API for a user id of all zeros. That endpoint verifies the signature
+against this project's JWT secret and requires the `service_role` claim, so:
+* an **anon** key is refused — it has no such claim;
+* a **signed-in member's** token is refused — the claim is set when the token
+  is issued and the signature covers it, so nobody can promote their own;
+* a **forged** or another project's token fails the signature check;
+* an **`sb_secret_…`** key passes, which is the whole point.
+
+The all-zero id belongs to nobody, so success is a 404 and **no personal data
+is returned**. The body is cancelled unread either way.
+
+**Also added:** a start-up line if `SUPABASE_SERVICE_ROLE_KEY` is not injected
+at all. That would break every database call in the function, and the reason
+would otherwise surface as an unrelated PostgREST message much later.
+
+**Not done, deliberately:** no fingerprint-reporting step comparing the two
+strings. Once the check no longer depends on them being identical, why they
+differ stops being a question worth asking.
+
+**The shape, for the list in item 30:** a check that was correct for the cases
+present when it was written. One credential, one spelling, one key format — all
+three true on the day, none of them guaranteed tomorrow.
 
 **── WHAT IS STILL OPEN ──**
 * **Mobile has no email preference UI.** A member with the app can only turn

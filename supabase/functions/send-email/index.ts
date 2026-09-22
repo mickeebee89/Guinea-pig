@@ -19,6 +19,9 @@
 // its own EMAIL_HOOK_SECRET into Vault through install_email_hook_secret().
 // The secret never appears on a screen or in a shell history.
 //
+// "with the service-role key" is checked by ASKING, not by matching text — see
+// isServiceRole() below, and audit item 74 for the day that distinction cost.
+//
 // ── WHAT IT WILL NOT DO ────────────────────────────────────────────────────
 //   * It never writes `notifications` or `messages`. An email cannot cause an
 //     email.
@@ -31,10 +34,13 @@
 
 import { createClient } from 'npm:@supabase/supabase-js@2'
 
-const db = createClient(
-  Deno.env.get('SUPABASE_URL')!,
-  Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
-)
+const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
+const SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+// Said once, loudly, at start-up: without it every database call below fails,
+// and the reason would otherwise arrive as an unrelated PostgREST message.
+if (!SERVICE_KEY) console.error('[send-email] SUPABASE_SERVICE_ROLE_KEY is not injected — every database call will fail.')
+
+const db = createClient(SUPABASE_URL, SERVICE_KEY)
 
 const SITE = 'https://cavybeauty.com'
 const FROM = 'Cavy <notifications@cavybeauty.com>'
@@ -182,6 +188,48 @@ async function send(o: {
   return { ok: true, id: String(json?.id ?? '') }
 }
 
+/**
+ * Does this bearer token carry service-role authority?
+ *
+ * ── WHY NOT COMPARE IT TO OUR OWN KEY ──────────────────────────────────────
+ * It used to, and it refused the real key on 22 Sep 2026: the string Supabase
+ * injects here and the string in the dashboard were not the same string, and
+ * equality cannot tell "different credential" from "different spelling of the
+ * same authority". It would have broken again on the next rotation, and again
+ * on the move to sb_secret_… keys, each time as an unexplained "Forbidden".
+ *
+ * ── WHAT IS ATTEMPTED, AND WHY NOTHING ELSE CAN PASS IT ────────────────────
+ * One GET to the Auth admin API, asking for a user id of all zeros. That API:
+ *   * verifies the token's signature against THIS project's JWT secret, so a
+ *     forged or another project's token fails;
+ *   * requires the service_role claim, so an anon or a signed-in user's token
+ *     is refused with 401/403 however it was obtained — an authenticated user
+ *     cannot promote their own token, since the claim is set when it is
+ *     issued and the signature covers it;
+ *   * accepts the new sb_secret_… keys too, which is the point of asking it
+ *     rather than matching text.
+ *
+ * The all-zero id belongs to nobody, so service role gets 404 and no personal
+ * data is returned to us. 200 is accepted as well, in case that id ever
+ * exists; both mean the admin API let us in, which is the question.
+ */
+async function isServiceRole(token: string): Promise<boolean> {
+  if (!token) return false
+  let res: Response
+  try {
+    res = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/00000000-0000-0000-0000-000000000000`, {
+      headers: { apikey: token, Authorization: `Bearer ${token}` },
+    })
+  } catch {
+    // Never the error's text: it can carry the URL and the headers with it.
+    console.error('[send-email] could not reach the Auth admin API to check the caller')
+    return false
+  }
+  // The body is never read, whatever it was.
+  await res.body?.cancel()
+  return res.status === 200 || res.status === 404
+}
+
 /** Their address and whether they want these at all. */
 async function recipient(userId: string) {
   const { data } = await db.from('users')
@@ -214,11 +262,10 @@ Deno.serve(async (req) => {
   // Both are run by hand by Micky. The service-role key is something he already
   // handles carefully, and it means neither needs the value nobody has.
   if (kind === 'install-secret' || kind === 'test') {
-    const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    const given = (req.headers.get('authorization') ?? '').replace(/^Bearer\s+/i, '')
-    if (!serviceKey || given !== serviceKey) {
-      console.error(`[send-email] ${kind} REJECTED: not the service-role key`)
-      return respond({ error: 'Forbidden' }, 403)
+    const token = (req.headers.get('authorization') ?? '').replace(/^Bearer\s+/i, '').trim()
+    if (!await isServiceRole(token)) {
+      console.error(`[send-email] ${kind} REJECTED: the caller's token has no service-role authority`)
+      return respond({ error: 'Forbidden: the token sent cannot use the Auth admin API, so it is not a service-role key' }, 403)
     }
 
     if (kind === 'install-secret') {

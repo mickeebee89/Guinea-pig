@@ -46,7 +46,13 @@ const body = await res.json().catch(() => null)
 
 if (!res.ok || !body?.ok) {
   console.error(`\nThe function refused (HTTP ${res.status}): ${body?.error ?? 'no message'}`)
-  if (res.status === 403) console.error('403 means the key sent was not the service-role key.')
+  if (res.status === 403) {
+    // The function asks the Auth admin API whether this token has service-role
+    // authority. It no longer compares it to its own key — that refused the
+    // real key on 22 Sep 2026, because the two strings were not identical.
+    console.error('403 means the token sent could not use the Auth admin API, so it is not a service-role key.')
+    console.error('Check which key is in SUPABASE_SERVICE_ROLE_KEY: the anon key sits beside it and looks the same.')
+  }
   if (String(body?.error ?? '').includes('EMAIL_HOOK_SECRET')) {
     console.error('EMAIL_HOOK_SECRET is not set on the function. Set it, redeploy, and run this again.')
   }
