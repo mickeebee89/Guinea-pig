@@ -2304,6 +2304,72 @@ offering them. The owner still sees their own.
 * Suspension still withdraws the shop, still cancels upcoming bookings, and
   still stops the stylist acting. This only changes what the MODEL can see.
 
+**── 0048 APPLIED AND VERIFIED — 22 Sep 2026, from Micky's pasted output ──**
+
+**Block A (shape).** `security_definer` true; `search_path` pinned to
+`public, pg_temp`; `authenticated_may_call` true; **`anon_may_call` false**;
+`select_policies` **2** — `providers_select_admin` and `providers readable
+when published or booked`. No third policy appeared, which is the number that
+would have meant something unknown was also granting reads.
+
+**Block B — the one that matters. It passed.** Against a provider with
+`is_published` false: **seen by the model who booked: 1. Seen by a member with
+no booking: 0.** Run with `set local role authenticated` and
+`request.jwt.claims`, so row security was genuinely applied — unlike item 66's
+Block B, which ran as the owner and tested the trigger rather than the policy.
+
+**Live, on the site:** signed in as `micky.buckfield@hotmail.co.uk`,
+`/stylist/09c6d70c-…` **opens instead of 404ing**. Signed out it redirects to
+sign-in, because the member area gates before the lookup — so the anon path
+never reaches this policy at all, which is the intended shape and is now
+confirmed rather than assumed.
+
+**── BLOCK D RAISED A FALSE ALARM, AND THE BLOCK WAS AT FAULT ──**
+
+It reported **published shops 0, visible to a member with no bookings 1**,
+which reads as a leak. It was not one. Micky investigated: the member it
+picked was `nahitih259@bevriz.com`, who **owns** one hidden shop and saw
+exactly that one — the `auth.uid() = user_id` clause, which has allowed that
+since long before this migration. **Nothing was widened.**
+
+The block's own wording invited it. The pass condition ended *"(must match,
+unless they own one)"* — the exception was in the prose and absent from the
+query, so the block picked an owner, called them a stranger, and printed a
+number the reader had to correct by hand. **A check whose pass condition needs
+a caveat read alongside it will be misread exactly once, on the day it
+matters.**
+
+**Should it exclude owners? Yes — and it now does.** The subject is chosen as
+a member who has no bookings AND owns no provider row; if no such member
+exists, the block says so and refuses rather than substituting an owner. The
+expectation is now "these must be equal. No caveat." Rewritten below the
+migration footer, so **the checksum is unchanged** (`19bce2e6…8513b`) and 0048
+does not need reapplying.
+
+This is the third instance of the same shape this week: a check that was
+correct for the cases present when it was written. When it was written there
+were members who owned nothing; after the test-account clear-out (item 73's
+run: 5 logins, 5 profiles) there are barely any left, so "a member with no
+bookings" now means "an owner" more often than not.
+
+**⚠️ SEPARATELY, AND NOT ABOUT THIS MIGRATION: `published shops: 0`.** Block D
+printed it in passing. **There is currently no live shop on the site at all** —
+`/browse` and every public treatment and city page have nothing to show, while
+the site is open to search engines and taking sign-ups (items 52 and 71). Item
+11's pre-launch condition was at least one LISTED stylist per category. This
+is a launch blocker hiding inside a passing test result, which is exactly
+where they hide.
+
+**── STILL UNTESTED, AND NOT CLAIMED ──**
+
+Verified: the row is readable, and the page opens. **Not verified:** that
+block and report now have a subject, that the review page renders, or that
+bookings and messages show the real name instead of "Stylist". All four follow
+from the same row becoming readable and all four are reasoned from the code
+(`thread.ts:76`, `review.ts:99`, `sessions.ts:117`, `conversations.ts:152`) —
+but reasoning is not evidence, and the code path that returns the name is not
+the code path that was just proved.
+
 **75. A CHECK COULD STOP THE WEBSITE UPDATING, AND NOTHING NOTICED IT HAD —
 CHANGED 22 Sep 2026. `npm run verify` EXIT 0.**
 
@@ -8433,7 +8499,8 @@ platforms each failed it differently.
 | 14 | Admin revoke UI — `0027` ships the mechanism, nothing calls it | No, but revocation is SQL-only until then |
 | 74 | Email notifications built but **not applied, not deployed, nothing sent**; mobile has no email switch | **Yes** for the deploy — a web-only member currently hears nothing |
 | 75 | Drift check is new and unproven — its first real test is the next failed or skipped deploy | No |
-| 76 | Fixed by 0048, **not applied yet**. Until it is, a hidden stylist still vanishes from models booked with them | **Yes**, until 0048 is applied |
+| 76 | 0048 applied and verified. Untested: block, report, review, and the real name in bookings and messages | No |
+| 77 | **No published shop exists at all** — `/browse` and every public treatment page are empty while the site is open and indexed | **Yes** |
 
 Carried in from before the audit, unchanged by it:
 

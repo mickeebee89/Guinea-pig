@@ -260,17 +260,30 @@ notify pgrst, 'reload schema';
 --
 -- ── BLOCK D — nothing else widened. Rolls itself back ───────────────────
 --
--- A member with no bookings at all sees exactly the published shops, and no
--- more. If this number moves, the policy is wider than it was meant to be.
+-- ⚠️ REWRITTEN 22 Sep 2026, AFTER ITS FIRST RUN RAISED A FALSE ALARM. The
+-- first version picked any member with no bookings, and picked one who OWNS a
+-- hidden shop: it reported "published shops 0, visible 1" and read as though
+-- the policy had leaked. It had not — the owner clause has allowed that since
+-- long before this migration. The trailing "(unless they own one)" put the
+-- exception in the prose and left it out of the query, which is where a
+-- reader under pressure will not apply it.
+--
+-- So the subject is now a member who owns NOTHING. If none exists, the block
+-- says so rather than quietly measuring an owner and calling it a stranger.
+-- A check whose pass condition needs a caveat read alongside it is a check
+-- that will be misread exactly once, on the day it matters.
 --
 --   do $$
 --   declare v_nobody uuid; v_visible int; v_published int;
 --   begin
---     select u.id into v_nobody from public.users u
+--     select u.id into v_nobody
+--     from public.users u
 --     where not exists (select 1 from public.sessions s where s.model_user_id = u.id)
+--       and not exists (select 1 from public.providers p where p.user_id = u.id)
 --     limit 1;
+--
 --     if v_nobody is null then
---       raise exception 'ROLLED BACK. Every member has a booking, so this cannot be measured.';
+--       raise exception 'ROLLED BACK. Every member either has a booking or owns a shop, so there is no stranger left to measure. That is a fact about the data, not a failure — say so rather than substituting an owner.';
 --     end if;
 --
 --     select count(*) into v_published from public.providers where is_published is true;
@@ -280,6 +293,6 @@ notify pgrst, 'reload schema';
 --     select count(*) into v_visible from public.providers;
 --     reset role;
 --
---     raise exception E'ROLLED BACK ON PURPOSE.\npublished shops: %\nvisible to a member with no bookings: %  (must match, unless they own one)',
+--     raise exception E'ROLLED BACK ON PURPOSE.\npublished shops: %\nvisible to a member who owns nothing and has booked nobody: %\nThese must be equal. No caveat.',
 --       v_published, v_visible;
 --   end $$;
