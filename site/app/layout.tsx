@@ -28,7 +28,12 @@ export const metadata: Metadata = {
   description:
     'Cavy connects hair and beauty stylists building their portfolios with models who want treatments at a discount — or for free.',
   applicationName: SITE_NAME,
-  alternates: { canonical: '/' },
+  // NO canonical here, deliberately. A root-layout canonical is inherited by
+  // every page that doesn't set its own, so until 22 Sep /sign-in, /sign-up and
+  // /forgot-password all declared themselves copies of the home page, and any
+  // new public page that forgot `alternates` would have done the same, silently
+  // (audit item 52). Each public page sets its own; a page without one sets
+  // none, which is the honest default.
   openGraph: {
     type: 'website',
     siteName: SITE_NAME,

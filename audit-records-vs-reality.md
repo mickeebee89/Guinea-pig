@@ -4710,6 +4710,65 @@ add its own noindex header to preview URLs. That has not been checked.
 > a canonical to a different page is two contradictory signals, and a future
 > public page that forgets its own `alternates` would silently tell Google it
 > duplicates the home page. Noted, not fixed.
+>
+> **── 22 Sep 2026: THE PER-DEPLOYMENT ADDRESS IS BLOCKED TOO. VERIFIED ──**
+>
+> Micky ran `curl -sI https://cavy-dw4yo92h6-mickeebee90.vercel.app/`. It
+> returned **302 to `vercel.com/sso-api`**, with **`X-Robots-Tag: noindex`**,
+> the same as the git-main address. The earlier "INFERRED that it behaves
+> the same" is now VERIFIED, for this deployment address.
+>
+> **── FIXED 22 Sep 2026: NO INHERITED CANONICAL. `next build` EXIT 0 ──**
+>
+> **The change.** `alternates: { canonical: '/' }` is removed from the root
+> layout (`site/app/layout.tsx`), and a comment there says why. A page
+> without its own canonical now sets none, instead of claiming to be a copy
+> of the home page.
+>
+> **Where each of the 14 sitemap pages gets its canonical.** VERIFIED from
+> the prerendered HTML in `.next/server/app/*.html` after the build. Each one
+> renders `<link rel="canonical">` with its own `https://cavybeauty.com`
+> address.
+>
+> | Page | Canonical rendered | Set in |
+> |---|---|---|
+> | `/` | `https://cavybeauty.com` | `app/(public)/page.tsx:11` |
+> | `/for-stylists` | `…/for-stylists` | `app/(public)/for-stylists/page.tsx:9` |
+> | `/for-models` | `…/for-models` | `app/(public)/for-models/page.tsx:9` |
+> | `/how-it-works` | `…/how-it-works` | `app/(public)/how-it-works/page.tsx:9` |
+> | `/hair-models` | `…/hair-models` | `app/(public)/[treatment]/page.tsx:34` (generateMetadata) |
+> | `/brow-models` | `…/brow-models` | same |
+> | `/lash-models` | `…/lash-models` | same |
+> | `/makeup-models` | `…/makeup-models` | same |
+> | `/nail-models` | `…/nail-models` | same |
+> | `/spray-tan-models` | `…/spray-tan-models` | same |
+> | `/terms` | `…/terms` | `app/(public)/terms/page.tsx:8` |
+> | `/privacy` | `…/privacy` | `app/(public)/privacy/page.tsx:8` |
+> | `/community` | `…/community` | `app/(public)/community/page.tsx:8` |
+> | `/delete-account` | `…/delete-account` | `app/(public)/delete-account/page.tsx:8` |
+>
+> The address is absolute because `metadataBase` is `SITE_URL`
+> (`layout.tsx:23`, unchanged). The local build had `PUBLIC_SITE_MODE` unset,
+> which doesn't matter here: canonicals don't depend on `IS_LIVE`, only
+> `robots` does.
+>
+> **The auth pages stay noindex:**
+> * **`/forgot-password`:** prerendered with `noindex, follow` and **no
+>   canonical** (0 in the built HTML). Its metadata is at
+>   `app/(auth)/forgot-password/page.tsx:4`.
+> * **`/sign-in` and `/sign-up`** render on request, so they have no built
+>   HTML to read. Their own metadata sets `robots: { index: false, follow:
+>   true }` (`sign-in/page.tsx:8`, `sign-up/page.tsx:12`), and they now
+>   inherit no canonical. On the live site before this deploy, both showed
+>   `noindex, follow` plus the inherited home canonical.
+>
+> **Found by the check: the 404 page had the same fault.** `_not-found` also
+> inherited the home canonical, so every missing URL declared itself a copy
+> of the home page. It now has `noindex` and no canonical.
+>
+> **Not yet seen on cavybeauty.com.** This goes live with the next
+> Production deploy. Confirm afterwards that `/sign-in` has no canonical and
+> `/terms` still has its own.
 
 **51. NOTHING GATES `main`, AND "PRODUCTION WAS BLOCKED FOR FIVE WEEKS" WAS SIX
 DAYS — RECORDED 18 Sep 2026. CORRECTS ITEM 45'S TITLE AND THE 15 Sep HANDOFF.**
