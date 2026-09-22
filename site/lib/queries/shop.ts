@@ -11,13 +11,20 @@ import type { SupabaseClient } from '@supabase/supabase-js'
  * second source of truth that drifts the first time someone clears their bio,
  * and "the app says I'm set up but my profile is empty" is unanswerable.
  *
- * ── PUBLISHING IS NOT A STEP THE STYLIST TAKES ────────────────────────────
+ * ── GOING LIVE THE FIRST TIME IS NOT A STEP THE STYLIST TAKES ─────────────
  * A person approves the ID check, and that approval sets both `is_verified`
- * and `providers.is_published` (admin/app/verification/page.tsx). The database
- * enforces the same order — `enforce_publish_requires_verified` refuses to
- * publish an unverified provider — so this panel describes publishing as an
- * outcome, never as a button. Offering a control the database will refuse is
- * how you get a stylist convinced they are live when they are not.
+ * and `providers.is_published` (admin/app/verification/page.tsx); a verified
+ * shop finished later publishes itself (0016). The database enforces the same
+ * order — `enforce_publish_requires_verified` refuses to publish an
+ * unverified provider — so the setup panel describes the FIRST publication as
+ * an outcome, never as a button. Offering a control the database will refuse
+ * is how you get a stylist convinced they are live when they are not.
+ *
+ * ── HIDING AND UN-HIDING IS ──────────────────────────────────────────────
+ * Once a shop has been live, the stylist can hide it and publish it again
+ * (shop/ShopVisibility.tsx, since 22 Sep 2026; mobile has the same switch on
+ * its Provider Dashboard). The control offers publishing only where
+ * `publishRefusal` below says the database will accept it.
  */
 
 export type IdCheckState = 'none' | 'pending' | 'approved' | 'rejected'
@@ -103,6 +110,11 @@ export interface StylistSetup {
   feeSettled: boolean
   isFoundingProvider: boolean
   isPublished: boolean
+  /**
+   * providers.first_published_at is set. Auto-publish (0016:313-316) fires only
+   * while it is null, so this is what makes hiding a shop stick.
+   */
+  everPublished: boolean
 }
 
 export interface ShopEditorData {
@@ -128,14 +140,14 @@ export async function getStylistSetup(
     // the two columns split has their area only in the dead one, and telling
     // them to fill in something they already filled in is worse than reading a
     // column we would rather retire. Same rule as lib/queries/browse.ts.
-    .select('id, name, bio, location_text, location, is_published')
+    .select('id, name, bio, location_text, location, is_published, first_published_at')
     .eq('user_id', userId)
     .maybeSingle()
 
   const prov = provRow as {
     id: string; name: string | null; bio: string | null
     location_text: string | null; location: string | null
-    is_published: boolean | null
+    is_published: boolean | null; first_published_at: string | null
   } | null
 
   const empty: StylistSetup = {
@@ -143,13 +155,14 @@ export async function getStylistSetup(
     detailsDone: false, treatmentCount: 0, publishBlockers: [], websiteBlockers: [],
     idCheck: 'none', idCheckNote: null,
     isVerified: false, feeSettled: false, isFoundingProvider: false,
-    isPublished: false,
+    isPublished: false, everPublished: false,
   }
   if (!prov) return empty
 
   const [treatRes, userRes, payRes, reqRes] = await Promise.all([
-    supabase.from('provider_treatments')
-      .select('id', { count: 'exact', head: true }).eq('provider_id', prov.id),
+    // Rows, not a head count: publishing needs a treatment WITH a category
+    // (provider_shop_is_publishable, 0016 / item 52), so both counts matter.
+    supabase.from('provider_treatments').select('category').eq('provider_id', prov.id),
     supabase.from('users')
       .select('is_verified, is_founding_provider, provider_fee_waived')
       .eq('id', userId).maybeSingle(),
@@ -168,13 +181,17 @@ export async function getStylistSetup(
   const req = reqRes.data as { status: string; notes: string | null } | null
 
   const locationText = prov.location_text ?? prov.location
-  const treatmentCount = treatRes.count ?? 0
+  const treatRows = (treatRes.data ?? []) as { category: string | null }[]
+  const treatmentCount = treatRows.length
+  const categorisedCount = treatRows.filter(r => r.category !== null).length
   const bioLength = (prov.bio ?? '').trim().length
 
-  // Going live: a name and a treatment. Nothing else, matching 0016.
+  // Going live: a name and a categorised treatment. Nothing else, matching
+  // 0016. (Until 22 Sep this counted any treatment row, so one with a null
+  // category read as enough when the database would refuse it.)
   const publishBlockers: string[] = []
   if (!prov.name?.trim()) publishBlockers.push('a name for your shop')
-  if (treatmentCount === 0) publishBlockers.push('at least one treatment')
+  if (categorisedCount === 0) publishBlockers.push('at least one treatment')
 
   // Showing on cavybeauty.com: the bio bar, and only once they are otherwise
   // live — telling someone about the public website while their shop still has
@@ -210,7 +227,35 @@ export async function getStylistSetup(
     feeSettled: !!payRes.data || !!u.is_founding_provider || !!u.provider_fee_waived,
     isFoundingProvider: !!u.is_founding_provider,
     isPublished: !!prov.is_published,
+    everPublished: prov.first_published_at !== null,
   }
+}
+
+/**
+ * Why this shop cannot be published right now, in words a stylist can act on,
+ * or null when it can. The one rule behind the web's publish control, used by
+ * both the screen and the server action.
+ *
+ * The same three checks, in the same order, as mobile's Provider Dashboard
+ * toggle (provider-dashboard.tsx:739-766): verified, fee settled, a treatment.
+ * The first and third are also enforced by the database
+ * (enforce_publish_requires_verified; enforce_publish_requires_complete_profile,
+ * 0016:227-265), which stays the authority. The fee is enforced by neither the
+ * database nor the console (audit item 56), so on both clients this check is
+ * the only one.
+ */
+export function publishRefusal(setup: StylistSetup): string | null {
+  if (!setup.providerId) return 'Only a stylist account has a shop to publish.'
+  if (!setup.isVerified) {
+    return setup.idCheck === 'pending'
+      ? 'Your ID check hasn’t been approved yet. Your shop goes live by itself as soon as it is.'
+      : 'Your shop can go live once your ID check has passed.'
+  }
+  if (!setup.feeSettled) return 'Pay the £14.99 fee first. You can do it on the ID check page.'
+  if (setup.publishBlockers.length > 0) {
+    return `Your shop still needs ${setup.publishBlockers.join(' and ')} before models can see it.`
+  }
+  return null
 }
 
 /* ── the editor ────────────────────────────────────────────────────────── */

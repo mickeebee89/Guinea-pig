@@ -119,6 +119,27 @@ export function StylistSetupPanel({ setup }: { setup: StylistSetup }) {
     )
   }
 
+  // Hidden by the stylist: everything done, verified, been live before, and
+  // not live now. Without this branch the panel read "Getting your shop live"
+  // over four ticked steps and promised "there's no switch for you to flip",
+  // which stopped being true when the web gained one (audit item 66).
+  if (setup.everPublished && setup.isVerified && setup.feeSettled && setup.publishBlockers.length === 0) {
+    return (
+      <section className="rounded-lg border border-hairline bg-white p-5 shadow-card">
+        <h2 className="font-display text-xl text-warm-dark">Your shop is hidden</h2>
+        <p className="mt-1 text-sm text-muted">
+          You’ve hidden your shop, so models can’t find you or apply. Everything else is set up,
+          so you can publish it again whenever you’re ready.
+        </p>
+        <p className="mt-3">
+          <Link href="/shop" className="text-sm font-bold text-rose hover:underline">
+            Publish it from your shop →
+          </Link>
+        </p>
+      </section>
+    )
+  }
+
   const detailsMissing = !setup.name?.trim()
     ? 'a name'
     : !setup.locationText?.trim() ? 'the area you work in' : null

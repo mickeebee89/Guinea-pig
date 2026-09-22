@@ -2076,6 +2076,174 @@ was the reason for three workflows rather than one.
 It remains a signal and not a gate. Everything above about branch protection
 still stands.
 
+**66. STYLISTS CAN PUBLISH AND HIDE THEIR SHOP ON THE WEB — BUILT 22 Sep
+2026. `next build` EXIT 0. NOT EXERCISED AGAINST THE LIVE DATABASE; MOBILE'S
+TOGGLE HAS A GAP THIS ONE CLOSES.**
+
+**Plainly:** until now the only way for a stylist to hide their shop was the
+switch on mobile's Provider Dashboard. The web had none. `/shop` now has one.
+
+**Where, and why.** A "Who can see your shop" section on `/shop`, straight
+under the setup panel (`site/app/(app)/shop/page.tsx`,
+`site/app/(app)/shop/ShopVisibility.tsx`). `/shop` is where a stylist manages
+the shop on the web, and it's the page the setup panel and the dashboard link
+to for it. The section shows once the shop has been live, or when it can be
+published now. A shop that has never been live and can't be published yet is
+left to the setup panel. Going live the first time is still an outcome (the
+approval, or 0016's auto-publish), not a switch.
+
+**Same path as mobile.** Mobile writes the table directly, as the signed-in
+owner: `providers.update({ is_published }).eq('id', …)`
+(`provider-dashboard.tsx:772-775`). The web's `setShopPublished`
+(`site/app/(app)/shop/actions.ts`) makes the same write with the stylist's own
+session client. So the same RLS applies: "providers can update own row", plus
+the RESTRICTIVE `providers_not_suspended` (policy snapshot of 8 Aug, `:162,
+:164`; not re-read live for this). The same triggers apply too:
+`trg_publish_requires_verified` and 0016's
+`trg_publish_requires_complete_profile`. **It is safe from the web because it
+opens nothing new.** Anyone signed in can already send this update straight
+to PostgREST with the public key. The server action takes the provider id from
+the session, never from the client.
+
+**The rule, one function.** `publishRefusal` (`site/lib/queries/shop.ts`)
+runs the same three checks as mobile, in mobile's order
+(`provider-dashboard.tsx:739-766`): verified, fee settled, a treatment. The
+screen and the server action both use it. The database stays the authority on
+the first and third. **The fee is checked only here and in mobile's client,
+because nothing in the database checks it** (item 56, unchanged). If a
+trigger refuses anyway, 23514 and the "not verified" message both map to
+plain words.
+
+**Hiding and `first_published_at`.** `trg_provider_maybe_publish`
+(`0016:313-316`) fires AFTER UPDATE `when (new.is_published is not true and
+new.first_published_at is null)`.
+* **With the date set, hiding sticks.**
+* **With it null, hiding a verified, publishable shop is undone by the same
+  statement's trigger.** So when the date is null, the hide writes
+  `first_published_at = now()` in the same UPDATE. The WHEN clause reads the
+  new row, so the trigger doesn't fire. This follows `0016:211-214`, which
+  gave the same stamp to every shop that was live when it shipped.
+* **A publish stamps it too when it's null**, as the approval does
+  (`0039:605-606`).
+* **Afterwards the row is read again**, because RETURNING doesn't show changes
+  an AFTER trigger makes. If the state didn't stick, the stylist is told so,
+  with the support address.
+* **An update that returns no row and no error means RLS filtered it out.**
+  Only a suspension does that to an owner, and the stylist is told to email
+  support.
+
+**⚠️ MOBILE'S TOGGLE HAS THE GAP, NOT CHANGED HERE.** It writes only
+`is_published` (`provider-dashboard.tsx:774`). A shop that is live with a null
+`first_published_at` is republished by the trigger when hidden from mobile.
+The switch then shows off while the shop stays live, and the client reports
+success because the update itself worked. Mobile also treats an RLS-filtered
+update (zero rows, no error) as success. **How often this happens is not
+measured:** every publish path in the migrations stamps the date, so it would
+take a shop published outside them. To count them:
+
+    select count(*) from public.providers
+    where is_published and first_published_at is null;
+
+**The shop panel.** `StylistSetupPanel` gained a "Your shop is hidden" state
+for a verified, finished, previously-live shop that isn't live now. Without it,
+a self-hidden shop read "Getting your shop live" over four ticked steps, and
+said "there's no switch for you to flip".
+
+**Publishability fixed in passing.** `publishBlockers` counted any
+`provider_treatments` row. `provider_shop_is_publishable` requires one with a
+non-null category (item 52's live body). It now counts only categorised ones.
+
+**The confirm step says** the shop "will stop appearing to models in Cavy and
+on the public cavybeauty.com pages". Hiding revalidates `/`, `/[treatment]`,
+`/browse`, `/dashboard`, `/shop` and `/stylist/<id>`, so a hidden shop leaves
+the ISR pages (900 s, 3600 s) on the next request. It also says existing
+bookings "stay as they are". **INFERRED:** the only triggers on `providers` in
+the repo are the three above, and none touches `sessions`. The live trigger
+list wasn't re-read for this.
+
+**UNTESTED:** no hide or publish has been run from the web. That needs a
+signed-in stylist on the live database. The two kept shops,
+micky.buckfield@gmail.com and nahitih259@bevriz.com, are the obvious first
+use. Run this before either is hidden:
+
+    select u.email, p.is_published, p.first_published_at
+    from public.providers p join public.users u on u.id = p.user_id
+    where u.email in ('micky.buckfield@gmail.com', 'nahitih259@bevriz.com');
+
+**65. THE CONSOLE'S FOUNDING-SLOT CONTROLS DO NOTHING, AND FREEING A LOW SLOT
+BREAKS THE NEXT GRANT — LOGGED 22 Sep 2026. FOR LATER; NOT FIXED.**
+
+**Plainly:** the console's founding-slot settings are ignored by signup. And if
+a founder with a low slot number is ever deleted while higher ones remain, the
+next founder silently gets no slot row.
+
+* **The controls write keys nothing reads.** The console's "Founding Provider
+  Slot Limit" and its on/off toggle write `founding_provider_limit` and
+  `founding_provider_offer_enabled` (`admin/app/settings/page.tsx:13-14,
+  93-106`). Signup reads `founding_provider_cap` (`0011:136-137`) and has no
+  on/off check at all. VERIFIED by reading both. The "N / limit slots used"
+  line (`:99`) is also measured against the key signup ignores.
+* **Slot numbers are count + 1 against UNIQUE(slot_number).**
+  `handle_new_auth_user` takes `v_slot := v_taken + 1`, where `v_taken` is
+  `count(*)` of `founding_providers` (`0011:140-144`), and inserts `on conflict
+  do nothing` (`:176-178`). UNIQUE(slot_number) per Micky, 22 Sep; not in any file in the repo.
+  **Freeing a lower slot while a higher one exists makes count + 1 equal a
+  surviving slot number.** The next founder's insert then collides and is
+  silently skipped. That founder gets `is_founding_provider = true` with no
+  slot row, and the count stops rising, so the cap undercounts from then on.
+* **It is not live now.** After item 64, `founding_providers` has 0 rows.
+
+**64. THE HAND-MADE TEST ACCOUNTS ARE DELETED — 21 Sep 2026. VERIFIED FROM
+MICKY'S QUERIES.**
+
+**The run.** `scripts/delete-test-accounts.mjs` (`2409c4f`), with the list of
+58 addresses read from the gitignored `scripts/private/`. How it works:
+* **Addresses are resolved to ids at runtime.** The keep-list and admins are
+  refused.
+* **Any account with a future-dated or live subscription is refused.**
+* **Database rows go through `delete_account_data` only**, and storage is
+  cleared the way `delete-account` does it.
+* **The login is deleted last.** If that fails, the login is banned.
+* **It uses no Stripe key.**
+
+**Before the run:** Stripe live showed **exactly one active subscription,
+micky.buckfield+model2@gmail.com**.
+
+**Dry run:** **all 58 resolved, and no refusals.** Then `--apply` ran.
+
+**Independent check afterwards:**
+
+| | |
+|---|---|
+| logins | 5 |
+| profiles | 5 |
+| login without profile | 0 |
+| profile without login | 0 |
+| banned logins | 0 |
+| published shops | 2 |
+| `public_stylists` rows | 1 |
+| founding slots | 0 |
+| live subscriptions | 1 |
+
+**INFERRED:** the five remaining are the keep-list. The count matches, and
+the script refused all five by id and email. The names weren't read back:
+* micky.buckfield@gmail.com
+* admin@guineapigapp.co.uk
+* micky.buckfield@hotmail.co.uk
+* nahitih259@bevriz.com
+* micky.buckfield+model2@gmail.com
+
+**With logins at 5 and banned logins at 0, every login delete succeeded.** No account needed the
+ban fallback, and item 50's "login with no profile" state was not created.
+
+**What this changes:**
+* **Verify block `0040` D can no longer be re-run.** Its shop, Jojo B
+  (provider `c42537d1…`, owner guineapig.app@gmail.com), was deleted. The block
+  stays in the file as the record of what was checked on the day.
+* **`HANDOVER.md`'s "Teardown" blocker is done** for the hand-made accounts.
+* **model2's subscription is untouched**, so the 14 Oct renewal test still
+  stands.
+
 **63. SEVEN ACCOUNTS READ AS PAYING MEMBERS WITH A PAID PERIOD LONG ENDED —
 FOUND 21 Sep 2026. THE APPLY GATES DON'T GRANT THEM; MOBILE SETTINGS AND THE
 CONSOLE SAY THEY'RE ACTIVE. NOT REPAIRED; PLAN BELOW.**

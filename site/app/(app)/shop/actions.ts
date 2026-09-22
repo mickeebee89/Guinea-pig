@@ -2,7 +2,8 @@
 
 import { revalidatePath } from 'next/cache'
 import { createSupabaseServerClient, requireUser } from '@/lib/supabase-server'
-import { categoryKey } from '@/lib/queries/shop'
+import { categoryKey, getStylistSetup, publishRefusal } from '@/lib/queries/shop'
+import { SUPPORT_EMAIL } from '@/lib/site'
 
 /**
  * Writes for the stylist's own shop.
@@ -242,4 +243,101 @@ export async function saveTreatments(categories: string[]): Promise<TreatmentsRe
   revalidatePath('/dashboard')
   revalidatePath('/availability')
   return { ok: true, added: toAdd.length, removed, blocked }
+}
+
+/* ── publish / hide ────────────────────────────────────────────────────── */
+
+export type VisibilityResult = { ok: true; published: boolean } | { ok: false; error: string }
+
+/**
+ * Publish or hide the stylist's own shop.
+ *
+ * ── THE SAME WRITE AS MOBILE ──────────────────────────────────────────────
+ * Mobile's Provider Dashboard toggle writes the table directly as the signed-in
+ * owner: `providers.update({ is_published }).eq('id', …)`
+ * (provider-dashboard.tsx:772-775). This is that write, made with the stylist's
+ * own session client, so RLS and every trigger apply exactly as they do there:
+ * "providers can update own row", the RESTRICTIVE providers_not_suspended, and
+ * the two publish guards. It opens nothing new: anyone signed in can already
+ * send this update straight to PostgREST with the public key. The fee is
+ * checked here by publishRefusal, the same as mobile checks it in the app,
+ * because nothing in the database checks it (audit item 56).
+ *
+ * ── first_published_at, AND WHY HIDING SETS IT WHEN IT IS NULL ────────────
+ * Auto-publish, `trg_provider_maybe_publish` (0016:313-316), fires AFTER UPDATE
+ * `when (new.is_published is not true and new.first_published_at is null)`.
+ * With the date set, hiding sticks. With it null, hiding a publishable,
+ * verified shop is undone by the same statement's trigger. So a hide writes
+ * `first_published_at` in the same UPDATE when it is null. The WHEN clause
+ * reads the new row, so the trigger never fires. The value is now(), meaning
+ * "live no later than this", the same stamp 0016:211-214 gave every shop that
+ * was live when it shipped. A publish stamps it too, as the admin approval does
+ * (0039:605-606), so a later hide sticks either way. Mobile does NEITHER, so
+ * its toggle has the gap this closes (audit item 66).
+ *
+ * The row is read back afterwards, not taken from RETURNING. RETURNING shows the
+ * statement's own row, before any AFTER trigger changes it.
+ */
+export async function setShopPublished(publish: boolean): Promise<VisibilityResult> {
+  const user = await requireUser()
+  const supabase = await createSupabaseServerClient()
+
+  const setup = await getStylistSetup(supabase, user.id)
+  const providerId = setup.providerId
+  if (!providerId) return { ok: false, error: 'Only a stylist account has a shop to publish.' }
+  if (setup.isPublished === publish) return { ok: true, published: publish }
+
+  if (publish) {
+    const refusal = publishRefusal(setup)
+    if (refusal) return { ok: false, error: refusal }
+  }
+
+  const patch: { is_published: boolean; first_published_at?: string } = { is_published: publish }
+  if (!setup.everPublished) patch.first_published_at = new Date().toISOString()
+
+  const { data, error } = await supabase
+    .from('providers')
+    .update(patch)
+    .eq('id', providerId)
+    .select('id')
+    .maybeSingle()
+
+  if (error) {
+    console.error('[shop] visibility change failed', { code: error.code, message: error.message })
+    // 23514 is 0016's complete-profile guard. The verified guard raises with no
+    // code of its own, so it is matched on its message. Either means the
+    // checks above went stale between the read and the write.
+    if (error.code === '23514') {
+      return { ok: false, error: 'Your shop still needs a name and at least one treatment before models can see it.' }
+    }
+    if (/not verified/i.test(error.message)) {
+      return { ok: false, error: 'Your shop can go live once your ID check has passed.' }
+    }
+    return { ok: false, error: 'That didn’t work. Your shop is unchanged. Try again in a moment.' }
+  }
+
+  // No row back and no error is RLS filtering the update out. Of the policies
+  // above, only a suspension does that to an owner.
+  if (!data) {
+    return { ok: false, error: `Your shop couldn’t be changed from this account. Email ${SUPPORT_EMAIL} and we’ll look into it.` }
+  }
+
+  const { data: after } = await supabase
+    .from('providers').select('is_published').eq('id', providerId).maybeSingle()
+  const nowPublished = !!(after as { is_published: boolean | null } | null)?.is_published
+
+  revalidatePath('/shop')
+  revalidatePath('/dashboard')
+  revalidatePath('/browse')
+  revalidatePath(`/stylist/${providerId}`)
+  // The public pages are ISR (900s and 3600s). Revalidate them so a hidden shop
+  // leaves on the next request rather than up to an hour later.
+  revalidatePath('/')
+  revalidatePath('/[treatment]', 'page')
+
+  if (nowPublished !== publish) {
+    console.error('[shop] visibility did not stick', { wanted: publish, got: nowPublished })
+    return { ok: false, error: `That didn’t stick, and your shop is still ${nowPublished ? 'live' : 'hidden'}. Email ${SUPPORT_EMAIL} and we’ll look into it.` }
+  }
+  return { ok: true, published: nowPublished }
 }
