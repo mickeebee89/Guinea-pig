@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { StatusPill, EmptyState, LoadError, Avatar } from '@/components/ui'
 import { SessionActions } from './SessionActions'
 import { MonthCalendar, type CalendarMark } from '@/components/MonthCalendar'
+import { BOOKINGS_PATH } from '@/lib/routes'
 
 export const metadata = { title: 'Bookings' }
 
@@ -73,6 +74,22 @@ function Group({
                   date={s.date}
                   otherName={s.otherPartyName}
                 />
+                {/* Both sides of a completed booking can review each other
+                    (audit item 70). */}
+                {s.status === 'completed' && (
+                  s.reviewedByMe ? (
+                    <p className="mt-2 text-xs text-muted">You’ve reviewed this booking.</p>
+                  ) : (
+                    <p className="mt-2">
+                      <Link
+                        href={`${BOOKINGS_PATH}/${s.id}/review`}
+                        className="text-sm font-bold text-rose hover:underline"
+                      >
+                        Leave a review →
+                      </Link>
+                    </p>
+                  )
+                )}
               </div>
             </div>
           </li>

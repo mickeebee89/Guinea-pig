@@ -47,7 +47,8 @@ function Panel({
   )
 }
 
-function BookingRow({ b }: { b: BookingCard }) {
+/** `action`: an optional control beside the row, outside its link. */
+function BookingRow({ b, action }: { b: BookingCard; action?: React.ReactNode }) {
   // Exactly one of these is ever set. A model's counterparty is a stylist
   // (providers.id), a stylist's is a model (auth user id).
   const href = b.providerId
@@ -67,17 +68,14 @@ function BookingRow({ b }: { b: BookingCard }) {
       <StatusPill status={b.status} />
     </>
   )
-  return (
-    <li>
-      {href ? (
-        <Link href={href} className="flex items-center gap-3 rounded-md p-2 transition-colors hover:bg-input-bg">
-          {inner}
-        </Link>
-      ) : (
-        <div className="flex items-center gap-3 p-2">{inner}</div>
-      )}
-    </li>
+  const row = href ? (
+    <Link href={href} className="flex min-w-0 flex-1 items-center gap-3 rounded-md p-2 transition-colors hover:bg-input-bg">
+      {inner}
+    </Link>
+  ) : (
+    <div className="flex min-w-0 flex-1 items-center gap-3 p-2">{inner}</div>
   )
+  return <li className={action ? 'flex items-center gap-2' : undefined}>{row}{action}</li>
 }
 
 /** One half of the apply gate: what it is, and where they stand on it. */
@@ -423,11 +421,25 @@ export default async function DashboardPage({
                 title="Leave a review" isEmpty={data.awaitingReview.length === 0}
                 empty="No treatments to review yet."
               >
+                {/* Until 22 Sep 2026 this said leaving a review was app-only
+                    (audit item 70). Each row now links to the web form. */}
                 {data.awaitingReview.length > 0 && (
-                  <>
-                    <ul>{data.awaitingReview.map(b => <BookingRow key={b.id} b={b} />)}</ul>
-                    <InApp what="Leaving a review" />
-                  </>
+                  <ul>
+                    {data.awaitingReview.map(b => (
+                      <BookingRow
+                        key={b.id}
+                        b={b}
+                        action={
+                          <Link
+                            href={`${BOOKINGS_PATH}/${b.id}/review`}
+                            className="shrink-0 rounded-[999px] bg-soft-pink px-3 py-1.5 text-xs font-bold text-rose hover:bg-rose hover:text-white"
+                          >
+                            Review
+                          </Link>
+                        }
+                      />
+                    ))}
+                  </ul>
                 )}
               </Panel>
 

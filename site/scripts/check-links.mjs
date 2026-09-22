@@ -189,6 +189,13 @@ const unresolvedWhere = []
  * anywhere in the source — while dead-link detection stays strict.
  */
 function collectMentions(src) {
+  // A template that starts with a path constant, e.g. `${BOOKINGS_PATH}/${id}/review`,
+  // is a mention of that constant's path plus the rest. Added 22 Sep 2026 with
+  // the review route, the first link built that way (audit item 70).
+  for (const m of src.matchAll(/`\$\{(\w+)\}(\/[a-z0-9\-_/\[\]$\{\}.]*)`/gi)) {
+    if (!constants.has(m[1])) continue
+    mentioned.add((constants.get(m[1]) + m[2]).replace(/\$\{[^}]*\}/g, '[id]').replace(/\/$/, ''))
+  }
   for (const m of src.matchAll(/['\`](\/[a-z0-9\-_/\[\]$\{\}.]*)['\`]/gi)) {
     const raw = m[1]
     if (raw.startsWith('//')) continue          // protocol-relative URL
@@ -210,7 +217,8 @@ for (const dir of SRC_DIRS) {
     for (const m of src.matchAll(/href=(?:"([^"]*)"|\{`([^`]*)`\}|\{([A-Za-z_$][\w$]*)\}|\{([^}]*)\})/g)) {
       const [, plain, tmpl, ident, other] = m
 
-      let href = plain ?? tmpl
+      // A path constant inside a template resolves like a bare one does.
+      let href = plain ?? tmpl?.replace(/\$\{(\w+)\}/g, (whole, id) => (constants.has(id) ? constants.get(id) : whole))
       if (ident !== undefined) {
         if (!constants.has(ident)) { unresolved++; unresolvedWhere.push(`${rel}  href={${ident}}`); continue }
         href = constants.get(ident)
