@@ -88,6 +88,27 @@ export default async function StylistPage({
         </div>
       </header>
 
+      {/* ── A SHOP THAT IS NOT LIVE ────────────────────────────────────────
+          Before 0048 this page could only ever be showing a published shop —
+          anything else 404'd, including for the model who had a booking with
+          them (audit item 76). Now she gets the page, so it has to say why it
+          looks quiet.
+
+          It says what is true for the reader — no new bookings — and NOT why.
+          "Hidden" is the stylist's business decision and "suspended" is a
+          moderation outcome; publishing either to another member would be us
+          disclosing something about them that they did not. The sentence is
+          the same whichever it is, which is the point. */}
+      {!p.isPublished && !p.isOwner && (
+        <p className="mt-4 rounded-lg border border-hairline bg-input-bg px-4 py-3 text-sm text-muted">
+          <span className="font-bold text-warm-dark">
+            {p.name} isn’t taking new bookings at the moment.
+          </span>{' '}
+          You can still message them about a booking you’ve already made, and leave a review once
+          it’s finished.
+        </p>
+      )}
+
       {p.isBlocked && (
         <p className="mt-4 rounded-lg border border-hairline bg-input-bg px-4 py-3 text-sm text-muted">
           You’ve blocked this person, or they’ve blocked you. You can’t message each other.
@@ -122,6 +143,10 @@ export default async function StylistPage({
         </section>
       )}
 
+      {/* No calendar on a shop that is not taking bookings: offering days to
+          pick from, and then refusing the application, would be worse than
+          not offering them. The owner still sees their own. */}
+      {(p.isPublished || p.isOwner) && (
       <section className="mt-6">
         <h2 className="mb-2 text-xs font-bold uppercase tracking-widest text-muted">Availability</h2>
         {p.openDates.length === 0 ? (
@@ -137,6 +162,7 @@ export default async function StylistPage({
           </div>
         )}
       </section>
+      )}
 
       {(p.portfolio.length > 0 || p.pendingPortfolio.length > 0) && (
         <section className="mt-6">

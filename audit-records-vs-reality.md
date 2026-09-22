@@ -2204,6 +2204,106 @@ Concretely, for a decision rather than for building today:
 4. Either way, `conversations.ts:154` should not link to a profile the viewer
    cannot open.
 
+**── FIXED: MIGRATION 0048, 22 Sep 2026. `npm run verify` EXIT 0. NOT APPLIED
+YET ──**
+
+`supabase/migrations/0048_a_booking_lets_you_see_who_it_is_with.sql`,
+checksum `19bce2e68bb5fed2760256b3bc406ed5df43ee1af92c1252f98c80cc9138513b`,
+computed by hand — `--stamp` was not run (item 60).
+
+**The whole symptom came from ONE policy.** Checked before writing anything:
+`availability`, `provider_treatments`, `portfolio_items` and `reviews` are all
+`SELECT ... using (true)` for `authenticated` (policy snapshot `:32, :150,
+:136, :177`). Nothing else was ever hiding. So widening `providers` restores
+the profile completely rather than half of it.
+
+**The helper.** `has_session_with_provider(uuid)` — `language sql`, `stable`,
+`security definer`, `search_path` pinned, execute revoked from `public` and
+granted to `authenticated` only. It takes no user id: the caller is always
+`auth.uid()`, so it cannot be asked about anyone else's bookings. Every
+session status counts, cancelled included — a cancelled booking is exactly
+when someone needs to know who it was with, and when a report is most likely.
+
+**⚠️ WHY IT HAD TO BE A DEFINER FUNCTION, AND NOT A SUBQUERY.** An inline
+`exists (select 1 from sessions …)` in this policy would have jammed the two
+policies against each other: `participants can read sessions` already reads
+`providers` (snapshot `:193`). Providers' policy would read sessions, whose
+policy reads providers, and Postgres raises *"infinite recursion detected in
+policy for relation"*. SECURITY DEFINER runs as the owner and applies no RLS
+to what it reads, so the loop never starts. Same shape and same reason as
+`is_admin()` and `is_suspended()`.
+
+**The policy**, renamed because the old name would now be a lie in the one
+place anyone looks to find out who can read this table:
+`providers readable when published` → **`providers readable when published or
+booked`**, `using (is_published = true or auth.uid() = user_id or
+public.has_session_with_provider(id))`. Plus an index on
+`sessions (provider_id, model_user_id)`, since the policy calls the helper
+once per candidate row.
+
+**── WHAT A STRANGER CAN AND CANNOT SEE AFTERWARDS ──**
+
+* A signed-in member with **no booking** with that stylist: **nothing**, for a
+  hidden shop. Identical to before. `/stylist/<id>` still 404s.
+* **The existence oracle stays shut.** A stranger cannot tell a hidden shop
+  from an id that was never real — both are `notFound()`, from the same line
+  (`page.tsx:34`), because both are an empty result. The only people who can
+  now tell the difference are the ones who already know the stylist exists,
+  because they have a booking with them.
+* **Anon is untouched.** The policy is `to authenticated`; the public website
+  reads `public_stylists`, which this migration does not go near.
+* Admins are unchanged (`providers_select_admin`).
+
+**── WHAT FALLS OUT WITH NO CODE CHANGE AT ALL ──**
+
+All three of these read `providers` by an id taken from the member's own
+sessions, so the row is now readable and they simply work:
+
+| | Before | After |
+|---|---|---|
+| **Block and report** | `thread.ts:76` had `otherUserId = od?.user_id ?? null`, and `od` was null, so the safety controls had no subject | `od` resolves, `otherUserId` is the stylist's auth user id, block and report work |
+| **Review** | `review.ts:99` got null → `:119` returned null → 404 | `prov.user_id` resolves, the page renders |
+| **Bookings and messages** | `prov?.name ?? 'Stylist'` (`sessions.ts:117`, `conversations.ts:152`) | **The real name is back.** No extra work: both queries key on provider ids drawn from the viewer's own sessions |
+
+So the answer to "does this give the name back" is **yes, everywhere** — the
+`?? 'Stylist'` fallbacks stay as the correct answer for a genuinely missing
+row, and stop being reached for this case. `conversations.ts:154`'s link to
+the profile also stops being a link to a 404.
+
+`review.ts:119` is deliberately left as it is: it still cannot tell "no
+account behind this stylist" from "RLS hid the row", but only the first case
+can now produce a null, which is what the line was written for.
+
+**── THE PAGE: TWO CHANGES ──**
+
+`lib/queries/stylist.ts` now selects `is_published` and returns `isPublished`.
+`app/(app)/stylist/[id]/page.tsx` renders, for a non-owner viewing an
+unpublished shop:
+
+> **{name} isn't taking new bookings at the moment.** You can still message
+> them about a booking you've already made, and leave a review once it's
+> finished.
+
+**It does not say hidden, suspended, or why**, and the sentence is the same
+either way — which is the point. "Hidden" is the stylist's business decision
+and "suspended" is a moderation outcome; telling another member which one it
+is would be us disclosing something about them that they did not.
+
+The availability calendar is not rendered for that viewer either. Offering
+days to pick from and then refusing the application would be worse than not
+offering them. The owner still sees their own.
+
+**── WHAT THIS DOES NOT CHANGE ──**
+
+* A hidden stylist still does not appear in `/browse`, on the public
+  treatment and city pages, or anywhere on the open web.
+* Nobody without a booking can see them at all.
+* **No new bookings can be made.** Nothing about applying was touched, the
+  calendar is not shown, and the publish rules (0016) and suspension rules
+  (0044) are exactly as they were.
+* Suspension still withdraws the shop, still cancels upcoming bookings, and
+  still stops the stylist acting. This only changes what the MODEL can see.
+
 **75. A CHECK COULD STOP THE WEBSITE UPDATING, AND NOTHING NOTICED IT HAD —
 CHANGED 22 Sep 2026. `npm run verify` EXIT 0.**
 
@@ -8333,7 +8433,7 @@ platforms each failed it differently.
 | 14 | Admin revoke UI — `0027` ships the mechanism, nothing calls it | No, but revocation is SQL-only until then |
 | 74 | Email notifications built but **not applied, not deployed, nothing sent**; mobile has no email switch | **Yes** for the deploy — a web-only member currently hears nothing |
 | 75 | Drift check is new and unproven — its first real test is the next failed or skipped deploy | No |
-| 76 | A hidden or suspended stylist vanishes from models already booked with them; no review possible | **Yes** — a completed booking with a hidden stylist cannot be reviewed at all |
+| 76 | Fixed by 0048, **not applied yet**. Until it is, a hidden stylist still vanishes from models booked with them | **Yes**, until 0048 is applied |
 
 Carried in from before the audit, unchanged by it:
 

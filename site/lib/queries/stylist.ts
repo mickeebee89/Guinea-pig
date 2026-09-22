@@ -35,6 +35,12 @@ export interface StylistProfile {
   location: string | null
   level: string | null
   isVerified: boolean
+  /**
+   * False when the shop is hidden. Since 0048 a member holding a booking can
+   * read the row, so this page now has to render a shop that is not taking
+   * bookings — where before it could only ever be looking at a live one.
+   */
+  isPublished: boolean
   rating: number | null
   reviewCount: number
   avatarUrl: string | null
@@ -67,7 +73,7 @@ export async function getStylistProfile(
   const { data: p } = await supabase
     .from('providers')
     .select(
-      'id, user_id, name, bio, location_text, location, level, is_verified, ' +
+      'id, user_id, name, bio, location_text, location, level, is_verified, is_published, ' +
       'rating, review_count, profile_pic_url, banner_url',
     )
     .eq('id', providerId)
@@ -77,7 +83,7 @@ export async function getStylistProfile(
   const prov = p as unknown as {
     id: string; user_id: string | null; name: string | null
     bio: string | null; location_text: string | null; location: string | null
-    level: string | null; is_verified: boolean | null
+    level: string | null; is_verified: boolean | null; is_published: boolean | null
     rating: number | null; review_count: number | null
     profile_pic_url: string | null; banner_url: string | null
   }
@@ -134,6 +140,7 @@ export async function getStylistProfile(
     location: prov.location_text ?? prov.location ?? null,
     level: prov.level,
     isVerified: !!prov.is_verified,
+    isPublished: !!prov.is_published,
     rating: prov.rating,
     reviewCount: prov.review_count ?? 0,
     avatarUrl: prov.profile_pic_url,
