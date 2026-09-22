@@ -2080,6 +2080,73 @@ still stands.
 2026. `next build` EXIT 0. NOT EXERCISED AGAINST THE LIVE DATABASE; MOBILE'S
 TOGGLE HAS A GAP THIS ONE CLOSES.**
 
+> **── 22 Sep 2026: TESTED BY MICKY. THREE FINDINGS, NONE FIXED YET ──**
+>
+> **(a) ⚠️ CORRECTION: HIDING DID NOT CLEAR THE TREATMENT PAGES AT ONCE.**
+> Below, this item says hiding revalidates the public pages *"so a hidden
+> shop leaves the ISR pages (900 s, 3600 s) on the next request"*. The code
+> comment in `setShopPublished` says the same. **Wrong for the six treatment
+> pages.** Tested as micky.buckfield@gmail.com: Hide worked (page Hidden,
+> `is_published` false, `public_stylists` 0), but `/hair-models` still showed
+> the card about 3 minutes later. It went only at the 15-minute rebuild.
+>
+> **Why, VERIFIED by reading the installed Next.js 16.2.7:**
+> * `revalidatePath('/[treatment]', 'page')` invalidates exactly one cache
+>   tag: `_N_T_/[treatment]/page` (`next/dist/server/web/spec-extension/revalidate.js:86-94`).
+> * A page's own tags come from its route file path, **route group included**.
+>   `getImplicitTags` (`next/dist/server/lib/implicit-tags.js:15-35, 51-66`)
+>   builds them from `/(public)/[treatment]/page`, the key in
+>   `.next/server/app-paths-manifest.json`. So the treatment pages carry
+>   `_N_T_/(public)/[treatment]/page`, the layout tags above it, and their own
+>   pathname, e.g. `_N_T_/hair-models`.
+> * **The tag we invalidated matches none of them**, so nothing was purged
+>   and the pages waited out `revalidate = 900`
+>   (`site/app/(public)/[treatment]/page.tsx:9`). Next's own docs show the
+>   group in the pattern: `revalidatePath('/(main)/blog/[slug]', 'page')`
+>   (`node_modules/next/dist/docs/01-app/03-api-reference/04-functions/revalidatePath.md`).
+> * **INFERRED, not observed:** `revalidatePath('/')` does match the home
+>   page, whose pathname tag is `_N_T_/`. So the home page's featured
+>   stylists should have cleared at once. Nobody looked.
+> * **For the fix:** `revalidatePath('/(public)/[treatment]', 'page')`, or one
+>   literal `revalidatePath('/<slug>')` per `TREATMENTS` entry. Both match a
+>   tag that exists.
+>
+> **(b) HIDE REFUSED FOR nahitih259@bevriz.com — CAUSE NOT YET ESTABLISHED.**
+> Hide returned *"Your shop couldn't be changed from this account…"*, and the
+> shop still shows Live. `first_published_at` is 2026-08-10 18:04:21, so the
+> write was `is_published = false` alone. **That message is only sent when the
+> UPDATE returns no row and no error** (`setShopPublished`, the `!data`
+> branch). The row was filtered out, not refused. It was not a trigger
+> raising, and not the 23514 or "not verified" paths. What can filter an
+> owner's UPDATE to zero rows silently:
+> 1. **The RESTRICTIVE `providers_not_suspended`**,
+>    `using (not is_suspended(auth.uid()))` (`supabase/suspension-enforcement.sql:65-68`):
+>    a `suspensions` row with `banned` true or `suspended_until` in the future.
+> 2. **The owner policy "providers can update own row" missing or changed on
+>    the live database.** micky.buckfield@gmail.com would still pass through
+>    "admins update any provider", because he is an admin. nahitih259 is not
+>    an admin. The policy list here is the 8 Aug snapshot
+>    (`schema-snapshot-2026-08-08-policies.sql:160-165`) and has not been
+>    re-read since.
+> 3. **A RESTRICTIVE UPDATE or SELECT policy added since the snapshot**, or a
+>    BEFORE UPDATE trigger that returns NULL. None is in the repo; the live
+>    lists are unread.
+>
+> These are the candidates, not the answer. The read-only SQL that settles
+> which one applies is in the chat of 22 Sep. **Whether a real stylist hits
+> it depends on the answer.** Under (1), only a suspended stylist, and the
+> message is vague but not false. Under (2), **every stylist who isn't an
+> admin**, on both clients:
+> * Mobile's toggle and `saveShopDetails` check only `error`, not the row
+>   count, so both would report success while changing nothing.
+>
+> **(c) THE HIDDEN-SHOP CARD LINKS TO THE PAGE IT'S ON.** The setup panel's
+> "Your shop is hidden" state (`site/components/StylistSetup.tsx`) links
+> "Publish it from your shop →" to `/shop`. On `/shop` that goes nowhere. The
+> link is right on `/dashboard`, `/settings` and `/verify`, which render the
+> same panel. For the fix: drop the link on `/shop`, or point it at the
+> visibility section.
+
 **Plainly:** until now the only way for a stylist to hide their shop was the
 switch on mobile's Provider Dashboard. The web had none. `/shop` now has one.
 
