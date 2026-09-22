@@ -1057,6 +1057,44 @@ advisory copy currently ESCAPES metacharacters. The moment patterns become real
 it has to stop, or the two disagree about the same post — which `0032`'s own
 comment forbids in as many words. Not a follow-up.
 
+**── 22 Sep 2026: A REAL LIST IS IN. VERIFIED FROM MICKY'S QUERY ──**
+
+`settings.banned_words` now holds **35 entries**, replacing the two test words
+of 13 Sep. **The list itself is not written here or anywhere in the repo, by
+decision.** Only its size and categories are recorded.
+
+* **Categories:** slurs, sexual solicitation, threats.
+* **Built around substring matching.** `banned_words_check` (0042) is a
+  case-insensitive substring match, so an entry fires inside any longer word.
+  Entries were left out or lengthened wherever the short form would flag
+  ordinary English: Pakistan, spicy, cocoon, among, fags (cigarettes), nude
+  (the shade), Essex, grape, "skill you've", "won't hurt you".
+* **Checked afterwards, with 0042's list-state query:**
+  * 35 entries;
+  * `list_state` clean;
+  * *"see you at 10 for your lashes"* clean;
+  * *"i'll kill you"* a hit.
+
+**What the list screens:** messages (0042, `trg_messages_90_screen`) and status
+posts (0032). Nothing else. **Bios and shop text stay unscreened, by decision**
+(item 58, deferred 19 Sep).
+
+**What this closes, and what it doesn't:**
+* **Closed:** the reason this item was opened. The list is no longer
+  placeholders or test scaffolding. It was written by Micky, against stated
+  categories, and tested for false positives on an ordinary booking message.
+* **Still open:** the 13 Sep gap. Steering someone off-platform or taking
+  payment off-platform (*"message me on WhatsApp 07700 900123, cash only"*)
+  is not among the three categories, and **substring matching can't express
+  a phone number**. The `banned_patterns` setting agreed on 13 Sep has not
+  been built: no file in `supabase/`, `site/`, `admin/` or `mobile/src`
+  mentions it (searched 22 Sep). So off-platform contact still passes both
+  screens untouched.
+* **The 13 Sep testing trap applies in its milder form.** The checks above
+  show the list catches one threat and passes one ordinary message. They
+  don't measure the false-positive rate across real posts. That will only
+  show in the moderation queue once real stylists and models are writing.
+
 **18. EVERY PUBLIC-SITE QUERY FAILURE LOOKS LIKE "NO DATA" — NEW, 7 Sep 2026.**
 
 `site/lib/stylists.ts` wraps every read of `public_stylists`:
@@ -3677,6 +3715,10 @@ exhaustive.
 
 **58. SCREENING BIOS AND OTHER PROFILE TEXT — PLANNED 19 Sep 2026, DEFERRED BY
 DECISION.**
+
+> **22 Sep 2026:** a real 35-entry `banned_words` list is in (item 17). It
+> screens messages and status posts only. Bios and shop text are still
+> unscreened, and this decision stands.
 
 **Decision, 19 Sep 2026 (Micky): messages now (`0042`), bios later. Revisit
 before onboarding stylists Micky does not personally know** — the same point as
