@@ -34,6 +34,8 @@ const eslintConfig = defineConfig([
   ...nextTs,
   globalIgnores([
     '.next/**',
+    // Demo mode's own build cache (next.config.ts, audit item 69).
+    '.next-demo/**',
     'out/**',
     'build/**',
     'next-env.d.ts',

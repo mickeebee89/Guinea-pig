@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { Fredoka, Quicksand } from 'next/font/google'
 import { IS_LIVE, SITE_NAME, SITE_TAGLINE, SITE_URL } from '@/lib/site'
 import { SiteAnalytics } from '@/components/SiteAnalytics'
+import { DemoLabel } from '@/components/DemoLabel'
 import './globals.css'
 
 // Self-hosted at build time by next/font — no runtime request to Google, so no
@@ -69,6 +70,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {/* Every page, public and member area. Query strings are stripped
             before sending — see the component. Audit item 67. */}
         <SiteAnalytics />
+        {/* Renders nothing, except in local demo mode with DEMO_LABEL=1
+            (audit item 69). */}
+        <DemoLabel />
       </body>
     </html>
   )

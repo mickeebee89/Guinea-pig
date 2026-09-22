@@ -61,3 +61,7 @@ deno.lock
 
 # Private inputs to one-off scripts (real email addresses). Never commit.
 scripts/private/
+
+# Demo mode: Micky's own licensed images for screenshots (audit item 69). Never commit.
+site/public/demo-images/
+site/.next-demo/

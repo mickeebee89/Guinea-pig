@@ -2116,6 +2116,139 @@ was the reason for three workflows rather than one.
 It remains a signal and not a gate. Everything above about branch protection
 still stands.
 
+**69. A LOCAL DEMO MODE FOR SCREENSHOTS — BUILT 22 Sep 2026. `next build`
+EXIT 0; A PRODUCTION BUILD CONTAINS NONE OF IT. ALL TEN SCREENS SEEN RUNNING.**
+
+**Plainly:** `DEMO_MODE=1` under local `next dev` shows the real web site
+filled with made-up stylists, bookings and messages, for advertising
+screenshots. It can't reach the live database, and it can't switch on in a
+production build or on Vercel.
+
+**── HOW IT'S WIRED: NO REAL FILE BRANCHES ON DEMO MODE ──**
+
+With `DEMO_MODE=1` under local `next dev`, `site/next.config.ts` adds three
+Turbopack aliases:
+* `@supabase/ssr` → `lib/demo/stub-server.ts` (server) or `lib/demo/stub-browser.ts` (browser)
+* `@supabase/supabase-js` → the same pair
+* `@/components/DemoLabel` → `lib/demo/DemoLabel.tsx`
+
+So `lib/supabase-server.ts`, `lib/supabase-public.ts`,
+`lib/supabase-browser.ts` and `proxy.ts` run exactly as written, and get an
+in-memory client (`lib/demo/engine.ts`) that answers from
+`lib/demo/fixtures.ts`. **Every page, component and query is the real one.**
+Only the client underneath them is swapped.
+* **What the engine handles:** the query shapes the site actually uses:
+  flat selects, the filters, ordering, limits, single rows, counts, writes,
+  three RPCs, and a fake realtime channel. A shape it doesn't know surfaces as
+  an ordinary query error.
+* **The views are derived on every read:** `public_stylists` (mirroring 0034's
+  rule), `public_profiles` and `public_stylist_status`.
+* **Being "signed in"** is a cookie, `cavy_demo_as` (model, stylist or none),
+  set by `app/demo/route.demo.ts`. That file is only a route while
+  `pageExtensions` includes `demo.ts`, which is demo mode only.
+* **The real-code changes are small:** `<DemoLabel />` in the root layout
+  (`components/DemoLabel.tsx` returns null); a `.next-demo/**` lint ignore; two
+  `tsconfig.json` include lines for demo mode's own build cache; and two
+  `.gitignore` lines.
+
+**── RULE 1: IT NEVER TOUCHES THE LIVE DATABASE ──**
+* **There's no network code in `lib/demo/`.** The real Supabase packages are
+  never loaded in demo mode.
+* **Sign-in, sign-up, email, payments, uploads and edge functions** return
+  "switched off in demo mode".
+* **Belt and braces:** the run command (and the `site-demo` launch config)
+  points `SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_URL` at
+  `http://127.0.0.1:9`, a dead port. **VERIFIED:** after every screen was
+  loaded, the dev-server log had no line mentioning that address, and no
+  server errors.
+
+**── RULE 2: IMPOSSIBLE IN PRODUCTION ──**
+* **The first lock:** `next.config.ts` throws if `DEMO_MODE=1` is set and
+  `NODE_ENV` isn't `development`, or `VERCEL` or `VERCEL_ENV` is set.
+  **VERIFIED:**
+  * `DEMO_MODE=1 npx next build` failed with *"DEMO_MODE=1 refused: NODE_ENV
+    is "production""*, and left the existing `.next` untouched (the BUILD_ID
+    timestamp was unchanged).
+  * `DEMO_MODE=1 VERCEL_ENV=preview npx next dev` failed with *"refused:
+    VERCEL_ENV is "preview""*.
+* **The second lock:** every stand-in calls `assertDemoAllowed`
+  (`lib/demo/guard.ts`) when it loads, and throws outside a local dev
+  server.
+* **The production build contains none of it. VERIFIED on the final `npx next
+  build`** (exit 0), by searching `.next/server` and `.next/static`:
+  * 0 files contain any fixture name, `demo.invalid`, the fixture id prefix,
+    the demo cookie name, the demo customer id, the "switched off in demo
+    mode" text, or the `/demo` page's title.
+  * `/demo` is in neither route manifest, and there's no demo page in
+    `.next/server/app`.
+  * **The only matches for "Example screen" or `lib/demo`** were code
+    comments from the real `layout.tsx` and the null
+    `components/DemoLabel.tsx`, inside one server-side source map.
+* **TypeScript still checks the demo files** in every build, because
+  `tsconfig.json` includes `**/*.ts`. Checked, but never bundled.
+
+**── RULE 3: REAL PAGES, CHECKED IN THE BROWSER ──**
+
+Run with the `site-demo` launch config, all ten screens rendered:
+* the homepage, with featured stylists;
+* `/hair-models`, with two stylists listed;
+* a stylist profile;
+* `/browse`, with all seven stylists;
+* the model dashboard;
+* the stylist dashboard;
+* bookings, as each account;
+* a message thread, as each account;
+* `/shop`;
+* `/availability`.
+
+**The fixtures:** seven stylists across the six treatments, four in Kent
+(Bromley, Tunbridge Wells, Maidstone, Sevenoaks) and three in London (Hackney,
+Islington, Lewisham). Bios are 40+ characters, with upcoming availability over
+three weeks. The two sign-in accounts are:
+* **the model, Amara O.:** four bookings (two accepted, one pending, one
+  completed) and one message thread;
+* **the stylist, Priya Shah:** four bookings (one accepted, two pending, one
+  completed) and one message thread.
+
+Dates are relative to the day the server starts.
+
+**What the fixtures deliberately leave out:**
+* **No reviews, ratings or testimonials.** `reviews` is empty, every `rating`
+  is null and every `review_count` is 0. The real UI therefore shows "No
+  reviews yet" on a profile, and "Rating —" and "Reviews 0" on the stylist
+  dashboard.
+* **No photos.** Every picture is null, so the site's initials placeholder
+  shows. Micky's own licensed images can go in `site/public/demo-images/`
+  (gitignored), named after the fixture key.
+* **All names invented**, with `.invalid` emails.
+* **No prices.** Asked for, but no screen on the site shows one: the site
+  neither writes nor reads a treatment price. Adding one to the fixtures
+  would appear nowhere, and a price display would be a new feature, not demo
+  data.
+
+**The label:** `DEMO_LABEL=1` adds a small "Example screen" badge, bottom
+right. Seen working. Next's dev badge is turned off in demo mode, so it
+doesn't appear in screenshots.
+
+**── FOUND WHILE BUILDING, AND FIXED ──**
+* **A client component also renders once on the server.** ChatThread calls
+  `getSupabaseBrowser()` while rendering, so the server stub has to return a
+  harmless client there rather than throw. The first version threw, and the
+  stylist's thread returned 500.
+* **Sharing `.next/dev` with a normal `next dev` left stale route tables.**
+  After one restart, every page except `/` and `/demo` returned 404. Fixed by
+  giving demo mode its own `distDir`, `.next-demo`. Three restarts since, all
+  pages loaded.
+* **`scripts/check-links.mjs` flagged `/demo`** as a dead link, correctly,
+  since it's no route in a real build. The index now uses query-only links
+  (`?as=…&to=…`). `npm run checks` exits 0. That's not a build claim; the
+  build claim is `next build` above.
+* **The model's subscription row** now has an invented Stripe customer id, so
+  `lib/verification.ts`'s fast path settles it. Without it, every model page
+  logged a failed payment-function call.
+
+**How to run it:** `site/lib/demo/README.md`.
+
 **68. ICO REGISTRATION IS IN PLACE — CONFIRMED BY MICKY, 22 Sep 2026.**
 
 `CLAUDE.md`'s compliance rules say identity selfies are special-category data,

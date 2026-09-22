@@ -1,6 +1,51 @@
 import type { NextConfig } from 'next'
 
+/**
+ * ── DEMO MODE: THE FIRST LOCK (audit item 69) ─────────────────────────────
+ * DEMO_MODE=1 under local `next dev` swaps Supabase for made-up fixtures, so
+ * Micky can take screenshots of the real pages without touching the live
+ * database. See lib/demo/README.md.
+ *
+ * It works ONLY by the aliases and the page extension below, which exist ONLY
+ * when this is true. A production build has neither, so nothing in the build
+ * references lib/demo or app/demo at all.
+ *
+ * Asking for demo mode anywhere it isn't allowed FAILS, rather than being
+ * quietly ignored: `DEMO_MODE=1 next build`, or DEMO_MODE set on Vercel, stops
+ * with the reason. A setting that silently does nothing is how someone ends up
+ * believing it did something.
+ */
+const DEMO_MODE = (() => {
+  if (process.env.DEMO_MODE !== '1') return false
+  const refused: string[] = []
+  if (process.env.NODE_ENV !== 'development') refused.push(`NODE_ENV is "${process.env.NODE_ENV}"`)
+  if (process.env.VERCEL_ENV) refused.push(`VERCEL_ENV is "${process.env.VERCEL_ENV}"`)
+  if (process.env.VERCEL) refused.push('VERCEL is set')
+  if (refused.length) {
+    throw new Error(`DEMO_MODE=1 refused: ${refused.join('; ')}. Demo mode runs only under local \`next dev\`.`)
+  }
+  return true
+})()
+
+const demoAliases = {
+  '@supabase/ssr': { browser: './lib/demo/stub-browser.ts', default: './lib/demo/stub-server.ts' },
+  '@supabase/supabase-js': { browser: './lib/demo/stub-browser.ts', default: './lib/demo/stub-server.ts' },
+  '@/components/DemoLabel': './lib/demo/DemoLabel.tsx',
+}
+
 const nextConfig: NextConfig = {
+  // Demo mode only: app/demo/route.demo.ts becomes a route. Otherwise the
+  // default extensions, under which that file is not a route at all.
+  //
+  // And its own build cache. Sharing .next/dev with a normal `next dev` left
+  // stale route tables that 404'd every page but / and /demo on 22 Sep; a
+  // separate folder means the two can never read each other's.
+  //
+  // And no Next.js dev badge in the corner: these are for screenshots.
+  ...(DEMO_MODE
+    ? { pageExtensions: ['tsx', 'ts', 'jsx', 'js', 'demo.ts'], distDir: '.next-demo', devIndicators: false }
+    : {}),
+
   /**
    * Local only, and only because of a stray C:\Users\micky\package-lock.json:
    * without this Next walks up looking for a lockfile, finds that one, and
@@ -14,7 +59,12 @@ const nextConfig: NextConfig = {
    * fights the value Vercel injects and reintroduces the "must have the same
    * value" warning.
    */
-  ...(process.env.VERCEL ? {} : { turbopack: { root: __dirname } }),
+  ...(process.env.VERCEL ? {} : {
+    turbopack: {
+      root: __dirname,
+      ...(DEMO_MODE ? { resolveAlias: demoAliases } : {}),
+    },
+  }),
 
   /**
    * DEVELOPMENT ONLY. Hosts allowed to fetch /_next/* from the dev server.

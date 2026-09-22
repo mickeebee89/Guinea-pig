@@ -7,6 +7,33 @@
       "runtimeArgs": ["run", "dev", "--prefix", "site"],
       "port": 3000,
       "autoPort": true
+    },
+    {
+      "name": "site-demo",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--prefix", "site", "--", "--port", "3100"],
+      "port": 3100,
+      "env": {
+        "DEMO_MODE": "1",
+        "SUPABASE_URL": "http://127.0.0.1:9",
+        "SUPABASE_ANON_KEY": "demo-mode-no-key",
+        "NEXT_PUBLIC_SUPABASE_URL": "http://127.0.0.1:9",
+        "NEXT_PUBLIC_SUPABASE_ANON_KEY": "demo-mode-no-key"
+      }
+    },
+    {
+      "name": "site-demo-label",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--prefix", "site", "--", "--port", "3100"],
+      "port": 3100,
+      "env": {
+        "DEMO_MODE": "1",
+        "DEMO_LABEL": "1",
+        "SUPABASE_URL": "http://127.0.0.1:9",
+        "SUPABASE_ANON_KEY": "demo-mode-no-key",
+        "NEXT_PUBLIC_SUPABASE_URL": "http://127.0.0.1:9",
+        "NEXT_PUBLIC_SUPABASE_ANON_KEY": "demo-mode-no-key"
+      }
     }
   ]
 }
