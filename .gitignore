@@ -58,3 +58,6 @@ seed/photos/
 # deno.json in this repo and Supabase deploys without it, so it is an artefact
 # rather than a dependency lock worth tracking.
 deno.lock
+
+# Private inputs to one-off scripts (real email addresses). Never commit.
+scripts/private/
