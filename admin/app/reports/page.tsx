@@ -73,8 +73,9 @@ function isFlagged(r: Report, history: Map<string, SubjectHistory>): boolean {
 
 const ACTION_HELP: Record<string, string> = {
   warn:    'Sends this user an official warning in the app. It does NOT close the report — resolve it afterwards.',
-  suspend: 'Blocks this user from applying, messaging and reviewing for the chosen number of days. It does NOT close the report — resolve it afterwards.',
-  ban:     'Permanently blocks this user from using the app. It does NOT close the report — resolve it afterwards.',
+  // The stylist half since 0044 (audit item 66): suspend and ban withdraw a stylist.
+  suspend: 'Blocks this user from applying, messaging and reviewing for the chosen number of days. If they are a stylist, their shop is hidden and their upcoming bookings are cancelled, and it stays hidden when the suspension ends until they republish it. It does NOT close the report — resolve it afterwards.',
+  ban:     'Permanently blocks this user from using the app. If they are a stylist, their shop is hidden and their upcoming bookings are cancelled. It does NOT close the report — resolve it afterwards.',
   dismiss: 'Closes this report with NO action against the user. Use when the report wasn’t a genuine breach.',
   resolve: 'Closes this report as actioned. Use after you’ve warned, suspended or banned the user.',
 }

@@ -129,14 +129,19 @@ awkward — which dilutes the one control that should mean exactly one thing.
 
 ## Where the cancellation wording lives
 
-**Not in either client.** All three messages are in
-`public.cancellation_notice` (migration `0029`), because they must not converge:
+**Not in either client.** All four messages are in
+`public.cancellation_notice` (migration `0029`; the fourth added in `0044`),
+because they must not converge:
 
 * `block` — a block cascaded the booking away. Silent about cause, and silent
   about *being* silent: no "we can't explain why" either, because the platform
   decided nothing and implying otherwise invents a judgement.
 * `by_stylist` — actor named, optional reason shown.
 * `by_model` — actor named, optional reason shown.
+* `withdrawn` — the platform cancelled: a revoked verification, a suspension or a
+  ban, one message for all three so a model can't tell which. It says it was
+  our decision and that we can't explain why, which is true here and false for
+  a block. Never takes the admin's reason. Sent by `_withdraw_stylist`.
 
 The block case is the fragile one. It already existed, its silence is
 load-bearing, and it reads as the most deficient of the three — so a shared

@@ -2237,6 +2237,109 @@ TOGGLE HAS A GAP THIS ONE CLOSES.**
 >
 > **Not decided:** whether suspend should unpublish, and whether to use the
 > revocation pattern, cancelling live bookings too.
+>
+> **── 22 Sep 2026: REVALIDATION FIX VERIFIED ──**
+>
+> Micky published on `/shop`, and the card appeared on `/hair-models`
+> **immediately**. `revalidatePath('/(public)/[treatment]', 'page')` reaches
+> the treatment pages. Hiding goes through the same calls, but was not
+> re-tested separately.
+>
+> **── 22 Sep 2026: DECIDED — OPTION 2. MIGRATION 0044 WRITTEN, NOT APPLIED ──**
+>
+> **The decision (Micky):** suspending or banning a stylist works like
+> revocation. Their shop is hidden and their upcoming bookings are cancelled.
+>
+> `supabase/migrations/0044_suspension_withdraws_the_stylist.sql`. Checksum
+> `31bc05d3…`, computed by hand over everything above the footer with CRLF
+> normalised, the same way as 0043. `--stamp` was not run (item 60).
+>
+> **One rule, extracted.** Revocation's cancel-and-notify loop was inline in
+> `revoke_verification` (0028), so it couldn't be reused as it stood. It is now
+> `_withdraw_stylist(user)`: SECURITY INVOKER, executable by no client role.
+> 1. **Hide** every live shop, stamping `first_published_at` when it's null.
+> 2. **Cancel** every upcoming booking where they are the stylist: pending or
+>    accepted, dated today or later (0015's definition). Completed bookings
+>    are never selected.
+> 3. **Notify** each model through `cancellation_notice`, under a new fourth
+>    kind, `'withdrawn'`.
+>
+> Both revocation and suspend/ban call it:
+> * **Revocation:** `revoke_verification` calls it in place of its loop.
+>   Revocation's own hide (the `is_verified` trigger, which clears the stamp
+>   so re-verification republishes, 0040) is unchanged, and runs first.
+> * **Suspend and ban:** `_admin_apply_user_action`, the one copy behind all
+>   three console surfaces (0039), calls it in both branches. Its counts reach
+>   `admin_audit_log.details`.
+>
+> **No automatic republish.** Reinstate is unchanged and deletes only the
+> suspension. The stamp means auto-publish can't put the shop back, so the
+> stylist republishes with the web control. **Added because it was
+> necessary:** `publish_provider_if_eligible` now also refuses a suspended
+> stylist. Without it, a verified stylist whose shop had never been live would
+> go live mid-suspension on adding a first treatment.
+>
+> **The notice.** It says neither "suspended" nor "revoked", and it's the same
+> for both. It is revocation's reviewed wording, with time and treatment
+> added as in 0030, and one sentence changed. *"You can report it from their
+> profile"* became the support address, because a hidden shop's profile
+> doesn't open for a model. That's INFERRED from the providers SELECT policy
+> in the snapshot and both profile screens; not tried live.
+>
+> **Existing suspensions:** section 6 applies the same withdrawal to every
+> stylist suspended right now, and records each result in
+> `migration_findings`. nahitih259 is the one known. Its shop is already
+> hidden, so for it that section only cancels upcoming bookings, if there are
+> any. Block E, run before applying, lists who that is and how many models
+> will be notified.
+>
+> **Guards:** the ASSERT refuses to apply if any of the four live function
+> bodies isn't the one this was written from. It matches code literals, not
+> comments.
+>
+> **Console copy:** it now tells an admin, before they confirm, what suspend
+> and ban do to a stylist: `admin/app/users/page.tsx` and
+> `admin/app/providers/page.tsx` modals, and `reports/page.tsx`'s
+> `ACTION_HELP`. The admin app's `next build` exits 0. **That copy goes live
+> on push, before 0044 is applied.** Until it's applied, the console
+> describes behaviour the database doesn't have yet.
+>
+> `docs/safety-surface.md` now lists four cancellation messages.
+>
+> **Still not covered:**
+> * An admin **approving the verification** of a suspended stylist still
+>   publishes their shop (`admin_decide_verification`, 0039:604-608).
+> * The pages that list shops still have no suspension filter. With 0044
+>   they no longer need one for a suspension made after it, or one caught by
+>   the backfill.
+>
+> **── 22 Sep 2026: A SUSPENDED MODEL — REPORT ONLY, NOTHING CHANGED ──**
+>
+> **Plainly:** suspending a model stops them booking, messaging and
+> reviewing, but their existing bookings go ahead. The stylist can still find
+> them, and a stylist can end up meeting a suspended model who can't reply to
+> a message. Read from the repo; the live policies weren't re-read.
+> * **What a suspension does to a model:** `sessions_not_suspended` stops
+>   them applying, `messages_not_suspended` stops them sending, and
+>   `reviews_not_suspended` stops them reviewing
+>   (`suspension-enforcement.sql:45-61`). Suspend and ban write the
+>   `suspensions` row and nothing else (0039:263-280). 0044's
+>   `_withdraw_stylist` selects only bookings where the user is the STYLIST,
+>   so for a model it does nothing.
+> * **Their bookings stay live.** Pending and accepted bookings aren't
+>   touched. **INFERRED:** the stylist can still accept a pending one, and
+>   either side can cancel. No suspension policy covers `sessions` UPDATE,
+>   and the status guard only checks who is a participant.
+> * **Stylists still find them.** `nearby_models` (0018:132) filters role and
+>   blocks, not suspension.
+>
+> **Needs the same treatment? Yes, in my view, but it's a decision.** The
+> risk is the mirror image of a stylist's: someone the platform has decided
+> to hold back still turns up at a stranger's appointment. The shape would be
+> the same one rule in the other direction:
+> * cancel their upcoming bookings where they are the model;
+> * notify each stylist with a neutral line;
+> * leave them out of `nearby_models` while suspended.
 
 **Plainly:** until now the only way for a stylist to hide their shop was the
 switch on mobile's Provider Dashboard. The web had none. `/shop` now has one.

@@ -409,6 +409,16 @@ export default function UsersPage() {
                   className="border border-black/10 rounded-lg px-3 py-2 text-sm w-full" />
               </div>
             )}
+            {['suspend','ban'].includes(modal.action) && (
+              // What 0044 made these do to a stylist. Said before Confirm,
+              // because it reaches other people: every model they're booked with.
+              <p className="mb-4 rounded-lg bg-orange-50 px-3 py-2 text-xs text-orange-800">
+                If this user is a stylist, their shop is hidden and their upcoming bookings are
+                cancelled. Each model is told the stylist can’t take bookings at the moment, not
+                why. Lifting the {modal.action === 'ban' ? 'ban' : 'suspension'} does not republish
+                the shop — the stylist does that themselves.
+              </p>
+            )}
             {['warn','suspend','ban'].includes(modal.action) && (
               <div className="mb-4">
                 <label className="text-xs font-medium text-[#3D2E2E]/60 block mb-1">Reason / note</label>
