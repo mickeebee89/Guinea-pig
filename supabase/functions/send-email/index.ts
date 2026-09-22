@@ -108,7 +108,7 @@ const FOOTER_TEXT =
 /** The whole email. One template, so every message looks the same. */
 function render(o: { heading: string; body: string; cta: string; url: string; unsubscribeUrl: string }) {
   // unsubscribeUrl is the PAGE (a click is a GET, and it asks first). The
-  // one-click POST address is built beside it, in send().
+  // one-click POST address is built from the same token in send().
 
   const paragraphs = o.body.split('\n').map(s => s.trim()).filter(Boolean)
   const text = [
@@ -151,12 +151,33 @@ async function log(row: {
   if (error && error.code !== '23505') console.error('[send-email] could not log', error.message)
 }
 
+/**
+ * The two addresses an email carries, both built from the same token.
+ *
+ * They used to be one address and a string replace on it. That is a silent
+ * breakage waiting to happen — change the visible link's shape and the header
+ * quietly keeps pointing at the old path — and it also hid the header's URL
+ * from site/scripts/check-links.mjs, which reads `${SITE}/…` literals out of
+ * this file to prove the pages an email points at still exist. Written out in
+ * full, both are checked. Audit item 74.
+ */
+const unsubscribeLinks = (token: string) => {
+  const t = encodeURIComponent(token)
+  return {
+    // A click is a GET, so this one only ASKS.
+    page: `${SITE}/email/unsubscribe?t=${t}`,
+    // List-Unsubscribe: Gmail and Yahoo POST here directly.
+    oneClick: `${SITE}/email/unsubscribe/confirm?t=${t}`,
+  }
+}
+
 async function send(o: {
-  to: string; subject: string; heading: string; body: string; cta: string; path: string; unsubscribeUrl: string
+  to: string; subject: string; heading: string; body: string; cta: string; path: string; unsubscribeToken: string
 }): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
   const key = Deno.env.get('RESEND_API_KEY')
   if (!key) return { ok: false, error: 'RESEND_API_KEY not configured' }
-  const { text, html } = render({ ...o, url: `${SITE}${o.path}` })
+  const links = unsubscribeLinks(o.unsubscribeToken)
+  const { text, html } = render({ ...o, url: `${SITE}${o.path}`, unsubscribeUrl: links.page })
 
   let res: Response
   try {
@@ -174,7 +195,7 @@ async function send(o: {
           // One-click unsubscribe. Gmail and Yahoo expect these on anything they
           // judge bulk, and it is what makes the header in the client work. The
           // header points at the POST route; the visible link at the page.
-          'List-Unsubscribe': `<${o.unsubscribeUrl.replace('/email/unsubscribe?', '/email/unsubscribe/confirm?')}>`,
+          'List-Unsubscribe': `<${links.oneClick}>`,
           'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
         },
       }),
@@ -245,10 +266,11 @@ async function recipient(userId: string) {
   return { email: row.email, wants, firstName: row.first_name }
 }
 
-async function unsubscribeUrlFor(userId: string) {
+/** Their token, made on first use. Both links are built from it, in send(). */
+async function unsubscribeTokenFor(userId: string) {
   const { data, error } = await db.rpc('email_unsubscribe_token', { p_user_id: userId })
   if (error || !data) throw new Error(`unsubscribe token: ${error?.message ?? 'none returned'}`)
-  return `${SITE}/email/unsubscribe?t=${encodeURIComponent(String(data))}`
+  return String(data)
 }
 
 Deno.serve(async (req) => {
@@ -279,7 +301,6 @@ Deno.serve(async (req) => {
 
     const to = String(body.to ?? '')
     if (!to.includes('@')) return respond({ error: 'A "to" address is required' }, 400)
-    const unsubscribeUrl = `${SITE}/email/unsubscribe?t=test-token-not-real`
     const sent = await send({
       to,
       subject: 'Test: this is how Cavy’s emails look',
@@ -287,7 +308,7 @@ Deno.serve(async (req) => {
       body: 'Nobody else received this. It was sent by hand to check how Cavy’s notification emails '
         + 'arrive: the sender, the reply address, the unsubscribe link and the footer.\n'
         + 'The unsubscribe link in this one does nothing, because there is no real account behind it.',
-      cta: 'Open Cavy', path: '/dashboard', unsubscribeUrl,
+      cta: 'Open Cavy', path: '/dashboard', unsubscribeToken: 'test-token-not-real',
     })
     return respond(sent.ok ? { ok: true, id: sent.id } : { ok: false, error: sent.error }, sent.ok ? 200 : 502)
   }
@@ -347,7 +368,7 @@ Deno.serve(async (req) => {
       const sent = await send({
         to: who.email, subject: c.subject, heading: c.heading,
         body: note.body ?? note.title ?? '', cta: c.cta, path: c.path,
-        unsubscribeUrl: await unsubscribeUrlFor(note.user_id),
+        unsubscribeToken: await unsubscribeTokenFor(note.user_id),
       })
       await log({
         user_id: note.user_id, kind: 'notification', ref_id: note.id, event: note.type,
@@ -388,7 +409,7 @@ Deno.serve(async (req) => {
         body: 'It’s waiting in your Cavy messages. We’ll only email you once an hour about a '
           + 'conversation, however many messages arrive.',
         cta: 'Read it', path: `/messages/${sessionId}`,
-        unsubscribeUrl: await unsubscribeUrlFor(userId),
+        unsubscribeToken: await unsubscribeTokenFor(userId),
       })
       await log({
         user_id: userId, kind: 'chat', ref_id: sessionId, event: 'chat',

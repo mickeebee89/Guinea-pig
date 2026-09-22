@@ -47,7 +47,7 @@
  * Left as a wildcard it swallowed every single-segment dead link, and the check
  * passed a deliberately broken one on its first real test.
  */
-import { readFileSync, readdirSync, statSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import path from 'node:path'
 
 const APP = path.join(process.cwd(), 'app')
@@ -242,13 +242,63 @@ for (const dir of SRC_DIRS) {
   }
 }
 
+// ── 3b. Links into the site from OUTSIDE it: emails ────────────────────────
+//
+// The site is not the only thing that links to the site. On 22 Sep 2026 the
+// notification emails shipped with `/email/unsubscribe`, a page nothing on the
+// site links to and nothing on the site should — its only entry point is a
+// link in an email. This check called it an unreachable route and failed the
+// build, which is how a page written that morning was still not deployed nine
+// hours later (audit item 74).
+//
+// Listing the two routes as "no link needed" would have silenced it and left
+// the real risk in place: rename the page and the email's link dies, with
+// nothing to say so. So the edge functions are read as a source of inbound
+// links instead. The route is then reachable BECAUSE the email points at it,
+// and renaming the page turns that email URL into a DEAD LINK here.
+//
+// ── WHAT THIS DOES NOT SEE ────────────────────────────────────────────────
+// Only URLs written as `${SITE}/something` — a literal path against the site
+// constant. `${SITE}${somePath}` is a runtime value and is counted, not
+// resolved, exactly as an href={expr} is in the site itself.
+const FUNCTIONS = path.join(process.cwd(), '..', 'supabase', 'functions')
+let emailUrls = 0
+let emailRuntime = 0
+let emailScan = 'no supabase/functions directory'
+
+if (existsSync(FUNCTIONS)) {
+  emailScan = ''
+  for (const file of walk(FUNCTIONS)) {
+    if (!file.endsWith('.ts')) continue
+    // Comments first: this file's own notes mention `${SITE}/…`, and the first
+    // run read that sentence as a link and reported it dead. A commented-out
+    // URL is not a link either way. Block comments, and line comments only
+    // where they start a line, so `https://` inside a string survives.
+    const src = readFileSync(file, 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/^[ \t]*\/\/.*$/gm, '')
+    const where = path.relative(path.join(process.cwd(), '..'), file)
+    for (const m of src.matchAll(/\$\{SITE\}([^`'"]*)/g)) {
+      const raw = m[1]
+      // `${SITE}${o.path}` and friends: the shape is not even known here.
+      if (!raw.startsWith('/')) { emailRuntime++; continue }
+      const href = raw.replace(/\$\{[^}]*\}/g, '[x]').split('?')[0]
+      emailUrls++
+      if (matches(href)) linked.add(href.replace(/\[x\]/g, '[id]'))
+      else dead.push(`${where}  ->  ${href}   (a link inside an email)`)
+    }
+  }
+}
+
 // ── 4. Routes nothing links to ─────────────────────────────────────────────
 // Entry points and machine endpoints are reached by URL or by redirect, not by
 // a link, so requiring an inbound link would be wrong rather than strict.
 const NO_LINK_NEEDED = new Set([
   '/', '/dashboard', '/sign-in', '/sign-up', '/forgot-password',
   '/auth/confirm', '/auth/new-password', '/auth/problem', '/auth/reset',
-  '/api/waitlist',
+  // `/api/waitlist` was here until 22 Sep 2026. The route is gone (item 71),
+  // and an entry for a route that no longer exists is one that would silence a
+  // future route of the same name without anyone deciding to.
   // Linked generically as `/${t.slug}` from the treatment page and the 404
   // page, so no literal href to this route exists or should.
   '/[treatment]',
@@ -288,8 +338,13 @@ console.log(
   `${linked.size} linked exactly, ` +
   `${reachable.size} reachable, ` +
   `${runtimeValued} href(s) with a runtime value, ` +
-  `${unresolved} href(s) could not be resolved statically`
+  `${unresolved} href(s) could not be resolved statically, ` +
+  `${emailUrls} link(s) into the site from emails` +
+  (emailRuntime ? ` (${emailRuntime} more built at runtime)` : '')
 )
+// A skipped source is a narrowing, so it is said out loud rather than left to
+// look like a clean run over everything.
+if (emailScan) console.log(`    email links NOT checked: ${emailScan}`)
 if (unresolved > 0) {
   for (const u of unresolvedWhere) console.log('    unresolved: ' + u)
 }

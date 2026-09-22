@@ -2305,6 +2305,82 @@ names both addresses with their status codes. `npx next build` exit 0, both
 routes listed. The migration's DEPLOY notes now make the website step 1, and
 the checksum is unchanged — those notes sit below the footer.
 
+**── WHY IT NEVER DEPLOYED: MY OWN LINK CHECKER FAILED THE BUILD, AND
+`npx next build` CANNOT SEE IT — 22 Sep 2026 ──**
+
+**Plainly:** three Production deployments failed and the site went nine hours
+without updating. The failing command was `npm run build`, and what failed
+inside it was `site/scripts/check-links.mjs`, not Next.
+
+**It is not the unresolved hrefs.** Micky's reading of the log was reasonable —
+the tail shows the summary, then seventeen `unresolved:` lines, then the
+error — but unresolved hrefs are **counted and printed, never fatal**:
+`check-links.mjs:169` declares the counter, `:223` and `:228` fill it, `:293`
+prints it. Only `failed` exits 1 (`:297`), and only two things set it: DEAD
+LINKS (`:267`) and UNREACHABLE ROUTES (`:273`). **No change made unresolved
+hrefs fatal; they never were.**
+
+**The real cause was printed above what he pasted, on stderr while the summary
+goes to stdout, so the two ends of the log were interleaved:**
+
+    UNREACHABLE ROUTES — 2 route(s) nothing links to:
+      /email/unsubscribe/confirm
+      /email/unsubscribe
+
+Reproduced locally, exit 1. **The two pages I added on 22 Sep are reached only
+from a link in an email**, so nothing on the site links to them — and this
+check's second half exists to catch exactly that shape, because `/model/[id]`
+shipped unreachable for nine days (audit items 9 and 10). It was right that
+nothing linked them. It was wrong about what that meant.
+
+**⚠️ AND `npx next build` COULD NEVER HAVE CAUGHT IT.** Vercel runs
+`npm run build`, which is `npm run checks && next build`
+(`site/package.json:6`). I verified every step of item 74 with `npx next build`
+alone, on standing instruction — a rule written because `npm run checks`
+compiles nothing and must never be cited as build evidence. **The inverse is
+equally true and was not written down anywhere: `next build` alone is not
+evidence a DEPLOY will succeed.** Two commands, neither a superset of the
+other. From now on the claim "this will deploy" needs `npm run build`.
+
+**The fix: not an exemption, an inbound link.** Adding the two routes to
+`NO_LINK_NEEDED` would have gone green in one line and left the real risk
+standing — rename the page, and the email's link dies with nothing to say so.
+Instead `check-links.mjs` now reads `supabase/functions/**/*.ts` for
+`${SITE}/…` URLs and treats each as an inbound link. The routes are reachable
+BECAUSE an email points at them, and renaming a page turns that email URL into
+a DEAD LINK. **Verified both ways:** clean exit 0, and with `page.tsx` moved
+aside it reports `supabase\functions\send-email\index.ts -> /email/unsubscribe
+(a link inside an email)` and exits 1.
+
+**Two things that fell out of writing it:**
+* **The `List-Unsubscribe` URL was built by string surgery** on the visible
+  one — `.replace('/email/unsubscribe?', '/email/unsubscribe/confirm?')`. The
+  checker could not see it, and change the visible link's shape and the header
+  would have gone on pointing at the old path in silence. Both are now built
+  from the token by `unsubscribeLinks()`, written out in full.
+* **The first run read this file's own comment** — a sentence mentioning
+  `${SITE}/…` — as a link, and reported it dead. Comments are now stripped
+  before the scan.
+
+**What it will catch afterwards:** a link, anywhere in the site OR in an email,
+that points at a route that does not exist; a route nothing points at from
+either place; a page renamed out from under an email.
+**What it still will not catch:** whether any link NAVIGATES (its own header
+has said so since 7 Sep), URLs an edge function builds from a variable rather
+than a literal (`${SITE}${o.path}` — counted, not resolved, and printed as
+`1 more built at runtime`), and anything at all if `supabase/functions` is
+absent, which it now says out loud rather than passing quietly.
+
+**⚠️ THE REAL FAULT IS WHERE THE CHECK RUNS.** A check that cannot prove links
+work, by its own header, was given the power to stop the website updating —
+and it used it, for nine hours, silently. `.github/workflows/site.yml` already
+runs `npm run checks` and a build on every push touching `site/**`, so **CI
+was almost certainly red on `d0b0fb2` too** (INFERRED — same script, same
+input; not confirmed, `gh` is not installed here). The signal existed. Nobody
+was told. That is the same shape as the five weeks recorded in that workflow's
+own header, inverted: there, a green tick hid red deploys; here, a red deploy
+hid behind nothing at all.
+
 **── WHAT IS STILL OPEN ──**
 * **Mobile has no email preference UI.** A member with the app can only turn
   these off on the website or by the link. The column is shared, so the switch
