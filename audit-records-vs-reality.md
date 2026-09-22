@@ -4643,6 +4643,73 @@ add its own noindex header to preview URLs. That has not been checked.
 > CSP. So Sensitive storage protects nothing, and costs the ability to read
 > back which value is actually deployed — the same blindness this change just
 > removed for `PUBLIC_SITE_MODE`.
+>
+> **── 22 Sep 2026: THE SITE IS LIVE TO SEARCH ENGINES. VERIFIED ──**
+>
+> `PUBLIC_SITE_MODE` was changed from `preview` to `live` in Vercel
+> (Production, Config type), and Production was redeployed from `0bdc644`.
+>
+> **robots.txt, verified by Micky.** `https://cavybeauty.com/robots.txt` reads
+> `User-Agent: *`, `Allow: /`, `Host: https://cavybeauty.com`, `Sitemap:
+> https://cavybeauty.com/sitemap.xml`.
+>
+> **The sitemap: 14 URLs, all on `https://cavybeauty.com`.** Home,
+> for-stylists, for-models, how-it-works, the six treatment pages, terms,
+> privacy, community and delete-account. No stylist or member page is in it.
+>
+> **Google Search Console:**
+> * **Domain property `cavybeauty.com`**, verified through Cloudflare by
+>   nsaknownenigma@gmail.com, the verified owner.
+> * **guineapig.app@gmail.com** added as a delegated owner. Not yet verified
+>   in its own right.
+> * **Sitemap** `https://cavybeauty.com/sitemap.xml` submitted, status
+>   Success.
+>
+> **Page-level checks, by Claude with `curl` on 22 Sep:**
+> * `/`, `/hair-models`, `/terms` and `/for-stylists` each carry
+>   `<meta name="robots" content="index, follow">` and a canonical link to
+>   their own `https://cavybeauty.com` URL.
+> * The canonical is absolute because `metadataBase` is `SITE_URL`
+>   (`site/app/layout.tsx:23`), not the host that served the page.
+>
+> **── ARE THE vercel.app ADDRESSES INDEXABLE AS DUPLICATES? No, on two
+> separate counts. READ-ONLY, 22 Sep ──**
+>
+> `VERCEL_ENV` is `production` on those addresses too, so `IS_LIVE` is true
+> and the app itself would say "index". Two layers stop it anyway:
+>
+> 1. **Vercel's login and a noindex header, observed on
+>    `cavy-git-main-mickeebee90.vercel.app`.** `curl -I` on `/`, `/robots.txt`
+>    and `/hair-models` each returned **302 to `vercel.com/sso-api`**, which is
+>    Vercel's Deployment Protection. Each also returned **`X-Robots-Tag:
+>    noindex`**. A crawler gets a redirect to a Vercel login page, with a
+>    noindex header, and never sees the site's own robots.txt or HTML.
+> 2. **The canonical link, if the pages were ever reachable.** Every public
+>    page's canonical is an absolute `https://cavybeauty.com/...` URL, so a
+>    copy served from another host names cavybeauty.com as the original.
+>
+> **Not checked:** the per-deployment `*.vercel.app` address. I don't know its
+> host name. **INFERRED** that it behaves the same: Vercel's standard
+> Deployment Protection covers every generated deployment address, and only
+> the production custom domain is exempt. To confirm it, run
+> `curl -sI https://<that-address>/` and look for the same 302 and header.
+>
+> **What would change this:** turning Deployment Protection off for
+> production deployments. The pages would then be served to crawlers.
+> * Still protected: the canonical links would still point at
+>   cavybeauty.com.
+> * **Unobserved:** whether the `X-Robots-Tag: noindex` header is Vercel's
+>   behaviour for all non-custom-domain addresses, or only comes with the
+>   login redirect. It has only been seen together with the redirect.
+>
+> **Found in passing, not a duplicate risk.** The root layout sets
+> `alternates: { canonical: '/' }` (`layout.tsx:31`), and every page that
+> doesn't override it inherits a canonical pointing at the home page. That
+> covers `/sign-in`, `/sign-up` and `/forgot-password` (observed). Those pages
+> are also `noindex`, so nothing wrong gets indexed. But noindex together with
+> a canonical to a different page is two contradictory signals, and a future
+> public page that forgets its own `alternates` would silently tell Google it
+> duplicates the home page. Noted, not fixed.
 
 **51. NOTHING GATES `main`, AND "PRODUCTION WAS BLOCKED FOR FIVE WEEKS" WAS SIX
 DAYS — RECORDED 18 Sep 2026. CORRECTS ITEM 45'S TITLE AND THE 15 Sep HANDOFF.**
