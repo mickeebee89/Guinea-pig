@@ -102,7 +102,7 @@ export default async function TreatmentPage({
         <p className="mt-4 text-sm text-muted">
           {count > 0
             ? `${count} ${count === 1 ? 'stylist is' : 'stylists are'} offering ${t.category.toLowerCase()} on Cavy.`
-            : 'Cavy hasn’t launched yet — join the waitlist and we’ll email you when stylists near you start looking.'}
+            : `No one is offering ${t.category.toLowerCase()} on Cavy yet. Sign up below and you’ll see stylists here as they join.`}
         </p>
       </section>
 

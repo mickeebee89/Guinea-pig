@@ -47,9 +47,15 @@ export default function ForStylists() {
           terms before anyone turned up.
         </p>
         <p className="mt-4 rounded-md border border-hairline bg-white p-4 text-sm text-warm-dark/80">
-          <strong className="font-bold text-warm-dark">Join the waitlist as a stylist</strong> and
-          you’ll get the free early-stylist account when we launch. Details are confirmed at launch
-          and it’s subject to availability — the full terms are in{' '}
+          {/* Until 22 Sep 2026: "Join the waitlist as a stylist and you'll get the
+              free early-stylist account when we launch." The waitlist is closed;
+              how that promise is kept is Terms section 5 (audit item 71). */}
+          <strong className="font-bold text-warm-dark">Cavy is open.</strong>{' '}
+          <Link href="/sign-up?role=stylist" className="text-rose underline decoration-rose/30 underline-offset-2">
+            Sign up as a stylist
+          </Link>{' '}
+          to set up your shop. If you joined our waitlist before launch, use the sign-up link we
+          email you: it makes you a Founding Provider, with no verification fee. The full terms are in{' '}
           <Link href="/terms#5" className="text-rose underline decoration-rose/30 underline-offset-2">
             section 5
           </Link>

@@ -10,7 +10,7 @@ export const revalidate = 3600
 export const metadata: Metadata = {
   alternates: { canonical: '/' },
   description:
-    'Stylists need people to practise on. Models want the treatment without the salon price. Cavy is the swap — join the UK waitlist.',
+    'Stylists need people to practise on. Models want the treatment without the salon price. Cavy is the swap — sign up free in the UK.',
 }
 
 // A real sequence, so numbering it is honest. If these were three unordered
@@ -65,7 +65,7 @@ export default function Home() {
         </p>
 
         <p className="mt-4 text-sm font-bold uppercase tracking-[0.16em] text-rose">
-          Launching soon in the UK
+          Now open in the UK
         </p>
       </section>
 

@@ -1,7 +1,4 @@
-'use client'
-
-import { useRef, useState } from 'react'
-import { WaitlistForm, type Role } from './WaitlistForm'
+import Link from 'next/link'
 
 /**
  * The two-sided choice IS the hero.
@@ -12,85 +9,56 @@ import { WaitlistForm, type Role } from './WaitlistForm'
  * own first screen (WelcomeScreen's "I want to be a…"), so the web and the app
  * ask the same question in the same words.
  *
- * No default selection. The role decides which launch email someone gets, so
- * it should be chosen, not inherited from whichever option we happened to
- * preselect.
+ * ── SIGN-UP, NOT A WAITLIST, SINCE 22 Sep 2026 (audit item 71) ───────────
+ * Until then each side opened a waitlist form (WaitlistForm, /api/waitlist),
+ * because Cavy hadn't launched. It has, so each side is now a link to the real
+ * sign-up with the role already chosen: /sign-up?role=stylist or
+ * /sign-up?role=model (sign-up/page.tsx reads ?role). The waitlist form, its
+ * API route and its rate limiter were removed with it.
+ *
+ * No default selection, still: the role is chosen by which side you tap.
  */
 
-const PANELS: { role: Role; label: string; deal: string; detail: string }[] = [
+const PANELS: { role: 'stylist' | 'model'; label: string; deal: string; detail: string; cta: string }[] = [
   {
     role: 'stylist',
     label: 'I’m a stylist',
     deal: 'You need people to practise on.',
     detail: 'Build your portfolio on real heads and real faces, without paying model rates.',
+    cta: 'Sign up as a stylist',
   },
   {
     role: 'model',
     label: 'I’m a model',
     deal: 'You want the treatment.',
     detail: 'Hair and beauty work, free or discounted, from stylists building their books.',
+    cta: 'Sign up as a model',
   },
 ]
 
-function Panel({
-  panel,
-  active,
-  onChoose,
-}: {
-  panel: (typeof PANELS)[number]
-  active: boolean
-  onChoose: () => void
-}) {
+function Panel({ panel }: { panel: (typeof PANELS)[number] }) {
   return (
-    <button
-      type="button"
-      onClick={onChoose}
-      aria-pressed={active}
+    <Link
+      href={`/sign-up?role=${panel.role}`}
       className={[
-        'w-full rounded-lg border p-5 text-left transition-all sm:p-7',
+        'block w-full rounded-lg border border-hairline bg-white p-5 text-left text-warm-dark transition-all sm:p-7',
+        'hover:border-rose/40 hover:shadow-[var(--shadow-card)] sm:hover:-translate-y-0.5',
         'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose',
-        active
-          ? 'border-rose bg-rose text-white shadow-[var(--shadow-card)]'
-          : 'border-hairline bg-white text-warm-dark hover:border-rose/40 hover:shadow-[var(--shadow-card)] sm:hover:-translate-y-0.5',
       ].join(' ')}
     >
-      <span
-        className={[
-          'text-xs font-bold uppercase tracking-[0.16em]',
-          active ? 'text-white/70' : 'text-rose',
-        ].join(' ')}
-      >
-        {panel.label}
-      </span>
+      <span className="text-xs font-bold uppercase tracking-[0.16em] text-rose">{panel.label}</span>
       <span className="mt-2 block font-display text-[1.375rem] leading-snug sm:mt-3 sm:text-[1.75rem]">
         {panel.deal}
       </span>
-      <span className={['mt-2 block text-sm', active ? 'text-white/85' : 'text-muted'].join(' ')}>
-        {panel.detail}
+      <span className="mt-2 block text-sm text-muted">{panel.detail}</span>
+      <span className="mt-4 inline-flex min-h-11 items-center rounded-[999px] bg-rose px-5 text-sm font-bold text-white">
+        {panel.cta} →
       </span>
-    </button>
+    </Link>
   )
 }
 
 export function RoleGate() {
-  const [role, setRole] = useState<Role | null>(null)
-  const headingRef = useRef<HTMLDivElement>(null)
-
-  function choose(next: Role) {
-    setRole(next)
-    window.requestAnimationFrame(() => {
-      const form = headingRef.current
-      if (!form) return
-      // Scroll the form into view, but move focus to its HEADING rather than
-      // its first input. Focusing an input would throw up the on-screen
-      // keyboard the instant someone taps a role — which on a phone means the
-      // page jumps and half the form is hidden before they've read it.
-      // Focusing the heading still tells a screen reader where it has landed.
-      form.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
-      form.querySelector<HTMLElement>('[data-form-heading]')?.focus()
-    })
-  }
-
   return (
     <div>
       {/* Stacked on phones with the badge in the flow between the two cards;
@@ -98,7 +66,7 @@ export function RoleGate() {
           The badge is a real element on mobile rather than a hidden one — it is
           the page's signature and most people will see this on a phone. */}
       <div className="relative grid gap-3 sm:grid-cols-2 sm:gap-6">
-        <Panel panel={PANELS[0]} active={role === PANELS[0].role} onChoose={() => choose(PANELS[0].role)} />
+        <Panel panel={PANELS[0]} />
 
         {/* Reads "or", not "↔". A double-headed arrow between two stacked cards
             on a phone looks like a swipe affordance, and nothing slides. "or"
@@ -115,18 +83,15 @@ export function RoleGate() {
           or
         </span>
 
-        <Panel panel={PANELS[1]} active={role === PANELS[1].role} onChoose={() => choose(PANELS[1].role)} />
+        <Panel panel={PANELS[1]} />
       </div>
 
-      <div ref={headingRef} className="mt-6 scroll-mt-20">
-        {role ? (
-          <WaitlistForm key={role} role={role} />
-        ) : (
-          <p className="text-center text-sm text-muted">
-            Pick a side to join the waitlist. You can be both later.
-          </p>
-        )}
-      </div>
+      <p className="mt-6 text-center text-sm text-muted">
+        Pick a side to sign up. Already have an account?{' '}
+        <Link href="/sign-in" className="font-bold text-rose underline decoration-rose/30 underline-offset-2">
+          Sign in
+        </Link>
+      </p>
     </div>
   )
 }

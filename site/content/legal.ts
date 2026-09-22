@@ -146,7 +146,7 @@ export const TERMS: LegalDoc = {
   metaTitle: 'Terms of Service',
   metaDescription:
     'The terms that govern your use of the Cavy website, waitlist and mobile app.',
-  updated: '21 September 2026',
+  updated: '22 September 2026',
   sections: [
     {
       n: '1',
@@ -164,7 +164,10 @@ export const TERMS: LegalDoc = {
       blocks: [
         {
           type: 'p',
-          text: 'These terms govern your use of the Cavy website, the Cavy waitlist, and the Cavy mobile app (“the app”). By joining the waitlist or using the app, you agree to these terms. If you don’t agree, please don’t use our services. Please also read our Privacy Policy and Community Guidelines, which form part of these terms.',
+          // Until 22 Sep 2026: "…the Cavy website, the Cavy waitlist, and the Cavy
+          // mobile app (“the app”). By joining the waitlist or using the app, you
+          // agree to these terms." (audit item 71)
+          text: 'These terms govern your use of the Cavy website and the Cavy mobile app (“the app”), and applied to the Cavy waitlist while it was open. By using the website or the app, you agree to these terms. If you don’t agree, please don’t use our services. Please also read our Privacy Policy and Community Guidelines, which form part of these terms.',
         },
       ],
     },
@@ -174,7 +177,7 @@ export const TERMS: LegalDoc = {
       blocks: [
         {
           type: 'p',
-          text: 'Cavy is strictly for adults. You must be 18 or over to join the waitlist or use the app. By using our services you confirm that you are 18 or over and that the information you give us is accurate.',
+          text: 'Cavy is strictly for adults. You must be 18 or over to use the website or the app. By using our services you confirm that you are 18 or over and that the information you give us is accurate.',
         },
       ],
     },
@@ -192,13 +195,24 @@ export const TERMS: LegalDoc = {
       n: '5',
       heading: 'The waitlist',
       blocks: [
+        // Rewritten 22 Sep 2026, when Cavy opened (audit item 71). Until then:
+        //   "Joining the waitlist means we'll email you when Cavy launches. …"
+        //   "The free early-stylist account offer is for people who join the
+        //    waitlist as a stylist before launch. Full details will be confirmed
+        //    at launch, and the offer may be subject to reasonable conditions
+        //    (for example, completing identity verification) and to availability."
+        // How it's honoured, as built: a sign-up link with ?ref=waitlist carries
+        // signup_source, and handle_new_auth_user grants Founding status to a
+        // stylist with a source while places remain (0011; cap 200). Founding
+        // settles the fee (provider_fee_settled, 0045). Mobile sign-up sends no
+        // source, hence "on the Cavy website".
         {
           type: 'p',
-          text: 'Joining the waitlist means we’ll email you when Cavy launches. It doesn’t create an account or guarantee you a place in the app — it simply means you’re on the list to hear from us. We handle your details as described in our Privacy Policy, and you can leave the waitlist at any time by unsubscribing or emailing us.',
+          text: 'Before Cavy opened, people could join a waitlist to hear when it launched. Cavy is now open and the waitlist is closed. We’ll email everyone on it once to say so, and then delete the list, as our Privacy Policy explains. Joining it never created an account.',
         },
         {
           type: 'p',
-          text: 'The free early-stylist account offer is for people who join the waitlist as a stylist before launch. Full details will be confirmed at launch, and the offer may be subject to reasonable conditions (for example, completing identity verification) and to availability.',
+          text: 'If you joined the waitlist as a stylist before launch, we promised you a free early-stylist account. We keep that promise like this: we’ll email you a personal sign-up link. Create your account through that link, on the Cavy website, and it becomes a Founding Provider account, which means you won’t pay the £14.99 verification fee. You’ll still need to complete the identity check before you can offer treatments (section 7). Founding places are limited (200 in total); if they have all gone by the time you sign up, your account will be a standard stylist account.',
         },
       ],
     },
@@ -398,7 +412,10 @@ export const PRIVACY: LegalDoc = {
       n: '4',
       heading: 'What we collect — website and waitlist',
       blocks: [
-        { type: 'p', text: 'When you join the waitlist, we collect only what you enter in the form:' },
+        // Until 22 Sep 2026: "When you join the waitlist, we collect only what
+        // you enter in the form:". The waitlist closed when Cavy opened (audit
+        // item 71), so this now describes what is held for people who joined.
+        { type: 'p', text: 'Before Cavy opened, you could join a waitlist. It’s now closed. For people who joined it, we hold only what they entered in the form:' },
         {
           type: 'ul',
           items: [
@@ -412,7 +429,7 @@ export const PRIVACY: LegalDoc = {
         },
         {
           type: 'p',
-          text: 'That’s everything for the waitlist. We don’t track you around the web.',
+          text: 'That’s everything for the waitlist, and we delete it once we’ve told you Cavy is open (section 9). We don’t track you around the web.',
         },
       ],
     },
@@ -560,7 +577,9 @@ export const PRIVACY: LegalDoc = {
         },
         {
           type: 'p',
-          text: 'Waitlist details: until Cavy launches and we’ve told you, or until you unsubscribe or ask us to delete them — whichever comes first.',
+          // Until 22 Sep 2026: "until Cavy launches and we've told you, or until
+          // you unsubscribe or ask us to delete them — whichever comes first."
+          text: 'Waitlist details: only long enough to tell you Cavy is open, then deleted. If you’d like them deleted sooner, unsubscribe or email us.',
         },
       ],
     },
@@ -610,7 +629,7 @@ export const PRIVACY: LegalDoc = {
       blocks: [
         {
           type: 'p',
-          text: 'Cavy is strictly for adults. You must be 18 or over to join the waitlist or use the app, and we ask for your date of birth at sign-up to check. We don’t knowingly collect information about anyone under 18; if we find that we have, we delete the account.',
+          text: 'Cavy is strictly for adults. You must be 18 or over to use the website or the app, and we ask for your date of birth at sign-up to check. We don’t knowingly collect information about anyone under 18; if we find that we have, we delete the account.',
         },
       ],
     },
