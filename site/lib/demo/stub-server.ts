@@ -10,27 +10,52 @@
  * One store per server process, kept on globalThis so a hot reload doesn't
  * reset it mid-session. Restart the dev server to reset the data.
  */
-import { existsSync } from 'node:fs'
+import { existsSync, readdirSync } from 'node:fs'
 import path from 'node:path'
 import { assertDemoAllowed, DEMO_AS_COOKIE, parseDemoAs } from './guard'
 import { DemoStore, makeDemoClient, type DemoUser, type Row } from './engine'
-import { buildTables, VIEWS, DEMO_MODEL_ID, DEMO_STYLIST_ID } from './fixtures'
+import { buildTables, VIEWS, DEMO_MODEL_ID, DEMO_STYLIST_ID, type DemoImages } from './fixtures'
 import { demoRpc } from './rpc'
 
 assertDemoAllowed('the server')
 
-/** An avatar Micky has dropped into public/demo-images/avatars/<key>.<ext>. */
-function localImage(kind: 'avatar', key: string): string | null {
-  for (const ext of ['jpg', 'jpeg', 'png', 'webp']) {
-    const rel = `demo-images/${kind}s/${key}.${ext}`
-    if (existsSync(path.join(process.cwd(), 'public', rel))) return `/${rel}`
+const IMG = /\.(png|jpe?g|webp)$/i
+const SEED_PHOTOS = path.resolve(process.cwd(), '..', 'seed', 'photos')
+
+/** Files in one seed/photos folder, sorted, or none if the folder isn't there. */
+function seedFiles(folder: string): string[] {
+  try { return readdirSync(path.join(SEED_PHOTOS, folder)).filter(f => IMG.test(f)).sort() } catch { return [] }
+}
+
+/**
+ * Where the pictures come from, in order:
+ *   1. public/demo-images/avatars/<key>.<ext> — Micky's own, if he drops any in;
+ *   2. seed/photos/ — the AI-generated seed set (seed/README.md), served by the
+ *      demo-only /demo-photos route. Named NN-<key>.png for a face, and
+ *      NN-<key>-N.png for work (portfolio/) or a model's own photos (gallery/).
+ * Nothing found means null, and the site's initials placeholder shows.
+ */
+function diskImages(): DemoImages {
+  const byKey = (folder: string, key: string, numbered: boolean) =>
+    seedFiles(folder)
+      .filter(f => (numbered ? new RegExp(`^\\d+-${key}-\\d+\\.`, 'i') : new RegExp(`^\\d+-${key}\\.`, 'i')).test(f))
+      .map(f => `/demo-photos/${folder}/${f}`)
+  return {
+    avatar(key) {
+      for (const ext of ['jpg', 'jpeg', 'png', 'webp']) {
+        const rel = `demo-images/avatars/${key}.${ext}`
+        if (existsSync(path.join(process.cwd(), 'public', rel))) return `/${rel}`
+      }
+      return byKey('stylists', key, false)[0] ?? byKey('models', key, false)[0] ?? null
+    },
+    portfolio: key => byKey('portfolio', key, true),
+    gallery: key => byKey('gallery', key, true),
   }
-  return null
 }
 
 const g = globalThis as unknown as { __cavyDemoStore?: DemoStore }
 function store(): DemoStore {
-  return (g.__cavyDemoStore ??= new DemoStore(buildTables(localImage), VIEWS))
+  return (g.__cavyDemoStore ??= new DemoStore(buildTables(diskImages()), VIEWS))
 }
 
 export function demoUserFor(as: string | undefined | null): DemoUser | null {

@@ -372,8 +372,11 @@ export function makeDemoClient(opts: {
 
     storage: {
       from: () => ({
-        createSignedUrls: async (paths: string[]) => ({ data: paths.map(p => ({ path: p, signedUrl: p, error: null })), error: null }),
-        createSignedUrl: async (p: string) => ({ data: { signedUrl: p }, error: null }),
+        // Demo photos are site paths. Callers strip the leading slash to make
+        // a storage path (lib/queries/model.ts toObjectPath), so put it back.
+        createSignedUrls: async (paths: string[]) => ({
+          data: paths.map(p => ({ path: p, signedUrl: /^(https?:|\/)/.test(p) ? p : `/${p}`, error: null })), error: null }),
+        createSignedUrl: async (p: string) => ({ data: { signedUrl: /^(https?:|\/)/.test(p) ? p : `/${p}` }, error: null }),
         getPublicUrl: (p: string) => ({ data: { publicUrl: p } }),
         upload: async () => ({ data: null, error: err('Uploads are switched off in demo mode.') }),
         remove: async () => ({ data: [], error: null }),

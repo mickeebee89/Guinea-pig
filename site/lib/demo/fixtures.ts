@@ -9,11 +9,13 @@
  *     invented five-star rating in an advert is exactly that. Nothing in a bio,
  *     a message or a status post may praise a stylist in a customer's voice
  *     either.
- *   * NO PHOTOS OF REAL PEOPLE. Every picture is null, so the site's own
- *     initials placeholder shows. Micky's own licensed images can be dropped
- *     into public/demo-images/ (gitignored) — see lib/demo/README.md.
- *   * EVERY PERSON IS INVENTED. Names were picked to sound ordinary, not to
- *     match anyone; the email domain is `.invalid`, which cannot exist.
+ *   * NO PHOTOS OF REAL PEOPLE. The pictures are the AI-generated set in
+ *     seed/photos/ (gitignored), which seed/README.md requires to be
+ *     AI-generated or properly licensed. Where a person has no photo, the
+ *     site's own initials placeholder shows.
+ *   * EVERY PERSON IS INVENTED, with an `.invalid` email that cannot exist.
+ *     The names match seed/photos/ so that each face appears under the name
+ *     it was generated for.
  *
  * Dates are relative to the day the dev server starts, so availability is
  * always upcoming and "completed" bookings are always in the past.
@@ -45,6 +47,7 @@ const CATEGORIES = [
 ]
 
 interface StylistSeed {
+  /** Also the photo key: seed/photos/stylists/NN-<key>.png, portfolio/NN-<key>-N.png */
   key: string
   userId: string
   first: string
@@ -59,6 +62,8 @@ interface StylistSeed {
   treatments: string[]
 }
 
+// Order matters: the index fixes each shop's id (uid(100 + i)), and /demo
+// links to index 1 (Amelia) as "the stylist profile".
 const STYLISTS: StylistSeed[] = [
   {
     key: 'priya', userId: DEMO_STYLIST_ID, first: 'Priya', last: 'Shah',
@@ -68,66 +73,73 @@ const STYLISTS: StylistSeed[] = [
     treatments: ['Lashes', 'Brows'],
   },
   {
-    key: 'hannah', userId: uid(11), first: 'Hannah', last: 'Clarke',
-    shop: 'Hannah Clarke Hair', area: 'Tunbridge Wells, Kent', region: 'Kent', lat: 51.132, lng: 0.263,
+    key: 'amelia', userId: uid(11), first: 'Amelia', last: 'Rowe',
+    shop: 'Amelia Rowe Hair', area: 'Tunbridge Wells, Kent', region: 'Kent', lat: 51.132, lng: 0.263,
     level: 'Student',
-    bio: 'Level 3 hairdressing student building my colour portfolio. I’m looking for models happy to try balayage, soft face-framing highlights and gloss treatments. All colour work starts with a patch test.',
+    bio: 'Level 3 hairdressing student building my portfolio in colour and occasion hair. I’m looking for models happy to try balayage, soft face-framing highlights and bridal-style updos. All colour work starts with a patch test.',
     treatments: ['Hair'],
   },
   {
-    key: 'leah', userId: uid(12), first: 'Leah', last: 'Mensah',
-    shop: 'Leah Mensah Makeup', area: 'Hackney, London', region: 'London', lat: 51.545, lng: -0.055,
+    key: 'nadia', userId: uid(12), first: 'Nadia', last: 'Ahmed',
+    shop: 'Nadia Ahmed Makeup', area: 'Hackney, London', region: 'London', lat: 51.545, lng: -0.055,
     level: 'Trainee',
     bio: 'Makeup artist in training, focusing on bridal and soft-glam looks for every skin tone. I’d love models for evening appointments in east London while I build a varied portfolio.',
     treatments: ['Makeup'],
   },
   {
-    key: 'ellie', userId: uid(13), first: 'Ellie', last: 'Harper',
-    shop: 'Ellie Harper Nails', area: 'Maidstone, Kent', region: 'Kent', lat: 51.27, lng: 0.522,
+    key: 'chloe', userId: uid(13), first: 'Chloe', last: 'Baxter',
+    shop: 'Chloe Baxter Nails', area: 'Maidstone, Kent', region: 'Kent', lat: 51.27, lng: 0.522,
     level: 'Newly qualified',
     bio: 'Nail technician practising BIAB, structured gel manicures and simple nail art. Appointments take about ninety minutes, and I’ll talk you through aftercare before you leave.',
     treatments: ['Nails'],
   },
   {
-    key: 'nadia', userId: uid(14), first: 'Nadia', last: 'Rahman',
-    shop: 'Brows by Nadia', area: 'Islington, London', region: 'London', lat: 51.536, lng: -0.103,
+    key: 'grace', userId: uid(14), first: 'Grace', last: 'Okafor',
+    shop: 'Brows by Grace', area: 'Islington, London', region: 'London', lat: 51.536, lng: -0.103,
     level: 'Student',
     bio: 'Brow student practising shaping, tinting and lamination. I need models with a range of brow types, from very fine to very full, to finish my course portfolio this term.',
     treatments: ['Brows'],
   },
   {
-    key: 'chloe', userId: uid(15), first: 'Chloe', last: 'Bennett',
-    shop: 'Chloe Bennett Tanning', area: 'Sevenoaks, Kent', region: 'Kent', lat: 51.272, lng: 0.19,
+    key: 'tia', userId: uid(15), first: 'Tia', last: 'Morgan',
+    shop: 'Tia Morgan Tanning', area: 'Sevenoaks, Kent', region: 'Kent', lat: 51.272, lng: 0.19,
     level: 'Trainee',
     bio: 'Spray tan technician in training, working on even coverage for fair and very fair skin. Sessions are about thirty minutes, and I’ll send you prep and aftercare notes the day before.',
     treatments: ['Spray tan'],
   },
   {
-    key: 'jess', userId: uid(16), first: 'Jess', last: 'Okafor',
-    shop: 'Jess Okafor Hair & Makeup', area: 'Lewisham, London', region: 'London', lat: 51.452, lng: -0.017,
+    key: 'ellie', userId: uid(16), first: 'Ellie', last: 'Harper',
+    shop: 'Ellie Harper Hair & Makeup', area: 'Lewisham, London', region: 'London', lat: 51.452, lng: -0.017,
     level: 'Student',
     bio: 'Hair and makeup student in south-east London. I’m practising blow-dries, updos and full event looks, and I’m happy to plan the look with you in the chat beforehand.',
     treatments: ['Hair', 'Makeup'],
   },
 ]
 
-// ── Models who appear as the other party in bookings ───────────────────────
+// ── Models. `key` is also the photo key: models/NN-<key>.png, gallery/NN-<key>-N.png
 const MODELS = [
-  { id: DEMO_MODEL_ID, first: 'Amara', last: 'Osei', lat: 51.482, lng: 0.0 },
-  { id: uid(21), first: 'Zara', last: 'Khan', lat: 51.44, lng: 0.05 },
-  { id: uid(22), first: 'Maya', last: 'Lewis', lat: 51.39, lng: 0.03 },
-  { id: uid(23), first: 'Ruby', last: 'Taylor', lat: 51.41, lng: 0.07 },
+  { id: DEMO_MODEL_ID, key: 'amara', first: 'Amara', last: 'Nwosu', lat: 51.482, lng: 0.0 },
+  { id: uid(21), key: 'sophie', first: 'Sophie', last: 'Hall', lat: 51.44, lng: 0.05 },
+  { id: uid(22), key: 'leah', first: 'Leah', last: 'Bennett', lat: 51.39, lng: 0.03 },
+  { id: uid(23), key: 'jess', first: 'Jess', last: 'Whitmore', lat: 51.41, lng: 0.07 },
 ]
 
 const provId = (key: string) => uid(100 + STYLISTS.findIndex(s => s.key === key))
 
 /**
- * An optional picture Micky has dropped in. Resolved by the server stub only
- * (it can read the disk); in the browser this is always null.
+ * Pictures, found on disk by the server stub (it can read seed/photos/). In the
+ * browser there is no disk, so the default finds nothing.
  */
-export type ImageResolver = (kind: 'avatar', key: string) => string | null
+export interface DemoImages {
+  avatar(key: string): string | null
+  /** Work photos, for a stylist's portfolio. */
+  portfolio(key: string): string[]
+  /** A model's own photos, for their profile. */
+  gallery(key: string): string[]
+}
+const NO_IMAGES: DemoImages = { avatar: () => null, portfolio: () => [], gallery: () => [] }
 
-export function buildTables(image: ImageResolver = () => null): Tables {
+export function buildTables(images: DemoImages = NO_IMAGES): Tables {
   const users: Row[] = []
   const providers: Row[] = []
   const provider_treatments: Row[] = []
@@ -136,17 +148,23 @@ export function buildTables(image: ImageResolver = () => null): Tables {
   const messages: Row[] = []
   const notifications: Row[] = []
   const status_posts: Row[] = []
+  const portfolio_items: Row[] = []
+  const model_photos: Row[] = []
 
   for (const m of MODELS) {
     users.push({
-      id: m.id, email: `${m.first.toLowerCase()}@demo.invalid`, role: 'model',
+      id: m.id, email: `${m.key}@demo.invalid`, role: 'model',
       first_name: m.first, last_name: m.last, last_initial: m.last[0],
       is_verified: true, is_founding_provider: false, provider_fee_waived: false,
       subscription_waived: false, subscription_status: m.id === DEMO_MODEL_ID ? 'active' : 'none',
       fraud_flagged: false, region: 'London', latitude: m.lat, longitude: m.lng,
-      instagram_handle: null, profile_pic_url: image('avatar', m.first.toLowerCase()),
+      instagram_handle: null, profile_pic_url: images.avatar(m.key),
       created_at: at(-40),
     })
+    images.gallery(m.key).forEach((url, n) => model_photos.push({
+      id: uid(9000 + model_photos.length), user_id: m.id, photo_url: url, caption: null,
+      category_id: null, created_at: at(-30 + n),
+    }))
   }
 
   let treatN = 0, slotN = 0
@@ -154,22 +172,28 @@ export function buildTables(image: ImageResolver = () => null): Tables {
 
   STYLISTS.forEach((s, i) => {
     const pid = provId(s.key)
+    const avatar = images.avatar(s.key)
     users.push({
-      id: s.userId, email: `${s.first.toLowerCase()}@demo.invalid`, role: 'provider',
+      id: s.userId, email: `${s.key}@demo.invalid`, role: 'provider',
       first_name: s.first, last_name: s.last, last_initial: s.last[0],
       is_verified: true, is_founding_provider: false, provider_fee_waived: false,
       subscription_waived: false, subscription_status: 'none', fraud_flagged: false,
       region: s.region, latitude: s.lat, longitude: s.lng, instagram_handle: null,
-      profile_pic_url: image('avatar', s.key), created_at: at(-60 + i),
+      profile_pic_url: avatar, created_at: at(-60 + i),
     })
     providers.push({
       id: pid, user_id: s.userId, name: s.shop, bio: s.bio,
       location_text: s.area, location: s.area, region: s.region, level: s.level,
       is_verified: true, is_published: true, first_published_at: at(-30 + i),
-      rating: null, review_count: 0, profile_pic_url: image('avatar', s.key), banner_url: null,
+      rating: null, review_count: 0, profile_pic_url: avatar, banner_url: null,
       shop_handle: s.key, latitude: s.lat, longitude: s.lng, location_lat: s.lat, location_lng: s.lng,
       created_at: at(-60 + i),
     })
+    images.portfolio(s.key).forEach((url, n) => portfolio_items.push({
+      id: uid(9500 + portfolio_items.length), provider_id: pid, media_url: url, media_type: 'image',
+      // Approved: the portfolio a model sees shows approved items only.
+      moderation_status: 'approved', created_at: at(-20 + n),
+    }))
     for (const cat of s.treatments) {
       const id = uid(200 + treatN++)
       treatmentIdOf.set(`${s.key}:${cat}`, id)
@@ -221,48 +245,52 @@ export function buildTables(image: ImageResolver = () => null): Tables {
       created_at: created, read_at: read ? created : null })
   }
 
-  // ── The model's bookings (signed in as Amara) ────────────────────────────
-  const hannahSession = book({ stylist: 'hannah', model: DEMO_MODEL_ID, category: 'Hair', day: 6, start: '10:00:00', end: '12:00:00',
+  const SOPHIE = uid(21), LEAH = uid(22), JESS = uid(23)
+
+  // ── The model's bookings (signed in as Amara). Order fixes the ids: the
+  //    first is uid(3000), the model's thread on /demo. ────────────────────
+  const ameliaSession = book({ stylist: 'amelia', model: DEMO_MODEL_ID, category: 'Hair', day: 6, start: '10:00:00', end: '12:00:00',
     status: 'accepted', note: 'Mid-length, dark brown, never coloured. Happy to go a couple of shades lighter.', createdDaysAgo: 4 })
-  book({ stylist: 'leah', model: DEMO_MODEL_ID, category: 'Makeup', day: 9, start: '14:00:00', end: '16:00:00',
+  book({ stylist: 'nadia', model: DEMO_MODEL_ID, category: 'Makeup', day: 9, start: '14:00:00', end: '16:00:00',
     status: 'pending', note: 'Soft glam for a wedding the following weekend, if that works as practice.', createdDaysAgo: 1 })
-  book({ stylist: 'chloe', model: DEMO_MODEL_ID, category: 'Spray tan', day: 12, start: '10:00:00', end: '12:00:00',
+  book({ stylist: 'tia', model: DEMO_MODEL_ID, category: 'Spray tan', day: 12, start: '10:00:00', end: '12:00:00',
     status: 'accepted', createdDaysAgo: 3 })
-  book({ stylist: 'jess', model: DEMO_MODEL_ID, category: 'Hair', day: -12, start: '14:00:00', end: '16:00:00',
+  book({ stylist: 'ellie', model: DEMO_MODEL_ID, category: 'Hair', day: -12, start: '14:00:00', end: '16:00:00',
     status: 'completed', createdDaysAgo: 20 })
 
-  const hannah = STYLISTS.find(s => s.key === 'hannah')!.userId
+  const amelia = STYLISTS.find(s => s.key === 'amelia')!.userId
   // Minutes ago. One conversation over a morning, so the times read in order.
-  say(hannahSession, DEMO_MODEL_ID, 'Hi Hannah, thanks for accepting! Is there anything I should do before the appointment?', 190)
-  say(hannahSession, hannah, 'Hi Amara! Could you pop in for a quick patch test at least 48 hours before? Any day this week after 4pm works.', 160)
-  say(hannahSession, DEMO_MODEL_ID, 'Thursday at 5 would be perfect.', 150)
-  say(hannahSession, hannah, 'Lovely, Thursday at 5 it is. Come with dry, unwashed hair on the day and we’ll look at shades together first.', 40, false)
+  say(ameliaSession, DEMO_MODEL_ID, 'Hi Amelia, thanks for accepting! Is there anything I should do before the appointment?', 190)
+  say(ameliaSession, amelia, 'Hi Amara! Could you pop in for a quick patch test at least 48 hours before? Any day this week after 4pm works.', 160)
+  say(ameliaSession, DEMO_MODEL_ID, 'Thursday at 5 would be perfect.', 150)
+  say(ameliaSession, amelia, 'Lovely, Thursday at 5 it is. Come with dry, unwashed hair on the day and we’ll look at shades together first.', 40, false)
 
-  // ── The stylist's bookings (signed in as Priya) ──────────────────────────
-  const zaraSession = book({ stylist: 'priya', model: uid(21), category: 'Lashes', day: 4, start: '10:00:00', end: '12:00:00',
+  // ── The stylist's bookings (signed in as Priya). The first is uid(3004),
+  //    the stylist's thread on /demo. ──────────────────────────────────────
+  const sophieSession = book({ stylist: 'priya', model: SOPHIE, category: 'Lashes', day: 4, start: '10:00:00', end: '12:00:00',
     status: 'accepted', note: 'First time having lashes done — I’d like something natural.', createdDaysAgo: 5 })
-  book({ stylist: 'priya', model: uid(22), category: 'Brows', day: 9, start: '14:00:00', end: '16:00:00',
+  book({ stylist: 'priya', model: LEAH, category: 'Brows', day: 9, start: '14:00:00', end: '16:00:00',
     status: 'pending', note: 'Quite sparse brows, interested in lamination.', createdDaysAgo: 0 })
-  book({ stylist: 'priya', model: uid(23), category: 'Lashes', day: 11, start: '10:00:00', end: '12:00:00',
+  book({ stylist: 'priya', model: JESS, category: 'Lashes', day: 11, start: '10:00:00', end: '12:00:00',
     status: 'pending', createdDaysAgo: 1 })
-  book({ stylist: 'priya', model: uid(23), category: 'Brows', day: -8, start: '10:00:00', end: '12:00:00',
+  book({ stylist: 'priya', model: JESS, category: 'Brows', day: -8, start: '10:00:00', end: '12:00:00',
     status: 'completed', createdDaysAgo: 15 })
 
-  say(zaraSession, uid(21), 'Hi Priya, I’ve never had extensions before — how long will it take?', 210)
-  say(zaraSession, DEMO_STYLIST_ID, 'Hi Zara! A natural classic set takes about two hours. Please come without mascara, and we’ll choose the length together.', 185)
-  say(zaraSession, uid(21), 'Great, see you then.', 60, false)
+  say(sophieSession, SOPHIE, 'Hi Priya, I’ve never had extensions before — how long will it take?', 210)
+  say(sophieSession, DEMO_STYLIST_ID, 'Hi Sophie! A natural classic set takes about two hours. Please come without mascara, and we’ll choose the length together.', 185)
+  say(sophieSession, SOPHIE, 'Great, see you then.', 60, false)
 
   // ── Notifications ────────────────────────────────────────────────────────
   notifications.push(
     { id: uid(6000), user_id: DEMO_MODEL_ID, type: 'session_accepted', title: 'Booking confirmed',
-      body: 'Hannah Clarke Hair accepted your booking.', session_id: hannahSession, data: null, read_at: null, created_at: at(-4, '19:00') },
+      body: 'Amelia Rowe Hair accepted your booking.', session_id: ameliaSession, data: null, read_at: null, created_at: at(-4, '19:00') },
     { id: uid(6001), user_id: DEMO_STYLIST_ID, type: 'session_request', title: 'New application',
-      body: 'Maya L. applied for a brow appointment.', session_id: null, data: null, read_at: null, created_at: at(0, '08:00') },
+      body: 'Leah B. applied for a brow appointment.', session_id: null, data: null, read_at: null, created_at: at(0, '08:00') },
   )
 
   // ── "What's on near you" — an approved, unexpired stylist update ──────────
   status_posts.push(
-    { id: uid(7000), provider_id: provId('hannah'), body: 'Two balayage slots free next week for models happy to go a few shades lighter.',
+    { id: uid(7000), provider_id: provId('amelia'), body: 'Two balayage slots free next week for models happy to go a few shades lighter.',
       moderation_status: 'approved', review_note: null, expires_at: at(3, '23:00'), created_at: at(-1) },
     { id: uid(7001), provider_id: provId('priya'), body: 'Lash lift practice slots this Saturday morning — natural looks only.',
       moderation_status: 'approved', review_note: null, expires_at: at(2, '23:00'), created_at: at(0, '07:30') },
@@ -280,13 +308,13 @@ export function buildTables(image: ImageResolver = () => null): Tables {
     status_posts,
     // No reviews. See the header.
     reviews: [],
-    favourites: [{ id: uid(8000), user_id: DEMO_MODEL_ID, provider_id: provId('hannah'), created_at: at(-5) }],
+    favourites: [{ id: uid(8000), user_id: DEMO_MODEL_ID, provider_id: provId('amelia'), created_at: at(-5) }],
     blocks: [],
-    portfolio_items: [],
+    portfolio_items,
     model_attributes: [{ user_id: DEMO_MODEL_ID, hair_colour: 'Dark brown', hair_type: 'Wavy', hair_length: 'Medium',
       hair_condition: 'Healthy', skin_tone: 'Deep', skin_type: 'Combination', eye_colour: 'Brown', eye_shape: 'Almond',
       nail_condition: 'Good', bio: 'Happy to try new looks, and I like to talk the plan through first.' }],
-    model_photos: [],
+    model_photos,
     model_photo_categories: [],
     subscriptions: [{ user_id: DEMO_MODEL_ID, status: 'active', current_period_start: at(-10),
       // A customer id, invented, so lib/verification.ts's fast path settles it

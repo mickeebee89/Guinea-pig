@@ -2249,6 +2249,66 @@ doesn't appear in screenshots.
 
 **How to run it:** `site/lib/demo/README.md`.
 
+**── 22 Sep 2026: PHOTOS FROM seed/photos/. VERIFIED IN THE BROWSER ──**
+
+Micky asked for the seed photos to populate profile pictures and portfolios.
+`seed/photos/` holds 41 PNGs:
+* 5 stylist faces;
+* 20 portfolio images, four per stylist (hair, lashes, nails, makeup, brows);
+* 4 model faces;
+* 12 model photos.
+
+`seed/README.md` requires them to be AI-generated or properly licensed, and
+the folder is gitignored. Spot-checked by eye: each portfolio set shows its
+stylist's treatment.
+
+* **Names now match the photos**, so each face appears under the name it
+  was made for:
+  * stylists Priya Shah (the signed-in stylist), Amelia Rowe, Nadia Ahmed,
+    Chloe Baxter and Grace Okafor;
+  * models Amara Nwosu (the signed-in model), Sophie Hall, Leah Bennett and
+    Jess Whitmore.
+
+  The two stylists without a photo set are Tia Morgan (spray tan) and Ellie
+  Harper (hair & makeup); they show initials. Shop ids and the two thread
+  ids are unchanged, so the `/demo` links still work.
+* **Served, not copied.** `app/demo-photos/[...path]/route.demo.ts` reads
+  from `seed/photos/`. It's a route only in demo mode, like `/demo`, and it
+  refuses paths outside that folder and anything that isn't an image. The
+  server stub finds each person's files by the `NN-<key>` naming.
+  `public/demo-images/avatars/<key>.*` still takes priority for a profile
+  picture.
+* **Portfolio items are `approved`**, and the model's photos fill
+  `/model/[id]`. `/demo` gains a "model profile, with photos" link.
+* **Fixed along the way:** the fake storage returned signed URLs without a
+  leading slash, because `toObjectPath` strips it. They're now site-absolute.
+
+**Checked in the browser**, every image loaded, none broken:
+* the stylist profile, 6 of 6 (face plus portfolio);
+* the homepage featured list, 6 of 6 after scrolling, served through
+  `next/image`;
+* Sophie's model profile, 4 of 4;
+* the model dashboard, 7 of 7.
+
+**Production, again:** `next build` exit 0, and `npm run checks` exit 0 (not
+a build claim).
+* **No fixture name, id, cookie or `seed/photos` path** is in the build
+  output.
+* **The one match for `demo-photos`** is the folder name, in a list of
+  top-level folder names Next records beside the `[treatment]` route. It's
+  not code.
+* **Neither is a route.** `next start` on that build answered 404 for
+  `/demo`, `/demo?as=stylist&to=/dashboard` and
+  `/demo-photos/stylists/02-priya.png`, and 200 for `/` and `/hair-models`.
+  The hair page contains no demo name.
+
+**⚠️ FOR THE ADVERTS, A JUDGEMENT FOR MICKY:** the portfolio images are
+AI-generated pictures shown as a stylist's work. In an advert that shows the
+product, rather than claiming treatment results, that's probably fine
+alongside the "Example screen" label (`DEMO_LABEL=1`). An image that could be
+read as "results you'll get" invites the ASA's scrutiny of beauty imagery.
+This is not legal advice.
+
 **68. ICO REGISTRATION IS IN PLACE — CONFIRMED BY MICKY, 22 Sep 2026.**
 
 `CLAUDE.md`'s compliance rules say identity selfies are special-category data,

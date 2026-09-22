@@ -19,14 +19,14 @@ import { BOOKINGS_PATH } from '@/lib/routes'
 assertDemoAllowed('the /demo route')
 
 const uid = (n: number) => `d0000000-0000-4000-8000-${String(n).padStart(12, '0')}`
-const HANNAH_SHOP = uid(101)
+const AMELIA_SHOP = uid(101)
 const MODEL_THREAD = uid(3000)
 const STYLIST_THREAD = uid(3004)
 
 const SCREENS: { title: string; as: 'model' | 'stylist' | 'none'; to: string }[] = [
   { title: 'Homepage', as: 'none', to: '/' },
   { title: 'Treatment page, with stylists (hair)', as: 'none', to: '/hair-models' },
-  { title: 'Stylist profile', as: 'model', to: `/stylist/${HANNAH_SHOP}` },
+  { title: 'Stylist profile, with portfolio', as: 'model', to: `/stylist/${AMELIA_SHOP}` },
   { title: 'Browse', as: 'model', to: '/browse' },
   { title: 'Model dashboard', as: 'model', to: '/dashboard' },
   { title: 'Model bookings', as: 'model', to: BOOKINGS_PATH },
@@ -36,6 +36,7 @@ const SCREENS: { title: string; as: 'model' | 'stylist' | 'none'; to: string }[]
   { title: 'Stylist message thread', as: 'stylist', to: `/messages/${STYLIST_THREAD}` },
   { title: 'Shop editor (/shop)', as: 'stylist', to: '/shop' },
   { title: 'Availability', as: 'stylist', to: '/availability' },
+  { title: 'Model profile, with photos (Sophie, as her stylist)', as: 'stylist', to: `/model/${uid(21)}` },
 ]
 
 /** Same-site paths only, so /demo can never be used to bounce somewhere else. */

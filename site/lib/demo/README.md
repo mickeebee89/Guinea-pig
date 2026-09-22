@@ -43,16 +43,24 @@ delete that folder and start again.
 
 - **No reviews, ratings or testimonials.** UK law bans fake reviews, and these
   screenshots are for advertising.
-- **No photos of real people.** Pictures are empty, so the site's initials
-  placeholder shows.
-- **Every person is invented**, with `.invalid` email addresses.
+- **No photos of real people.** The pictures are the AI-generated set in
+  `seed/photos/` (see `seed/README.md`).
+- **Every person is invented**, with `.invalid` email addresses. The names
+  match `seed/photos/`, so each face appears under the name it was made for.
 
-## Your own licensed images (optional)
+## Photos
 
-Drop them in `site/public/demo-images/avatars/`, named after the fixture key:
-`priya`, `hannah`, `leah`, `ellie`, `nadia`, `chloe`, `jess` (stylists) and
-`amara`, `zara`, `maya`, `ruby` (models). `.jpg`, `.jpeg`, `.png` or `.webp`.
-Restart the dev server to pick them up.
+Read straight from `seed/photos/` (gitignored) by the demo-only
+`/demo-photos` route. Nothing is copied into `public/`.
 
-`public/demo-images/` is gitignored, so licensed images never reach the repo
-or a deploy.
+| Folder | Used as | Keys |
+|---|---|---|
+| `stylists/NN-<key>.png` | stylist profile picture | `priya`, `amelia`, `nadia`, `chloe`, `grace` |
+| `portfolio/NN-<key>-N.png` | stylist portfolio | same |
+| `models/NN-<key>.png` | model profile picture | `amara`, `sophie`, `leah`, `jess` |
+| `gallery/NN-<key>-N.png` | model's own photos (model profile) | same |
+
+`tia` (spray tan) and `ellie` (hair & makeup) have no photos, so they show
+initials. To give them one, add e.g. `stylists/06-tia.png`, or drop a file in
+`site/public/demo-images/avatars/<key>.jpg`, which takes priority for the
+profile picture. Restart the dev server to pick up new files.
