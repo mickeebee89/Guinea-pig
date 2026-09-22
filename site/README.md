@@ -56,15 +56,34 @@ missing view, RLS refusal, network error, empty result — degrades to an empty
 list plus a server-log warning, never a thrown error. Pre-launch, empty is the
 correct answer.
 
-## Checks (these fail the build)
+## Checks (these fail CI, NOT the deploy — changed 22 Sep 2026)
 
-`npm run build` runs `npm run checks` first, so all three block a deploy:
+**Three commands, and the difference matters:**
+
+| Command | What it is | Who runs it |
+|---|---|---|
+| `npm run build` | `next build`, nothing else | **Vercel**, on every push to `main` |
+| `npm run checks` | eslint + the four scripts. Compiles nothing | CI |
+| `npm run verify` | `checks` then `build` — everything | CI, and locally before claiming a change is good |
+
+`build` used to be `npm run checks && next build`, which meant **a check could
+stop the website updating**. On 22 Sep 2026 one did: `check-links.mjs` called
+`/email/unsubscribe` an unreachable route — correctly, it is only ever reached
+from a link in an email — and three Production deploys failed. The site served
+a nine-hour-old build, and the only notice of it was on a Vercel page nobody
+was watching (audit items 74 and 75).
+
+So the checks moved to where a false positive costs a red tick instead of a
+deploy. **They are a signal, not a gate** — the same standing decision as
+`.github/workflows/site.yml`'s own header. What still blocks a deploy is what
+always should have: the build failing to compile.
 
 | Check | Catches |
 |---|---|
 | `eslint . --max-warnings=0` | Lint errors AND warnings. Wired in 2 Sep 2026 at zero of both |
 | `check-client-boundary.mjs` | Anything reachable from `(public)` touching cookies or the browser client |
 | `check-route-coverage.mjs` | An `(app)` route missing from the proxy matcher, so it stops refreshing its session cookie |
+| `check-links.mjs` | A link — in the site **or in an email** — pointing at no route, and a route nothing points at |
 
 Type errors are already build-blocking: `next build` type-checks and
 `typescript.ignoreBuildErrors` is not set.

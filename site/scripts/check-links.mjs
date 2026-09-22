@@ -299,6 +299,10 @@ const NO_LINK_NEEDED = new Set([
   // `/api/waitlist` was here until 22 Sep 2026. The route is gone (item 71),
   // and an entry for a route that no longer exists is one that would silence a
   // future route of the same name without anyone deciding to.
+  //
+  // Read by .github/workflows/live-drift.yml once an hour, never by a person,
+  // so no page links to it and none should (item 75).
+  '/api/version',
   // Linked generically as `/${t.slug}` from the treatment page and the 404
   // page, so no literal href to this route exists or should.
   '/[treatment]',

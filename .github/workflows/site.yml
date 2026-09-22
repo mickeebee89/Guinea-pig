@@ -23,14 +23,22 @@
 # ==========================================================================
 name: site
 
+# ⚠️ `supabase/functions/**` is in this list on purpose, and it is not a
+# mistake that a backend path triggers the site's workflow: since 22 Sep 2026
+# check-links.mjs reads the edge functions for `${SITE}/…` URLs, so renaming a
+# page there can break a link here (item 74). Without this, d0b0fb2's two
+# follow-up commits touched no site/ file, this workflow never ran, and Vercel
+# failed both deploys with nothing red anywhere (item 75).
 on:
   push:
     paths:
       - 'site/**'
+      - 'supabase/functions/**'
       - '.github/workflows/site.yml'
   pull_request:
     paths:
       - 'site/**'
+      - 'supabase/functions/**'
       - '.github/workflows/site.yml'
   # So it can be run by hand without touching a file.
   workflow_dispatch:
@@ -54,10 +62,16 @@ jobs:
 
       - run: npm ci
 
-      # Two steps, not `npm run build`, so the GitHub UI names which half
-      # failed. `build` is `checks && next build`, and running it would repeat
-      # checks for nothing.
-      - name: checks (eslint + the three custom scripts)
+      # Two steps, not `npm run verify`, so the GitHub UI names which half
+      # failed.
+      #
+      # ⚠️ SINCE 22 Sep 2026 THIS IS THE ONLY PLACE THE CHECKS RUN. Vercel's
+      # `npm run build` is now `next build` alone, so a check failing here
+      # turns this tick red and does NOT stop the website updating. That is
+      # the point: on 22 Sep a link check stopped three Production deploys for
+      # nine hours over two routes that were perfectly fine (items 74, 75).
+      # If this job is ever deleted, the checks stop running anywhere at all.
+      - name: checks (eslint + the four custom scripts)
         run: npm run checks
 
       # ── WHY THIS STEP EXISTS, AND WHAT IT COST TO LEARN ──────────────────

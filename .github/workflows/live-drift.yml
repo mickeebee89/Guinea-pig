@@ -1,0 +1,88 @@
+# ==========================================================================
+#  live-drift — is cavybeauty.com serving the latest commit on main?
+#
+#  Audit item 75.
+#
+#  ── THE FAILURE THIS EXISTS FOR ──────────────────────────────────────────
+#  A stale site looks exactly like a working one. Every page loads, nothing
+#  errors, the content is simply old. It has now happened twice:
+#    * 10 Aug – 8 Sep 2026: five weeks of the 10 August build, while CI
+#      reported green the whole time (audit item 45).
+#    * 22 Sep 2026: nine hours, because a link check failed the build
+#      (item 74). Three deploys failed and nobody was told.
+#
+#  Every other signal answers "did this run fail?". This one answers "is the
+#  live site current?", which is the question that was never being asked —
+#  and it is the only one that also catches a deploy that never started.
+#
+#  ── IT IS A SIGNAL, NOT A GATE ───────────────────────────────────────────
+#  It cannot stop or fix anything. It goes red, GitHub emails, Micky looks.
+#  Same standing decision as site.yml's header.
+# ==========================================================================
+name: live-drift
+
+on:
+  schedule:
+    # Hourly at 17 past — off the hour, because everything in the world runs
+    # on the hour and the runner queue shows it.
+    - cron: '17 * * * *'
+  # So it can be run the moment a deploy is expected to have landed.
+  workflow_dispatch:
+
+# Nothing here needs write access to anything.
+permissions:
+  contents: read
+
+jobs:
+  drift:
+    runs-on: ubuntu-latest
+    steps:
+      # Full history: the check reports HOW FAR behind, which needs the live
+      # commit to be in the graph. A shallow clone cannot answer that.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: main
+
+      - name: Compare the live commit with main
+        run: |
+          set -uo pipefail
+
+          answer=$(curl -sf --max-time 20 https://cavybeauty.com/api/version || true)
+          if [ -z "$answer" ]; then
+            echo "::error::cavybeauty.com/api/version did not answer."
+            echo "Either the site is down, or the deployment serving it predates the route"
+            echo "(added 22 Sep 2026) — which is itself drift worth looking at."
+            exit 1
+          fi
+
+          live=$(echo "$answer" | jq -r '.commit')
+          branch=$(echo "$answer" | jq -r '.branch')
+          head=$(git rev-parse HEAD)
+
+          echo "live: $live ($branch)"
+          echo "main: $head"
+
+          if [ "$live" = "$head" ]; then
+            echo "Up to date."
+            exit 0
+          fi
+
+          # A deploy takes a couple of minutes. Without this, every run that
+          # lands just after a push is a false alarm — and a check that cries
+          # wolf hourly gets muted, which would leave us worse off than now.
+          age=$(( $(date +%s) - $(git log -1 --format=%ct HEAD) ))
+          if [ "$age" -lt 1200 ]; then
+            echo "main is only $((age / 60))m old — a deploy is probably still running. Not failing."
+            exit 0
+          fi
+
+          behind=$(git rev-list --count "$live..$head" 2>/dev/null || echo "?")
+          echo "::error::cavybeauty.com is $behind commit(s) behind main, and the newest has been there $((age / 60)) minutes."
+          echo ""
+          echo "Commits on main that the live site is not serving:"
+          git log --oneline "$live..$head" 2>/dev/null || echo "  (the live commit is not in main's history — check the branch: $branch)"
+          echo ""
+          echo "Look at the Vercel deployment for $head. A failed build, a cancelled one,"
+          echo "or one that never started all look identical from the outside: an old site."
+          exit 1

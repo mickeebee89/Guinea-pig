@@ -2116,6 +2116,92 @@ was the reason for three workflows rather than one.
 It remains a signal and not a gate. Everything above about branch protection
 still stands.
 
+**75. A CHECK COULD STOP THE WEBSITE UPDATING, AND NOTHING NOTICED IT HAD —
+CHANGED 22 Sep 2026. `npm run verify` EXIT 0.**
+
+**Plainly:** three Production deploys failed, cavybeauty.com quietly served a
+nine-hour-old build, and the only place that said so was a Vercel page nobody
+was watching. A stale site looks exactly like a working one — every page
+loads, the content is simply old.
+
+**── WHAT CI ACTUALLY DID, VERIFIED FROM THE GITHUB API, 22 Sep ──**
+
+| Commit | site workflow | Vercel production |
+|---|---|---|
+| `d92dce6` 11:09 | success | success — **the build the site served all day** |
+| `d0b0fb2` 19:12 | **failure** | failed |
+| `c3b67cd` | **never ran** | failed |
+| `69bea86` | **never ran** | failed |
+| `a0bf96d` 20:17 | success | (after the fix) |
+
+**So the answer to "was CI red on d0b0fb2 and the two after it" is: red on
+d0b0fb2, and on the other two it did not run at all.** Both touched zero files
+under `site/`, and the workflow's `paths` filter is `site/**`. **Vercel has no
+such filter** — it builds the whole site on every push to `main` — so it kept
+rebuilding a tree that was already broken, and failed twice more with nothing
+red anywhere. A path filter makes CI's silence ambiguous: "nothing to check"
+and "not checked" look identical from outside.
+
+**Fixed:** `supabase/functions/**` is now in the site workflow's `paths`,
+because `check-links.mjs` reads the edge functions (item 74) — renaming a page
+there can break a link here, so it is genuinely site input now.
+
+**── 1. THE CHECKS NO LONGER BLOCK A DEPLOY ──**
+
+`site/package.json`: `build` was `npm run checks && next build`. It is now
+`next build`. A new `verify` script is `checks` then `build` — everything —
+and `.github/workflows/site.yml` already ran the two halves as separate steps,
+so CI is unchanged in what it runs and is now **the only place the checks
+run**. Its header says so, in case the job is ever deleted.
+
+**Why this way round.** `check-links.mjs`'s own header says it cannot prove a
+link works. A check that admits it cannot prove the thing it is named after
+should not hold the power to stop the website updating — especially against
+the failure it actually produced, which was two perfectly good routes. What
+still blocks a deploy is the build failing to compile, which is what always
+should have.
+
+**The cost, stated plainly:** a dead link can now reach production. Before, it
+could not. That is the trade, and it is the right way round only because the
+red tick arrives in the same minute and the site keeps working meanwhile.
+
+**⚠️ `npm run build` CHANGED MEANING TODAY.** It no longer runs the checks.
+The command that runs everything is `npm run verify`. Anyone reading an older
+note saying "npm run build runs the checks first" is reading something true
+until 22 Sep 2026 and false after it. `site/README.md` now leads with the
+three-command table rather than the old sentence.
+
+**── 2. THE DRIFT CHECK: IS THE LIVE SITE CURRENT? ──**
+
+Every other signal answers *did this run fail?*. None of them answers *is the
+live site current?* — which is why five weeks of a stale build (item 45) and
+nine hours of one (item 74) both passed unnoticed. **A deploy that never
+starts produces no failed run to notice at all.**
+
+* **What says it:** `site/app/api/version/route.ts` returns the commit and
+  branch the deployment was built from, `no-store`, from a public repo —
+  a SHA and a branch name, nothing about the database, the environment or a
+  person. No build timestamp: the honest one is not available at runtime, and
+  a wrong one is worse than none.
+* **Where it runs:** `.github/workflows/live-drift.yml`, on GitHub, not in
+  the build and not on Micky's machine.
+* **How often:** hourly, at 17 past. Off the hour on purpose — the runner
+  queue at :00 is everyone else's cron.
+* **How it reaches Micky:** the run goes red and GitHub emails on a failed
+  workflow run. No new service, no webhook, no account.
+* **What it costs:** one runner-minute an hour — about 12 minutes a day.
+  Free on a public repository; about 360 minutes a month against the 2,000
+  free if it is ever made private.
+* **The false-alarm guard:** if `main`'s newest commit is under 20 minutes
+  old it does not fail, because a deploy is probably still running. **A check
+  that cries wolf hourly gets muted, and a muted check is worse than none.**
+* **What it reports when red:** how many commits behind, how long the newest
+  has sat there, and `git log --oneline` of exactly what is not live.
+
+**What it will not catch:** a deploy that succeeded and shipped something
+broken — it only compares commits, never behaviour. And it is blind to the
+first hour of any outage by design.
+
 **74. NOBODY WAS EVER EMAILED WHEN SOMETHING HAPPENED ON CAVY — BUILT 22 Sep
 2026. `next build` EXIT 0. THE FUNCTION IS DEPLOYED (proved by its own 400 to a
 malformed POST); THE MIGRATION'S STATE IS NOT ESTABLISHED HERE; NOTHING SENT.**
@@ -8138,6 +8224,7 @@ platforms each failed it differently.
 | 13 | Cancellation wording, and no cancel path exists at all | **Yes** — "I need to cancel" is inevitable |
 | 14 | Admin revoke UI — `0027` ships the mechanism, nothing calls it | No, but revocation is SQL-only until then |
 | 74 | Email notifications built but **not applied, not deployed, nothing sent**; mobile has no email switch | **Yes** for the deploy — a web-only member currently hears nothing |
+| 75 | Drift check is new and unproven — its first real test is the next failed or skipped deploy | No |
 
 Carried in from before the audit, unchanged by it:
 
