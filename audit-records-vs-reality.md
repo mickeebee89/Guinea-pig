@@ -2256,6 +2256,55 @@ differ stops being a question worth asking.
 present when it was written. One credential, one spelling, one key format — all
 three true on the day, none of them guaranteed tomorrow.
 
+**── THE TEST EMAIL'S UNSUBSCRIBE LINK 404'd — 22 Sep 2026. CAUSE: THE WEBSITE
+HAD NOT DEPLOYED. THE CODE MATCHED ALL ALONG ──**
+
+**Plainly:** the first test email arrived with an unsubscribe link that led to
+a "page not found". Had the system been armed, every notification email would
+have carried the same dead link.
+
+**Established read-only, before anything changed:**
+* **The email builds** `https://cavybeauty.com/email/unsubscribe?t=<token>`
+  (`supabase/functions/send-email/index.ts:251`, and `:282` for the test).
+* **The route exists** at `site/app/email/unsubscribe/page.tsx`, with
+  `site/app/email/unsubscribe/confirm/route.ts` behind it. Both are on `main`
+  in `d0b0fb2`, and `npx next build` lists both.
+* **So it is neither the path nor the query.** `?t=` is what the page reads
+  (`page.tsx:30`). Nothing was misspelled.
+* **The live site answers 404 for both**, while `/settings` still answers 307
+  to `/sign-in` — so the site is up, and these two routes are simply not in
+  the deployment serving it.
+* **Decisive:** `curl https://cavybeauty.com/privacy` does not contain
+  "Emails about your bookings", the §6 paragraph added in the same commit. The
+  Vercel **production deploy of `d0b0fb2` has not landed.**
+
+**Cause: an ordering fault, not a code fault.** The email is sent by an edge
+function and the links point into a separately deployed website. Deploying the
+function first and the site later leaves a window in which every email that
+goes out carries links to pages that do not exist yet. **Nothing connected the
+two, so nothing could have caught it** — the function has no idea what the
+website serves, and `next build` proves only that the route compiles here.
+
+**The fix is not a URL change; it is a guard, placed where it bites.**
+`scripts/check-unsubscribe-route.mjs` asks the live site for both addresses,
+and `install-email-secret.mjs` refuses to run while either is missing.
+**Installing the secret is what ARMS the system** — before it, every trigger
+call is refused for want of the shared secret — so the system now cannot be
+armed while the link it will print is dead. `send-test-email.mjs` refuses on
+the same grounds: a test email with a dead unsubscribe link tests nothing.
+
+**Both addresses are checked, because an email carries two.** The visible link
+goes to the page; the **`List-Unsubscribe` header** goes to `/confirm`
+(`index.ts:177`), which is what Gmail and Yahoo POST to. It was equally 404 and
+a check of only the visible link would have passed half a broken email. A
+redirect counts as a pass there, since a GET of `/confirm` redirects to the
+page by design.
+
+**Verified:** run against the live site, the guard reproduces the fault and
+names both addresses with their status codes. `npx next build` exit 0, both
+routes listed. The migration's DEPLOY notes now make the website step 1, and
+the checksum is unchanged — those notes sit below the footer.
+
 **── WHAT IS STILL OPEN ──**
 * **Mobile has no email preference UI.** A member with the app can only turn
   these off on the website or by the link. The column is shared, so the switch

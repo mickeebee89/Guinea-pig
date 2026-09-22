@@ -19,10 +19,21 @@
  * secret, redeploy, run this again.
  */
 
+import { unsubscribeRouteProblem } from './check-unsubscribe-route.mjs'
+
 const KEY = (process.env.SUPABASE_SERVICE_ROLE_KEY ?? '').trim()
 if (!KEY) {
   console.error('\nRefusing to run: SUPABASE_SERVICE_ROLE_KEY is not set in this shell.')
   console.error("  $env:SUPABASE_SERVICE_ROLE_KEY = '<service-role-key>'\n")
+  process.exit(1)
+}
+
+// Installing the secret is what ARMS the whole thing: until Vault holds it,
+// every trigger call is refused. So this is the last moment at which a broken
+// unsubscribe link can still be caught before real emails carry it.
+const problem = await unsubscribeRouteProblem()
+if (problem) {
+  console.error(`\nRefusing to arm email notifications.\n\n${problem}\n`)
   process.exit(1)
 }
 

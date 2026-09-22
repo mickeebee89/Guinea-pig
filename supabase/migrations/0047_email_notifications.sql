@@ -412,25 +412,35 @@ notify pgrst, 'reload schema';
 
 
 -- ===========================================================================
--- DEPLOY — in this order. The middle step is the one that matters.
+-- DEPLOY — in this order. Step 1 is not optional and step 4 is the one that
+-- matters.
 --
---   1. Deploy the function (from the repo root):
+--   1. THE WEBSITE FIRST. Every email carries two links into it: the visible
+--      unsubscribe link (/email/unsubscribe) and the List-Unsubscribe header
+--      (/email/unsubscribe/confirm). Push to main and wait for the Vercel
+--      PRODUCTION deploy to finish. On 22 Sep 2026 a test email went out
+--      ahead of that deploy and its unsubscribe link 404'd.
+--        curl.exe -s -o NUL -w "%{http_code}\n" "https://cavybeauty.com/email/unsubscribe?t=x"
+--      Expect 200. Steps 3 and 4 now refuse to run until it is.
+--
+--   2. Deploy the function (from the repo root):
 --        npx supabase functions deploy send-email --no-verify-jwt
 --      --no-verify-jwt because the caller is a database trigger, which sends
 --      the shared secret instead of a JWT. Same as send-push.
 --
---   2. Apply this migration.
+--   3. Apply this migration.
 --
---   3. Install the secret, with the service-role key in THIS shell only:
+--   4. Install the secret, with the service-role key in THIS shell only:
 --        $env:SUPABASE_SERVICE_ROLE_KEY = '<service-role-key>'
 --        node scripts/install-email-secret.mjs
 --      The function copies its own EMAIL_HOOK_SECRET into Vault. Nothing
---      prints the secret.
+--      prints the secret. THIS IS WHAT ARMS IT: until Vault holds the secret
+--      every trigger call is refused, so nothing is sent before this step.
 --
---   4. Send one test email to a real address, before any member gets one:
+--   5. Send one test email to a real address, before any member gets one:
 --        node scripts/send-test-email.mjs you@example.com
 --
---   5. Then Block A below.
+--   6. Then Block A below.
 -- ===========================================================================
 --
 -- ── BLOCK A — installed, and the secret is in place. Read-only ──────────

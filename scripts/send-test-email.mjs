@@ -13,6 +13,8 @@
  * carries a token that matches nobody, so clicking it changes nothing.
  */
 
+import { unsubscribeRouteProblem } from './check-unsubscribe-route.mjs'
+
 const KEY = (process.env.SUPABASE_SERVICE_ROLE_KEY ?? '').trim()
 const TO = (process.argv[2] ?? '').trim()
 
@@ -23,6 +25,14 @@ if (!KEY) {
 }
 if (!TO.includes('@')) {
   console.error('\nUsage: node scripts/send-test-email.mjs you@example.com\n')
+  process.exit(1)
+}
+
+// The point of the test is to read the email as a member would, including the
+// unsubscribe line. Sending one with a dead link tests nothing.
+const problem = await unsubscribeRouteProblem()
+if (problem) {
+  console.error(`\nRefusing to send.\n\n${problem}\n`)
   process.exit(1)
 }
 
