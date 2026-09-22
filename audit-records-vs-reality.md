@@ -2116,6 +2116,70 @@ was the reason for three workflows rather than one.
 It remains a signal and not a gate. Everything above about branch protection
 still stands.
 
+**70. REVIEW-LEAVING ON THE WEB, AND "LAUNCHING SOON" — BUILT 22 Sep 2026,
+HELD ON BRANCH `web-reviews`, NOT ON `main`. NOT DEPLOYED, 0046 NOT APPLIED.**
+
+**What happened:** Micky asked to "build review-leaving on the web and remove
+any mention of 'launching soon'". While it was being built he clarified: *"this
+doesnt need to function, it is literally just to get screenshots"*, with
+phone-sized screenshots mattering most. The finished work was therefore
+committed to a branch, `web-reviews` (`b51353e`), so nothing reached the live
+site. **Decision pending (Micky): ship it, or drop it.**
+
+**What's on the branch** (`next build` exit 0; `npm run checks` exit 0, not a
+build claim):
+* **A review page, `/bookings/<id>/review`,** for either side of a completed
+  booking: a model reviews the stylist, a stylist reviews the model, as on
+  mobile.
+  * **Fields:** an overall rating, category ratings (the four columns
+    `reviews` has; a model review gets punctuality only, the one of mobile's
+    four that is actually stored), mobile's tags, and a comment of up to
+    1,000 characters.
+  * **The reviewee comes from the booking,** worked out on the server
+    (`lib/queries/review.ts`), never from the browser.
+  * **Links:** each completed booking on `/bookings`, and the dashboard's
+    "Leave a review" panel, replacing its "in the Cavy app for now" note.
+  * **Checked in demo mode:** stars, category pre-fill, tags, the "not yet"
+    and "already reviewed" states, and a 404 on someone else's booking.
+  * **A real save has not been tried on the live database.** Demo mode
+    refuses all review writes, so no screenshot can show an invented review.
+* **Migration 0046 (`b367c5ba…`, checksum computed by hand):** a trigger
+  refuses any review whose reviewee isn't the other party to the booking.
+  **The hole it closes exists today, whatever happens to the web page.** The
+  INSERT policy checks only the reviewer, so a direct API write could put a
+  review, and its rating, on anyone. Worth applying on its own merits.
+* **`scripts/check-links.mjs`** now resolves a path constant inside a
+  template (`` `${BOOKINGS_PATH}/…` ``).
+* **"Launching soon in the UK"** became "Now open in the UK". The treatment
+  pages' *"Cavy hasn't launched yet — join the waitlist…"* became *"No one is
+  offering {treatment} on Cavy yet. Join below…"*.
+
+**Still pre-launch, and NOT changed, pending a decision:** the public site is
+a waitlist funnel throughout:
+* the waitlist forms (`RoleGate`), the homepage meta description and the
+  `/for-stylists` copy;
+* Terms §"The waitlist" and its "free early-stylist account" offer for people
+  who join the waitlist "before launch";
+* the Privacy waitlist sections, including retention *"until Cavy launches"*.
+
+If the app is live, all of those need replacing, which means deciding where
+people are sent instead.
+
+**Found while building, for later:** review comments publish instantly and
+unscreened. `banned_words` covers messages and status posts only (items 17
+and 58). And reviews can't be reported.
+
+**Phone screenshots, 22 Sep 2026:** 15 screens at iPhone size (390×844, 3×
+resolution), each as the visible screen plus a full-page version, saved to
+`C:\Users\micky\Documents\Cavy screenshots\phone\` (outside the repo), with a
+contact sheet. Taken from demo mode on the branch.
+* **"In use" states:** a reply being typed in each chat, and an availability
+  day open.
+* **The review form is shown EMPTY.** A first take had five stars and a
+  praising comment typed in. That's an invented testimonial if it appears in
+  an advert, so it was replaced.
+* **The "Example screen" label was off.**
+
 **69. A LOCAL DEMO MODE FOR SCREENSHOTS — BUILT 22 Sep 2026. `next build`
 EXIT 0; A PRODUCTION BUILD CONTAINS NONE OF IT. ALL TEN SCREENS SEEN RUNNING.**
 
