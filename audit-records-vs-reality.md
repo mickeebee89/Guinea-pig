@@ -2116,6 +2116,16 @@ was the reason for three workflows rather than one.
 It remains a signal and not a gate. Everything above about branch protection
 still stands.
 
+**68. ICO REGISTRATION IS IN PLACE — CONFIRMED BY MICKY, 22 Sep 2026.**
+
+`CLAUDE.md`'s compliance rules say identity selfies are special-category data,
+needing "a retention policy + UK ICO registration". **Micky has confirmed that
+the ICO registration is in place.** Recorded as his confirmation. The
+registration number and entry weren't pasted, and haven't been checked
+against the ICO public register. The retention half is enforced by
+`purge-selfies` and `run_retention_purge`, with their own open checks (the
+8 October selfie-orphan check, `HANDOVER.md`).
+
 **67. VERCEL WEB ANALYTICS ON THE WEBSITE — ADDED 22 Sep 2026. `next build`
 EXIT 0. NOT YET DEPLOYED; NO PAGE VIEW OBSERVED.**
 
@@ -2258,6 +2268,13 @@ page address in `beforeSend`, before anything leaves the browser.
 * `/messages/abc` (not a UUID) became `/messages/[sessionId]`.
 
 **Not yet seen:** what the dashboard actually receives, after the deploy.
+
+**── 22 Sep 2026: DEPLOYED AND SEEN IN THE DASHBOARD. VERIFIED ──**
+
+After the route-pattern change was deployed, the Vercel Analytics dashboard
+showed visits. It listed a Messages page as **`/messages/[sessionId]`**, not a
+real booking id. The path rewrite works on the live site. The other two id
+routes (`/model/[id]`, `/stylist/[id]`) were not individually observed.
 
 **66. STYLISTS CAN PUBLISH AND HIDE THEIR SHOP ON THE WEB — BUILT 22 Sep
 2026. `next build` EXIT 0. NOT EXERCISED AGAINST THE LIVE DATABASE; MOBILE'S
@@ -3604,6 +3621,16 @@ each "22 Sep" below as 21 Sep:
 The commits themselves carry the true time: all 21 Sep 2026, between 20:26
 and 21:10. The same stamp in five code comments was corrected in `c951ff4`.
 
+**── 22 Sep 2026: REPLIES CAN NOW BE SENT AS support@cavybeauty.com. VERIFIED ──**
+
+Gmail's "send as" for **support@cavybeauty.com** is set up in
+guineapig.app@gmail.com, the inbox the address forwards to. It sends through
+**Resend SMTP**. A test reply arrived showing **"Cavy"** as the sender, and it
+landed in the **inbox, not junk**. So the support address now works both ways:
+mail in (Cloudflare forwarding, 20 Sep) and replies out. One test message to
+one inbox; other providers not tried. DMARC is still open (see the earlier
+note in this item).
+
 **61. `anon` AND `authenticated` HOLD DELETE ON `public.messages`, AND NO DELETE
 POLICY EXISTS — SEEN 20 Sep 2026 IN `0043`'s BLOCK A. READ-ONLY; NOT FIXED. ONE
 QUERY DECIDES WHETHER IT IS INERT OR SERIOUS.**
@@ -4173,6 +4200,25 @@ approving an unpaid account on the live database.
 > **Not yet seen:** the console's plain CV002 message in a browser. Block C
 > proved the code comes back as `CV002` from SQL. That PostgREST passes it
 > through as `error.code` is still INFERRED, as it was for CV001.
+>
+> **── 22 Sep 2026: THE PAID CASE PASSES. VERIFIED ──**
+>
+> The stylist who paid the first real fee (micky.buckfield+feetest@gmail.com;
+> the payment is in item 53) submitted an ID photo. **An admin approved it in
+> the console, and the approval succeeded.** That stylist has a payment row
+> and no waiver and no Founding status, so 0045's gate let them through on
+> the payment alone. **With Block C, every case of item 56 has now been seen
+> on the live database:** paid, unpaid, waived, founding, a decline while
+> unpaid, and the Verify button while unpaid.
+>
+> The console reported that the **shop wasn't made live, because its details
+> are incomplete**. That is `shopsNote` working as built: the approval
+> verifies the stylist and publishes only what `provider_shop_is_publishable`
+> passes.
+>
+> **Still not seen:** the console's plain CV002 message in a browser. That
+> needs an approve attempt on an unpaid stylist through the console, rather
+> than in SQL.
 
 **55. RELOADING /subscribe CAN CANCEL A SUBSCRIPTION THE PERSON HAS JUST PAID
 FOR — AND A FAILED FIRST PAYMENT GRANTS ACCESS AND SENDS A NOTICE THAT IS FALSE.
@@ -4694,6 +4740,30 @@ a finding.
 > Recorded with both sources, rather than either alone, so neither is later
 > read as the only one to have got it wrong. The live payload settled it for
 > both.
+
+> **── 22 Sep 2026: THE FIRST REAL £14.99 FEE. VERIFIED FROM THE DATABASE ──**
+>
+> **The payment.** A new stylist test account, micky.buckfield+feetest@gmail.com,
+> paid the fee on the web.
+> * **`verification_payments`:** one row, 1499 GBP, created **07:56:57.183276**.
+> * **`stripe_webhook_events`:** `payment_intent.succeeded`, outcome
+>   `processed`, detail *"Verification fee pi_3UIOYT2NT7OAGIRc0kW0MKGN already
+>   recorded — confirm_verification got there first"*, received
+>   **07:56:57.183275**.
+>
+> **So the two writers raced, and the design held.** `confirm_verification`
+> (the page) and the webhook backstop hit the table about a microsecond apart.
+> **The webhook's insert ran, and was refused by the unique key
+> `verification_payments_stripe_payment_id_key` (23505).** That detail text
+> is written only in the 23505 branch (`stripe-webhook/index.ts:521-522`), so
+> the refusal is shown, not inferred. The result was one row, no double
+> record, and the event marked `processed`, not `failed`.
+>
+> **Still unexercised: a SUCCESSFUL backstop insert.** The page won the race,
+> so the webhook never wrote a row itself. The case this item exists for (the
+> stylist pays, then closes the tab before `confirm_verification` runs) has
+> not happened yet. Only then does the webhook's insert
+> (`stripe-webhook/index.ts:513`) do the recording.
 
 **52. WHAT THE LIVE DATABASE SAYS ABOUT ADMIN, PUBLISHING, ROLES AND VERCEL —
 READ 15–18 Sep 2026. VERIFIED FROM OUTPUT MICKY PASTED, UNLESS MARKED.**
