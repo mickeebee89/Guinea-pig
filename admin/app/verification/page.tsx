@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useLoader } from '@/lib/useLoader'
-import { humanError, shopsNote } from '@/lib/adminActions'
+import { adminErrorText, humanError, shopsNote } from '@/lib/adminActions'
 import type { ActionResult, ShopState } from '@/lib/adminActions'
 import { reviewerNames } from '@/lib/reviewers'
 import { ReviewerLine } from '@/components/ReviewerLine'
@@ -162,7 +162,8 @@ export default function VerificationQueuePage() {
         p_note:       note.trim() || null,
       })
       if (error) {
-        alert(`Couldn't approve this request.\n\n${humanError(error.message)}\n\nNothing has changed.`)
+        // A fee refusal (CV002, 0045) gets plain words; anything else, the function's own.
+        alert(`Couldn't approve this request.\n\n${adminErrorText(error)}\n\nNothing has changed.`)
         return
       }
 

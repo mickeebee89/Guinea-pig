@@ -80,6 +80,25 @@ export interface ActionResult {
 export const humanError = (m: string) => m.replace(/^admin_[a-z_]+:\s*/, '')
 
 /**
+ * The words an admin sees when a database function refuses. Recognises the
+ * refusals that have their own SQLSTATE by CODE, never by matching message
+ * text, and falls back to humanError for everything else.
+ *
+ * CV002 — 0045, audit item 56: a stylist whose £14.99 fee is not settled
+ * cannot be approved or verified. Raised by admin_decide_verification and by
+ * the 'verify' action. Nothing was changed when it fires; the request, if
+ * there was one, is still pending.
+ */
+export const FEE_NOT_SETTLED =
+  'This stylist hasn’t settled the £14.99 fee. There’s no payment on record, and they aren’t a ' +
+  'Founding Provider or fee-waived, so they can’t be verified yet.\n\n' +
+  'To let them in without paying, use “Free fee” on the Users page first, then try again. ' +
+  'If they have a request in the queue, it’s still waiting, and you can decline it.'
+
+export const adminErrorText = (error: { code?: string; message: string }) =>
+  error.code === 'CV002' ? FEE_NOT_SETTLED : humanError(error.message)
+
+/**
  * ── AN APPROVAL THAT DOES NOT PUBLISH TELLS NOBODY ───────────────────────
  *
  * Verifying a stylist is supposed to make their shop live. When it does not,

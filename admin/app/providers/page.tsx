@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useLoader } from '@/lib/useLoader'
-import { humanError, shopsNote } from '@/lib/adminActions'
+import { adminErrorText, shopsNote } from '@/lib/adminActions'
 import type { ActionResult } from '@/lib/adminActions'
 
 interface Provider {
@@ -112,7 +112,7 @@ export default function ProvidersPage() {
     })
 
     if (error) {
-      alert(`Could not ${action.replace('_', ' ')} this provider.\n\n${humanError(error.message)}\n\nNothing has changed.`)
+      alert(`Could not ${action.replace('_', ' ')} this provider.\n\n${adminErrorText(error)}\n\nNothing has changed.`)
       return
     }
 

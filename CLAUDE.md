@@ -98,7 +98,15 @@ _This file is read automatically at the start of every Claude Code session. It h
 - Provider: **£14.99 one-off** verification (first 100–200 free — "Founding Providers"). Model: **£4.99/mo** subscription.
 - **Provider is PAY-FIRST:** Get Verified → pay £14.99 → selfie → admin approves → unlock (`is_verified` + `is_published`). Provider entry points: provider-dashboard + settings.
 - **Model has NO standalone verification entry.** Browsing/search is FREE and open (no gate). The £4.99/mo subscribe **and** the identity selfie happen together **only at apply-time** (apply-gate in `apply-session.tsx`: subscribe-first → selfie). Model needs active subscription AND identity verification to apply. (The old model "Get verified" buttons were removed — they created stranded verified-but-unsubscribed accounts.)
-- Admin `approve()` unlocks unconditionally (free-account override).
+- **A stylist can only be verified once the £14.99 fee is settled** — a
+  `verification_payments` row, or `is_founding_provider`, or `provider_fee_waived`
+  (`provider_fee_settled()`, migration `0045`, audit item 56). Both admin paths
+  refuse with SQLSTATE `CV002`: the queue's approve and the Users/Providers Verify
+  button. Declining is never gated. To let a stylist in free, waive the fee first
+  (Users → Free fee), then approve. Models have no fee to settle. *Written
+  22 Sep 2026: until the migration ledger shows 0045 applied, this is not yet true.*
+  ~~Admin `approve()` unlocks unconditionally (free-account override).~~
+  *Superseded by 0045 for stylists, 22 Sep 2026.*
 - Test card: `4242 4242 4242 4242`, exp `12/34`, CVC `123`.
 
 ---

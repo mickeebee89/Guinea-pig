@@ -3878,6 +3878,116 @@ approving an unpaid account on the live database.
   Micky does not personally know.** At that point the reviewer can no longer
   tell a genuine stylist from someone who skipped the fee.
 
+> **── 22 Sep 2026: MIGRATION 0045 WRITTEN, NOT YET APPLIED ──**
+>
+> `supabase/migrations/0045_verification_requires_the_fee.sql`. Checksum
+> `75e0264d…`, computed by hand over everything above the footer with CRLF
+> normalised, then checked against the footer. `--stamp` was not run (item
+> 60). It had to be computed twice: a line citation in the header was
+> corrected after the first pass.
+>
+> **1. One rule, one place:** `provider_fee_settled(user)`. It is true when
+> there's a `verification_payments` row, or `is_founding_provider`, or
+> `provider_fee_waived`: the test every client already applies. Any payment
+> row counts, as in every client, because rows are only written once Stripe
+> has confirmed (`stripe-payment/index.ts:325`, webhook backstop `:513`). It's
+> SECURITY INVOKER and **executable by no client role** for now.
+>
+> **2. Both admin paths to `is_verified` refuse an unpaid stylist, with
+> SQLSTATE `CV002`:**
+> * **`admin_decide_verification`** (0039's body plus one check): runs after
+>   the request is locked and the role read, before any write. A refusal
+>   changes nothing, and the request stays pending.
+> * **The bare Verify button**: the `'verify'` branch of
+>   `_admin_apply_user_action` (0044's body plus the same check). **This was
+>   not in the brief, and is added because the gate means nothing without
+>   it.** The Users and Providers pages both have a Verify button that sets
+>   `is_verified` directly, so gating only the queue would leave item 56 open
+>   through the button.
+>
+> **What the gate does and doesn't cover:**
+> * **Only `role = 'provider'` is gated.** A model's verification has no fee.
+> * **Declining is never gated.**
+> * **A stylist can't self-verify.** 0040's one permit is `role <>
+>   'provider'` (`0040:204-235`), so these two admin paths are the only way a
+>   stylist becomes verified.
+>
+> **MEASURE records** how many stylists are already verified without a
+> settled fee, and how many unpaid stylist requests are pending. Nobody
+> already verified is changed.
+>
+> **3. The console:** `adminErrorText` in `admin/lib/adminActions.ts`
+> recognises `CV002` **by code**, not by message text. It shows: *"This
+> stylist hasn't settled the £14.99 fee… To let them in without paying, use
+> 'Free fee' on the Users page first, then try again. If they have a request
+> in the queue, it's still waiting, and you can decline it."* It's used by
+> the queue's approve, and by the Users and Providers action dialogs. Every
+> other error still goes through `humanError`, as before. The admin app's
+> `next build` exits 0 (TypeScript included). That PostgREST returns `CV002`
+> in `error.code` is INFERRED, as it was for CV001.
+>
+> **`CLAUDE.md`'s** *"Admin approve() unlocks unconditionally"* is struck
+> through and replaced. The replacement says it isn't true until the ledger
+> shows 0045 applied.
+>
+> **── 4. SHOULD AN UNPAID STYLIST BE ABLE TO FILE A REQUEST AT ALL?
+> REPORT ONLY, NOTHING CHANGED ──**
+>
+> **Today, yes.** `vr_user_policy` is ALL, `(auth.uid() = user_id)`, and
+> 0040's `guard_verification_decision` checks only that an insert arrives
+> `pending` with no decision on it (`0040:308-320`). Mobile inserts the row
+> directly (`verify-payment.tsx:208`).
+>
+> **What closing it would take:** one condition in the INSERT branch of
+> `guard_verification_decision`: refuse when the new row's user is a
+> `provider` and `provider_fee_settled` is false. It's SECURITY DEFINER, so
+> no client grant is needed. A RESTRICTIVE INSERT policy would work too, but
+> needs the function executable by `authenticated`.
+>
+> **What it would break, as far as the code shows:**
+> * **Nothing on the normal paths.** Both clients already refuse the selfie
+>   step on the same test before inserting: web `verify/actions.ts:56-73`,
+>   mobile `verify-payment.tsx:66-83`. A paid, founding or waived stylist
+>   resubmitting after a rejection also passes.
+> * **A new failure where the two disagree.** Mobile uploads the selfie to
+>   storage before it inserts the row. So a refused insert would strand a
+>   selfie object with no row pointing to it, and `purge-selfies` finds
+>   selfies only through rows (audit, "resubmitting a selfie strands the old
+>   one"). Special-category data, orphaned. This could only happen if a
+>   client's check and the database's disagreed, but it is the one real way
+>   this could go wrong.
+> * **Existing unpaid pending requests are untouched.** The gate would apply
+>   to inserts only.
+>
+> **My view:** not needed now. After 0045, an unpaid request can't be
+> approved, so filing one gets the stylist nothing. The only remaining cost
+> is a reviewer's time on a request they must decline. Worth doing if unpaid
+> requests start to fill the queue.
+>
+> **── 5. EVERY CLIENT COPY OF THE FEE RULE, AND WHETHER IT COULD READ THE
+> FUNCTION. NOTHING CHANGED ──**
+>
+> **None can, as granted today**, because execute is revoked from
+> `authenticated`. **If it were granted, each could.** The function is
+> SECURITY INVOKER, so when a member calls it, it reads the same three inputs
+> under the same RLS that the client's own queries use today, and gets the
+> same answer. For anyone else's id, RLS hides the evidence and it reads
+> false. That's no more than the client can see already, but it means the
+> answer is only meaningful for the caller's own account, or for an admin.
+> INFERRED from the fact that each client already reads these inputs for
+> itself. The policies weren't re-read.
+>
+> | Where | What it gates | Could read the function? |
+> |---|---|---|
+> | `site/lib/queries/shop.ts:167-227` (`feeSettled` in `getStylistSetup`) | The web publish control (`publishRefusal`, `:254`), the setup panel's fee step and hidden state (`StylistSetup.tsx:126, 155, 236`), and `/verify`'s fee-first screen (`verify/page.tsx:92`) | Yes. One RPC replaces a payment query plus two user columns |
+> | `site/app/(app)/verify/actions.ts:56-73` | The server action that accepts an ID selfie | Yes |
+> | `mobile/src/app/(app)/provider-dashboard.tsx:289-297` (load) and `:553-563` (focus refresh) | The Published toggle and the "pay to go live" banner | Yes |
+> | `mobile/src/app/(app)/verify-payment.tsx:66-83` | The pay-first gate before the selfie | Partly. It also needs `paid` alone, to avoid charging twice, so the payment-row read stays |
+> | `admin/app/users/page.tsx:100` (payment count) and `:238-243` (`feeStatus`) | The Waived / Founding / Paid / Unpaid label | Partly. The label names **which** of the three, which a boolean can't. The Unpaid decision alone could use it |
+>
+> Also worth knowing: the admin verification queue page shows no fee state
+> of its own. After 0045 it doesn't need to, because the approve refuses.
+
 **55. RELOADING /subscribe CAN CANCEL A SUBSCRIPTION THE PERSON HAS JUST PAID
 FOR — AND A FAILED FIRST PAYMENT GRANTS ACCESS AND SENDS A NOTICE THAT IS FALSE.
 FOUND 18 Sep 2026 BY READING. NOTHING OBSERVED; THE SQL THAT SETTLES THE
@@ -4769,6 +4879,14 @@ add its own noindex header to preview URLs. That has not been checked.
 > **Not yet seen on cavybeauty.com.** This goes live with the next
 > Production deploy. Confirm afterwards that `/sign-in` has no canonical and
 > `/terms` still has its own.
+>
+> **── 22 Sep 2026: LIVE AFTER THE `f70e6fb` DEPLOY. VERIFIED ──**
+>
+> Micky checked cavybeauty.com after the deploy:
+> * **`/terms`** carries `<link rel="canonical" href="https://cavybeauty.com/terms"/>`.
+> * **`/sign-in`** carries **no canonical**, and has `<meta name="robots"
+>   content="noindex, follow"/>`. That meta tag also shows the page loaded,
+>   so the missing canonical isn't just an empty response.
 
 **51. NOTHING GATES `main`, AND "PRODUCTION WAS BLOCKED FOR FIVE WEEKS" WAS SIX
 DAYS — RECORDED 18 Sep 2026. CORRECTS ITEM 45'S TITLE AND THE 15 Sep HANDOFF.**

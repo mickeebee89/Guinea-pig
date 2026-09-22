@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useLoader } from '@/lib/useLoader'
-import { humanError, shopsNote } from '@/lib/adminActions'
+import { adminErrorText, shopsNote } from '@/lib/adminActions'
 import type { ActionResult } from '@/lib/adminActions'
 
 interface User {
@@ -178,7 +178,7 @@ export default function UsersPage() {
 
     if (error) {
       // There is no partial state to describe. It committed or it did not.
-      alert(`Could not ${action} this user.\n\n${humanError(error.message)}\n\nNothing has changed.`)
+      alert(`Could not ${action} this user.\n\n${adminErrorText(error)}\n\nNothing has changed.`)
       return
     }
 
