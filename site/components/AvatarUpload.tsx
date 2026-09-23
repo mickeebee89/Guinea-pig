@@ -3,11 +3,16 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { downscale } from '@/lib/downscale'
-import { uploadAvatar } from './actions'
+import { uploadAvatar } from '@/lib/queries/avatar-action'
 import { Avatar } from '@/components/ui'
 
 /**
- * Her profile picture. Audit item 99.
+ * A profile picture. BOTH ROLES. Audit items 99 and 101.
+ *
+ * Moved out of the model's profile folder once the stylist needed it too:
+ * a stylist has no /profile page, so gating her ID check on having a picture
+ * without giving her somewhere to set one would have relocated the dead end
+ * rather than closed it. Hers lives on /shop.
  *
  * ⚠️ THE FIRST THING site/ HAS EVER WRITTEN TO profile_pic_url. Until now a
  * member who had only ever used the website was a grey circle to everyone,

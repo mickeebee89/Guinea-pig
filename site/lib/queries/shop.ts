@@ -80,6 +80,19 @@ export const categoryKey = (name: string): string => name.trim().toLowerCase()
 export interface StylistSetup {
   /** Null only if the signup trigger never made a providers row. */
   providerId: string | null
+  /**
+   * Her profile picture — read from `users.profile_pic_url`, which is
+   * the column the ADMIN QUEUE compares a selfie against (item 98). Not
+   * `providers.profile_pic_url`, even though that is what her shop shows:
+   * the gate has to ask about the photo a reviewer will actually see.
+   *
+   * The two are written together (lib/queries/avatar-action.ts), so they
+   * agree — but if they ever disagree, this is the one that matters here.
+   *
+   * The URL rather than a boolean, because /shop needs to SHOW it and the
+   * gate only needs to know it is there. One field, two readers.
+   */
+  profilePicUrl: string | null
   name: string | null
   bio: string | null
   locationText: string | null
@@ -163,7 +176,7 @@ export async function getStylistSetup(
   } | null
 
   const empty: StylistSetup = {
-    providerId: null, name: null, bio: null, locationText: null,
+    providerId: null, profilePicUrl: null, name: null, bio: null, locationText: null,
     detailsDone: false, treatmentCount: 0, publishBlockers: [], websiteBlockers: [],
     idCheck: 'none', idCheckNote: null,
     isVerified: false, feeSettled: false, isFoundingProvider: false,
@@ -176,7 +189,7 @@ export async function getStylistSetup(
     // (provider_shop_is_publishable, 0016 / item 52), so both counts matter.
     supabase.from('provider_treatments').select('category').eq('provider_id', prov.id),
     supabase.from('users')
-      .select('is_verified, is_founding_provider, provider_fee_waived')
+      .select('is_verified, is_founding_provider, provider_fee_waived, profile_pic_url')
       .eq('id', userId).maybeSingle(),
     supabase.from('verification_payments')
       .select('id').eq('user_id', userId).limit(1).maybeSingle(),
@@ -189,6 +202,7 @@ export async function getStylistSetup(
 
   const u = (userRes.data ?? {}) as {
     is_verified?: boolean; is_founding_provider?: boolean; provider_fee_waived?: boolean
+    profile_pic_url?: string | null
   }
   const req = reqRes.data as { status: string; notes: string | null } | null
 
@@ -225,6 +239,7 @@ export async function getStylistSetup(
 
   return {
     providerId: prov.id,
+    profilePicUrl: u.profile_pic_url ?? null,
     name: prov.name,
     bio: prov.bio,
     locationText,

@@ -42,6 +42,12 @@ export interface ApplyContext {
   provider: { id: string; name: string; userId: string | null; isPublished: boolean }
   subscribed: boolean
   verified: boolean
+  /**
+   * She has a profile photo. Her ID check is compared against it (item 101),
+   * so the step has to say so BEFORE she takes a selfie that could never be
+   * accepted — the server refuses it either way.
+   */
+  hasProfilePic: boolean
   idCheck: IdCheck
   slots: ApplySlot[]
   treatments: ApplyTreatment[]
@@ -75,7 +81,7 @@ export async function getApplyContext(
 
   const today = new Date().toISOString().slice(0, 10)
 
-  const [gate, idCheck, slotRes, treatRes, photoRes, consentLoad, blocked] = await Promise.all([
+  const [gate, idCheck, slotRes, treatRes, photoRes, consentLoad, blocked, meRes] = await Promise.all([
     getGateState(supabase, userId),
     getIdCheck(supabase, userId),
     supabase
@@ -94,6 +100,9 @@ export async function getApplyContext(
       .limit(12),
     loadActiveConsentDocument(supabase),
     getBlockedIds(supabase, userId).catch(() => new Set<string>()),
+    // users, not public_profiles: the ID check is compared against the column
+    // the admin queue reads, which is this one (item 98).
+    supabase.from('users').select('profile_pic_url').eq('id', userId).maybeSingle(),
   ])
 
   const rawSlots = (slotRes.data ?? []) as {
@@ -145,6 +154,7 @@ export async function getApplyContext(
     },
     subscribed: gate.subscribed,
     verified: gate.verified,
+    hasProfilePic: !!(meRes.data as { profile_pic_url: string | null } | null)?.profile_pic_url,
     idCheck,
     slots: rawSlots.map(s => ({
       id: s.id,

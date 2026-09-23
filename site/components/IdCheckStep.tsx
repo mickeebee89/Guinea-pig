@@ -30,7 +30,41 @@ import type { IdCheck } from '@/lib/queries/idCheck'
  * audit already found the app calling it "identity verification" in three
  * places, which claims something nobody does.
  */
-export function IdCheckStep({ check }: { check: IdCheck }) {
+export function IdCheckStep({
+  check, hasProfilePic = true,
+}: {
+  check: IdCheck
+  /**
+   * ⚠️ Her ID check photo is compared against her profile photo, so there has
+   * to be one. Defaulted true so an older caller renders exactly as before —
+   * the server refuses either way (submitSelfie, item 101), and this only
+   * decides whether she finds out before or after taking the selfie.
+   */
+  hasProfilePic?: boolean
+}) {
+  if (check.state !== 'pending' && !hasProfilePic) {
+    return (
+      <section className="rounded-lg border border-hairline bg-white p-5">
+        <h2 className="font-display text-xl text-warm-dark">Add a profile photo first</h2>
+        <p className="mt-2 text-sm text-muted">
+          A person compares your ID check photo against your profile photo — so there has to be
+          one to compare it with. It’s also the first thing a stylist sees of you.
+        </p>
+        {/* Her page, not the stylist's. The same gate sends a stylist to
+            /shop, because that is where hers lives. */}
+        <Link
+          href="/profile"
+          className="mt-5 inline-flex min-h-11 items-center rounded-[999px] bg-rose px-6 text-sm font-bold text-white"
+        >
+          Add your photo
+        </Link>
+        <p className="mt-4 text-xs text-muted">
+          Come back to your application afterwards — everything you’ve filled in is kept.
+        </p>
+      </section>
+    )
+  }
+
   if (check.state === 'pending') {
     return (
       <section className="rounded-lg border border-hairline bg-white p-5">

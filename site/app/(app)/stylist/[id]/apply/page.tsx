@@ -104,7 +104,7 @@ export default async function ApplyPage({
       <>
         {back}
         <h1 className="mb-6 mt-4 font-display text-3xl text-warm-dark">Apply</h1>
-        <IdCheckStep check={ctx.idCheck} />
+        <IdCheckStep check={ctx.idCheck} hasProfilePic={ctx.hasProfilePic} />
       </>
     )
   }

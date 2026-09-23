@@ -3,7 +3,7 @@ import { createSupabaseServerClient, requireUser } from '@/lib/supabase-server'
 import { getMyProfile } from '@/lib/queries/my-profile'
 import { getDashboardUser } from '@/lib/queries/dashboard'
 import { EmptyState, LoadError } from '@/components/ui'
-import { AvatarUpload } from './AvatarUpload'
+import { AvatarUpload } from '@/components/AvatarUpload'
 import { AttributesForm } from './AttributesForm'
 import { PhotoManager } from './PhotoManager'
 

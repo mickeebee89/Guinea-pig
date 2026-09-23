@@ -5,6 +5,7 @@ import { StylistSetupPanel } from '@/components/StylistSetup'
 import { EmptyState, LoadError } from '@/components/ui'
 import { ShopDetailsForm } from './ShopDetailsForm'
 import { TreatmentPicker } from './TreatmentPicker'
+import { AvatarUpload } from '@/components/AvatarUpload'
 import { ShopVisibility } from './ShopVisibility'
 
 export const metadata = { title: 'Your shop' }
@@ -68,6 +69,26 @@ export default async function ShopPage() {
             onPublicSite={setup.isPublished && setup.websiteBlockers.length === 0}
           />
         )}
+        {/* ⚠️ HERS LIVES HERE, NOT ON /profile — that page is the MODEL's.
+            Built with the ID-check gate (item 101) rather than before it: a
+            stylist told she needs a profile picture, on a website that gave
+            her no way to set one, would have been the same dead end the gate
+            exists to remove, just moved one screen along.
+
+            Above the name and bio on purpose. It is the first thing a model
+            sees of her on browse, and it is what her ID check is compared
+            against — both of which make it the shop's face rather than a
+            detail underneath the details. */}
+        <section className="rounded-lg border border-hairline bg-white p-5 shadow-soft">
+          <h2 className="font-display text-xl text-warm-dark">Your photo</h2>
+          <p className="mt-1 text-sm text-muted">
+            Models see this on your shop and in search results.
+          </p>
+          <div className="mt-4">
+            <AvatarUpload initialUrl={setup.profilePicUrl} name={shop.name || 'You'} />
+          </div>
+        </section>
+
         <ShopDetailsForm
           initial={{
             name: shop.name, bio: shop.bio,

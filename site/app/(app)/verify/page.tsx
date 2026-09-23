@@ -107,6 +107,39 @@ export default async function VerifyPage() {
     )
   }
 
+  // ══ NO PHOTO TO COMPARE AGAINST. Audit item 101. ════════════════════
+  //
+  // Refused here as well as in submitSelfie, and the difference matters: the
+  // server stops it happening, this stops her WASTING the attempt. Taking a
+  // selfie holding a handwritten note is a small piece of work, and being told
+  // afterwards that it could never have been accepted is the shape of failure
+  // this audit keeps finding.
+  //
+  // It sits with the fee gate above rather than inside the panel below,
+  // because it is the same kind of thing: something to do first, with the
+  // place to do it one click away.
+  if (!setup.profilePicUrl) {
+    return (
+      <Wrap>
+        <h2 className="font-display text-xl text-warm-dark">Add a photo of yourself first</h2>
+        <p className="mt-2 text-sm text-muted">
+          A person compares your ID check photo against the photo on your shop — so there has to
+          be one there to compare it with. It only takes a moment, and it’s the same photo
+          models see when they’re deciding whether to apply to you.
+        </p>
+        <Link
+          href="/shop"
+          className="mt-5 inline-flex min-h-11 items-center rounded-[999px] bg-rose px-6 text-sm font-bold text-white"
+        >
+          Add your photo
+        </Link>
+        <p className="mt-4 text-xs text-muted">
+          Come back here once it’s saved. Nothing else about your ID check changes.
+        </p>
+      </Wrap>
+    )
+  }
+
   return (
     <Wrap>
       <h2 className="font-display text-xl text-warm-dark">

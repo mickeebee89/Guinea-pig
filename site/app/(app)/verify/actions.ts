@@ -5,7 +5,14 @@ import { hasActiveSubscription } from '@/lib/verification'
 import { createSupabaseServerClient, requireUser } from '@/lib/supabase-server'
 import type { ConfirmOutcome } from '@/components/PayForm'
 
-export type VerifyResult = { ok: true } | { ok: false; error: string }
+/**
+ * `needsProfilePic` is the one refusal the capture component acts on rather
+ * than only printing: it is fixable, and the fix is on another page. Every
+ * other refusal here is either already-done or a rule she cannot change.
+ */
+export type VerifyResult =
+  | { ok: true }
+  | { ok: false; error: string; needsProfilePic?: boolean }
 
 /** Matches mobile: resized to 1080 wide, JPEG. A phone photo is 3–5MB raw. */
 const MAX_BYTES = 3 * 1024 * 1024
@@ -73,18 +80,50 @@ export async function submitSelfie(form: FormData): Promise<VerifyResult> {
   const [{ data: provRow }, { data: userRow }, { data: payRow }] = await Promise.all([
     supabase.from('providers').select('id').eq('user_id', user.id).maybeSingle(),
     supabase.from('users')
-      .select('is_verified, is_founding_provider, provider_fee_waived')
+      .select('is_verified, is_founding_provider, provider_fee_waived, profile_pic_url')
       .eq('id', user.id).maybeSingle(),
     supabase.from('verification_payments').select('id').eq('user_id', user.id).limit(1).maybeSingle(),
   ])
 
   const u = (userRow ?? {}) as {
     is_verified?: boolean; is_founding_provider?: boolean; provider_fee_waived?: boolean
+    profile_pic_url?: string | null
   }
 
   // Said first, because it is the same answer for both and the kindest one.
   if (u.is_verified) {
     return { ok: false, error: 'You’re already verified — there’s nothing to submit.' }
+  }
+
+  // ══ A PROFILE PICTURE IS REQUIRED. Audit item 101. ══════════════════
+  //
+  // ⚠️ THIS IS WHAT MAKES A PUBLISHED SENTENCE TRUE, and it is the reason the
+  // copy did not have to be softened. Privacy §7, in two places:
+  //
+  //   "a selfie you take holding a handwritten note, which a member of our
+  //    team looks at ALONGSIDE YOUR PROFILE PHOTO"
+  //
+  // Also /for-stylists, /verify, Settings and mobile's verify-payment. For a
+  // member with no profile picture every one of those was false: there was
+  // nothing to look at it alongside, and the reviewer could not have done what
+  // the sentence describes even after item 98 put the two photos side by side.
+  //
+  // ⚠️ IT COULD NOT BE ADDED UNTIL BOTH ROLES HAD SOMEWHERE TO SET ONE.
+  // Until today nothing in site/ wrote profile_pic_url at all, so this gate
+  // would have refused every web-only member with no way out — including
+  // stylists who had already paid the £14.99. A model got /profile (item 99)
+  // and a stylist got /shop (item 101) first, deliberately, and the message
+  // below names whichever one is hers.
+  //
+  // Both roles, because the claim is role-neutral and so is the check.
+  if (!u.profile_pic_url) {
+    return {
+      ok: false,
+      error: provRow
+        ? 'Add a photo of yourself to your shop first — your ID check photo is compared against it, so there has to be something to compare.'
+        : 'Add a profile photo first — your ID check photo is compared against it, so there has to be something to compare.',
+      needsProfilePic: true,
+    }
   }
 
   if (provRow) {

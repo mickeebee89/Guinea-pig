@@ -82,7 +82,17 @@ export function SelfieCapture({ retake = false }: { retake?: boolean }) {
       const form = new FormData()
       form.append('selfie', new File([blob], 'selfie.jpg', { type: 'image/jpeg' }))
       const res = await submitSelfie(form)
-      if (!res.ok) { setError(res.error); return }
+      if (!res.ok) {
+        setError(res.error)
+        // ⚠️ The one refusal worth ACTING on rather than only printing: her
+        // profile photo went away between this page rendering and the submit,
+        // so a refresh flips the page into the panel that has the button on
+        // it (item 101). A sentence telling her where to go is worse than
+        // taking her there, and every other refusal here is either
+        // already-done or a rule she cannot change by navigating.
+        if (res.needsProfilePic) router.refresh()
+        return
+      }
       if (preview) URL.revokeObjectURL(preview)
       setPreview(null)
       setBlob(null)

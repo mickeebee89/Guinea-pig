@@ -4771,6 +4771,107 @@ strips comments before scanning — which `check-links.mjs` already did, for thi
 exact reason. **Proven by restoring the apostrophe comment and re-running: it
 passes.** Then reverted.
 
+**✅ ITEM 99 VERIFIED LIVE — 23 Sep 2026.** `/profile` works for a model:
+attributes save one at a time, the bio saves, the avatar uploads, captioning
+and grouping photos work, and "See what stylists see" renders the badge,
+reviews and photos.
+
+**101. THE ID CHECK NOW REQUIRES A PROFILE PICTURE, AND PRIVACY §7 IS TRUE AS
+WRITTEN — BUILT 23 Sep 2026. `npm run verify` EXIT 0. NOT DEPLOYED.**
+
+**Plainly:** you cannot send an ID check photo without having a photo for it to
+be compared against. Privacy §7 said that was what happened; now it is.
+
+**── ⚠️ MICKY CAUGHT THE HOLE IN MY OWN PLAN ──**
+
+I proposed the gate and said the blocker was gone because item 99 gave a model
+somewhere to set an avatar. **A stylist has no `/profile` page — that page is
+the model's.** So the gate as planned would have refused every stylist with no
+way out: the exact failure I had warned about two messages earlier, moved one
+screen along rather than removed.
+
+So a stylist's avatar upload was built first, on **`/shop`**, above the name
+and bio — it is the first thing a model sees of her on browse, and it is what
+her ID check is compared against.
+
+**── AND READING MOBILE FOUND TWO DEFECTS IN WHAT I SHIPPED AN HOUR EARLIER ──**
+
+Item 99's avatar upload was written without reading mobile's. Mobile's version
+had already made and fixed both mistakes:
+
+1. **It wrote `users` only.** `providers.profile_pic_url` is a SEPARATE column
+   and it is the one every stylist-facing surface reads — `/stylist/[id]`,
+   browse, and `public_stylists` **on the open web**. Mobile writes both and
+   its comment says exactly why. A 'both'-role account using `/profile` would
+   have changed her photo everywhere except her shop.
+2. **It used a random filename per upload.** Mobile uses a fixed
+   `<user id>/profile.jpg` with `upsert`, so a new photo REPLACES the old
+   object. Mine left every previous avatar sitting in a **public** bucket for
+   ever, referenced by nothing and swept only on account deletion — the
+   selfie-orphan shape again, in a bucket anyone can read by URL.
+
+Both fixed, in one shared action now used by both roles. The fixed filename
+means an identical public URL every time, so the `?t=` cache-buster mobile
+applies is applied here too, once, to the stored value.
+
+**This is the second time today that reading a repo file instead of the other
+client's code produced a worse answer.** The rule that already exists — read
+the live definition first — has a sibling: **read the other client's version of
+the same write before writing yours.**
+
+**── WHAT SHE SEES, AND WHERE SHE IS SENT ──**
+
+| | Sent to |
+|---|---|
+| **Stylist**, on `/verify` | `/shop` — *"A person compares your ID check photo against the photo on your shop — so there has to be one there to compare it with."* |
+| **Model**, in the apply wizard | `/profile` — *"A person compares your ID check photo against your profile photo... It's also the first thing a stylist sees of you."* |
+
+Both panels replace the camera rather than sitting above it, and both carry a
+button to the right page and a line saying nothing else is lost by going
+there. **Told BEFORE she takes the selfie**, because taking a photo holding a
+handwritten note is real work and being told afterwards that it could never
+have been accepted is the shape of failure this audit keeps finding.
+
+**Enforced on the server too** (`submitSelfie`), with a `needsProfilePic` flag
+that the capture component acts on rather than only printing — a refresh flips
+the page into the panel that has the button. That path is only reachable if the
+photo disappears between the page rendering and the submit, but a sentence
+telling her where to go is worse than taking her there.
+
+**Both roles, because the claim is role-neutral and so is the check.**
+
+**── ✅ PRIVACY §7 IS NOW TRUE AS WRITTEN, WITH NO COPY CHANGE ──**
+
+> a selfie you take holding a handwritten note, **which a member of our team
+> looks at alongside your profile photo**
+
+Three things had to be true for that sentence, and now all three are:
+
+1. **A profile photo exists** — this item's gate.
+2. **The reviewer can see it** — item 98 put the two side by side in the queue,
+   where `profile_pic_url` had appeared zero times.
+3. **Both roles can set one** — items 99 (`/profile`) and 101 (`/shop`).
+
+The same applies to `legal.ts:559`, `/for-stylists`, `/verify`, Settings and
+mobile's verify-payment. **Not one word of published copy was changed**, which
+was the point of choosing this sequence over softening it.
+
+**⚠️ ONE THING THE GATE DOES NOT DO.** It requires a photo; it cannot require
+that the photo is of her. That is what the human comparison is for, and it is
+now a comparison that can actually be made.
+
+**── ⚠️ WHAT THIS DOES TO EXISTING ACCOUNTS ──**
+
+Anyone **already verified** is untouched — the gate is on submitting, and
+`is_verified` is checked first anyway. Anyone with a **pending** request is
+untouched: it was submitted before the gate existed and will be reviewed as
+normal, though the queue will show the red "nothing to compare against" banner
+from item 98 if they have no photo.
+
+**Only a NEW submission is gated.** Both test accounts have used the app, so
+both have a photo; the gate is most likely to be seen first by a genuinely
+web-only signup, which is exactly who it is for.
+
 **75. A CHECK COULD STOP THE WEBSITE UPDATING, AND NOTHING NOTICED IT HAD —
 CHANGED 22 Sep 2026. `npm run verify` EXIT 0.**
 
@@ -10930,7 +11031,8 @@ platforms each failed it differently.
 | 92 | ✅ **CLOSED 23 Sep** — verified both ways: chips filter with a postcode, and go inert with the list intact without one | No |
 | 94 | ✅ **CLOSED 23 Sep** — verified live both ways. The unique index exists, so duplicates were never possible and the heart's missing check is the defect | No |
 | 96 | ✅ **CLOSED 23 Sep** — all four verified on screen: the photo on the booking card, and the badge, reviews, photos and bio on her profile | No |
-| 99 | A model's own profile on the web — built, **not deployed**. Avatar, bio, the nine attributes, photo management, Profile in the nav, and a link to what stylists see | No |
+| 101 | ✅ **ID check gated on having a profile picture — built, not deployed.** Privacy §7 is true as written, with no copy change. A stylist sets hers on `/shop`, a model on `/profile` | No |
+| 99 | ✅ **VERIFIED LIVE 23 Sep.** A model's own profile on the web — built, **not deployed**. Avatar, bio, the nine attributes, photo management, Profile in the nav, and a link to what stylists see | No |
 | 100 | **A profile picture is not moderated, on either client.** Live the moment it is uploaded; report/block and the ID-check comparison are the only controls, both after the fact. Not introduced by 99 — written down by it | No |
 | 98 | Verification queue now shows the profile picture beside the selfie — built, **not deployed**. Privacy §7's comparison was previously impossible in the console. **Open: the copy is still false for a member with no profile picture** | No, but Privacy §7 describes it |
 | 97 | **`sessions.price_pence` is read by nothing in either client.** 0052 snapshots it so an edited slot cannot rewrite what was agreed; both clients show the SLOT's price today instead. They agree until someone edits a slot after an application | No, but it is a money display |
