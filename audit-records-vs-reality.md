@@ -2768,6 +2768,98 @@ step 5 lands. **The visible check waits for step 5, and is not claimed here.**
 `JSON.stringify`, so a hash recomputed in Node would differ for reasons that
 say nothing about whether the text is intact.
 
+**81. CONSENT v3: THE PATCH TEST BECOMES EVIDENCE — MIGRATION 0051 WRITTEN
+23 Sep 2026. `npm run build` EXIT 0. NOT APPLIED.**
+
+**Plainly:** the one thing a model must tick before she can send an application
+— that she knows a patch test may be needed — was the only one that left no
+record. It gated the Send button and then vanished. v3 makes it an
+acknowledgement like the other five: keyed, worded, hashed, append-only, kept
+six years.
+
+`supabase/migrations/0051_consent_v3_adds_the_patch_test.sql`, checksum
+`f0da27401272078ad8c8262a09b928f17e724d73350478ae93e0d10ed43201e2`, computed by
+hand — `--stamp` not run.
+
+**── THE WORDING, AS AGREED ──**
+
+> I understand some treatments need an allergy patch test at least 48 hours
+> beforehand, and I will not go ahead without one if my stylist says it's
+> needed
+
+Key `patch_test`, **position 4**, immediately after `age_and_health` — the
+other health item. Position is a decision, not a detail: the hash covers the
+array, order included.
+
+Drawn from `site/lib/site.ts:97` and the checkbox it replaces
+(`apply-session.tsx:1007`), with two deliberate departures:
+* **the A&E line is dropped** — true and right on a marketing page, wrong in a
+  document someone ticks under mild time pressure;
+* **"if my stylist says it's needed"**, not "where it is needed" — Micky's
+  change, and the better one: **a model cannot judge whether a patch test is
+  required and the stylist can**, so the tick must not ask her to.
+
+Everything else is v2 verbatim: same title, same body, same five ticks, same
+three notices with their icons and paragraphs. **9 items, 6 ticks, 3 notices**,
+checked by parsing the JSON out of the migration rather than by eye.
+
+**── WHY A VERSION AND NOT AN EDIT, AND THE TRAP INSIDE THAT ──**
+
+`set_consent_hash()` is BEFORE INSERT **OR UPDATE**. Editing v2's wording would
+recompute v2's hash in place and every consent already recorded against it
+would stop matching the document it points at — the records right, the document
+moved. So a wording change is always a new version.
+
+**⚠️ And the deactivation re-runs that same trigger on v2.** It is safe, but
+only by arithmetic: the hash is computed from title || body || acknowledgements
+and `is_active` is none of those, so it comes out byte-identical. Said out loud
+in the migration, and **Block C proves it rather than trusting it.**
+
+**── WHAT IS NEWLY RECORDED ──**
+
+Before: `patchTestAgreed` — `useState(false)`, gating the Send button
+(`apply-session.tsx:1052`), reaching no table, no RPC, no log. If anyone ever
+asked "was she told to allow 48 hours", the answer was a public web page and a
+checkbox nobody could prove was ticked.
+
+After: an acknowledgement in `session_consents` with its key, its exact
+wording, `agreed: true`, the document id, the version and the content hash over
+the whole document. It becomes the same class of evidence as "I am 18 or over".
+
+This does **not** resurrect `patch_tests` (0007), the table nothing writes. It
+records the AGREEMENT, not a test result.
+
+**── MOBILE: NO APP CHANGE NEEDED, THEN ONE ──**
+
+`ConsentGate` fetches the active document and renders every `requires_tick`
+item it finds; `allTicked` requires all of them (`:106`, `:184-204`). Nothing is
+hardcoded to five, so **six ticks appear with no app change**.
+
+Then the old checkbox must come out (`apply-session.tsx:994-1008`) **along with
+its condition on the Send button (`:1052-1053`), or the button can never
+enable**. Until it does, the model is asked twice and the weaker, unrecorded
+wording is the one gating the button.
+
+**── THE ackParts FIX SHIPPED WITH THIS, AND v3 NEEDED IT ──**
+
+Applied in `242a35e` and `09f2be2`: `ackParts()` is now the single place that
+decides what an acknowledgement looks like and returns heading AND body for
+both shapes; `ackText()` remains the RECORD's label, matching mobile exactly.
+`warnOnUnrenderedFields()` logs at load time if a document carries a field the
+renderer cannot show — it logs rather than blocks, because refusing a consent
+document over a copy change would stop every application.
+
+**v3 has the same three notices, so without that fix this migration would have
+shipped three more empty headings.**
+
+**── VERIFY BLOCKS ──**
+A exactly one active document and it is v3, with 9/6/3; B every item in order
+with the new tick word for word **and the notices' bodies present**; **C ⭐
+existing consents still match their own documents — `hash_has_moved` must be 0,
+and no rows means nothing to measure rather than a pass**; D every hash is 64
+characters, matches a recomputation, and v2's differs from v3's; E an ordinary
+member can read the active document, rolled back.
+
 **75. A CHECK COULD STOP THE WEBSITE UPDATING, AND NOTHING NOTICED IT HAD —
 CHANGED 22 Sep 2026. `npm run verify` EXIT 0.**
 
@@ -8919,6 +9011,7 @@ platforms each failed it differently.
 | 77 | ✅ **CLOSED 23 Sep** — Micky republished his shop, so one is live. Item 11's condition (one LISTED stylist per CATEGORY) is still unmet with a single shop | No, but launch-relevant |
 | 79 | Slot prices live. Untested: the mobile price field; no model can see a price until step 5 | No |
 | 80 | Consent surface built, **no route until step 5**. Terms §5 still needs its line about displayed prices | No |
+| 81 | Consent v3 written (0051), **not applied**. After applying, the mobile patch-test checkbox must come out or the model is asked twice | No |
 Carried in from before the audit, unchanged by it:
 
 | Item | State |
