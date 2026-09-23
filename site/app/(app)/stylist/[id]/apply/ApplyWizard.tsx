@@ -180,7 +180,12 @@ export function ApplyWizard({ ctx }: { ctx: ApplyContext }) {
         // read and tick the terms first", and that is exactly how a submit
         // failure got reported on 23 Sep as a consent failure. Six ticks are
         // not ours to discard because a stylist's diary moved.
-        if (res.code === 'consent_moved' || res.code === 'consent_missing' || res.code === 'consent_unreadable') {
+        if (
+          res.code === 'consent_moved' ||
+          res.code === 'consent_missing' ||
+          res.code === 'consent_unreadable' ||
+          res.code === 'consent_malformed'
+        ) {
           setConsent(null)
         }
         if (res.refresh) router.refresh()

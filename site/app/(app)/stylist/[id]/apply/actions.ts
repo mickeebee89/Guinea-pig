@@ -2,10 +2,11 @@
 
 import { revalidatePath } from 'next/cache'
 import { createSupabaseServerClient, requireUser } from '@/lib/supabase-server'
-import { consentStillCurrent } from '@/lib/queries/consent'
+import { consentStillCurrent, type AcceptedConsent } from '@/lib/queries/consent'
 import { getGateState } from '@/lib/verification'
 import { getBlockedIds } from '@/lib/blocks'
 import { BOOKINGS_PATH } from '@/lib/routes'
+import type { Database } from '@/lib/database.types'
 
 /**
  * Sending an application, from the web. Audit item 83.
@@ -50,6 +51,7 @@ export type ApplyRefusalCode =
   | 'gate_idcheck'
   | 'consent_missing'     // no consent fields in the form at all
   | 'consent_unreadable'  // the payload would not parse
+  | 'consent_malformed'   // it parsed, but it is not a consent record
   | 'consent_moved'       // the document changed under the reader
   | 'consent_unticked'    // an acknowledgement came back not agreed
   | 'blocked'             // the two have blocked each other, either direction
@@ -60,6 +62,82 @@ export type ApplyRefusalCode =
 export type ApplyResult =
   | { ok: true; sessionId: string }
   | { ok: false; error: string; code: ApplyRefusalCode; refresh?: boolean }
+
+/**
+ * create_session_with_consent, with the ONE argument the generated types get
+ * wrong. Audit item 84.
+ *
+ * -- WHY A WRAPPER AND NOT A CAST AT THE CALL SITE -------------------------
+ * `p_note` is `text` and accepts NULL. Mobile has sent null since the function
+ * was written, and a booking with no note stores NULL — not an empty string.
+ *
+ * **The generator cannot express that.** `supabase gen types` marks every
+ * argument without a SQL default as required AND non-nullable; parameter
+ * nullability is not something it reads out of pg_proc. So `p_note: string` is
+ * the generator's limit, not the function's, and it is the only argument of
+ * the sixteen affected.
+ *
+ * Declaring it here, once, keeps the call site below fully checked on its
+ * other fifteen arguments against the live signature — which is the whole
+ * point of turning the types on. Making the types happy by sending `''`
+ * instead would have been a one-character change and would have silently
+ * altered what is stored in every note-less booking.
+ *
+ * Used by exactly one call site. If a second appears, that is the moment to
+ * ask whether the generator has learned to do this properly.
+ */
+type CreateSessionArgs =
+  Omit<Database['public']['Functions']['create_session_with_consent']['Args'], 'p_note'>
+  & { p_note: string | null }
+
+function createSessionWithConsent(
+  supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>,
+  args: CreateSessionArgs,
+) {
+  // The single place the generator's limit is overridden, and the only
+  // assertion in this file. It widens nothing: `args` has already been checked
+  // against CreateSessionArgs above, which is the true signature.
+  return supabase.rpc('create_session_with_consent', args as CreateSessionArgs & { p_note: string })
+}
+
+type Acknowledgement = AcceptedConsent['acknowledgements'][number]
+
+/**
+ * The acknowledgements, CHECKED rather than trusted. Audit item 84.
+ *
+ * WARNING: THIS IS EVIDENCE, AND IT ARRIVES FROM A BROWSER.
+ *
+ * What goes in here is denormalised into `session_consents` and kept for six
+ * years (0006). It is the copy anyone reading the record sees first — the
+ * hash pins the document, but nobody reads a hash. Until this function
+ * existed, the whole array was `unknown[]` and the only check on it was that
+ * every element had `agreed === true`. A caller could post acknowledgements
+ * with rewritten `text`, or extra fields of their own, and they would be
+ * stored verbatim as what she agreed to.
+ *
+ * So: every element must have the three fields, of the right types, non-empty.
+ * The returned objects are REBUILT from those three fields, so anything else
+ * that was sent is dropped rather than recorded.
+ *
+ * WARNING: WHAT THIS STILL DOES NOT DO. It checks the SHAPE, not the CONTENT:
+ * it cannot tell that `text` is the document's own wording, because it never
+ * reads the document. Closing that means rebuilding the array server-side from
+ * the consent document and taking only the ticked KEYS from the browser, which
+ * is a change to what the flow sends and is not made here unasked.
+ */
+function parseAcknowledgements(value: unknown): Acknowledgement[] | null {
+  if (!Array.isArray(value) || value.length === 0) return null
+  const out: Acknowledgement[] = []
+  for (const item of value) {
+    if (typeof item !== 'object' || item === null || Array.isArray(item)) return null
+    const { key, text, agreed } = item as Record<string, unknown>
+    if (typeof key !== 'string' || key.trim() === '') return null
+    if (typeof text !== 'string' || text.trim() === '') return null
+    if (typeof agreed !== 'boolean') return null
+    out.push({ key, text, agreed })
+  }
+  return out
+}
 
 export async function submitApplication(form: FormData): Promise<ApplyResult> {
   const user = await requireUser()
@@ -128,11 +206,30 @@ export async function submitApplication(form: FormData): Promise<ApplyResult> {
     return { ok: false, error: 'We didn’t receive your agreement to the terms. Please tick them again.', code: 'consent_missing', refresh: true }
   }
 
-  let payload: { consent_version?: number; acknowledgements?: unknown[] }
+  let payload: { consent_version?: unknown; acknowledgements?: unknown }
   try {
     payload = JSON.parse(rawPayload)
   } catch {
     return { ok: false, error: 'We couldn’t read your agreement to the terms. Please tick them again.', code: 'consent_unreadable', refresh: true }
+  }
+
+  // WARNING: THE VERSION IS REQUIRED, AND USED TO BE ALLOWED TO BE NULL.
+  //
+  // The call sent `payload.consent_version ?? null`, so a payload arriving
+  // without one would have written a consent row recording no version at all.
+  // That is the weakest possible evidence of an agreement — it says she
+  // agreed to something, and cannot say to what edition of it — and it would
+  // have been created silently, at the moment the record was supposed to be
+  // made. Refusing is the only honest answer, and the types are what found it.
+  const consentVersion = payload.consent_version
+  if (typeof consentVersion !== 'number' || !Number.isInteger(consentVersion) || consentVersion < 1) {
+    console.error('[apply] consent payload has no usable version', { got: typeof consentVersion })
+    return {
+      ok: false,
+      error: 'We couldn’t record which version of the terms you agreed to, so your application wasn’t sent. Nothing has been saved — please read them again and tick the boxes.',
+      code: 'consent_malformed',
+      refresh: true,
+    }
   }
 
   if (!(await consentStillCurrent(supabase, consentId, consentHash))) {
@@ -145,19 +242,29 @@ export async function submitApplication(form: FormData): Promise<ApplyResult> {
     }
   }
 
-  const acks = Array.isArray(payload.acknowledgements) ? payload.acknowledgements : []
-  const allAgreed = acks.every(a => (a as { agreed?: boolean })?.agreed === true)
-  if (acks.length === 0 || !allAgreed) {
+  const acks = parseAcknowledgements(payload.acknowledgements)
+  if (!acks) {
+    // Deliberately NOT the generic 'that didn’t work'. A refusal here means
+    // her consent was not recorded, and a message that does not say so leaves
+    // her believing it was.
+    console.error('[apply] acknowledgements did not match the expected shape')
+    return {
+      ok: false,
+      error: 'Your agreement to the terms didn’t reach us in a form we could record, so your application wasn’t sent. Nothing has been saved — please read them again and tick the boxes.',
+      code: 'consent_malformed',
+      refresh: true,
+    }
+  }
+
+  const allAgreed = acks.every(a => a.agreed === true)
+  if (!allAgreed) {
     // ⚠️ Logged with the KEYS, not just a count. "6 of 9 agreed" does not say
     // which, and the difference between "she missed one" and "we sent one
     // wrong" is the whole diagnosis. Keys and booleans only — the wording is
     // in the document, and this is a server log.
     console.error('[apply] acknowledgements not all agreed', {
       count: acks.length,
-      state: acks.map(a => {
-        const ack = a as { key?: string; agreed?: boolean }
-        return `${ack.key ?? '?'}=${ack.agreed === true ? 'y' : 'n'}`
-      }),
+      state: acks.map(a => `${a.key}=${a.agreed ? 'y' : 'n'}`),
     })
     return {
       ok: false,
@@ -175,7 +282,7 @@ export async function submitApplication(form: FormData): Promise<ApplyResult> {
   const [eh, em] = endTime.split(':').map(Number)
   const durationMinutes = Math.max(15, (eh * 60 + em) - (sh * 60 + sm))
 
-  const { data, error } = await supabase.rpc('create_session_with_consent', {
+  const { data, error } = await createSessionWithConsent(supabase, {
     p_provider_id: providerId,
     p_availability_id: availabilityId,
     p_date: date,
@@ -188,7 +295,7 @@ export async function submitApplication(form: FormData): Promise<ApplyResult> {
     p_note: note || null,
     p_photo_urls: photoPaths,
     p_consent_document_id: consentId,
-    p_consent_version: payload.consent_version ?? null,
+    p_consent_version: consentVersion,
     p_content_hash: consentHash,
     p_acknowledgements: acks,
     // ⚠️ FIFTEEN ARGUMENTS, MATCHING MOBILE EXACTLY. Do not add to this list

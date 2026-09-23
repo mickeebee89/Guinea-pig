@@ -1,4 +1,5 @@
 import { createServerClient } from '@supabase/ssr'
+import type { Database } from '@/lib/database.types'
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 
@@ -24,7 +25,7 @@ import { redirect } from 'next/navigation'
 export async function createSupabaseServerClient() {
   const cookieStore = await cookies()
 
-  return createServerClient(
+  return createServerClient<Database>(
     process.env.SUPABASE_URL!,
     process.env.SUPABASE_ANON_KEY!,
     {

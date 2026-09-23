@@ -117,9 +117,15 @@ export async function cancelBooking(sessionId: string, reason?: string): Promise
   await requireUser()
   const supabase = await createSupabaseServerClient()
 
+  // `p_reason text default null`, and the body does
+  // `nullif(btrim(coalesce(p_reason, '')), '')` — so a missing reason and an
+  // explicit null are the same statement to it. Omitted rather than sent as
+  // null because the generated types describe a defaulted argument as optional,
+  // which is what the live database says it is. No behaviour changes.
+  const reasonText = reason?.trim()
   const { error } = await supabase.rpc('cancel_booking', {
     p_session_id: sessionId,
-    p_reason: reason?.trim() ? reason.trim() : null,
+    ...(reasonText ? { p_reason: reasonText } : {}),
   })
 
   if (error) {

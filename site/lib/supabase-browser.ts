@@ -1,4 +1,5 @@
 import { createBrowserClient } from '@supabase/ssr'
+import type { Database } from '@/lib/database.types'
 
 /**
  * The BROWSER client. Session read from the same cookies the server client
@@ -39,11 +40,11 @@ import { createBrowserClient } from '@supabase/ssr'
  * every initial page load. This client is for subscriptions and for writes made
  * from an interaction.
  */
-let client: ReturnType<typeof createBrowserClient> | undefined
+let client: ReturnType<typeof createBrowserClient<Database>> | undefined
 
 export function getSupabaseBrowser() {
   if (!client) {
-    client = createBrowserClient(
+    client = createBrowserClient<Database>(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     )

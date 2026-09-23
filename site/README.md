@@ -85,21 +85,37 @@ always should have: the build failing to compile.
 | `check-route-coverage.mjs` | An `(app)` route missing from the proxy matcher, so it stops refreshing its session cookie |
 | `check-links.mjs` | A link — in the site **or in an email** — pointing at no route, and a route nothing points at |
 
-### Generated database types — built, not turned on (audit item 84)
+### Generated database types — ON for this app (audit item 84)
 
-Every call to the database is an unchecked string: **401 `.from()` calls over
-~30 tables and 20 `.rpc()` calls over 15 functions**, across the three apps.
-`supabase.rpc('x', { … })` compiles whether or not `x` exists.
+`lib/database.types.ts` is generated from the live database and the three
+Supabase clients here are parameterised with it, so a table, column or RPC
+argument that does not exist is a **build failure** rather than a live user's
+problem. Before this, every call was an unchecked string — `supabase.rpc('x',
+{ … })` compiled whether or not `x` existed, which is how the web's first
+real application shipped calling a parameter the function does not have.
 
-The scaffolding is in `scripts/gen-supabase-types.mjs` (generates, stamps, and
-writes one copy per app) and `scripts/check-types-freshness.mjs` (refuses types
-older than the newest migration — the only staleness check possible without a
-database connection, since CI's keys cannot read `pg_proc`).
+`scripts/gen-supabase-types.mjs` generates, stamps and writes one copy per app.
+**Regenerate whenever a migration is applied:**
 
-**Neither is wired into `checks` yet.** Turning it on means: generate, count
-what it flags, triage — each flag is either a real bug or a genuine type gap,
-and neither should be silenced with a cast — then add the freshness check to
-`checks`, and regenerate as part of applying any migration.
+```bash
+node scripts/gen-supabase-types.mjs
+```
+
+Switching it on produced five errors. Two were real: a consent could be
+recorded with no version, and the acknowledgements array went unvalidated into
+a six-year evidence record. The other three were type gaps, fixed without
+casts — see audit item 84b for the full triage.
+
+**One deliberate exception.** `p_note` on `create_session_with_consent` accepts
+NULL and the generator cannot express that: it marks every argument without a
+SQL default as required and non-nullable. `apply/actions.ts` declares the real
+type once, in a wrapper used by that one call site. Do not widen it into a
+blanket cast — the other fifteen arguments are checked.
+
+**Still off:** `scripts/check-types-freshness.mjs` (refuses types older than the
+newest migration — the only staleness check possible without a database
+connection, since CI's keys cannot read `pg_proc`) is not wired into `checks`,
+and `mobile/` and `admin/` have their copies but untyped clients.
 
 ⚠️ **It checks names and shapes, never permission.** A typed query can return
 nothing because an RLS policy filtered it, which is most of this audit's

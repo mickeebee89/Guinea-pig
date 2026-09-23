@@ -7,6 +7,7 @@ import {
   getReviewContext, type SubRatingKey,
 } from '@/lib/queries/review'
 import { BOOKINGS_PATH } from '@/lib/routes'
+import type { Database } from '@/lib/database.types'
 
 export type ReviewResult = { ok: true } | { ok: false; error: string }
 
@@ -58,7 +59,18 @@ export async function leaveReview(sessionId: string, input: ReviewInput): Promis
     return { ok: false, error: `Your comment is too long (${COMMENT_MAX} characters at most).` }
   }
 
-  const row: Record<string, unknown> = {
+  // ⚠️ TYPED AGAINST THE TABLE, NOT `Record<string, unknown>` (audit item 84).
+  //
+  // The sub-ratings are written under COMPUTED keys — `${key}_rating` — and an
+  // untyped bag was the only way to make that compile. It also meant nothing
+  // checked that those four columns exist, or that the six fixed ones do:
+  // `allowedSubs` was the sole thing standing between a made-up key and the
+  // insert, and a typo anywhere here would have failed at runtime, on a review
+  // a member had already written.
+  //
+  // SubRatingKey is a union of four literals, so `${key}_rating` narrows to
+  // exactly the four nullable rating columns. Nothing is cast.
+  const row: Database['public']['Tables']['reviews']['Insert'] = {
     session_id: sessionId,
     reviewer_id: user.id,
     reviewee_id: ctx.revieweeUserId,

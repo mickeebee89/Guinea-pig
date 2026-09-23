@@ -3812,6 +3812,117 @@ question, answered only by running it AS that member — which is what the
 verify blocks with `set local role authenticated` are for, and why item 66's
 Block B was worthless until it switched role.
 
+**84b. THE TYPES WENT ON FOR `site/`, AND FOUND TWO REAL PROBLEMS NO CHECK IN
+THIS REPO WOULD HAVE CAUGHT — 23 Sep 2026. `npm run verify` EXIT 0.**
+
+**Plainly:** the three Supabase clients in `site/` now carry the generated
+`Database` type, so every table name, column and RPC argument in that app is
+checked when it builds. Switching it on produced **exactly five errors**. None
+was a crash. **Two were real defects in the consent record**, and neither is
+the kind of thing lint, the link checker, a route check or a build would ever
+have noticed — both were perfectly valid TypeScript writing the wrong thing to
+a six-year evidence table.
+
+**── THE FIVE, AND WHAT EACH TURNED OUT TO BE ──**
+
+| | Where | Verdict | Outcome |
+|---|---|---|---|
+| 1 | `review/actions.ts:74` | Type gap | The insert row was `Record<string, unknown>` because the sub-rating keys are computed. Now typed as the table's own `Insert`; `${key}_rating` narrows to the four real columns. Nothing cast |
+| 2 | `bookings/actions.ts:122` | Type gap | Sent `p_reason: null` to a defaulted argument. Now omitted. `p_reason text default null` and the body coalesces it, so nothing changes |
+| 3 | `apply/actions.ts:188` | **Generator limitation** | `p_note` accepts NULL; the generator cannot say so. A one-argument typed wrapper, below |
+| 4 | `apply/actions.ts:191` | **REAL BUG** | A consent could be recorded with **no version**. Now refused |
+| 5 | `apply/actions.ts:193` | **REAL GAP** | Unvalidated browser JSON went into the consent record. Now parsed and rebuilt |
+
+**── ⚠️ 4. A CONSENT WITH NO VERSION ──**
+
+The call sent `p_consent_version: payload.consent_version ?? null`. The payload
+comes from a browser. A payload arriving without a version would have written a
+`session_consents` row saying she agreed to *something* and unable to say to
+which edition of it — silently, at the exact moment the record was supposed to
+be made. Our own wizard always sets it, which is why nothing ever noticed.
+
+It now requires a positive integer and refuses otherwise. **What she sees:**
+
+> We couldn’t record which version of the terms you agreed to, so your
+> application wasn’t sent. Nothing has been saved — please read them again and
+> tick the boxes.
+
+**── ⚠️ 5. THE ACKNOWLEDGEMENTS WERE NEVER CHECKED ──**
+
+`p_acknowledgements` was `unknown[]`, straight from `JSON.parse` of a browser
+string. The only test applied to it was that every element had `agreed ===
+true`. It is denormalised into the consent record and kept for six years
+(0006), and it is the copy a person reads — the hash pins the document, but
+nobody reads a hash. **A caller could have posted acknowledgements with
+rewritten `text`, or extra fields of their own, and they would have been stored
+verbatim as what she agreed to.**
+
+`parseAcknowledgements` now requires `{ key, text, agreed }` of the right types
+and non-empty, and **rebuilds each element from those three fields**, so
+anything else that was sent is dropped rather than recorded.
+
+**What she sees:**
+
+> Your agreement to the terms didn’t reach us in a form we could record, so
+> your application wasn’t sent. Nothing has been saved — please read them again
+> and tick the boxes.
+
+Both refusals carry a new code, `consent_malformed`, which the wizard treats
+like the other consent refusals: it clears her ticks and reloads the document,
+because a malformed payload means the client's state is not to be trusted.
+**Neither is allowed to be the generic `rpc_failed` message.** A refusal here
+means her consent was not recorded, and “please try again” would leave her
+believing it was.
+
+**⚠️ WHAT 5 STILL DOES NOT DO.** It checks the SHAPE, not the CONTENT — it
+cannot tell that `text` is the document's own wording, because it never reads
+the document. The stronger fix is to rebuild the array server-side from the
+consent document and take only the ticked KEYS from the browser. That changes
+what the flow sends, so it is named here rather than done unasked.
+
+**── 3. THE ONE PLACE THE GENERATOR IS OVERRIDDEN ──**
+
+`p_note` is `text` and accepts NULL. Mobile has sent null since the function
+was written, and a note-less booking stores NULL, not `''`. **`supabase gen
+types` marks every argument without a SQL default as required AND non-nullable
+— parameter nullability is not something it reads out of `pg_proc`.** So
+`p_note: string` is the generator's limit, not the function's.
+
+A `CreateSessionArgs` type declares the real nullability once, and a four-line
+`createSessionWithConsent` wrapper is the single assertion. The other fifteen
+arguments stay fully checked against the live signature, which is the entire
+point of turning this on. **The tempting fix — sending `''` — was one
+character and would have silently changed what is stored in every note-less
+booking.**
+
+**── WHAT THIS SAYS ABOUT THE EXERCISE ──**
+
+Five errors across 142 reads, and the headline is not the count. **The types
+were bought to stop item 83 happening again — a call naming an argument that
+does not exist — and they did confirm that fix from the database's own
+signature (`p_category_id` present, `p_device_info` absent, no file consulted).
+But what they actually FOUND was two flaws in the consent record**, which is
+the one table in this product that exists to be read years later by someone
+who was not there.
+
+Neither would have been caught by anything else here: eslint passes on
+`?? null`, the link checker looks at routes, and the build compiled it happily
+for a day. **Both were valid code doing the wrong thing, and the only reason
+they surfaced is that a type described what the database actually accepts.**
+
+**── ALSO DONE ──**
+
+`gen-supabase-types.mjs` used `execFileSync` with `shell: true`, which Node
+deprecates (DEP0190): an argument array plus a shell means the shell re-parses
+arguments meant to be literal. Now `execSync` with a command string — the
+shell is genuinely needed, because `npx` is a `.cmd` on Windows and cannot be
+spawned directly. Nothing interpolated comes from outside the file. Re-run
+after the change: three copies written, byte-identical, no warning.
+
+**Still off:** `check-types-freshness.mjs` is not wired into `npm run checks`,
+and `mobile/` and `admin/` clients are not typed. Both are now cheap, and both
+are separate decisions.
+
 **75. A CHECK COULD STOP THE WEBSITE UPDATING, AND NOTHING NOTICED IT HAD —
 CHANGED 22 Sep 2026. `npm run verify` EXIT 0.**
 
@@ -9967,7 +10078,7 @@ platforms each failed it differently.
 | 81 | ✅ **CLOSED 23 Sep** — v3 live with 6 ticks, 5 existing consents intact, mobile checkbox removed | No |
 | 82 | Model ID check live inside the apply flow. `/verify` still refuses models, by design | No |
 | 83 | ✅ **CLOSED 23 Sep** — sent, accepted, both emails, price_pence 1000 and consent v3 with 9 items on the same booking; 0052 applied 2h before it | No |
-| 84 | Types scaffolding built and **switched off** until the flagged calls are counted. 401 `.from()` + 20 `.rpc()` would come under it | No, but it is why 83 shipped broken |
+| 84 | ✅ **ON for `site/` 23 Sep** — 5 errors, all fixed, no casts bar one declared wrapper. **Found two real consent defects nothing else here would have caught.** Still off: the freshness check in `checks`, and typing `mobile/` and `admin/` | No, but it is why 83 shipped broken |
 | 85 | ✅ **CLOSED 23 Sep** — a real account deleted itself on the web, no half-deleted state. Untested: the Stripe customer fallback, the orphan surface, a failed auth delete | No |
 Carried in from before the audit, unchanged by it:
 

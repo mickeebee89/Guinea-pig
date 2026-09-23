@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import type { Database } from '@/lib/database.types'
 
 /**
  * Anonymous, server-side-only Supabase client for the public website.
@@ -29,7 +30,7 @@ if (!url || !anonKey) {
   )
 }
 
-export const supabase = createClient(url, anonKey, {
+export const supabase = createClient<Database>(url, anonKey, {
   auth: {
     persistSession: false,
     autoRefreshToken: false,

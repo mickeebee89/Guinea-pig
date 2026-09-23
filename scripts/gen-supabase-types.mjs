@@ -37,7 +37,7 @@
  * cannot drift because nothing regenerates them individually.
  */
 
-import { execFileSync } from 'node:child_process'
+import { execSync } from 'node:child_process'
 import { readdirSync, writeFileSync, mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
 
@@ -66,10 +66,18 @@ console.log('If this asks you to log in: npx supabase login\n')
 
 let types
 try {
-  types = execFileSync(
-    'npx',
-    ['supabase', 'gen', 'types', 'typescript', '--project-id', PROJECT_REF],
-    { encoding: 'utf8', maxBuffer: 32 * 1024 * 1024, shell: true },
+  // execSync, not execFileSync with `shell: true`. Node deprecated that
+  // combination (DEP0190) because an argument array plus a shell means the
+  // shell re-parses arguments that were meant to be passed literally. The
+  // shell is needed on Windows, where `npx` is a .cmd and cannot be spawned
+  // directly, so the honest form is a command string.
+  //
+  // Nothing interpolated here comes from outside this file: PROJECT_REF is a
+  // constant above. If that ever stops being true, this must go back to
+  // execFileSync with a real executable and no shell.
+  types = execSync(
+    `npx supabase gen types typescript --project-id ${PROJECT_REF}`,
+    { encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 },
   )
 } catch (e) {
   console.error('\nCould not generate types.')
