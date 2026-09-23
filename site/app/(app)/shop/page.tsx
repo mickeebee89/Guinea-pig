@@ -69,7 +69,10 @@ export default async function ShopPage() {
           />
         )}
         <ShopDetailsForm
-          initial={{ name: shop.name, bio: shop.bio, locationText: shop.locationText }}
+          initial={{
+            name: shop.name, bio: shop.bio,
+            locationText: shop.locationText, postcode: shop.postcode,
+          }}
         />
         <TreatmentPicker all={shop.allCategories} initial={shop.selected} />
       </div>

@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { saveShopDetails } from './actions'
+import { PostcodeField } from '@/components/PostcodeField'
 
 const LIMITS = { name: 80, bio: 500, location: 120 } as const
 
@@ -16,7 +17,7 @@ const LIMITS = { name: 80, bio: 500, location: 120 } as const
 export function ShopDetailsForm({
   initial,
 }: {
-  initial: { name: string; bio: string; locationText: string }
+  initial: { name: string; bio: string; locationText: string; postcode: string | null }
 }) {
   const router = useRouter()
   const [name, setName] = useState(initial.name)
@@ -57,6 +58,22 @@ export function ShopDetailsForm({
           id="shop-location" label="Area" value={locationText} onChange={setLocationText}
           max={LIMITS.location} placeholder="e.g. Bromley, Kent"
           hint="The town or area you work in. Models search on this, so write it the way someone nearby would."
+        />
+
+        {/* ⚠️ ALONGSIDE THE AREA BOX, NOT INSTEAD OF IT. They are different
+            things and one cannot do the other's job:
+              * the AREA is your own words, it is what a model READS on your
+                profile, and it is what the browse search matches on;
+              * the POSTCODE is machinery. It is never displayed, and it is the
+                only thing that can put you on a map.
+            Replacing the area with a postcode would show models a postcode and
+            break the only text search they have. It saves on its own button
+            because it fails for its own reasons — a postcode that cannot be
+            found has nothing to do with your bio being too long. */}
+        <PostcodeField
+          initial={initial.postcode}
+          label="Postcode"
+          hint="How models filter by distance. Never shown to anyone — they see the area above, not this. A postcode with no coordinate means you don’t appear when someone filters by distance at all."
         />
 
         <div>

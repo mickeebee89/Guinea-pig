@@ -464,7 +464,15 @@ export const PRIVACY: LegalDoc = {
         },
         {
           type: 'p',
-          text: 'Your location: your approximate location, so we can show you people nearby and sort results by distance. Stylists also have a location for their shop or working area. We ask your device for this and you can refuse; if you do, you can still browse.',
+          // Rewritten 23 Sep 2026 (audit item 90). It described asking the
+          // device as the ONLY way we get a location, which was true for as
+          // long as the website could not set one at all. The postcode box
+          // makes that half false, and the replacement says what is kept —
+          // the postcode as well as the area it points to — because keeping
+          // it is a deliberate choice and not an implementation detail.
+          // ~~'We ask your device for this and you can refuse; if you do, you
+          // can still browse.'~~
+          text: 'Your location: your approximate location, so we can show you people nearby and sort results by distance. Stylists also have a location for their shop or working area. In the app we ask your device, and you can refuse. On the website you can type a postcode instead, and we keep the postcode along with the point it refers to — the postcode so you can check and change it, the point so we can work out distances. We never ask for or keep your street address. It is optional either way, you can remove it at any time in Settings, and you can still browse without it.',
         },
         {
           type: 'p',
@@ -573,6 +581,14 @@ export const PRIVACY: LegalDoc = {
         {
           type: 'p',
           text: 'We use a small number of service providers who handle information only on our instructions: our database, login and file storage provider; our payment provider (Stripe); our email provider; our notification provider; and our website host.',
+        },
+        {
+          // Added 23 Sep 2026 with the postcode box (item 90). Strictly, a
+          // postcode on its own with nothing attached to it may not be
+          // personal data at all — but saying so and saying nothing look the
+          // same from outside, and this document's habit is to say more.
+          type: 'p',
+          text: 'When you type a postcode on the website, we look it up using a free public postcode service run on Ordnance Survey and ONS data. We send it the postcode and nothing else — not your name, not your account, and not your computer’s address, because the lookup is done by our server rather than by your browser.',
         },
         {
           type: 'p',

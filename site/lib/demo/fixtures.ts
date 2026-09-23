@@ -186,7 +186,7 @@ export function buildTables(images: DemoImages = NO_IMAGES): Tables {
       location_text: s.area, location: s.area, region: s.region, level: s.level,
       is_verified: true, is_published: true, first_published_at: at(-30 + i),
       rating: null, review_count: 0, profile_pic_url: avatar, banner_url: null,
-      shop_handle: s.key, latitude: s.lat, longitude: s.lng, location_lat: s.lat, location_lng: s.lng,
+      shop_handle: s.key, latitude: s.lat, longitude: s.lng,
       created_at: at(-60 + i),
     })
     images.portfolio(s.key).forEach((url, n) => portfolio_items.push({

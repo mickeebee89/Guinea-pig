@@ -128,6 +128,12 @@ export interface ShopEditorData {
   name: string
   bio: string
   locationText: string
+  /**
+   * The stylist's own postcode, from `users` — not from `providers`, which
+   * holds only the coordinate derived from it. One home for the postcode, so
+   * a member with both roles cannot end up with two of them (0054).
+   */
+  postcode: string | null
   /** treatment_categories.name values this stylist currently offers. */
   selected: string[]
   /** Every active category, in the app's own order. */
@@ -282,10 +288,11 @@ export async function getShopEditorData(
   } | null
   if (!prov) return null
 
-  const [mineRes, allRes] = await Promise.all([
+  const [mineRes, allRes, meRes] = await Promise.all([
     supabase.from('provider_treatments').select('category').eq('provider_id', prov.id),
     supabase.from('treatment_categories')
       .select('name, sort_order').eq('is_active', true).order('sort_order'),
+    supabase.from('users').select('postcode').eq('id', userId).maybeSingle(),
   ])
 
   const allCategories = ((allRes.data ?? []) as { name: string }[]).map(c => c.name)
@@ -310,6 +317,7 @@ export async function getShopEditorData(
     name: prov.name ?? '',
     bio: prov.bio ?? '',
     locationText: prov.location_text ?? prov.location ?? '',
+    postcode: (meRes.data as { postcode: string | null } | null)?.postcode ?? null,
     selected,
     allCategories,
   }

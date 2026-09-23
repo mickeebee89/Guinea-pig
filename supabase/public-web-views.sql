@@ -64,9 +64,16 @@ where tc.is_active is true;
 -- ---------------------------------------------------------------------------
 -- 2. Stylists — the directory and the profile page.
 --
--- EXCLUDED ON PURPOSE, never add these: latitude, longitude, user_id,
--- is_published, shop_handle.
+-- EXCLUDED ON PURPOSE, never add these: latitude, longitude, postcode,
+-- user_id, is_published, shop_handle.
 --   * lat/lng — publishing a lone worker's coordinates is a safety exposure.
+--   * postcode — users.postcode, added by 0054. It is finer than the
+--     coordinate, not coarser: a postcode is roughly fifteen households, and
+--     it was kept only so the member can read back and correct what she
+--     typed. It is not on providers at all, so nothing here can reach it by
+--     accident — this line exists so that stays true on purpose. The same
+--     applies to public_profiles, which selects explicit columns from users
+--     and must never gain this one.
 --   * user_id — an auth.users id; joins reviews internally, never leaves here.
 --   * shop_handle — client-generated as "first-lastinitial", not unique, not
 --     editable, and a real first name. Not fit to be a URL key (see `slug`).

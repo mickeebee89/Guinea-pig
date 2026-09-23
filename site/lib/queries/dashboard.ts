@@ -434,6 +434,23 @@ export interface UpdateFeed {
    * than they need and more than we should say.
    */
   hiddenByBlock: boolean
+  /**
+   * The radius actually used, which is NOT always the one that was asked for:
+   * it is null whenever we cannot place the viewer, however the chips look.
+   * See the note in getStylistUpdates — applying a radius to someone with no
+   * coordinate empties the list in silence (item 90).
+   */
+  radiusApplied: number | null
+  /**
+   * How many live updates the radius removed for being unplaceable.
+   *
+   * A COUNT HERE, unlike hiddenByBlock above, and the difference is what it
+   * discloses. A block count says something about one member's safety
+   * decision. This says "some stylists have not told us where they are",
+   * which is about us, and it is the only signal that widening the radius
+   * would not help.
+   */
+  unplaceableHidden: number
 }
 
 /**
@@ -461,7 +478,7 @@ export async function getStylistUpdates(
   const [meRes, provRes, statusRes, blockRes] = await Promise.all([
     supabase.from('users').select('latitude, longitude').eq('id', userId).maybeSingle(),
     supabase.from('providers')
-      .select('id, user_id, name, profile_pic_url, latitude, longitude, location_lat, location_lng')
+      .select('id, user_id, name, profile_pic_url, latitude, longitude')
       .eq('is_published', true),
     // status_posts, not providers.status_text (0031-0034). APPROVED and
     // unexpired — the old column had no moderation state, so anything written
@@ -487,7 +504,6 @@ export async function getStylistUpdates(
   const rows = (provRes.data ?? []) as {
     id: string; user_id: string | null; name: string | null; profile_pic_url: string | null
     latitude: number | null; longitude: number | null
-    location_lat: number | null; location_lng: number | null
   }[]
   const provById = Object.fromEntries(rows.map(r => [r.id, r]))
 
@@ -513,11 +529,13 @@ export async function getStylistUpdates(
       return true
     })
     .map(({ sp, p }) => {
-      // providers carries lat/lng twice, the same duplication as
-      // location/location_text. Prefer whichever is populated rather than
-      // picking one and showing nothing for half the rows.
-      const lat = p.latitude ?? p.location_lat
-      const lng = p.longitude ?? p.location_lng
+      // ONE coordinate pair since 0055. providers used to carry a second,
+      // location_lat/location_lng, read here as a fallback — and it was never
+      // a fallback: nothing had ever written it, on any of the five live
+      // accounts. A second place to look that can never hold anything makes
+      // every reader believe the schema is harder than it is.
+      const lat = p.latitude
+      const lng = p.longitude
       const distanceMiles =
         hasLoc && lat != null && lng != null
           ? haversineMiles(me!.latitude!, me!.longitude!, lat, lng)
@@ -531,10 +549,40 @@ export async function getStylistUpdates(
         distanceMiles,
       }
     })
-    // A stylist with no coordinates is kept when no radius is set and dropped
-    // when one is — being unable to prove they are near is not proof they are.
-    .filter(u => radiusMiles == null || (u.distanceMiles != null && u.distanceMiles <= radiusMiles))
     .sort((a, b) => (a.distanceMiles ?? Infinity) - (b.distanceMiles ?? Infinity))
 
-  return { updates, viewerHasLocation: !!hasLoc, hiddenByBlock }
+  // ⚠️ THE RADIUS ONLY APPLIES IF WE CAN PLACE THE VIEWER (item 90).
+  //
+  // It used to apply always, and the default is 20 miles — so a member with
+  // no coordinate of her own got a null distance for every stylist, the
+  // filter dropped every one of them, and the page said, in one breath:
+  //
+  //   "We don't have a location for your account, so these aren't filtered
+  //    by distance yet."
+  //   "No stylists have posted an update within 20 miles right now."
+  //
+  // The first sentence says the filter is off. The second IS the filter,
+  // emptying the list. EVERY web-only model saw both, because until 0054
+  // nothing on the website could give her a coordinate at all.
+  //
+  // A control that silently does nothing is the thing to remove. Mobile
+  // disables its distance chips when it cannot place you (index.tsx:882) and
+  // has been right about this the whole time.
+  const effectiveRadius = hasLoc ? radiusMiles : null
+
+  // A stylist with no coordinates is kept when no radius is set and dropped
+  // when one is — being unable to prove they are near is not proof they are.
+  // COUNTED rather than silently removed: an empty list and a filtered list
+  // look identical, and only one of them is worth widening the radius for.
+  const withinRadius = effectiveRadius == null
+    ? updates
+    : updates.filter(u => u.distanceMiles != null && u.distanceMiles <= effectiveRadius)
+
+  return {
+    updates: withinRadius,
+    viewerHasLocation: !!hasLoc,
+    hiddenByBlock,
+    radiusApplied: effectiveRadius,
+    unplaceableHidden: updates.length - withinRadius.length,
+  }
 }

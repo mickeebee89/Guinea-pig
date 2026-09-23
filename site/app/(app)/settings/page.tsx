@@ -7,6 +7,7 @@ import { getGateState } from '@/lib/verification'
 import { MembershipSection, type MembershipView } from './MembershipSection'
 import { EmailNotificationsSection } from './EmailNotificationsSection'
 import { DeleteAccountSection } from './DeleteAccountSection'
+import { PostcodeField } from '@/components/PostcodeField'
 
 export const metadata = { title: 'Settings' }
 
@@ -69,8 +70,9 @@ export default async function SettingsPage() {
   // control from someone who is being billed. "Cancel any time" has to be true
   // for whoever is actually paying.
   const { data: me } = await supabase
-    .from('users').select('role, notification_preferences').eq('id', user.id).maybeSingle()
+    .from('users').select('role, notification_preferences, postcode').eq('id', user.id).maybeSingle()
   const role = (me as { role?: string } | null)?.role
+  const postcode = (me as { postcode?: string | null } | null)?.postcode ?? null
   // Default ON: null, a missing key, or anything but an explicit false (item 74).
   const emailNotifications =
     (me as { notification_preferences?: { email?: { enabled?: boolean } } } | null)
@@ -139,6 +141,25 @@ export default async function SettingsPage() {
           <MembershipSection view={membership} />
         </section>
       )}
+
+      {/* ⚠️ SHOWN TO BOTH ROLES, AND IT IS THE ONLY COPY FOR A MODEL.
+          A model has no profile page on this website at all, so there is
+          nowhere else to put this — and until it existed, nothing on the web
+          could set a coordinate for anyone. The stylist also gets one on
+          /shop, next to the area she writes in her own words, because that is
+          where she is already thinking about where she works. Both write the
+          same column through the same action. */}
+      <section className="mb-8">
+        <h2 className="mb-2 font-display text-lg text-warm-dark">Where you are</h2>
+        <PostcodeField
+          initial={postcode}
+          hint={
+            setup.providerId
+              ? 'Used to work out how far away you are from models. Never shown to anyone — they see the area you write on your shop page, not this.'
+              : 'Used to sort stylists and their updates by how far away they are. Never shown to anyone, and you can remove it at any time.'
+          }
+        />
+      </section>
 
       <section className="mb-8">
         <h2 className="mb-2 font-display text-lg text-warm-dark">Emails</h2>

@@ -4036,6 +4036,193 @@ were generated against the newest migration ON DISK. A types file made against
 a migration that was written and never run passes this and is still wrong,
 which is precisely 0009.
 
+**90. NOTHING ON THE WEB HAS EVER WRITTEN A COORDINATE — BUILT 23 Sep 2026.
+MIGRATIONS 0054 AND 0055 NOT APPLIED, NOT DEPLOYED.**
+
+**Plainly:** a stylist who signs up on the website, pays £14.99, passes the ID
+check and publishes **cannot be found by anyone filtering by distance in the
+app**. And a model who signs up on the website sees an empty updates feed
+whatever she does. Both are the same missing value, and nothing in the product
+could supply it: `users.latitude/longitude` and `providers.latitude/longitude`
+are written in exactly two places, **both in `mobile/`**.
+
+Found by walking the three journeys end to end rather than by checking
+features. Every check in this repo passes on both.
+
+**── THE DECISION ──**
+
+A postcode box, looked up server-side, not the browser's location API. Micky,
+23 Sep. It needs no permission prompt, works on a desktop, beats an IP-derived
+fix for accuracy, and — the part that matters most — **she can read it back and
+correct it.** A coordinate she never sees cannot be checked by the only person
+who knows whether it is right.
+
+**postcodes.io**: ONS open data, no key, UK-only. The deciding factor was the
+licence, not the price: we KEEP the coordinate, and Google's Geocoding terms
+forbid storing results outside a Google map.
+
+**── ⚠️ SERVER-SIDE, AND THAT IS A PUBLISHED CLAIM, NOT A PREFERENCE ──**
+
+Privacy §11 says of this website: *"Our fonts are served from this site rather
+than a third party, so loading a page doesn't share your IP address with anyone
+else."* **This is the first outbound call to a third party anywhere in `site/`
+— there were none before.** From a browser it would have sent the member's IP
+to postcodes.io and made that sentence false; from a server action our address
+goes and hers does not.
+
+`lib/postcode.ts` imports `server-only`, so putting it in a Client Component is
+a build error rather than a silent regression. That package was added for this
+one line, and it is the repo's own standard: *"if a comment is the only thing
+making something safe, it isn't"* (check-client-boundary.mjs's header).
+
+**── WHAT IS STORED ──**
+
+**The full postcode, and the coordinate unrounded.** Micky's reasoning, 23 Sep:
+the coordinate is the sensitive part and is stored either way, so keeping the
+postcode barely changes what a breach reveals — while a wrong placement she
+cannot see is exactly the silent failure this work exists to fix.
+
+*An earlier draft of mine stored only the outward code and rounded the
+coordinate to 3 decimal places. Both were dropped. Rounding a coordinate while
+the full postcode sits in the next column protects nothing — **a postcode is
+the finer identifier** — so it would have cost accuracy and bought a feeling.*
+
+Condition attached and honoured: `postcode` is on `public-web-views.sql`'s
+exclusion list beside latitude and longitude, and `public_profiles` selects
+explicit columns that do not include it.
+
+**── WHERE THE BOX IS ──**
+
+| | Where | Why |
+|---|---|---|
+| Stylist | `/shop`, **beside** the free-text Area, not instead of it | The Area is her own words, it is what a model READS, and it is what browse's text search matches. A postcode cannot do any of those three |
+| Model | `/settings` — the only copy | **She has no profile page on this website at all** (see the journey report). Nowhere else existed to put it |
+
+**But the box is not the uptake.** Settings is a page nobody visits, so the
+dashboard's *"We don't have a location for your account"* note — which was true
+and was a **dead end** — now links to it. That sentence is already on screen for
+exactly the people who need it.
+
+**── TWO TABLES THAT MUST NOT DISAGREE ──**
+
+`users.postcode` is the only copy of the postcode. The coordinate goes to
+`users` always and is mirrored onto `providers` for a stylist, because that is
+the row the stylist-facing queries read — the same two writes mobile does.
+
+**Written as two client calls they can half-succeed**, and a stylist whose
+postcode says Chatham while her provider row holds last year's GPS is placed
+somewhere she is not, silently. So `set_my_postcode()` (0054) does both in one
+transaction. **SECURITY INVOKER deliberately**: as an invoker it inherits
+`providers_not_suspended` and the two own-row policies, so a suspended stylist
+is refused by the same rule that refuses her everywhere else, for free. A
+DEFINER function would have had to re-implement all of that.
+
+**── THE NULL-RADIUS BUG, AND WHAT IT WAS SAYING ──**
+
+`getStylistUpdates` applied the radius unconditionally, and the default is 20
+miles. A member with no coordinate got a null distance for every stylist, so
+the filter removed every one — and the page said, in one breath:
+
+> We don't have a location for your account, so these aren't filtered by
+> distance yet.
+
+> No stylists have posted an update within 20 miles right now.
+
+**The first sentence says the filter is off. The second IS the filter, emptying
+the list.** Every web-only model saw both.
+
+Fixed in three parts, and none of them is "change the default":
+
+1. **The radius applies only if we can place you.** `effectiveRadius = hasLoc ?
+   radiusMiles : null`, and the empty state now reads `radiusApplied`, not the
+   chip — they differ exactly when she cannot be placed.
+2. **The chips render as disabled** when we cannot place her, instead of as
+   links that empty the page. **Mobile has done this since it was written
+   (index.tsx:882) and was right all along** — the web copied the feature
+   without the guard.
+3. **A radius that hides someone says so**: *"2 stylists haven't told us where
+   they are, so they're not shown at this distance."* An empty list and a
+   filtered list look identical, and only one is worth widening the radius for.
+
+**── MOBILE NEEDS NO CHANGE, AND SPECIFICALLY MUST NOT GET ONE ──**
+
+| | A web-only stylist looked like… |
+|---|---|
+| Before | Visible under "Any" — the default — and **gone the instant anyone picked a radius**, with no trace |
+| After | Placed like everyone else |
+
+Mobile's filter has no escape hatch for a null distance, and that is correct:
+*"If we can't place a stylist, a radius can't include them"* (index.tsx:454).
+**It must never be "fixed" by including them** — that was the old behaviour, it
+made the chip light up and filter nothing, and it was deliberately removed.
+
+**── THE FIVE ACCOUNTS: NO BACKFILL ──**
+
+From Micky's query, 23 Sep: model `b0df9c2f` has coordinates; `8788ed3d` and
+`740a7b41` do not, both web-only. Both providers have them on the user row and
+the provider row.
+
+* **Anyone who already has one: left alone.** The app stored real device GPS;
+  a postcode centroid is coarser, and overwriting would be a silent downgrade.
+* **Anyone without: prompted, not backfilled.** The temptation was to geocode
+  `location_text` ("Bromley, Kent") through postcodes.io's place endpoint. **It
+  was refused.** Prose geocoding is unreliable, and a stylist placed in the
+  wrong town gets no applications and is given no reason — a null at least
+  degrades honestly and shows her the prompt.
+
+**── A BAD POSTCODE, AND THE ONE THAT MATTERS ──**
+
+| Case | What she sees |
+|---|---|
+| Empty | Accepted. *"Removed."* Withdrawal has to work as well as consent |
+| Malformed | *"That doesn't look like a UK postcode. It should look like BR1 2AB."* Nothing is sent anywhere |
+| Not found (404) | *"We couldn't find that postcode. Check it and try again."* |
+| Real, but ONS holds no coordinate | *"That postcode exists, but we don't have a location for it. Try the postcode of a nearby street."* |
+| **Lookup failed** | ***"We couldn't check that postcode just now, so nothing has changed. Please try again in a moment."*** |
+
+**The last row is the whole reason there are five.** A service outage must never
+read as *"your postcode is wrong"* — she would retype a correct postcode until
+she concluded the site was broken. Same distinction the consent re-read needed
+between *the terms moved* and *we could not read the terms*: one is about her,
+the other is about us, and they cannot share a sentence.
+
+The box also **keeps what she typed** on a failure. Clearing it would make an
+outage cost her the typing as well, with nothing left on screen to compare
+against.
+
+**── THE DEAD PAIR, AND WHY IT IS A SECOND MIGRATION ──**
+
+`providers.location_lat/location_lng` — read as a fallback in the feed, written
+by nothing but the in-memory demo fixtures, **false on all five live accounts**.
+Not a fallback: a decoy.
+
+It is dropped in **0055, not 0054**, and the split is the point. Two orders
+contradict each other:
+
+* dropping it needs the live site to have stopped naming it first — **PostgREST
+  fails the WHOLE select when one column is missing**, and `getStylistUpdates`
+  has no try/catch, so the model dashboard would 500 rather than degrade;
+* but the site cannot BUILD until the types know `set_my_postcode`, and the
+  types come from the live database, so 0054 has to be applied first.
+
+So **0054 is purely additive and safe against the build that is live right
+now**, and 0055 waits for the deploy.
+
+**── ⚠️ NOT COMMITTED, AND WHY ──**
+
+`npx tsc --noEmit` reports **two errors, both `set_my_postcode` is not a known
+function**. That is correct: it does not exist yet. The types are doing the job
+they were turned on for — refusing a call to a function that is not there — and
+it cannot be silenced without the cast this project does not use.
+
+So the working tree holds the whole change and **nothing is pushed**, because a
+push would fail the Vercel build and leave `main` undeployable. The order is
+in 0054's DEPLOY block.
+
+**And the freshness check earned its wiring on its first migration**: it failed
+immediately, naming all three copies as stamped 0053 with 0055 on disk. It was
+added to `checks` four hours ago.
+
 **75. A CHECK COULD STOP THE WEBSITE UPDATING, AND NOTHING NOTICED IT HAD —
 CHANGED 22 Sep 2026. `npm run verify` EXIT 0.**
 
@@ -10192,6 +10379,7 @@ platforms each failed it differently.
 | 82 | Model ID check live inside the apply flow. `/verify` still refuses models, by design | No |
 | 83 | ✅ **CLOSED 23 Sep** — sent, accepted, both emails, price_pence 1000 and consent v3 with 9 items on the same booking; 0052 applied 2h before it | No |
 | 84 | ✅ **ON for `site/` 23 Sep** — 5 errors, all fixed, no casts bar one declared wrapper. **Found two real consent defects nothing else here would have caught.** Freshness check now wired into `checks` and proven to fail. Still untyped: `mobile/` and `admin/` clients | No, but it is why 83 shipped broken |
+| 90 | **Coordinates on the web — built, NOT APPLIED and NOT DEPLOYED.** 0054 (additive) then 0055 (drops the dead pair), with a site deploy between them. Until 0054 is applied the site does not build, by design | **Yes for a paying stylist** — web-only signups are invisible to distance search today |
 | 89 | **Mobile builds its consent record client-side and calls the same function.** The web now rebuilds it server-side (84c); mobile has no server to do that in, so the fix is inside `create_session_with_consent` — a migration, and it would make the web's rebuild redundant. Two clients currently write records of different strength into the same six-year table | No |
 | 85 | ✅ **CLOSED 23 Sep** — a real account deleted itself on the web, no half-deleted state. Untested: the Stripe customer fallback, the orphan surface, a failed auth delete | No |
 Carried in from before the audit, unchanged by it:

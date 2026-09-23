@@ -1,7 +1,7 @@
 // GENERATED FILE — DO NOT EDIT BY HAND.
 //
 // Written by scripts/gen-supabase-types.mjs from the live database.
-// TYPES_STAMP: 0053
+// TYPES_STAMP: 0055
 //
 // Regenerate whenever a migration is applied:
 //   node scripts/gen-supabase-types.mjs
@@ -1896,6 +1896,7 @@ export type Database = {
           latitude: number | null
           longitude: number | null
           notification_preferences: Json | null
+          postcode: string | null
           profile_pic_url: string | null
           provider_fee_waived: boolean
           region: string
@@ -1921,6 +1922,7 @@ export type Database = {
           latitude?: number | null
           longitude?: number | null
           notification_preferences?: Json | null
+          postcode?: string | null
           profile_pic_url?: string | null
           provider_fee_waived?: boolean
           region: string
@@ -1946,6 +1948,7 @@ export type Database = {
           latitude?: number | null
           longitude?: number | null
           notification_preferences?: Json | null
+          postcode?: string | null
           profile_pic_url?: string | null
           provider_fee_waived?: boolean
           region?: string
@@ -2465,6 +2468,10 @@ export type Database = {
         }
       }
       run_retention_purge: { Args: { p_dry_run?: boolean }; Returns: Json }
+      set_my_postcode: {
+        Args: { p_lat?: number; p_lng?: number; p_postcode?: string }
+        Returns: undefined
+      }
       stripe_webhook_health: {
         Args: never
         Returns: {

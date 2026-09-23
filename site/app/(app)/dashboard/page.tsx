@@ -308,28 +308,62 @@ export default async function DashboardPage({
         <section className="mb-6 rounded-lg border border-hairline bg-white p-5 shadow-card">
           <div className="mb-3 flex flex-wrap items-baseline justify-between gap-3">
             <h2 className="font-display text-xl text-warm-dark">Stylist updates</h2>
+            {/* ⚠️ NOT RENDERED AS LINKS WHEN WE CANNOT PLACE HER (item 90).
+                These used to be live whatever we knew, and picking one emptied
+                the feed while the note underneath said filtering was off. A
+                control that silently does nothing is worse than no control:
+                mobile disables its distance chips for exactly this reason
+                (index.tsx:882) and has been right all along. */}
             <nav aria-label="Distance" className="flex flex-wrap gap-1.5">
-              {RADII.map(r => (
-                <Link
-                  key={r.key}
-                  href={`/dashboard?within=${r.key}`}
-                  aria-current={r.key === radius.key ? 'page' : undefined}
-                  className={`inline-flex min-h-11 items-center rounded-[999px] px-3 text-xs font-bold ${
-                    r.key === radius.key ? 'bg-rose text-white' : 'bg-input-bg text-muted hover:bg-soft-pink'
-                  }`}
-                >
-                  {r.label}
-                </Link>
-              ))}
+              {RADII.map(r =>
+                feed.viewerHasLocation ? (
+                  <Link
+                    key={r.key}
+                    href={`/dashboard?within=${r.key}`}
+                    aria-current={r.key === radius.key ? 'page' : undefined}
+                    className={`inline-flex min-h-11 items-center rounded-[999px] px-3 text-xs font-bold ${
+                      r.key === radius.key ? 'bg-rose text-white' : 'bg-input-bg text-muted hover:bg-soft-pink'
+                    }`}
+                  >
+                    {r.label}
+                  </Link>
+                ) : (
+                  <span
+                    key={r.key}
+                    aria-disabled="true"
+                    className="inline-flex min-h-11 cursor-not-allowed items-center rounded-[999px] bg-input-bg px-3 text-xs font-bold text-border"
+                  >
+                    {r.label}
+                  </span>
+                ),
+              )}
             </nav>
           </div>
 
           {!feed.viewerHasLocation && (
-            // Say why filtering is off rather than showing a distance control
-            // that quietly does nothing.
+            // ⚠️ A WAY OUT, NOT JUST AN EXPLANATION. This sentence was true
+            // and was a dead end: nothing on the website could give her a
+            // coordinate, so being told we did not have one led nowhere. It is
+            // also the highest-traffic place to ask — Settings is a page
+            // nobody visits, and this is already on screen.
             <p className="mb-3 rounded-md bg-input-bg px-3 py-2 text-xs text-muted">
-              We don’t have a location for your account, so these aren’t filtered by distance yet.
-              You can still find stylists by area on the browse page.
+              We don’t know where you are, so these aren’t sorted by distance.{' '}
+              <Link href="/settings" className="font-bold text-rose hover:underline">
+                Add your postcode
+              </Link>{' '}
+              and they will be. You can also find stylists by area on the browse page.
+            </p>
+          )}
+
+          {/* Said out loud rather than left as a shorter list. A radius that
+              hid someone is recoverable — widening it brings them back — and
+              only if she knows there is something to widen for. */}
+          {feed.viewerHasLocation && feed.unplaceableHidden > 0 && (
+            <p className="mb-3 rounded-md bg-input-bg px-3 py-2 text-xs text-muted">
+              {feed.unplaceableHidden === 1
+                ? 'One stylist hasn’t told us where they are, so they’re not shown at this distance.'
+                : `${feed.unplaceableHidden} stylists haven’t told us where they are, so they’re not shown at this distance.`}{' '}
+              Choose <span className="font-bold">Any distance</span> to include them.
             </p>
           )}
 
@@ -343,8 +377,13 @@ export default async function DashboardPage({
               </p>
             ) : (
               <p className="text-sm text-muted">
-                No stylists have posted an update{radius.miles ? ` within ${radius.miles} miles` : ''} right
-                now. Updates last 48 hours, so this changes through the week.
+                {/* radiusApplied, not radius.miles. They differ exactly when we
+                    cannot place her — and saying "within 20 miles" to someone
+                    whose feed was never distance-filtered is the half of the
+                    contradiction that survived the fix above. */}
+                No stylists have posted an update
+                {feed.radiusApplied ? ` within ${feed.radiusApplied} miles` : ''} right now.
+                Updates last 48 hours, so this changes through the week.
               </p>
             )
           ) : (
