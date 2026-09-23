@@ -20,6 +20,15 @@
  * 0009 is the standing example of exactly that gap (item 83). This narrows the
  * window; it does not close it.
  *
+ * ⚠️ AND THE OTHER HALF, SEEN LIVE 23 Sep 2026 (item 91). The stamp is the
+ * newest migration FILE, so regenerating while a migration is written but not
+ * yet applied produces a stamp NEWER than the database. That happened between
+ * 0054 and 0055 and this check passed, as it is built to — the types were
+ * correct, the stamp over-claimed by one.
+ *
+ * So a pass means: no migration file has appeared since these types were made.
+ * It has never meant, and cannot mean, that every file has been applied.
+ *
  * Wired into site/'s `npm run checks` on 23 Sep 2026, once the five calls it
  * flagged had been triaged and fixed (item 84b). It runs from `site/`, so
  * every path here is resolved against this file's own location.

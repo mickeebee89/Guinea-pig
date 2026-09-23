@@ -50,7 +50,22 @@ const DESTINATIONS = [
   'admin/lib/database.types.ts',
 ]
 
-/** The newest migration on disk — what the types are being stamped against. */
+/**
+ * The newest migration FILE ON DISK. Audit item 91, 23 Sep 2026.
+ *
+ * ⚠️ THIS IS NOT THE NEWEST APPLIED MIGRATION, AND THE STAMP IS NAMED AFTER
+ * IT ANYWAY. Micky caught the gap the first time it mattered: 0054 was
+ * applied, 0055 was written and pending, and the types — correctly generated
+ * from a database at 0054 — came out stamped 0055.
+ *
+ * The types themselves were right. The STAMP was a claim about a folder,
+ * printed in a form that reads as a claim about the database.
+ *
+ * It stays file-based because nothing here can do better: this script has the
+ * Supabase CLI's login and a project ref, not a database connection, so it
+ * cannot read schema_migrations. Inventing a number would be worse than a
+ * documented approximation. See item 91 for what closing it properly costs.
+ */
 function newestMigration() {
   const versions = readdirSync('supabase/migrations')
     .map(f => /^(\d{4})_/.exec(f)?.[1])

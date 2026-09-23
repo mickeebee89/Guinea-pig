@@ -4223,6 +4223,73 @@ in 0054's DEPLOY block.
 immediately, naming all three copies as stamped 0053 with 0055 on disk. It was
 added to `checks` four hours ago.
 
+**91. THE TYPES STAMP IS A CLAIM ABOUT A FOLDER, PRINTED AS A CLAIM ABOUT THE
+DATABASE — FOUND BY MICKY, 23 Sep 2026. RECORDED, NOT CHANGED.**
+
+**Plainly:** `TYPES_STAMP: 0055` reads as *"these types describe a database at
+migration 0055"*. It means *"0055 was the newest migration FILE in the folder
+when these were generated"*. Those came apart the first time it mattered.
+
+**── EXACTLY WHAT HAPPENED ──**
+
+0054 applied. 0055 written and pending, by design — it waits for a deploy. Types
+regenerated from the live database, which was at 0054. **They came out stamped
+0055**, and `check-types-freshness.mjs` passed.
+
+**Nothing was wrong with the types.** They were generated from the live schema
+and describe it exactly. The stamp was the only thing that over-claimed, and it
+over-claimed by one migration, in the direction that reads as more-current than
+reality.
+
+Micky: *"the stamp reads the newest migration file on disk rather than what's in
+the database, which is the limitation you recorded this morning."* Correct, and
+the limitation as recorded named only the other half of it — that a types file
+made against a migration written but never run would pass. This is the mirror:
+the FILE existing is enough to move the stamp, whether or not anything ran.
+
+**── SHOULD IT STAMP THE NEWEST APPLIED MIGRATION INSTEAD? ──**
+
+**Yes in principle, no as things stand, and the reason is not laziness.**
+
+`gen-supabase-types.mjs` has the Supabase CLI's login and a project ref. It runs
+`supabase gen types`, which emits types and nothing else. **It has no database
+connection**, so it cannot read `schema_migrations`. The check that consumes the
+stamp runs in CI, which has less again: publishable keys that cannot read
+`pg_proc` (item 38). Neither end can see the ledger.
+
+So the options are a documented approximation or an invented number, and this
+project has already decided which of those is worse.
+
+**── WHAT WAS DONE NOW ──**
+
+The claim is fixed, not the mechanism. Both scripts now say the stamp is the
+newest migration FILE, that regenerating with a pending migration produces a
+stamp newer than the database, and that a pass means only *"no migration file
+has appeared since these types were made"*.
+
+**── WHAT WOULD ACTUALLY CLOSE IT, IF IT IS WORTH IT ──**
+
+**Stamp both, and make the second one required.** `TYPES_STAMP` stays exactly as
+it is, file-based, driving the check unchanged. A second line, `TYPES_APPLIED`,
+comes from a **required** argument:
+
+```
+node scripts/gen-supabase-types.mjs --applied=0054
+```
+
+Required rather than optional, because an optional flag on a step run right
+after applying a migration is a flag that gets skipped on the day it matters —
+this repo has a memory note titled "rules I wrote get walked past".
+
+It costs one number, which is in front of whoever just applied the migration.
+It buys two things: a stamp that cannot read as more current than the database,
+and — the part that is genuinely new — **a difference between the two numbers
+that means "there are migration files not yet applied", which nothing in this
+repo reports today.** That is the state 0009 sat in for six weeks.
+
+**Not built.** It is a change to a step Micky runs by hand, so it is his call
+whether the extra argument is worth it.
+
 **75. A CHECK COULD STOP THE WEBSITE UPDATING, AND NOTHING NOTICED IT HAD —
 CHANGED 22 Sep 2026. `npm run verify` EXIT 0.**
 
@@ -10379,6 +10446,7 @@ platforms each failed it differently.
 | 82 | Model ID check live inside the apply flow. `/verify` still refuses models, by design | No |
 | 83 | ✅ **CLOSED 23 Sep** — sent, accepted, both emails, price_pence 1000 and consent v3 with 9 items on the same booking; 0052 applied 2h before it | No |
 | 84 | ✅ **ON for `site/` 23 Sep** — 5 errors, all fixed, no casts bar one declared wrapper. **Found two real consent defects nothing else here would have caught.** Freshness check now wired into `checks` and proven to fail. Still untyped: `mobile/` and `admin/` clients | No, but it is why 83 shipped broken |
+| 91 | Types stamp names the newest migration FILE, not the newest applied — so it can read one ahead of the database. Claim corrected in both scripts; closing it properly needs a required `--applied=` argument, **your call** | No |
 | 90 | **Coordinates on the web — built, NOT APPLIED and NOT DEPLOYED.** 0054 (additive) then 0055 (drops the dead pair), with a site deploy between them. Until 0054 is applied the site does not build, by design | **Yes for a paying stylist** — web-only signups are invisible to distance search today |
 | 89 | **Mobile builds its consent record client-side and calls the same function.** The web now rebuilds it server-side (84c); mobile has no server to do that in, so the fix is inside `create_session_with_consent` — a migration, and it would make the web's rebuild redundant. Two clients currently write records of different strength into the same six-year table | No |
 | 85 | ✅ **CLOSED 23 Sep** — a real account deleted itself on the web, no half-deleted state. Untested: the Stripe customer fallback, the orphan surface, a failed auth delete | No |
