@@ -2607,6 +2607,40 @@ Both editors refuse to save while a price is unparseable, rather than saving
 the last figure that happened to be valid on a slot the stylist believes says
 something else.
 
+**✅ 0050 APPLIED AND VERIFIED — 23 Sep 2026, from Micky's pasted output.**
+
+* **Block A:** no price accepted; **£100.01 refused**; negative refused; **£0
+  accepted and distinct from unset** — the one distinction the whole design
+  rests on, seen rather than assumed.
+* **Block B:** the owner set a price on their own slot (1 row); another member
+  could not (0 rows). The column inherits `avail_write_own`, as intended.
+* **Block C proved nothing: there were 0 future slots at the time.**
+
+**⚠️ A CHECK OVER AN EMPTY SET IS NOT A PASS, IT IS AN ABSENCE.** Block C reads
+"every future slot is unpriced" and a table with no future slots satisfies that
+perfectly while testing nothing. **Third instance this week** — 0048's Block D
+picked an owner and called them a stranger, 0049's Block C picked a provider
+with no treatments so its positive half never ran. The family: *a check whose
+subject is chosen from live data can find no subject and still report success.*
+The fix each time is the same — make the block say "there was nothing to
+measure" instead of passing.
+
+**Superseded by a live test, which is the real evidence:** as
+`micky.buckfield@gmail.com`, a slot on **30 Sep, 09:00–10:00** was created on
+the web with *"What you'll ask for this slot £10"* and saved. **The database
+holds `price_pence` 1000 for that row.** The in-product line reads *"Shown to
+models before they apply. You still agree the final amount in the chat."*
+
+So: the web editor writes pence correctly, the cap and the free/unset
+distinction hold in the database, and only the owner can set a price.
+
+**Still untested, and not claimed:**
+* **The mobile day editor's price field.** This matters more than it sounds:
+  slots made in the app must not end up priceless, and that is exactly the
+  upsert trap the build was written around.
+* **Whether a model ever sees a price** — which needs the apply flow (step 5).
+  Nothing a model can reach shows one today.
+
 **── REMINDER: HAPTICS ──** the mobile price field is a new interaction. The
 sheet's existing controls all buzz on press (`Haptics.impactAsync`); the text
 input has none, which is right for typing, but the save that now validates a
@@ -8761,7 +8795,7 @@ platforms each failed it differently.
 | 14 | Admin revoke UI — `0027` ships the mechanism, nothing calls it | No, but revocation is SQL-only until then |
 | 74 | Email notifications **proven end to end on live data**. Open: mobile has no email switch | No |
 | 75 | Drift check is new and unproven — its first real test is the next failed or skipped deploy | No |
-| 77 | **No published shop exists at all** — `/browse` and every public treatment page are empty while the site is open and indexed | **Yes** |
+| 77 | ✅ **CLOSED 23 Sep** — Micky republished his shop, so one is live. Item 11's condition (one LISTED stylist per CATEGORY) is still unmet with a single shop | No, but launch-relevant |
 | 79 | Slot prices built (0050), **not applied**. Terms §5 needs a line about displayed prices before the web apply flow goes live | No |
 
 Carried in from before the audit, unchanged by it:
