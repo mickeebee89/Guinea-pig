@@ -3747,6 +3747,71 @@ code, and confirmed by printing the code points: `0x5c` is a backslash.
 **Untested:** Micky has not yet reloaded the app to see it. `npx expo start -c
 --dev-client` — a stale Metro bundle will not have the switch at all.
 
+**── SCAFFOLDING BUILT, SWITCHED OFF — 23 Sep 2026. THE SURFACE COUNTED ──**
+
+**What would come under the checker, counted from the repo:**
+
+| App | Files | `.from()` | Tables | `.rpc()` | Functions |
+|---|---|---|---|---|---|
+| site | 34 | 142 | 24 | 5 | 5 |
+| mobile | 30 | 203 | 25 | 7 | 7 |
+| admin | 14 | 56 | 19 | 8 | 7 |
+| **total** | **78** | **401** | ~30 distinct | **20** | **15 distinct** |
+
+⚠️ **That is the SURFACE, not the error count.** How many of those 401 the
+types would REJECT cannot be known from the repo — it needs the generated file,
+which needs one command run against the live project. Reporting a guess here
+would be the same fault this item exists to fix.
+
+**── THE THREE DECISIONS ──**
+
+**1. Staleness — the hard one.** The honest check is "do these match what is
+running", and CI cannot ask: its Supabase variables are `sb_publishable_…`
+keys (item 38) which cannot read `pg_proc`. So the types carry a
+**`TYPES_STAMP`** of the newest migration at generation time, and
+`check-types-freshness.mjs` refuses them when a later migration exists. That is
+answerable from the repo alone.
+
+⚠️ **A pass does not mean they are correct.** They are stamped when GENERATED,
+not when APPLIED — a types file made against a migration that was written and
+never run would pass and still be wrong, which is precisely 0009. It narrows
+the window; it does not close it.
+
+**2. Three apps, no shared code.** One generation writes **three identical
+copies**, because TypeScript will not import across package boundaries that do
+not exist. They cannot drift, because nothing regenerates them individually —
+the same reasoning as the two deliberate copies of `price.ts`.
+
+**3. The calls it would flag — triage, never silence.** Turn it on for `site/`
+first: it is the app at 0 lint errors, and its 142 reads are the newest code.
+**Every flag is either a real bug or a genuine type gap, and a cast is neither
+answer.** Two are already known to be real: item 83's phantom parameter, and
+the mobile chat query asking for a `materials_cost` column that does not exist
+— which failed the WHOLE query, so no treatment showed in chat at all.
+
+**── WHAT MICKY RUNS, AND HOW OFTEN ──**
+* **Once:** `npx supabase login` (browser flow).
+* **Then, and after every applied migration:**
+  `node scripts/gen-supabase-types.mjs`
+* The output holds schema names only — no rows, no keys. It is committed.
+
+**── ⚠️ WHAT IT WOULD NOT HAVE CAUGHT: RLS ──**
+
+**It checks names and shapes. It never checks permission.**
+
+A perfectly typed query can return nothing because a policy filtered it, and
+PostgREST answers with success and an empty set rather than an error. That is
+**most of this audit's findings**, not an edge case: the suspended stylist
+whose update was filtered to zero rows (66), the hidden provider who vanished
+from a model who had booked her (76), the apply gate (49), every
+`public_*` view grant.
+
+So **a green build must never start reading as "the query works"**. It means
+the names are real. Whether the caller may see the rows is a different
+question, answered only by running it AS that member — which is what the
+verify blocks with `set local role authenticated` are for, and why item 66's
+Block B was worthless until it switched role.
+
 **75. A CHECK COULD STOP THE WEBSITE UPDATING, AND NOTHING NOTICED IT HAD —
 CHANGED 22 Sep 2026. `npm run verify` EXIT 0.**
 
@@ -9902,7 +9967,7 @@ platforms each failed it differently.
 | 81 | ✅ **CLOSED 23 Sep** — v3 live with 6 ticks, 5 existing consents intact, mobile checkbox removed | No |
 | 82 | Model ID check live inside the apply flow. `/verify` still refuses models, by design | No |
 | 83 | ✅ **CLOSED 23 Sep** — sent, accepted, both emails, price_pence 1000 and consent v3 with 9 items on the same booking; 0052 applied 2h before it | No |
-| 84 | No generated Supabase types: every rpc name, argument and column is an unchecked string. Scoped, not built | No, but it is why 83 shipped broken |
+| 84 | Types scaffolding built and **switched off** until the flagged calls are counted. 401 `.from()` + 20 `.rpc()` would come under it | No, but it is why 83 shipped broken |
 | 85 | ✅ **CLOSED 23 Sep** — a real account deleted itself on the web, no half-deleted state. Untested: the Stripe customer fallback, the orphan surface, a failed auth delete | No |
 Carried in from before the audit, unchanged by it:
 

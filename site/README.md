@@ -85,6 +85,26 @@ always should have: the build failing to compile.
 | `check-route-coverage.mjs` | An `(app)` route missing from the proxy matcher, so it stops refreshing its session cookie |
 | `check-links.mjs` | A link — in the site **or in an email** — pointing at no route, and a route nothing points at |
 
+### Generated database types — built, not turned on (audit item 84)
+
+Every call to the database is an unchecked string: **401 `.from()` calls over
+~30 tables and 20 `.rpc()` calls over 15 functions**, across the three apps.
+`supabase.rpc('x', { … })` compiles whether or not `x` exists.
+
+The scaffolding is in `scripts/gen-supabase-types.mjs` (generates, stamps, and
+writes one copy per app) and `scripts/check-types-freshness.mjs` (refuses types
+older than the newest migration — the only staleness check possible without a
+database connection, since CI's keys cannot read `pg_proc`).
+
+**Neither is wired into `checks` yet.** Turning it on means: generate, count
+what it flags, triage — each flag is either a real bug or a genuine type gap,
+and neither should be silenced with a cast — then add the freshness check to
+`checks`, and regenerate as part of applying any migration.
+
+⚠️ **It checks names and shapes, never permission.** A typed query can return
+nothing because an RLS policy filtered it, which is most of this audit's
+findings. A green build must never read as "the query works".
+
 Type errors are already build-blocking: `next build` type-checks and
 `typescript.ignoreBuildErrors` is not set.
 
