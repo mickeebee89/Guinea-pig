@@ -72,8 +72,14 @@ console.log(doc.body)
 console.log(`\n${ticks.length} item(s) to tick:`)
 for (const a of ticks) console.log(`  [ ] ${a.text ?? a.title ?? a.key}`)
 if (notices.length > 0) {
+  // ⚠️ A notice is a HEADING AND A PARAGRAPH. Printing only the heading is how
+  // three paragraphs looked like empty titles on 23 Sep — the same fault the
+  // web component had, and this output is where it was spotted.
   console.log(`\n${notices.length} notice(s), shown but not ticked:`)
-  for (const a of notices) console.log(`   ·  ${a.text ?? a.title ?? a.key}`)
+  for (const a of notices) {
+    console.log(`\n   ${a.title ?? a.text ?? a.key}`)
+    if (a.body) console.log(`   ${a.body}`)
+  }
 }
 
 if (ticks.length === 0) {
