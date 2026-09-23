@@ -3078,6 +3078,70 @@ rendering the wizard.
 The server action re-checks both gates anyway, because a page that was correct
 when it rendered is not a guarantee about the moment she presses send.
 
+**⚠️ THE FIRST REAL APPLICATION FAILED, AND THE CAUSE WAS THE ARGUMENT LIST —
+23 Sep 2026, from the Vercel function log.**
+
+    [apply] create_session_with_consent failed
+    { code: "PGRST202", message: "Could not find the function
+      public.create_session_with_consent(p_acknowledgements, p_availability_id,
+      p_category_id, …) in the schema cache" }
+
+Nothing to do with consent, the gate or the price. **PGRST202 is PostgREST
+saying no overload matched the NAMED ARGUMENTS IT WAS GIVEN — and the list it
+prints is what was SENT, not what exists.** It names no culprit; it only
+proves the set was wrong. That distinction matters, because reading a culprit
+out of that message is how the wrong parameter gets removed.
+
+**The fix: fifteen arguments, matching mobile exactly.** The web was sending
+seventeen — the fifteen plus `p_category_id` and `p_device_info`, both of
+which migration 0009's baseline records as defaulted parameters. The fifteen
+are the set the installed app has been booking with for weeks, so they are the
+only ones with evidence behind them. The other two go back only once the live
+signature has been read, and only if it has them.
+
+**Where `p_category_id` came from, and whether mobile sends it:** it came from
+`0009:97`, the baseline's own signature line, which lists both as
+`DEFAULT NULL`. **Mobile sends NEITHER** (`apply-session.tsx:575-590`, fifteen
+arguments) — and 0009's header says so in a warning I had read and quoted:
+*"⚠ Two parameters have defaults and the mobile app passes NEITHER."* I used
+the baseline's signature and ignored its warning about the only caller that
+had ever run.
+
+**A claim in the record was corrected, not quietly dropped:** items 80 and 83
+say the web sends `{"platform":"web"}` as device info. It does not, as of this
+fix. The constant stays in `consent.ts`, unused, with the reasoning intact, so
+the decision does not have to be made twice — but the record must not go on
+saying something is recorded when it is not.
+
+**── HOW THIS SHIPPED, AND WHAT WOULD HAVE CAUGHT IT ──**
+
+**It was never checked against the database. Not once.** `npm run verify` is
+eslint, three text-reading scripts and `next build` — none of them know what
+functions exist in Postgres. `supabase.rpc('create_session_with_consent', {…})`
+is a string and an object literal: **TypeScript cannot check either**, because
+this project generates no Supabase types. So "the signature is unchanged" was
+a statement about a FILE, and the file is a record of what ran on 9 Aug 2026.
+
+**This is the second time.** The first was 0049's Block D, written precisely to
+exercise this call — and skipped, correctly, because the app is in no store.
+But it would not have caught this one either: **Block D calls it with mobile's
+fifteen.** The web's seventeen were never exercised by anything.
+
+Three things would have caught it before a live attempt, cheapest first:
+1. **Reading the signature.** `pg_get_function_arguments` over `pg_proc`, ten
+   seconds, before writing a call. The habit that was missing.
+2. **A verify block that mirrors the WEB's call**, not mobile's. A fixture that
+   tests a different caller than the one being built proves nothing about it.
+3. **Generated Supabase types** (`supabase gen types typescript`), committed,
+   which would make `rpc()` type-checked and turn this into a build failure.
+   That is the structural fix and it is not yet done.
+
+**The shape, for the list:** *a baseline is a record of what ran, not a promise
+about what runs.* 0009's own header says exactly that — "a baseline that
+differs from what is running is worse than no baseline: it looks authoritative
+and is wrong" — and it was still read as authoritative, by me, three weeks
+later.
+
 **── 5. WHAT CANNOT BE TESTED WITHOUT A REAL APPLICATION ──**
 
 Recorded as untested, not as working:
@@ -9246,7 +9310,7 @@ platforms each failed it differently.
 | 80 | Consent surface built, **no route until step 5**. Terms §5 still needs its line about displayed prices | No |
 | 81 | ✅ **CLOSED 23 Sep** — v3 live with 6 ticks, 5 existing consents intact, mobile checkbox removed | No |
 | 82 | Model ID check live inside the apply flow. `/verify` still refuses models, by design | No |
-| 83 | Web apply flow built, **0052 not applied and not deployed**. Nothing in it has been exercised by a real application | **Yes** until it ships |
+| 83 | Web apply flow live; first real attempt failed on the RPC argument list, fixed and **not yet re-tested**. No Supabase types, so no rpc() call in this repo is checked by anything | **Yes** until an application succeeds |
 Carried in from before the audit, unchanged by it:
 
 | Item | State |

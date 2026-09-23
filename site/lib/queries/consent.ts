@@ -89,11 +89,20 @@ export interface AcceptedConsent {
 /**
  * Device info for session_consents.
  *
- * ⚠️ Deliberately just the platform. Mobile records device details; Privacy
- * publishes that we record no device information and that claim currently
- * holds (audit: "no IP or device recorded" is listed among the things that do).
- * Matching mobile exactly here would make a published statement false, so it
- * does not.
+ * ⚠️ NOT CURRENTLY SENT, AND THE RECORD SAYING OTHERWISE WAS CORRECTED.
+ * The web's first real application failed with PGRST202 because its RPC call
+ * carried p_device_info and p_category_id, and no overload matched the
+ * resulting argument set. The call now sends the fifteen arguments the
+ * installed app has been booking with, which are the only ones with live
+ * evidence behind them, and those two are omitted until the live signature
+ * has been read.
+ *
+ * Kept here, unused, because the DECISION behind it still stands and should
+ * not have to be made again: if this ever goes back, it is the platform and
+ * nothing else. Mobile records device details; Privacy publishes that we
+ * record no device information, and that claim is one of the few the audit
+ * found holding. Matching mobile exactly would make a published statement
+ * false.
  */
 export const CONSENT_DEVICE_INFO = { platform: 'web' } as const
 

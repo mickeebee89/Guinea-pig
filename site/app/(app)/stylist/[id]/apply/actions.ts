@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createSupabaseServerClient, requireUser } from '@/lib/supabase-server'
-import { consentStillCurrent, CONSENT_DEVICE_INFO } from '@/lib/queries/consent'
+import { consentStillCurrent } from '@/lib/queries/consent'
 import { getGateState } from '@/lib/verification'
 import { BOOKINGS_PATH } from '@/lib/routes'
 
@@ -160,10 +160,21 @@ export async function submitApplication(form: FormData): Promise<ApplyResult> {
     p_consent_version: payload.consent_version ?? null,
     p_content_hash: consentHash,
     p_acknowledgements: acks,
-    p_category_id: null,
-    // ⚠️ Platform only. Mobile records device details; Privacy publishes that
-    // we record none, and that claim holds today.
-    p_device_info: CONSENT_DEVICE_INFO,
+    // ⚠️ FIFTEEN ARGUMENTS, MATCHING MOBILE EXACTLY. Do not add to this list
+    // without reading the live signature first.
+    //
+    // This call originally also sent p_category_id and p_device_info, because
+    // migration 0009's baseline records them as defaulted parameters. Every
+    // application from the web failed with PostgREST's PGRST202 — "could not
+    // find the function … in the schema cache" — which is what PostgREST says
+    // when NO overload matches the named arguments it was given. It lists what
+    // was SENT, not what exists, so it names no culprit; it only proves the
+    // set was wrong.
+    //
+    // These fifteen are the set the installed app has been booking with for
+    // weeks, so they are the only ones with evidence behind them. The other
+    // two go back only once the live signature has been read, and only if it
+    // has them.
   })
 
   if (error) {
