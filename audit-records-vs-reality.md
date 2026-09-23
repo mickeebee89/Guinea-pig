@@ -4508,6 +4508,95 @@ Both are worth fixing and neither is in this scope; **the failure-silently one
 is the real defect**, because it tells her something untrue about what will
 reach her.
 
+**✅ ITEM 94 VERIFIED LIVE — 23 Sep 2026.** Saving from the stylist page shows
+the line about new times, she appears on the dashboard Favourites card, and
+unsaving removes her from both.
+
+**And the unique-index question is settled, from a read-only query:**
+`favourites` **does** carry a unique index on `(user_id, provider_id)`, and no
+duplicate rows exist. So duplicates were never possible.
+
+That decides which of mobile's two entry points was right, and it is the
+opposite of reassuring: **`verify-payment.tsx`'s careful version was correct,
+and the heart's missing check is the defect** — it happens not to bite only
+because the database refuses what the client never checks. Both comments that
+said the question was open have been corrected in place, with the originals
+struck through. The `Set` in `notifyFavourites` stays as belt-and-braces and is
+now labelled as such rather than as a fix.
+
+**96. TWO QUERIES SELECTING LESS THAN THE APP'S — AND IT WAS FOUR FIELDS, NOT
+TWO. BUILT 23 Sep 2026. `npm run verify` EXIT 0. NOT DEPLOYED.**
+
+**Plainly:** a stylist reading an application on the website saw a booking with
+no photos, and a model's profile with no reviews — both of which the app shows.
+Micky asked what ELSE those two queries omit, on the grounds that if two fields
+were missed there may be more. **There were two more.**
+
+**── FIELD BY FIELD, sessions ──**
+
+| Column | mobile `sessions.tsx:123` | web `queries/sessions.ts:58` |
+|---|---|---|
+| id, model_user_id, date, start_time, end_time, treatment_id, note, status | yes | yes |
+| **`photo_urls`** | yes | **MISSING** |
+| **`created_at`** | yes | **MISSING** |
+
+**`photo_urls` — the known one.** She picked photos in the wizard and was told
+they were shared. They were: into a query that did not select them. For a
+treatment chosen partly on what someone's hair currently looks like, that is
+most of the decision.
+
+**`created_at` — the one nobody was looking for, and it changes an ORDER.**
+Mobile sorts pending applications by it, newest first (`sessions.tsx:180`). The
+web ordered everything by `date` descending, which is right for Upcoming and
+Past and wrong for applications: **a stylist with three applications for the
+same slot had no way to tell who asked first**, and the meaning of the order
+silently changed between her two screens. Now sorted to match.
+
+**── FIELD BY FIELD, the model profile ──**
+
+| Read | mobile `model/[id].tsx` | web `queries/model.ts` |
+|---|---|---|
+| public_profiles (name, initial, pic, instagram) | yes | yes |
+| model_attributes — all nine, plus bio | yes | yes |
+| model_photos — id, url, caption, category | yes | yes |
+| model_photo_categories | yes | yes |
+| **reviews, with an average** | yes | **MISSING** |
+| **`users.is_verified` — the "Verified model" badge** | yes | **MISSING** |
+
+**The identity badge is the more serious of the two.** It is the one thing a
+stranger can be told about another stranger before they agree to be in a room
+together, mobile has shown it since it was built (`model/[id].tsx:479`), and the
+web model page had none. A stylist deciding on the website could not see that
+the applicant had passed her ID check.
+
+**Reviews** are the difference between deciding on nine hair attributes and
+deciding on what other stylists said afterwards. Shown even when empty, unlike
+the photos section — *"no reviews yet"* is an answer, whereas a missing section
+reads as a page that does not do reviews.
+
+**── THE SHAPE UNDER ALL FOUR ──**
+
+Every one is the same mistake: the web page was ported from the app screen by
+reading what it RENDERED, and anything the app used for sorting, or displayed
+in a place the porter did not scroll to, was not in the list of things to
+port. A `select()` is a promise about what the page can say, and nothing
+checks it against the other client.
+
+**⚠️ The generated types would not have caught any of these** — every one of
+these queries is valid, names real columns, and returns rows. It is what they
+DON'T ask for that was wrong, and no type system has an opinion about that.
+
+**── ONE MORE FOUND, NOT FIXED, BECAUSE IT IS BOTH CLIENTS ──**
+
+**`sessions.price_pence` is read by nothing, anywhere.** 0052 snapshots the
+agreed price onto the booking specifically so a stylist editing a slot
+afterwards cannot rewrite what was agreed — and neither client ever shows it
+back. Both read `availability.price_pence` only, so what a booking displays is
+the price of the SLOT today, not the price the booking recorded. Right now they
+agree. They stop agreeing the moment anyone edits a slot after an application.
+
+Recorded as item 97. Not a web-versus-app gap, so not in this scope.
+
 **75. A CHECK COULD STOP THE WEBSITE UPDATING, AND NOTHING NOTICED IT HAD —
 CHANGED 22 Sep 2026. `npm run verify` EXIT 0.**
 
@@ -10665,7 +10754,9 @@ platforms each failed it differently.
 | 83 | ✅ **CLOSED 23 Sep** — sent, accepted, both emails, price_pence 1000 and consent v3 with 9 items on the same booking; 0052 applied 2h before it | No |
 | 84 | ✅ **ON for `site/` 23 Sep** — 5 errors, all fixed, no casts bar one declared wrapper. **Found two real consent defects nothing else here would have caught.** Freshness check now wired into `checks` and proven to fail. Still untyped: `mobile/` and `admin/` clients | No, but it is why 83 shipped broken |
 | 92 | ✅ **CLOSED 23 Sep** — verified both ways: chips filter with a postcode, and go inert with the list intact without one | No |
-| 94 | Favourites on the web — built, **not deployed**. Saving is a SUBSCRIPTION to `new_availability`, and the control says so. Open: whether `favourites` has a unique index, which the two mobile call sites disagree about | No |
+| 94 | ✅ **CLOSED 23 Sep** — verified live both ways. The unique index exists, so duplicates were never possible and the heart's missing check is the defect | No |
+| 96 | Four fields the web queried and the app showed — application photos, `created_at` (the pending sort), the model's reviews, and her Verified badge. Built, **not deployed** | No |
+| 97 | **`sessions.price_pence` is read by nothing in either client.** 0052 snapshots it so an edited slot cannot rewrite what was agreed; both clients show the SLOT's price today instead. They agree until someone edits a slot after an application | No, but it is a money display |
 | 95 | **Mobile's favourite heart fails silently** — no error handling on insert or delete, so a filled heart can sit over a row that does not exist. It also never says that saving subscribes her to notifications | No, but it tells her something untrue |
 | 93 | **A published shop's bio is keyboard-mash test text.** Live, on the only published shop, and it clears `public_stylists`' 40-character bar because that bar counts characters | No, but a model would see it |
 | 91 | Types stamp names the newest migration FILE, not the newest applied — so it can read one ahead of the database. Claim corrected in both scripts; closing it properly needs a required `--applied=` argument, **your call** | No |

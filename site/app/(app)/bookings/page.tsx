@@ -61,6 +61,31 @@ function Group({
                   {s.treatmentName && ` · ${s.treatmentName}`}
                 </p>
                 {s.note && <p className="mt-2 text-sm text-warm-dark/80">{s.note}</p>}
+
+                {/* What she attached to the application. Until 23 Sep the web
+                    did not select these at all, so a stylist reading an
+                    application here saw a booking with no photos while the same
+                    one on the app showed them (item 96).
+
+                    Plain <img>, not next/image: these are signed URLs from a
+                    private bucket that expire, so they cannot be optimised or
+                    cached by the image pipeline. */}
+                {s.photoUrls.length > 0 && (
+                  <ul className="mt-3 flex flex-wrap gap-2">
+                    {s.photoUrls.map((url, i) => (
+                      <li key={url}>
+                        <a href={url} target="_blank" rel="noopener noreferrer">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={url}
+                            alt={`Photo ${i + 1} from ${s.otherPartyName}’s application`}
+                            className="size-20 rounded-md border border-hairline object-cover"
+                          />
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                )}
                 {/* Accept/decline/complete are the stylist's alone — a model
                     seeing Accept on their own application would be nonsense and
                     RLS would refuse it. CANCEL is not: either party can cancel a
@@ -149,7 +174,19 @@ export default async function SessionsPage() {
             </EmptyState>
           ) : (
             <>
-              <Group title="Awaiting acceptance" rows={rows.filter(r => r.status === 'pending')} />
+              {/* ⚠️ NEWEST APPLICATION FIRST, NOT FURTHEST-FUTURE APPOINTMENT.
+                  getSessions orders everything by `date` descending, which is
+                  right for Upcoming and Past and wrong here: an application is
+                  a thing that ARRIVED, and three for the same slot were being
+                  shown in an order that said nothing about who asked first.
+                  Mobile has always sorted this group by created_at
+                  (sessions.tsx:180); the web had never selected the column. */}
+              <Group
+                title="Awaiting acceptance"
+                rows={rows.filter(r => r.status === 'pending')
+                  .slice()
+                  .sort((a, b) => b.createdAt.localeCompare(a.createdAt))}
+              />
               <Group title="Upcoming" rows={rows.filter(r => r.status === 'accepted' && r.date >= today)} />
               {/* Past is by DATE, not just by status. An accepted booking whose
                   day has gone is over whether or not anyone remembered to mark

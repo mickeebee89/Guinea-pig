@@ -36,14 +36,10 @@ export async function setFavourite(providerId: string, saved: boolean): Promise<
   if (!providerId) return { ok: false, error: 'That stylist couldn’t be found.' }
 
   if (!saved) {
-    // ⚠️ DELETES BY THE PAIR, NOT BY ID, SO IT CLEARS DUPLICATES TOO.
-    //
-    // Nothing in this repo proves `favourites` has a unique index on
-    // (user_id, provider_id) — the table predates the migration ledger and no
-    // file creates it. mobile's verify-payment.tsx handles 23505 as if one
-    // exists; mobile's provider/[id].tsx inserts with no check at all, which
-    // only works if one does. Until that is settled, unsaving removes every
-    // row for the pair rather than assuming there is one.
+    // Deletes by the PAIR, not by id. There is a unique index on
+    // (user_id, provider_id) — read from pg_indexes, 23 Sep 2026 — so there
+    // is only ever one row, and this is the same statement either way. It
+    // stays written this way because it needs no id to have been read first.
     const { error } = await supabase
       .from('favourites').delete()
       .eq('user_id', user.id).eq('provider_id', providerId)

@@ -19,6 +19,19 @@ import { indexById, displayName, type ProviderRef, type ProfileRef, type Treatme
  * Read-only. Accept and decline are slice 4 (provider side).
  */
 
+/** Signed for the life of one render. Same bucket and TTL as queries/model.ts. */
+const PHOTO_BUCKET = 'model-photos'
+const PUBLIC_MARKER = `/object/public/${PHOTO_BUCKET}/`
+const SIGN_TTL_SECONDS = 3600
+
+/** Port of mobile's toObjectPath — tolerates a bare path or a legacy public URL. */
+function toObjectPath(stored: string): string {
+  if (!stored) return ''
+  const i = stored.indexOf(PUBLIC_MARKER)
+  const raw = i >= 0 ? stored.slice(i + PUBLIC_MARKER.length) : stored
+  return raw.replace(/^\/+/, '').split('?')[0]
+}
+
 export interface SessionRow {
   id: string
   role: 'model' | 'provider'
@@ -27,6 +40,25 @@ export interface SessionRow {
   endTime: string | null
   status: string
   note: string | null
+  /**
+   * The photos the model attached to her application, signed.
+   *
+   * ⚠️ THE WEB DID NOT SELECT THESE AT ALL until 23 Sep 2026 (item 96). She
+   * chose them in the wizard, was told they were shared, and a stylist reading
+   * the application on the website saw a booking with no photos — while the
+   * same application on the app showed them. For a treatment chosen partly on
+   * what someone's hair currently looks like, that is most of the decision.
+   */
+  photoUrls: string[]
+  /**
+   * When the application arrived, which is NOT the appointment date.
+   *
+   * Mobile sorts pending applications by this, newest first
+   * (sessions.tsx:180). The web ordered everything by `date` alone, so a
+   * stylist with three applications for the same slot had no idea who asked
+   * first — and the order silently changed meaning between her two screens.
+   */
+  createdAt: string
   treatmentName: string | null
   treatmentCategory: string | null
   otherPartyName: string
@@ -55,7 +87,7 @@ export async function getSessions(
 
   const { data: raw, error } = await supabase
     .from('sessions')
-    .select('id, provider_id, model_user_id, date, start_time, end_time, treatment_id, note, status')
+    .select('id, provider_id, model_user_id, date, start_time, end_time, treatment_id, note, photo_urls, created_at, status')
     .or(orClause)
     .in('status', ['pending', 'accepted', 'completed'])
     .order('date', { ascending: false })
@@ -65,6 +97,7 @@ export async function getSessions(
     id: string; provider_id: string; model_user_id: string
     date: string; start_time: string | null; end_time: string | null
     treatment_id: string | null; note: string | null; status: string
+    photo_urls: string[] | null; created_at: string
   }[]
   if (rows.length === 0) return []
 
@@ -86,6 +119,27 @@ export async function getSessions(
       : Promise.resolve({ data: [], error: null }),
   ])
   const reviewed = new Set(((reviewedRes.data ?? []) as { session_id: string }[]).map(r => r.session_id))
+
+  // The attached photos live in a PRIVATE bucket, so the stored paths have to
+  // be swapped for signed URLs or they render blank. One batched call for every
+  // booking on the page, as mobile does.
+  //
+  // A signing failure falls back to the stored value per file rather than
+  // dropping the gallery — a broken image is a visible fault, and an empty
+  // space reads as "she attached nothing", which is the false statement this
+  // whole change exists to stop making.
+  const allPaths = [...new Set(
+    rows.flatMap(r => (r.photo_urls ?? []).map(toObjectPath)).filter(Boolean),
+  )]
+  const signedByPath = new Map<string, string>()
+  if (allPaths.length > 0) {
+    const { data: signed, error: signErr } = await supabase
+      .storage.from(PHOTO_BUCKET).createSignedUrls(allPaths, SIGN_TTL_SECONDS)
+    if (signErr) console.warn('[sessions] createSignedUrls failed:', signErr.message)
+    for (const s of signed ?? []) {
+      if (s.signedUrl && s.path) signedByPath.set(s.path, s.signedUrl)
+    }
+  }
 
   const provMap  = indexById<ProviderRef>(provRes.data)
   const modelMap = indexById<ProfileRef>(modelRes.data)
@@ -111,6 +165,10 @@ export async function getSessions(
         endTime: r.end_time,
         status: r.status,
         note: r.note,
+        photoUrls: (r.photo_urls ?? [])
+          .map(p => signedByPath.get(toObjectPath(p)) ?? p)
+          .filter(Boolean),
+        createdAt: r.created_at,
         treatmentName: treat?.name ?? null,
         treatmentCategory: treat?.category ?? null,
         otherPartyName: isModel ? (prov?.name ?? 'Stylist') : displayName(model),

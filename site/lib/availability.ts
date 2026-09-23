@@ -170,18 +170,19 @@ export async function notifyFavourites(
 ): Promise<void> {
   try {
     const { data } = await supabase.from('favourites').select('user_id').eq('provider_id', providerId)
-    // ⚠️ DE-DUPLICATED, BECAUSE NOTHING GUARANTEES THE ROWS ARE UNIQUE.
+    // De-duplicated, and as of 23 Sep 2026 this is belt-and-braces rather
+    // than a fix. ~~No file in this repo creates a unique index on
+    // (user_id, provider_id), and the database has not been asked which of
+    // mobile's two entry points is right.~~
     //
-    // No file in this repo creates a unique index on (user_id, provider_id) —
-    // the table predates the migration ledger. mobile's verify-payment.tsx
-    // handles 23505 as though one exists; mobile's provider/[id].tsx inserts
-    // with no check at all, which only works if one does. One of those two is
-    // wrong and the database has not been asked which.
+    // ASKED AND ANSWERED (item 94): `favourites` DOES carry a unique index on
+    // (user_id, provider_id), and no duplicate rows exist. So duplicates were
+    // never possible, verify-payment.tsx's careful version was right, and the
+    // heart's missing check is the defect rather than the safeguard.
     //
-    // The consequence lands here and only here: two rows for the same model
-    // mean she is notified twice, every time this stylist posts times. A Set
-    // costs nothing and holds whichever way that question is answered — and
-    // it also cleans up after any duplicates already sitting in the table.
+    // The Set stays because it costs nothing and because the harm it guards
+    // against lands here and only here: two rows for one model would mean she
+    // is notified twice every time this stylist posts times.
     const users = [...new Set(((data ?? []) as { user_id: string }[]).map(f => f.user_id))]
     if (users.length === 0) return
     await supabase.from('notifications').insert(users.map(uid => ({
