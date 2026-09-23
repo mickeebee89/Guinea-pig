@@ -146,7 +146,7 @@ export const TERMS: LegalDoc = {
   metaTitle: 'Terms of Service',
   metaDescription:
     'The terms that govern your use of the Cavy website, waitlist and mobile app.',
-  updated: '22 September 2026',
+  updated: '23 September 2026',
   sections: [
     {
       n: '1',
@@ -249,6 +249,17 @@ export const TERMS: LegalDoc = {
           text: 'When a model and a stylist agree to a treatment, that arrangement is directly between them. They are responsible for agreeing what the treatment involves, where and when it takes place, and any details such as cost. Cavy is not a party to that arrangement. We ask all members to follow our Community Guidelines, including the safety guidance, when meeting in person.',
         },
         {
+          // ADDED 23 Sep 2026, the day a stylist could first put a price on a
+          // slot (migration 0050) and a model could first see it before
+          // applying. A displayed price is the stylist's asking figure and not
+          // an offer Cavy is party to: we take no payment for treatments, hold
+          // no money and run no refunds, so a binding price here would be a
+          // promise we have no mechanism to keep. We record what was shown
+          // (sessions.price_pence) so both of you can point at the same number.
+          type: 'p',
+          text: 'A stylist may show a price on a time slot. That is what they are asking for that session — it is an indication to help you decide before you apply, not an offer from Cavy, and the final amount is whatever the two of you agree in the chat. We keep a record of the price that was shown when a booking was made. Cavy does not take payment for treatments, does not hold your money, and is not involved in refunds or disputes about them.',
+        },
+        {
           type: 'p',
           text: 'Stylists are responsible for carrying out treatments safely, lawfully and competently, and for holding any insurance, qualifications, or licences that apply to the services they offer. Models are responsible for disclosing any relevant allergies, sensitivities or medical considerations before a treatment.',
         },
@@ -260,7 +271,9 @@ export const TERMS: LegalDoc = {
       blocks: [
         {
           type: 'p',
-          text: 'Some features of Cavy require payment — a monthly membership subscription for models, and a one-off identity-verification fee for stylists. Current prices are shown in the app before you pay, and payments are handled by our payment provider (we don’t store your full card details).',
+          // "in the app" until 23 Sep 2026 — untrue since 14 Sep, when
+          // membership became payable on the website too.
+          text: 'Some features of Cavy require payment — a monthly membership subscription for models, and a one-off identity-verification fee for stylists. Current prices are shown on the website and in the app before you pay, and payments are handled by our payment provider (we don’t store your full card details).',
         },
         {
           type: 'p',
@@ -369,7 +382,7 @@ export const PRIVACY: LegalDoc = {
   metaTitle: 'Privacy Policy',
   metaDescription:
     'What Cavy does with your information across the website, the waitlist and the app, and your rights over it.',
-  updated: '22 September 2026',
+  updated: '23 September 2026',
   sections: [
     {
       n: '1',
@@ -459,7 +472,12 @@ export const PRIVACY: LegalDoc = {
         },
         {
           type: 'p',
-          text: 'Bookings and messages: the appointments you make, when and where, which treatment, any notes or photos attached, what it cost, and the messages you exchange with the other person, including when they were read.',
+          // ⚠️ "what it cost" was FALSE from the day it was written until
+          // 23 Sep 2026: no column held it (audit items 79 and 83). It is true
+          // now, and worded for what is actually stored — the price the slot
+          // showed when the booking was made, which is blank where the stylist
+          // set none.
+          text: 'Bookings and messages: the appointments you make, when and where, which treatment, any notes or photos attached, the price the slot showed when you booked it if the stylist set one, and the messages you exchange with the other person, including when they were read.',
         },
         {
           type: 'p',

@@ -46,12 +46,24 @@ export function ConsentGate({
   submitLabel = 'Agree and send my application',
   pending = false,
   disabled = false,
+  onAccept,
 }: {
   doc: ConsentDocument
   submitLabel?: string
   pending?: boolean
   /** The caller's own reasons for not being ready — a missing slot, say. */
   disabled?: boolean
+  /**
+   * Mobile's shape: hand the ticked document UP and let the caller carry it to
+   * the end (ConsentGate.tsx:196-207). Used by the wizard, where consent is
+   * step 6 and sending is step 7 — the hidden fields below would unmount in
+   * between, and a consent record that vanished on the way to the button is
+   * the one failure this component exists to prevent.
+   *
+   * Without it, this renders the hidden fields and its own submit button, for
+   * a caller that is already a <form>.
+   */
+  onAccept?: (accepted: ReturnType<typeof toAcceptedConsent>) => void
 }) {
   const [ticked, setTicked] = useState<string[]>([])
 
@@ -115,17 +127,23 @@ export function ConsentGate({
         </ul>
       </fieldset>
 
-      {/* What the server will be told it showed. Checked there, never trusted. */}
-      <input type="hidden" name="consent_document_id" value={doc.id} />
-      <input type="hidden" name="consent_hash" value={doc.contentHash} />
-      <input
-        type="hidden"
-        name="consent_payload"
-        value={JSON.stringify(toAcceptedConsent(doc, ticked))}
-      />
+      {/* What the server will be told it showed. Checked there, never trusted.
+          In onAccept mode the caller carries these instead. */}
+      {!onAccept && (
+        <>
+          <input type="hidden" name="consent_document_id" value={doc.id} />
+          <input type="hidden" name="consent_hash" value={doc.contentHash} />
+          <input
+            type="hidden"
+            name="consent_payload"
+            value={JSON.stringify(toAcceptedConsent(doc, ticked))}
+          />
+        </>
+      )}
 
       <button
-        type="submit"
+        type={onAccept ? 'button' : 'submit'}
+        onClick={onAccept ? () => onAccept(toAcceptedConsent(doc, ticked)) : undefined}
         disabled={!ready || pending || disabled}
         className="mt-6 inline-flex min-h-11 items-center rounded-[999px] bg-rose px-6 text-sm font-bold text-white disabled:bg-border disabled:text-muted"
       >

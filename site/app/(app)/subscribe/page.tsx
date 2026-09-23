@@ -54,7 +54,7 @@ export default async function SubscribePage() {
           {' '}
           {gate.verified
             ? 'You can apply for sessions now.'
-            : 'The ID check is the other half of applying — it is in the Cavy app for now.'}
+            : 'The ID check is the other half of applying — you do it in the flow, when you apply.'}
         </p>
       </Wrap>
     )

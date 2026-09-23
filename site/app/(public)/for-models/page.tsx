@@ -15,8 +15,8 @@ const POINTS = [
     body: 'You’re not modelling. You’re the person in the chair. If you’re 18 or over and happy to sit for a treatment, you qualify.',
   },
   {
-    title: 'Free or discounted, agreed up front',
-    body: 'The stylist tells you what the treatment involves and what it costs — usually nothing — in the chat, before you commit.',
+    title: 'The price is on the slot, before you apply',
+    body: 'Stylists can put a price on each time they offer — often nothing. You see it before you apply, and you agree the details with them in the chat.',
   },
   {
     title: 'You choose who',

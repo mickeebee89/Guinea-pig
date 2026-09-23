@@ -148,7 +148,20 @@ export default async function StylistPage({
           not offering them. The owner still sees their own. */}
       {(p.isPublished || p.isOwner) && (
       <section className="mt-6">
-        <h2 className="mb-2 text-xs font-bold uppercase tracking-widest text-muted">Availability</h2>
+        <div className="mb-2 flex flex-wrap items-baseline justify-between gap-3">
+          <h2 className="text-xs font-bold uppercase tracking-widest text-muted">Availability</h2>
+          {/* The way in. Before 23 Sep this said applying was in the app —
+              which was true, and was the whole of item 77: the web sent a
+              model to an app that is in no store. */}
+          {!p.isOwner && p.openDates.length > 0 && (
+            <Link
+              href={`/stylist/${id}/apply`}
+              className="inline-flex min-h-11 items-center rounded-[999px] bg-rose px-5 text-sm font-bold text-white"
+            >
+              Apply for a session
+            </Link>
+          )}
+        </div>
         {p.openDates.length === 0 ? (
           <EmptyState title="No open slots">
             {p.name} hasn’t posted availability for the next couple of months.
@@ -157,7 +170,7 @@ export default async function StylistPage({
           <div className="max-w-sm">
             <MonthCalendar
               marks={p.openDates.map((d): CalendarMark => ({ date: d, kind: 'open', label: 'Slots open' }))}
-              caption="Days with slots open. Picking one and applying is in the Cavy app for now."
+              caption="Days with slots open. Pick a time on the next screen."
             />
           </div>
         )}

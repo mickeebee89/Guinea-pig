@@ -277,8 +277,8 @@ export default async function DashboardPage({
               thing about their own account. */}
           {!gate.verified && (
             <p className="mt-4 rounded-md bg-input-bg px-3 py-2 text-xs text-muted">
-              The ID check is in the Cavy app for now — it’s coming to the web shortly, and this
-              page will update itself when it does.
+              You do the ID check when you apply for your first session — it’s one selfie, and
+              membership and the check happen together at that point.
             </p>
           )}
         </section>

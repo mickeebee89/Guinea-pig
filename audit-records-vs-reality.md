@@ -2978,6 +2978,121 @@ and then deleted" I first wrote.
 **── STILL TRUE, AND WORTH REPEATING ──**
 `/verify` continues to refuse model accounts. Nothing about this reopens it.
 
+**83. A MODEL CAN BOOK ON THE WEB — BUILT 23 Sep 2026. `npm run verify`
+EXIT 0. MIGRATION 0052 NOT APPLIED, NOT DEPLOYED.**
+
+Step 5, and the end of the road that started at item 77: a model who signed up
+on cavybeauty.com could pay £4.99 and do nothing with it, because applying
+existed only in an app that is in no store.
+
+`supabase/migrations/0052_a_booking_remembers_its_price.sql`, checksum
+`bda83bb9f978f65e9d1a4cfc152fb8a60b8e58c9f54c554062988e5d7d1be775`, by hand.
+
+**── 1. SEVEN SCREENS, AND WHAT SURVIVES A REFRESH ──**
+
+`/stylist/[id]/apply`, mobile's seven steps, not a redesign. **A browser
+reloads and a native wizard does not**, so:
+
+| What | Where it lives | Why |
+|---|---|---|
+| step, date, slot, treatment, photo ids | **the URL** | refresh, back and forward all work; the address bar is the state |
+| the photos themselves | **uploaded on pick**, into `model_photos` | a reload re-reads her library instead of losing files. **A model who has photographed her own hair three times does not do it a fourth** |
+| the note | **sessionStorage**, never the URL | free text about her hair, skin or health does not belong in browser history or in a link she might paste |
+
+The photo library is the same one mobile uses, so a photo added on either
+appears on both.
+
+⚠️ **The note is read with `useSyncExternalStore`, not restored in an effect.**
+The obvious version — `useState('')` plus an effect that reads storage — is a
+setState inside an effect, which this repo lints against and which the build
+refused. Browser storage IS an external system; that hook is the thing meant
+for it. Every access is wrapped, because in a private window these throw
+rather than return null.
+
+**── 2. THE RPC: NO 18th PARAMETER, WHICH IS A CHANGE OF PLAN ──**
+
+The plan said an 18th defaulted argument. Writing it showed three reasons not
+to, in rising order of importance:
+
+1. **It cannot be done safely.** `CREATE OR REPLACE` cannot change an argument
+   list, so a defaulted 18th parameter is a NEW function — and the installed
+   app's 17-argument call then matches both, which Postgres refuses as
+   *"function is not unique"*.
+2. **The client would be telling us the price.** Anything passed can be passed
+   wrongly. The slot already knows.
+3. **Old clients would record nothing.**
+
+So `sessions.price_pence` is filled by a BEFORE INSERT trigger from the
+availability row the booking already points at — **the mobile app gets the
+snapshot without knowing**. Same shape as 0049's gate: the rule belongs to the
+table, not to one caller.
+
+**A slot with no price snapshots as NULL, not 0.** NULL is "agree it in the
+chat"; 0 is a stylist saying free. Block A of 0052 exists to see 2500, 0 and
+null come out of three slots, because merging the last two would have every
+unpriced slot in the product promising a free treatment.
+
+**── 3. PUBLISHED COPY THAT WAS FALSE THE MOMENT THIS SHIPPED ──**
+
+| Where | Was | Now |
+|---|---|---|
+| `browse:74` | "Applying happens in the Cavy app for now" | "Open a stylist to see their times and apply." |
+| `stylist/[id]:160` | "Picking one and applying is in the Cavy app for now" | "Pick a time on the next screen." + an **Apply for a session** button |
+| `subscribe:57` | "The ID check … is in the Cavy app for now" | "…you do it in the flow, when you apply." |
+| `dashboard:280` | "The ID check is in the Cavy app for now — it's coming to the web shortly" | "You do the ID check when you apply for your first session…" |
+| `for-models:18` | **"Free or discounted, agreed up front"** / "…in the chat, before you commit" | **"The price is on the slot, before you apply"** / "Stylists can put a price on each time they offer — often nothing. You see it before you apply, and you agree the details with them in the chat." |
+
+**Terms §5 gains the sentence that has been owed since 0050:**
+
+> A stylist may show a price on a time slot. That is what they are asking for
+> that session — it is an indication to help you decide before you apply, not
+> an offer from Cavy, and the final amount is whatever the two of you agree in
+> the chat. We keep a record of the price that was shown when a booking was
+> made. Cavy does not take payment for treatments, does not hold your money,
+> and is not involved in refunds or disputes about them.
+
+**Terms §6** said prices "are shown in the app before you pay" — untrue since
+14 Sep, when membership became payable on the website. Now "on the website and
+in the app".
+
+**Privacy: "what it cost" was false from the day it was written** (items 79 and
+83) and is true now, worded for what is actually stored: *"the price the slot
+showed when you booked it if the stylist set one"*. Both documents are dated
+23 September 2026.
+
+**── 4. WHAT SHE SEES WITHOUT A MEMBERSHIP OR AN ID CHECK ──**
+
+The database refuses both (0049), so the only question is whether she finds
+out **now or after seven screens**. It is now: the page checks before
+rendering the wizard.
+
+* **No membership** → "Membership comes first", £4.99, cancel any time, a link
+  to /subscribe, and the honest line: *"Your place isn't held while you do
+  this — slots are first come, first served."*
+* **No ID check** → `IdCheckStep` (item 82), in the flow, never on /verify.
+* **Shop unpublished** → she cannot apply, and is told the booking she may
+  already have is unaffected.
+* **Consent unavailable** → "Applications are paused". Fails closed.
+* **No free slots** → says so rather than an empty wizard.
+
+The server action re-checks both gates anyway, because a page that was correct
+when it rendered is not a guarantee about the moment she presses send.
+
+**── 5. WHAT CANNOT BE TESTED WITHOUT A REAL APPLICATION ──**
+
+Recorded as untested, not as working:
+1. **The whole submit path end to end** — the RPC from the web, with real
+   consent and a real slot. Everything before it is compile-time.
+2. **The stylist's notification, and therefore the email** (0047 makes the
+   notification insert the thing that sends it).
+3. **The price snapshot landing on a real booking** from the web.
+4. **A photo uploaded from a desktop browser** — resizing is not done here as
+   it is for the selfie, so a 5MB phone photo goes up whole.
+5. **The consent-moved-under-you path.** It needs a document to change between
+   render and submit, which cannot be staged by hand without a second session.
+6. **Two models racing for one slot** — the 23505 message is written and
+   unproven.
+
 **75. A CHECK COULD STOP THE WEBSITE UPDATING, AND NOTHING NOTICED IT HAD —
 CHANGED 22 Sep 2026. `npm run verify` EXIT 0.**
 
@@ -9130,7 +9245,8 @@ platforms each failed it differently.
 | 79 | Slot prices live. Untested: the mobile price field; no model can see a price until step 5 | No |
 | 80 | Consent surface built, **no route until step 5**. Terms §5 still needs its line about displayed prices | No |
 | 81 | ✅ **CLOSED 23 Sep** — v3 live with 6 ticks, 5 existing consents intact, mobile checkbox removed | No |
-| 82 | Model ID check built, **no route until step 5**. `/verify` still refuses models, by design | No |
+| 82 | Model ID check live inside the apply flow. `/verify` still refuses models, by design | No |
+| 83 | Web apply flow built, **0052 not applied and not deployed**. Nothing in it has been exercised by a real application | **Yes** until it ships |
 Carried in from before the audit, unchanged by it:
 
 | Item | State |

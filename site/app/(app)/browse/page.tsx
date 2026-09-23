@@ -71,7 +71,7 @@ export default async function BrowsePage({
     <>
       <h1 className="mb-2 font-display text-3xl text-warm-dark">Browse stylists</h1>
       <p className="mb-6 text-sm text-muted">
-        Everyone here is looking for models. Applying happens in the Cavy app for now.
+        Everyone here is looking for models. Open a stylist to see their times and apply.
       </p>
 
       {/* A plain GET form: no JavaScript needed, and the result is a real URL
