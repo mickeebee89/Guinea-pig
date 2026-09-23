@@ -2716,6 +2716,47 @@ Matching mobile exactly would have made it false for the sake of parity.
   change the hash and is a copy decision, not a build one.**
 * **No published-copy change.**
 
+**── WHICH GUARD IS LIVE ON `session_consents` — ANSWERED 23 Sep 2026,
+VERIFIED from Micky's query ──**
+
+**`trg_lock_consents` calls `guard_session_consents`, enabled** — not the
+blanket `prevent_mutation`. So the two things the retention promise depends on
+are both mechanically possible: the **12-month ip/device scrub** and the
+**6-year purge** (`0005:153-173`), each refused before its age and permitted
+after it.
+
+**That settles a piece of record drift, in the file that exists to stop it.**
+The 8 Aug schema snapshot (`:437`) shows `trg_lock_consents` calling
+`prevent_mutation()`, which would have made both impossible and a published
+retention statement false. `supabase/account-deletion-fix.sql:212-265`
+replaces it, and **neither file is a numbered migration**, so the repo could
+not say which was true. The database says the fix is live. The snapshot's own
+header already warns it is "NOT authoritative once it ages" — this is the
+first place that has been shown rather than assumed.
+
+**── AND A SECOND TRIGGER NOBODY HAD MENTIONED: `trg_consent_subject` ──**
+
+`set_consent_subject()`, BEFORE INSERT, SECURITY DEFINER
+(`account-deletion-fix.sql:115-151`). It stamps two columns onto every consent
+row as it is written:
+
+* `subject_name` — first name plus last initial;
+* `subject_email_hash` — SHA-256 of the lower-cased email.
+
+**Why it matters for the web apply flow:** the web writes consent through
+`create_session_with_consent`, so this fires for it too. **The web must not
+supply either column, and must not try** — the comment on the migration is
+explicit that it is a trigger and not app code precisely so the app "cannot
+forget", and a consent record written without identity is unusable later.
+
+It is the same durable-identity pattern as `reports.reported_email_hash`: the
+consent survives account deletion in a form that can still answer "did this
+person agree to this text", without holding an address that can be read back.
+
+So `session_consents` carries personal data by design, which is what the
+6-year bound in Privacy §9 is for — and now demonstrably enforceable, because
+the guard permits the delete once that age is reached.
+
 **── HOW IT CAN BE CHECKED NOW ──**
 `node scripts/read-consent-document.mjs` prints the live document — version,
 title, body, every tick and notice, and the hash. That is the text the page
