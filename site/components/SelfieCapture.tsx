@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { submitSelfie } from '@/app/(app)/verify/actions'
+import { downscale } from '@/lib/downscale'
 
 /**
  * Take the ID-check photo and send it.
@@ -39,31 +40,9 @@ import { submitSelfie } from '@/app/(app)/verify/actions'
  * whatever signal a salon has.
  */
 
-const MAX_WIDTH = 1080
-const QUALITY = 0.85
-
-async function downscale(file: File): Promise<Blob> {
-  const bitmap = await createImageBitmap(file)
-  const scale = Math.min(1, MAX_WIDTH / bitmap.width)
-  const w = Math.round(bitmap.width * scale)
-  const h = Math.round(bitmap.height * scale)
-
-  const canvas = document.createElement('canvas')
-  canvas.width = w
-  canvas.height = h
-  const ctx = canvas.getContext('2d')
-  if (!ctx) throw new Error('no 2d context')
-  ctx.drawImage(bitmap, 0, 0, w, h)
-  bitmap.close()
-
-  return new Promise((resolve, reject) => {
-    canvas.toBlob(
-      b => (b ? resolve(b) : reject(new Error('toBlob returned null'))),
-      'image/jpeg',
-      QUALITY,
-    )
-  })
-}
+// Moved to lib/downscale.ts on 23 Sep 2026, unchanged, because the apply flow
+// needed the same thing and had been uploading full-size phone photos for want
+// of it (audit item 86).
 
 export function SelfieCapture({ retake = false }: { retake?: boolean }) {
   const router = useRouter()

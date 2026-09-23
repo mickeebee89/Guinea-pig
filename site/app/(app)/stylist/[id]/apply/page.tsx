@@ -60,6 +60,20 @@ export default async function ApplyPage({
     )
   }
 
+  // Before the gates, because it is not a thing she can fix by paying.
+  if (ctx.isBlocked) {
+    return (
+      <>
+        {back}
+        <h1 className="mb-6 mt-4 font-display text-3xl text-warm-dark">Apply</h1>
+        <EmptyState title="You can’t book with each other">
+          You’ve blocked this stylist, or they’ve blocked you. You can undo a block you made in
+          Settings.
+        </EmptyState>
+      </>
+    )
+  }
+
   if (!ctx.subscribed) {
     return (
       <>

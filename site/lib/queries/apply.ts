@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { getGateState } from '@/lib/verification'
 import { getIdCheck, type IdCheck } from '@/lib/queries/idCheck'
 import { loadActiveConsentDocument, type ConsentDocument } from '@/lib/queries/consent'
+import { getBlockedIds } from '@/lib/blocks'
 
 /**
  * Everything the apply wizard needs, in one read. Audit item 83.
@@ -48,6 +49,13 @@ export interface ApplyContext {
   consent: ConsentDocument | null
   /** Why consent could not be shown. Applying is blocked while this is set. */
   consentProblem: string | null
+  /**
+   * Blocked in either direction. Asked here so she is told before seven
+   * screens rather than at the end — the same reason the gates are read here.
+   * The server action asks again at submit, because a block can arrive while
+   * she is filling the form in.
+   */
+  isBlocked: boolean
 }
 
 const hhmm = (t: string) => t.substring(0, 5)
@@ -67,7 +75,7 @@ export async function getApplyContext(
 
   const today = new Date().toISOString().slice(0, 10)
 
-  const [gate, idCheck, slotRes, treatRes, photoRes, consentLoad] = await Promise.all([
+  const [gate, idCheck, slotRes, treatRes, photoRes, consentLoad, blocked] = await Promise.all([
     getGateState(supabase, userId),
     getIdCheck(supabase, userId),
     supabase
@@ -85,6 +93,7 @@ export async function getApplyContext(
       .order('created_at', { ascending: false })
       .limit(12),
     loadActiveConsentDocument(supabase),
+    getBlockedIds(supabase, userId).catch(() => new Set<string>()),
   ])
 
   const rawSlots = (slotRes.data ?? []) as {
@@ -150,5 +159,6 @@ export async function getApplyContext(
     photos,
     consent: consentLoad.ok ? consentLoad.doc : null,
     consentProblem: consentLoad.ok ? null : consentLoad.reason,
+    isBlocked: !!p.user_id && blocked.has(p.user_id),
   }
 }

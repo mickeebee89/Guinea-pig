@@ -3591,6 +3591,108 @@ the body it was written against, not merely for the function's existence.
 
 Apple 5.1.1(v) and Play are unaffected — the app already had this.
 
+**✅ ITEM 13 CLOSED — 23 Sep 2026, BY READING THE WHOLE PATH. ITS OPEN LINE WAS
+STALE ON BOTH HALVES.**
+
+The line, verbatim:
+
+> | 13 | Cancellation wording, and no cancel path exists at all | **Yes** — "I
+> need to cancel" is inevitable |
+
+**"No cancel path exists at all" is false.** It was true on 2 Sep. It is not
+now, and both clients reach the same function:
+
+| | Where |
+|---|---|
+| The rule | `cancel_booking` — 0029, rewritten by `0030:133-205` |
+| Web | `bookings/SessionActions.tsx:95-160` — either party, a reason box, a confirm step, `canCancel = (pending \|\| accepted) && !isPast` |
+| Mobile | `chat/[sessionId].tsx:573-590` → `CancelSheet` → `lib/cancel.ts:31` |
+
+The function refuses what it should and says why in words a person can read:
+not signed in, booking not found, *"this booking is already cancelled"*, *"not
+a participant of this booking"*. It caps the reason at 280 characters, records
+`cancelled_by`, `cancelled_at` and `cancellation_reason`, and writes the other
+party a notice.
+
+**"Cancellation wording" is addressed.** That was the real complaint — the
+careful wording went to the rare case and the common one read *"Your upcoming
+treatment has been cancelled"* with no actor and no route. 0029 gave it three
+messages, 0030 made them name the slot, and **0053's Block B rendered one an
+hour ago**: *"Your booking on 3 October at 9am has been cancelled"*, naming the
+stylist and the treatment. Seen, not assumed.
+
+**Two things checked because "it exists" is not the same as "it works":**
+* **Cancelling frees the slot.** Nothing anywhere writes `availability.is_taken`
+  on booking — 0029's own note says there is no is_taken bookkeeping — and
+  every taken-slot reader keys on sessions with status pending/accepted. A
+  cancelled booking stops blocking its slot immediately.
+* **The other party is told, and emailed.** `session_cancelled` is one of the
+  seven emailed types (0047), and the notice insert is what sends it.
+
+**── ⚠️ ONE THING THAT GENUINELY DOES NOT WORK, RECORDED SEPARATELY AS ITEM 87 ──**
+
+**A cancelled booking disappears from both clients.** `sessions.ts:60` and
+`sessions.tsx:125` both list `pending, accepted, completed` only. So after a
+cancellation — hers or theirs — the booking is simply gone from the list, and
+the notification is the only trace. **Notifications are deletable (0008)**, so
+a member can end up with no record at all that a booking ever existed.
+
+That is not what item 13 was about and it does not block launch, but it is
+real, it is on both clients, and closing 13 without naming it would be closing
+it on a half-read.
+
+---
+
+**86. THE APPLY PHOTOS WENT UP WHOLE, AND A BLOCKED PAIR GOT A SHRUG — BOTH
+FIXED 23 Sep 2026. `npm run verify` EXIT 0.**
+
+**── THE RESIZE ──**
+
+The ID-check selfie has been shrunk in the browser since it was built: 1080px,
+0.85 JPEG, with the reasoning recorded — *"a modern phone photo is 3–5MB, most
+of it detail a person comparing two faces does not need, and the upload happens
+on whatever signal a salon has."*
+
+**Every word of that is equally true of an application photo, and those went up
+whole** — because the resize lived in the one component that happened to need
+it first. It is now `lib/downscale.ts`, used by both, so the two cannot drift
+into "the selfie is resized and the application photos are not" a second time.
+
+`downscaleToFile` **never throws**: if the browser cannot decode the image — a
+HEIC from an older iPhone, a canvas the OS will not allocate — the original is
+sent. A large upload is a worse experience; a refused upload is a lost
+application. It also keeps the original when the "resized" file comes out
+bigger, which small PNGs re-encoded as JPEG will do.
+
+**── THE BLOCKED PAIR ──**
+
+Applying to someone she has blocked, or who has blocked her, was refused by
+`sessions_insert_not_blocked` — a RESTRICTIVE policy — and she saw
+*"We couldn't send your application. Please try again."* Trying again cannot
+help.
+
+**How it knows it is a block: it ASKS, rather than reading it out of an error.**
+A RESTRICTIVE failure arrives as **42501, the same code as every other
+row-security refusal**, including 0049's apply gate. Inferring "blocked" from
+that code would be a guess, and would put those words in front of someone whose
+membership had merely lapsed. So `getBlockedIds` — the same helper the lists
+use, and the product's own definition of a block, either direction — is called
+before the RPC.
+
+**What it says, and what it does not:**
+
+> You can't apply to this stylist. You've blocked them, or they've blocked you
+> — either way you can't book with each other. You can undo a block you made in
+> Settings.
+
+**It never says who blocked whom.** Telling her *they* blocked her hands one
+member a fact about another's safety decision; *"you blocked them"* would be
+wrong half the time. The site already words this exactly once, on the stylist
+profile, and this matches it deliberately.
+
+Asked **twice**: on the page, so she is told before seven screens, and again in
+the action, because a block can arrive while she is filling the form in.
+
 **75. A CHECK COULD STOP THE WEBSITE UPDATING, AND NOTHING NOTICED IT HAD —
 CHANGED 22 Sep 2026. `npm run verify` EXIT 0.**
 
@@ -9735,7 +9837,8 @@ platforms each failed it differently.
 | | Item | Blocking launch? |
 |---|---|---|
 | 12 | Stylist banners cannot be set — read in four places, written nowhere | No |
-| 13 | Cancellation wording, and no cancel path exists at all | **Yes** — "I need to cancel" is inevitable |
+| 13 | ✅ **CLOSED 23 Sep** — stale on both halves: both clients cancel, and 0029/0030 rewrote the wording. Was the last launch blocker | No |
+| 87 | A cancelled booking vanishes from both clients — lists show pending/accepted/completed only, and notifications are deletable, so a member can be left no record | No |
 | 14 | Admin revoke UI — `0027` ships the mechanism, nothing calls it | No, but revocation is SQL-only until then |
 | 74 | Email notifications **proven end to end on live data**. Open: mobile has no email switch | No |
 | 75 | Drift check is new and unproven — its first real test is the next failed or skipped deploy | No |

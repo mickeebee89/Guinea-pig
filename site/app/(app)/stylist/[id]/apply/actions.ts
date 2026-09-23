@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { createSupabaseServerClient, requireUser } from '@/lib/supabase-server'
 import { consentStillCurrent } from '@/lib/queries/consent'
 import { getGateState } from '@/lib/verification'
+import { getBlockedIds } from '@/lib/blocks'
 import { BOOKINGS_PATH } from '@/lib/routes'
 
 /**
@@ -51,6 +52,7 @@ export type ApplyRefusalCode =
   | 'consent_unreadable'  // the payload would not parse
   | 'consent_moved'       // the document changed under the reader
   | 'consent_unticked'    // an acknowledgement came back not agreed
+  | 'blocked'             // the two have blocked each other, either direction
   | 'slot_taken'
   | 'gate_database'       // CV003: the database refused, not us
   | 'rpc_failed'
@@ -84,6 +86,35 @@ export async function submitApplication(form: FormData): Promise<ApplyResult> {
   }
   if (!gate.verified) {
     return { ok: false, error: 'Your ID check isn’t done yet, so this can’t be sent.', code: 'gate_idcheck', refresh: true }
+  }
+
+  // ── Blocked, either direction ────────────────────────────────────────────
+  //
+  // ⚠️ ASKED, NOT INFERRED FROM AN ERROR. `sessions_insert_not_blocked` is a
+  // RESTRICTIVE policy, and a RESTRICTIVE failure arrives as 42501 — the same
+  // code as every other row-security refusal, including 0049's apply gate. So
+  // reading "blocked" out of the error would be a guess, and would put those
+  // words in front of someone whose membership had simply lapsed.
+  //
+  // getBlockedIds returns the pair in BOTH directions, which is the product's
+  // definition of a block (CLAUDE.md: mutual block = either direction), and it
+  // is the same helper the lists use.
+  const { data: provUser } = await supabase
+    .from('providers').select('user_id').eq('id', providerId).maybeSingle()
+  const stylistUserId = (provUser as { user_id: string | null } | null)?.user_id
+  if (stylistUserId) {
+    const blocked = await getBlockedIds(supabase, user.id).catch(() => new Set<string>())
+    if (blocked.has(stylistUserId)) {
+      // ⚠️ IT MUST NOT SAY WHO BLOCKED WHOM. Telling her they blocked her hands
+      // one member a fact about another's safety decision, and "you blocked
+      // them" would be wrong half the time. The site already words this exactly
+      // once, on the stylist profile, and this matches it deliberately.
+      return {
+        ok: false,
+        error: 'You can’t apply to this stylist. You’ve blocked them, or they’ve blocked you — either way you can’t book with each other. You can undo a block you made in Settings.',
+        code: 'blocked',
+      }
+    }
   }
 
   // ── The consent, checked against the document itself ─────────────────────

@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { ConsentGate } from '@/components/ConsentGate'
 import { formatPrice } from '@/lib/price'
+import { downscaleToFile } from '@/lib/downscale'
 import type { AcceptedConsent } from '@/lib/queries/consent'
 import type { ApplyContext, ApplyPhoto } from '@/lib/queries/apply'
 import { submitApplication, uploadApplicationPhoto } from './actions'
@@ -126,8 +127,13 @@ export function ApplyWizard({ ctx }: { ctx: ApplyContext }) {
   const addPhoto = async (file: File) => {
     setError(null)
     setUploading(true)
+    // Shrunk in the browser, like the ID-check selfie. Until 23 Sep a 5MB
+    // phone photo went up whole, on whatever signal she had (item 86).
+    // downscaleToFile never throws: if the browser cannot decode the image the
+    // original is sent, because a large upload is worse and a refused one
+    // loses the application.
     const fd = new FormData()
-    fd.append('photo', file)
+    fd.append('photo', await downscaleToFile(file))
     const res = await uploadApplicationPhoto(fd)
     setUploading(false)
     if (!res.ok) { setError(res.error); return }
