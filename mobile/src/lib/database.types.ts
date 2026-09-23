@@ -1075,8 +1075,6 @@ export type Database = {
           latitude: number | null
           level: string | null
           location: string | null
-          location_lat: number | null
-          location_lng: number | null
           location_text: string | null
           longitude: number | null
           name: string | null
@@ -1099,8 +1097,6 @@ export type Database = {
           latitude?: number | null
           level?: string | null
           location?: string | null
-          location_lat?: number | null
-          location_lng?: number | null
           location_text?: string | null
           longitude?: number | null
           name?: string | null
@@ -1123,8 +1119,6 @@ export type Database = {
           latitude?: number | null
           level?: string | null
           location?: string | null
-          location_lat?: number | null
-          location_lng?: number | null
           location_text?: string | null
           longitude?: number | null
           name?: string | null
