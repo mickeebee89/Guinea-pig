@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import {
-  ackText,
+  ackParts,
   allRequiredTicked,
   toAcceptedConsent,
   type ConsentDocument,
@@ -18,6 +18,13 @@ import {
  * checkboxes, the ones that do not as notices. The hash recorded against this
  * application covers all of that, so leaving any of it out, or restyling the
  * text into markdown, would mean the hash no longer describes what was read.
+ *
+ * ⚠️ A NOTICE IS A HEADING AND A PARAGRAPH. This component shipped on 23 Sep
+ * rendering only the heading, because it read every acknowledgement through
+ * `text ?? title ?? key` — and v2's notices have no `text`, only `title` and
+ * `body` (0001:131-151). Three paragraphs a model is told she has read would
+ * never have appeared. Everything now goes through ackParts(), which is the
+ * one place that decides what an acknowledgement looks like.
  *
  * Nothing is pre-ticked, and the document is never summarised.
  *
@@ -67,11 +74,15 @@ export function ConsentGate({
 
       {notices.length > 0 && (
         <ul className="mt-4 space-y-2">
-          {notices.map(a => (
-            <li key={a.key} className="rounded-md bg-input-bg px-3 py-2 text-sm text-muted">
-              {ackText(a)}
-            </li>
-          ))}
+          {notices.map(a => {
+            const { heading, body } = ackParts(a)
+            return (
+              <li key={a.key} className="rounded-md bg-input-bg px-3 py-2">
+                <p className="text-sm font-bold text-warm-dark">{heading}</p>
+                {body && <p className="mt-1 text-sm text-muted">{body}</p>}
+              </li>
+            )
+          })}
         </ul>
       )}
 
@@ -89,7 +100,15 @@ export function ConsentGate({
                   onChange={() => toggle(a.key)}
                   className="mt-0.5 size-5 shrink-0 accent-rose"
                 />
-                <span className="text-sm text-warm-dark">{ackText(a)}</span>
+                <span className="text-sm text-warm-dark">
+                  {ackParts(a).heading}
+                  {/* A tick with a paragraph would be unusual — and it would
+                      still be shown, because the rule is "everything the
+                      document carries", not "everything v2 happened to have". */}
+                  {ackParts(a).body && (
+                    <span className="mt-1 block text-muted">{ackParts(a).body}</span>
+                  )}
+                </span>
               </label>
             </li>
           ))}

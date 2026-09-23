@@ -38,13 +38,36 @@ import type { SupabaseClient } from '@supabase/supabase-js'
  * and the server re-reads that row and refuses if the two disagree.
  */
 
+/**
+ * ⚠️ TWO SHAPES IN ONE ARRAY, AND THEY ARE NOT INTERCHANGEABLE.
+ *
+ * v2's ticks carry `text`. Its NOTICES carry `title` + `body` + `icon` and no
+ * `text` at all (migration 0001:131-151). A renderer that reads
+ * `text ?? title ?? key` therefore shows a notice's heading and silently drops
+ * its entire paragraph — which is what this file did on 23 Sep, before any
+ * page existed to show it. The hash would have gone on claiming she read the
+ * paragraph.
+ *
+ * So every text-bearing field is listed here, and ackParts() below is the ONLY
+ * way to turn one of these into something on screen. Adding a field to a future
+ * document without adding it here is caught at load time, loudly — see
+ * UNKNOWN_ACK_FIELDS.
+ */
 export interface ConsentAck {
   key: string
   requires_tick: boolean
-  /** Some items carry `title` instead of `text`; both are rendered as-is. */
+  /** The tick's own sentence. Absent on notices. */
   text?: string | null
+  /** A notice's heading. Absent on ticks. */
   title?: string | null
+  /** A notice's paragraph. THE PART THAT WENT MISSING. */
+  body?: string | null
+  /** Mobile draws an Ionicon; the web does not, and dropping it shows nothing. */
+  icon?: string | null
 }
+
+/** Every field the renderer knows how to show. Anything else is a warning. */
+const KNOWN_ACK_FIELDS = new Set(['key', 'requires_tick', 'text', 'title', 'body', 'icon'])
 
 export interface ConsentDocument {
   id: string
@@ -107,6 +130,7 @@ export async function loadActiveConsentDocument(
   }
 
   const doc = shape(data)
+  warnOnUnrenderedFields(doc)
   if (!doc.acknowledgements.some(a => a.requires_tick)) {
     console.error('[consent] active document has nothing to tick', { id: doc.id, version: doc.version })
     return { ok: false, reason: UNAVAILABLE }
@@ -169,9 +193,30 @@ export function allRequiredTicked(doc: ConsentDocument, tickedKeys: string[]): b
   return required.length > 0 && required.every(a => ticked.has(a.key))
 }
 
-/** The text of one acknowledgement, exactly as stored. Never reworded here. */
+/**
+ * What the RECORD calls this acknowledgement — heading only, matching mobile's
+ * handleContinue exactly so both clients write the same shape into
+ * session_consents. Deliberately NOT what is rendered: see ackParts.
+ */
 export function ackText(a: ConsentAck): string {
   return a.text ?? a.title ?? a.key
+}
+
+/**
+ * Everything this acknowledgement has to say, for the screen.
+ *
+ * A tick is one sentence. A notice is a heading and a paragraph, and BOTH must
+ * appear: the hash covers them, so showing one without the other is a record
+ * that claims more was read than was shown.
+ */
+export function ackParts(a: ConsentAck): { heading: string; body: string | null } {
+  const heading = a.requires_tick
+    ? (a.text ?? a.title ?? a.key)
+    : (a.title ?? a.text ?? a.key)
+  // A tick with a body would be unusual, and it would still be rendered — the
+  // rule is "show everything the document carries", not "show what v2 had".
+  const body = a.body && a.body !== heading ? a.body : null
+  return { heading, body }
 }
 
 function shape(row: unknown): ConsentDocument {
@@ -188,5 +233,28 @@ function shape(row: unknown): ConsentDocument {
     body: r.body ?? '',
     contentHash: r.content_hash,
     acknowledgements: r.acknowledgements ?? [],
+  }
+}
+
+/**
+ * ⚠️ THE CANARY. A future document version that adds a field this renderer does
+ * not know about would show less than the hash describes, silently — the exact
+ * failure that lost the notices' bodies. It cannot be caught by types, because
+ * the column is jsonb and the document is data.
+ *
+ * It logs rather than blocks: refusing to show a consent document because it
+ * gained a field would stop every application over a copy change, which is a
+ * worse outcome than a server log nobody reads for a day. Fail closed is for
+ * "we cannot show it at all"; this is "we may be showing less of it".
+ */
+function warnOnUnrenderedFields(doc: ConsentDocument): void {
+  for (const a of doc.acknowledgements) {
+    const unknown = Object.keys(a).filter(k => !KNOWN_ACK_FIELDS.has(k))
+    if (unknown.length > 0) {
+      console.error(
+        '[consent] acknowledgement carries fields this page does not render — it may be showing less than the hash covers',
+        { document: doc.id, version: doc.version, key: a.key, unknown },
+      )
+    }
   }
 }
