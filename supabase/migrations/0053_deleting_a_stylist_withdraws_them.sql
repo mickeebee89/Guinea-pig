@@ -7,6 +7,18 @@
 --
 -- ⚠️ Apply 0052 first.
 --
+-- ⚠️⚠ THIS MIGRATION WAS WRITTEN TWICE. The first version reproduced the body
+-- in supabase/account-deletion-fix.sql, which is NOT what runs — the live
+-- function is 0004's. Its own ASSERT refused it, which is the only reason
+-- nothing was damaged. The body below is the live definition, read with
+-- pg_get_functiondef on 23 Sep 2026.
+--
+-- The two are not cosmetically different. The file version DELETES reports
+-- where the member is reporter or reported; the live one COUNTS them and
+-- leaves them, which is what 0004 and 0006 require — reports survive
+-- de-identified and are append-only for six years. Reproducing the file
+-- version would have made account deletion destroy moderation evidence.
+--
 -- ── WHAT WAS WRONG ──────────────────────────────────────────────────────
 -- delete_account_data collects every session where the member is the model OR
 -- the provider (account-deletion-fix.sql:311-315) and deletes them, with the
@@ -71,10 +83,18 @@ begin
 
   v_def := pg_get_functiondef('public.delete_account_data(uuid)'::regprocedure);
 
+  -- Landmarks of the LIVE body (0004's), read from the database rather than
+  -- from a file. v_reports_retained is the distinguishing one: the version in
+  -- account-deletion-fix.sql has v_report_ids and deletes reports instead.
   if v_def not like '%delete_account_data requires a user id%'
-     or v_def not like '%v_report_ids%' then
+     or v_def not like '%v_reports_retained%' then
     raise exception
       '0053: the live delete_account_data is not the version this migration was written against. Read it with pg_get_functiondef before replacing it.';
+  end if;
+
+  if v_def like '%v_report_ids%' then
+    raise exception
+      '0053: the live delete_account_data looks like account-deletion-fix.sql''s version, which DELETES reports. This migration is written against 0004''s, which retains them. Stop and read both.';
   end if;
 
   if v_def like '%_withdraw_stylist%' then
@@ -83,24 +103,28 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------------
--- THE FUNCTION, REPRODUCED FROM account-deletion-fix.sql:296-356 WITH TWO
--- ADDITIONS AND NOTHING ELSE CHANGED.
+-- THE FUNCTION, REPRODUCED FROM THE LIVE DEFINITION (pg_get_functiondef,
+-- 23 Sep 2026) WITH TWO ADDITIONS AND NOTHING ELSE CHANGED.
 --
--- The additions are marked `-- 0053:`. Everything else — the order of the
--- deletes, the audit-trail nulling, the comments — is the existing body
--- verbatim, because a rewrite of this function is a rewrite of account
--- deletion.
+-- The additions are marked `-- 0053:`. Every other statement, and the order of
+-- them, is exactly what is running: reports are COUNTED and retained, never
+-- deleted (0004, 0006).
+--
+-- ⚠️ NOTE THE ORDER OF THE DELETES. notifications go BEFORE sessions, so the
+-- explicit `session_id = any(v_session_ids)` clause would take the model's new
+-- notices with it. The de-referencing below is not only about an FK cascade;
+-- it is about that line.
 -- ---------------------------------------------------------------------------
 create or replace function public.delete_account_data(p_user uuid)
 returns jsonb language plpgsql security definer
 set search_path to 'public' as $$
 declare
-  v_provider_ids uuid[];
-  v_session_ids  uuid[];
-  v_report_ids   uuid[];
-  v_pre_notices  uuid[];   -- 0053
-  v_withdrawn    jsonb;    -- 0053
-  v_result       jsonb;
+  v_provider_ids     uuid[];
+  v_session_ids      uuid[];
+  v_reports_retained int;
+  v_pre_notices      uuid[];   -- 0053
+  v_withdrawn        jsonb;    -- 0053
+  v_result           jsonb;
 begin
   if p_user is null then
     raise exception 'delete_account_data requires a user id';
@@ -115,11 +139,9 @@ begin
       or model_id = p_user
       or provider_id = any(v_provider_ids);
 
-  select coalesce(array_agg(distinct id), '{}') into v_report_ids
+  select count(*) into v_reports_retained
     from public.reports
-   where reporter_id = p_user
-      or reported_id = p_user
-      or session_id = any(v_session_ids);
+   where reporter_id = p_user or reported_id = p_user;
 
   -- 0053: tell this stylist's models before anything is destroyed.
   --
@@ -132,9 +154,12 @@ begin
 
     v_withdrawn := public._withdraw_stylist(p_user);
 
-    -- De-reference the notices just created, so the session deletes below
-    -- cannot take them with them. The body still names the date, the time and
-    -- the treatment; only the link to a now-deleted booking is dropped.
+    -- De-reference the notices just created. The notifications delete below
+    -- matches on session_id and runs BEFORE the sessions delete, so without
+    -- this the model's notice is removed by our own statement — and the email
+    -- has already been sent by then (0047 sends on the INSERT). The body still
+    -- names the date, the time and the treatment (0030); only the link to a
+    -- booking that is about to stop existing is dropped.
     update public.notifications
        set session_id = null
      where session_id = any(v_session_ids)
@@ -142,17 +167,11 @@ begin
        and id <> all(v_pre_notices);
   end if;
 
-  -- Preserve the audit trail; drop only the pointers into deleted rows.
   update public.admin_audit_log set target_user_id     = null where target_user_id     = p_user;
   update public.admin_audit_log set target_provider_id = null where target_provider_id = any(v_provider_ids);
   update public.admin_audit_log set target_session_id  = null where target_session_id  = any(v_session_ids);
   update public.verification_requests set reviewed_by  = null where reviewed_by        = p_user;
 
-  -- reports.reviewed_by is NO ACTION -> auth.users and blocks the auth delete
-  -- where this user reviewed someone else's report as an admin.
-  -- (moderation_actions.related_report_id also pointed at reports we delete
-  -- below; that FK is severed in section 1, since the row is immutable and the
-  -- pointer could not be nulled.)
   update public.reports set reviewed_by = null where reviewed_by = p_user;
 
   delete from public.reviews       where reviewer_id = p_user
@@ -160,20 +179,16 @@ begin
                                       or session_id  = any(v_session_ids);
   delete from public.messages      where sender_id  = p_user or session_id = any(v_session_ids);
   delete from public.notifications where user_id    = p_user or session_id = any(v_session_ids);
-  delete from public.reports       where id = any(v_report_ids);
   delete from public.sessions      where id = any(v_session_ids);
   delete from public.providers     where user_id = p_user;
 
-  -- public.users has NO FK to auth.users, so the auth delete does not cascade
-  -- it. Deleting it here fires its own CASCADE children (blocks, favourites,
-  -- model_attributes, model_photos, subscriptions, verification_*, ...).
   delete from public.users where id = p_user;
 
   v_result := jsonb_build_object(
-    'providers', cardinality(v_provider_ids),
-    'sessions',  cardinality(v_session_ids),
-    'reports',   cardinality(v_report_ids),
-    'withdrawn', coalesce(v_withdrawn, 'null'::jsonb));   -- 0053
+    'providers',        cardinality(v_provider_ids),
+    'sessions',         cardinality(v_session_ids),
+    'reports_retained', v_reports_retained,
+    'withdrawn',        coalesce(v_withdrawn, 'null'::jsonb));   -- 0053
   return v_result;
 end $$;
 
@@ -185,11 +200,11 @@ comment on function public.delete_account_data(uuid) is
   'Deletes one account''s data in ONE transaction. Since 0053 it first calls _withdraw_stylist '
   'when the member is a stylist, so their models get the same neutral cancellation notice a '
   'suspension gives, and de-references those notices before the sessions are deleted. '
-  'session_consents and moderation_actions survive by design. service_role only.';
+  'reports, session_consents and moderation_actions survive by design. service_role only.';
 
 -- MIGRATION FOOTER
 insert into public.schema_migrations (version, name, checksum)
-values ('0053', 'deleting_a_stylist_withdraws_them', 'c6d2f4ece78d7cba90a36e8a20a60840331c459e2d5603c6c4b9a72f809a8f66');
+values ('0053', 'deleting_a_stylist_withdraws_them', '0acee9d8459cee8a743e671d1380a7fa450baaac84bc49a940fe5629646d5e29');
 
 commit;
 

@@ -3483,6 +3483,54 @@ What the web does instead:
 the auth delete is retried. Every other failure leaves the account whole and
 says so.
 
+**⚠️ 0053's ASSERT REFUSED IT, AND IT WAS RIGHT — 23 Sep 2026. NOTHING WAS
+CHANGED. SECOND INSTANCE TODAY OF READING A FILE INSTEAD OF THE DATABASE.**
+
+The first version of 0053 reproduced `delete_account_data` from
+`supabase/account-deletion-fix.sql`. **The live function is 0004's.** The
+ASSERT checked the live definition for two landmarks of the version it was
+written against, did not find them, and stopped.
+
+**This was not a near-miss on cosmetics.** The file version **DELETES** reports
+where the member is reporter or reported; the live one **COUNTS** them and
+leaves them, which is what 0004 and 0006 require — reports survive
+de-identified, append-only for six years, and are the ban-evasion signal.
+Reproducing the file version would have made **account deletion destroy
+moderation evidence**, quietly, on every deletion from then on.
+
+The rewrite is against the live definition, read with `pg_get_functiondef`.
+Checked mechanically rather than by eye: every statement of the live body is
+present verbatim, and the only difference is the one line this migration
+deliberately changes.
+
+**The ordering note that came with it matters:** notifications are deleted
+**before** sessions, so the model's new notice would have been removed by this
+function's own `session_id = any(v_session_ids)` clause, not by an FK cascade.
+The de-referencing is load-bearing for a reason I had half-right.
+
+**── THE SECOND INSTANCE, AND WHAT CHANGES ──**
+
+This morning: migration 0009 read from line 55, past a header saying DO NOT
+RUN, producing an RPC call with an argument that does not exist and a set of
+confident claims about the ledger that were wrong (item 83).
+
+This afternoon: `account-deletion-fix.sql` read as though it were what runs.
+
+Same fault twice in a day, and the file was wrong in a more dangerous way the
+second time. Both files are honest — one says it was never applied, the other
+is simply older than what replaced it. **Neither is the database.**
+
+**The rule, effective now: reading the live definition is the FIRST step of any
+migration that replaces a function.** Not a check at the end, not an ASSERT
+that catches it — `pg_get_functiondef` first, then write against what comes
+back. The ASSERT stays as the backstop, and this is the second time in two
+weeks it has earned its place, but a backstop that fires is still a plan that
+failed.
+
+**What the ASSERT did right, and should be copied:** it tested for landmarks of
+the body it was written against, not merely for the function's existence.
+"The function is there" would have passed and then replaced the wrong body.
+
 **── 5. THE COPY ──**
 * Deletion page: *"**On the website: Settings → Delete account.** In the app:
   Settings → Delete account. Or email us any time…"*
@@ -9649,7 +9697,7 @@ platforms each failed it differently.
 | 82 | Model ID check live inside the apply flow. `/verify` still refuses models, by design | No |
 | 83 | ✅ **CLOSED 23 Sep** — sent, accepted, both emails, price_pence 1000 and consent v3 with 9 items on the same booking; 0052 applied 2h before it | No |
 | 84 | No generated Supabase types: every rpc name, argument and column is an unchecked string. Scoped, not built | No, but it is why 83 shipped broken |
-| 85 | Web account deletion built, **0053 not applied and not deployed**. Untested end to end | **Yes** — a web-only member still has no self-serve way out until it ships |
+| 85 | Web account deletion built; 0053 **rewritten against the live function** after its ASSERT refused the first version. Not applied, not deployed | **Yes** — a web-only member still has no self-serve way out until it ships |
 Carried in from before the audit, unchanged by it:
 
 | Item | State |
