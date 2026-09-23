@@ -2647,6 +2647,86 @@ input has none, which is right for typing, but the save that now validates a
 price should keep the existing success/warning feedback. Worth a look when
 Micky next runs the app.
 
+**80. THE CONSENT SURFACE ON THE WEB — BUILT 23 Sep 2026. `npm run verify`
+EXIT 0. NO MIGRATION, NO ROUTE YET, NOTHING PUBLISHED CHANGED.**
+
+Step 3 of the web apply flow (item 77's plan). The web could not have shown a
+model what she was agreeing to, because nothing in `site/` had ever touched
+consent — the word appeared only in sign-up and one comment.
+
+**── WHAT CONSENT IS FOR, IN ONE SENTENCE ──**
+
+`session_consents` records a `content_hash`, and that hash is worth something
+only if it is the hash **of the text the person read**. Everything below is a
+way of saying that.
+
+The hash is computed in Postgres by `set_consent_hash()` over
+`title || body || acknowledgements::text` (snapshot `:189`). **Nothing on the
+web recomputes it** — it is read from the row that was rendered and passed
+through untouched.
+
+**── THE FIVE RULES, PORTED FROM MOBILE ──**
+
+1. **Render the document, never a copy.** No hardcoded fallback, ever. Mobile's
+   header records what that costs: a hardcoded gate silently diverged from an
+   active v1 that had been live since June and was never shown to anyone.
+2. **Whole and raw.** Plain text, `whitespace-pre-wrap`, and **every**
+   acknowledgement — the notices as well as the ticks, because the hash covers
+   the lot. Markdown, truncation or a "read more" would mean the shown text is
+   not the hashed text.
+3. **Never re-fetch "the active document" at submit.** A version going active
+   while someone reads would record consent to text they never saw.
+4. **Fail closed.** No active document, a failed read, or a document with
+   nothing to tick all block applying, with one wording and a server-side log.
+5. **Do not cache.** The page that renders it must be dynamic, or a cached
+   document outlives its own deactivation.
+
+**── ONE PLACE THE WEB IS DELIBERATELY STRONGER THAN MOBILE ──**
+
+Mobile hands its fetched document straight to the RPC and trusts itself to. A
+browser cannot be trusted with that job: anything posted back can be edited. So
+the browser posts **the document's id and the hash it was shown**, and
+`consentStillCurrent()` re-reads **that row by id** and refuses if the two
+disagree. Reading "the active document" there instead would reintroduce exactly
+the race rule 3 forbids, which is why the function says so in its own comment.
+
+**── ONE DECISION THAT TOUCHES A PUBLISHED CLAIM ──**
+
+`session_consents.device_info`: mobile records device details. **The web sends
+`{"platform":"web"}` and nothing else.** Privacy publishes that we record no
+device information, and that claim is one of the few the audit found holding.
+Matching mobile exactly would have made it false for the sake of parity.
+
+**── WHAT WAS BUILT ──**
+* `site/lib/queries/consent.ts` — load (fails closed), `consentStillCurrent`,
+  `toAcceptedConsent` (records EVERY acknowledgement, not just the ticked ones,
+  so the row shows the document as presented rather than a filtered view — the
+  same rule as mobile's `handleContinue`), `allRequiredTicked`, `ackText`.
+* `site/components/ConsentGate.tsx` — the document, the ticks, three hidden
+  fields and its own submit button, to sit inside the apply form.
+* `scripts/read-consent-document.mjs` — read-only, prints the live document.
+
+**── WHAT WAS NOT BUILT, AND WHY ──**
+* **No route.** The apply page is step 5. A page added now would be a route
+  nothing links to, which `check-links` would correctly fail (item 74), and a
+  half-built apply route is worse than none.
+* **No server action.** It belongs with the RPC call, in step 5.
+* **No migration, so no checksum this step.** The consent document is database
+  copy, active since 0001, and the web renders it verbatim. **Editing it would
+  change the hash and is a copy decision, not a build one.**
+* **No published-copy change.**
+
+**── HOW IT CAN BE CHECKED NOW ──**
+`node scripts/read-consent-document.mjs` prints the live document — version,
+title, body, every tick and notice, and the hash. That is the text the page
+will show, so the wording can be read today and compared with the screen when
+step 5 lands. **The visible check waits for step 5, and is not claimed here.**
+
+⚠️ The script deliberately does NOT recompute the hash, and nor does the site:
+`acknowledgements::text` is Postgres's own jsonb rendering, not
+`JSON.stringify`, so a hash recomputed in Node would differ for reasons that
+say nothing about whether the text is intact.
+
 **75. A CHECK COULD STOP THE WEBSITE UPDATING, AND NOTHING NOTICED IT HAD —
 CHANGED 22 Sep 2026. `npm run verify` EXIT 0.**
 
@@ -8796,8 +8876,8 @@ platforms each failed it differently.
 | 74 | Email notifications **proven end to end on live data**. Open: mobile has no email switch | No |
 | 75 | Drift check is new and unproven — its first real test is the next failed or skipped deploy | No |
 | 77 | ✅ **CLOSED 23 Sep** — Micky republished his shop, so one is live. Item 11's condition (one LISTED stylist per CATEGORY) is still unmet with a single shop | No, but launch-relevant |
-| 79 | Slot prices built (0050), **not applied**. Terms §5 needs a line about displayed prices before the web apply flow goes live | No |
-
+| 79 | Slot prices live. Untested: the mobile price field; no model can see a price until step 5 | No |
+| 80 | Consent surface built, **no route until step 5**. Terms §5 still needs its line about displayed prices | No |
 Carried in from before the audit, unchanged by it:
 
 | Item | State |
