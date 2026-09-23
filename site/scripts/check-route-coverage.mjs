@@ -85,7 +85,22 @@ if (!matcherBlock) {
   console.error('    If that shape changed, update this script.\n')
   process.exit(1)
 }
-const entries = [...matcherBlock[1].matchAll(/['"]([^'"]+)['"]/g)].map(m => m[1])
+// ⚠️ COMMENTS ARE STRIPPED FIRST, AND THAT IS NOT TIDINESS.
+//
+// The entries are found by scanning for quoted strings. A `//` comment inside
+// the matcher array containing an APOSTROPHE — "A model's own profile" — opens
+// a string literal as far as this regex is concerned, and it then swallows
+// everything up to the next quote. On 23 Sep 2026 that silently ate TWO real
+// entries, and the check reported /profile and /verify as uncovered when
+// /verify had been there for weeks.
+//
+// A check that can be broken by an apostrophe in a comment will be broken
+// again. check-links.mjs already strips comments before scanning for the same
+// reason; this now does too.
+const withoutComments = matcherBlock[1]
+  .replace(/\/\*[\s\S]*?\*\//g, '')
+  .replace(/\/\/.*/g, '')
+const entries = [...withoutComments.matchAll(/['"]([^'"]+)['"]/g)].map(m => m[1])
 
 const routes = walk(APP_DIR).map(routeOf)
 const uncovered = routes.filter(r => !entries.some(e => coveredBy(r, e)))

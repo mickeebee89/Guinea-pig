@@ -4648,6 +4648,10 @@ every web-only stylist who has already paid the £14.99 — a worse outcome than
 reviewer who knows what they are deciding. The person decides; the console's job
 is to stop them deciding blind.
 
+**✅ DECIDED, Micky 23 Sep: option (a), sequenced. Build the avatar upload (item 99, done), THEN gate the ID check on having a profile picture, and Privacy §7 becomes true as written rather than softened. The published copy is not to be touched.**
+
+**⚠️ THE GATE IS NOT TO BE ADDED UNTIL THE WEB CAN SET AN AVATAR, or it would refuse every web-only stylist — who have already paid the £14.99. Item 99 removes that blocker; the gate itself is still to build.**
+
 **── DOES THE PUBLISHED COPY NEED CHANGING? YES, AND IT IS NOT WRITTEN YET ──**
 
 Micky's question, and the honest answer is that the console fix does not make
@@ -4667,6 +4671,105 @@ written. (b) is the fallback if the gate is not wanted.
 
 Not written, because it is published legal text and the sequencing is a
 decision, not a detail.
+
+**99. A MODEL HAD NO ROUTE TO ANYTHING SHE OWNS — BUILT 23 Sep 2026.
+`npm run verify` EXIT 0. NOT DEPLOYED.**
+
+**Plainly:** a stylist has Shop, Availability and Portfolio — three routes to
+build what other people see of her. **A model had zero.** Nothing in `site/`
+wrote `model_attributes`, nothing set a profile picture, and every
+`/model/[id]` link on the site pointed at somebody else, so she could not even
+LOOK at her own profile. She applied as a name and a photo she could not
+choose, and had no way to find out why she was being refused.
+
+`/profile` now holds her avatar, bio, the nine attributes and her photo
+library, with **"See what stylists see →"** linking to `/model/[id]` and a
+Profile entry in the nav.
+
+**── SAVED ONE FIELD AT A TIME, NOT BEHIND ONE BUTTON ──**
+
+Matching mobile, and for a reason beyond consistency: **a member who fills
+three fields and closes the tab should have three fields saved.** A single Save
+is how a profile ends up empty because the last step was never reached — which
+is the problem this page exists to fix. The bio is the exception and has its
+own button, because saving on every keystroke would write 200 rows for one
+sentence.
+
+**── THE PHOTOS ALREADY EXISTED AND SHE COULD NOT SEE THEM ──**
+
+The apply wizard uploads into `model_photos` on pick, so a web-only model
+already HAD photos — uncategorised, uncaptioned, and visible only to a stylist
+reading her profile. That is why photo management is in this piece rather than
+a later nicety. The upload reuses `uploadApplicationPhoto` rather than being
+reimplemented: same bucket, same user-id prefix, same checks, same insert. Two
+upload paths into one table would drift.
+
+**── ⚠️ THE AVATAR: WHERE IT GOES, AND HOW IT IS MODERATED ──**
+
+**This is the first thing `site/` has ever written to `profile_pic_url`.**
+
+**Where.** The `profile-pics` bucket, under `<user id>/`, exactly as mobile
+does. That bucket is **public** (storage-lockdown.sql:15), so the column holds
+a full URL from `getPublicUrl` rather than a path — which is why nothing signs
+it, and why the admin queue can render it directly (item 98).
+
+**How it is moderated: IT IS NOT. Said plainly.** Portfolio photos are
+moderation-gated — `portfolio_items.moderation_status` must be 'approved'
+before anyone sees them. A profile picture is not, on either client, and this
+does not change that. Gating it would leave a stylist with no avatar while her
+ID check compares a selfie **against** it, and would put every new member
+behind a queue with one reviewer.
+
+**What actually stands between a profile picture and a misuse of it:**
+
+1. **Audience.** A model's avatar reaches SIGNED-IN MEMBERS only —
+   `public_profiles` lost its `anon` grant on 2026-08-07. **A stylist's is
+   different: `public_stylists` publishes hers to the open web.** The one added
+   here is the model's.
+2. **Report and block**, from her profile, reaching the admin queue. After the
+   fact, which is the honest description.
+3. **The ID check compares a selfie against it.** A photo that is not her fails
+   verification — a real control, and since item 98 one a reviewer can apply.
+4. Admin suspension.
+
+**None of those is prevention.** A profile picture is live the moment it is
+uploaded and a stranger may see it before anyone has looked. **That is true of
+mobile today and is not introduced here** — it is written down here because
+this is the second place it becomes true and the first never said it. Recorded
+as item 100 rather than solved in passing.
+
+**── ONE THING THE UPLOAD DOES THAT MOBILE'S DOES NOT ──**
+
+It re-encodes through a canvas **always**, not only when that makes the file
+smaller — which is what **strips EXIF, including the GPS coordinates a phone
+writes into a photo.** A photo of your own face is usually taken at home.
+`downscaleToFile` keeps the original when the re-encode comes out bigger, which
+is right for an application photo and wrong for this, so the avatar calls
+`downscale` directly and falls back only if the browser cannot decode the image
+at all.
+
+**── THE TYPES CAUGHT THE SAME CLASS AS THE REVIEW INSERT ──**
+
+`{ [key]: value }` with `key: string` widens to an index signature the
+generated Update type refuses — correctly, since an arbitrary key would be a
+column that does not exist. Fixed by narrowing `AttributeKey` to the nine
+literals with a type guard on the way in from the form. **No cast**, and the
+guard is a real validation: a server action is callable directly, and these
+strings are what stylists filter on.
+
+**── ⚠️ AND A CHECK BROKE ON AN APOSTROPHE ──**
+
+`check-route-coverage.mjs` finds matcher entries by scanning for quoted
+strings. The comment I added inside the array — *"A model's own profile"* —
+opened a string literal as far as that regex was concerned and **swallowed two
+real entries**, so it reported `/profile` AND `/verify` as uncovered when
+`/verify` had been there for weeks.
+
+The check was right that something was wrong and wrong about what. **A check
+that can be broken by an apostrophe in a comment will break again**, so it now
+strips comments before scanning — which `check-links.mjs` already did, for this
+exact reason. **Proven by restoring the apostrophe comment and re-running: it
+passes.** Then reverted.
 
 **75. A CHECK COULD STOP THE WEBSITE UPDATING, AND NOTHING NOTICED IT HAD —
 CHANGED 22 Sep 2026. `npm run verify` EXIT 0.**
@@ -10827,6 +10930,8 @@ platforms each failed it differently.
 | 92 | ✅ **CLOSED 23 Sep** — verified both ways: chips filter with a postcode, and go inert with the list intact without one | No |
 | 94 | ✅ **CLOSED 23 Sep** — verified live both ways. The unique index exists, so duplicates were never possible and the heart's missing check is the defect | No |
 | 96 | ✅ **CLOSED 23 Sep** — all four verified on screen: the photo on the booking card, and the badge, reviews, photos and bio on her profile | No |
+| 99 | A model's own profile on the web — built, **not deployed**. Avatar, bio, the nine attributes, photo management, Profile in the nav, and a link to what stylists see | No |
+| 100 | **A profile picture is not moderated, on either client.** Live the moment it is uploaded; report/block and the ID-check comparison are the only controls, both after the fact. Not introduced by 99 — written down by it | No |
 | 98 | Verification queue now shows the profile picture beside the selfie — built, **not deployed**. Privacy §7's comparison was previously impossible in the console. **Open: the copy is still false for a member with no profile picture** | No, but Privacy §7 describes it |
 | 97 | **`sessions.price_pence` is read by nothing in either client.** 0052 snapshots it so an edited slot cannot rewrite what was agreed; both clients show the SLOT's price today instead. They agree until someone edits a slot after an application | No, but it is a money display |
 | 95 | **Mobile's favourite heart fails silently** — no error handling on insert or delete, so a filled heart can sit over a row that does not exist. It also never says that saving subscribes her to notifications | No, but it tells her something untrue |

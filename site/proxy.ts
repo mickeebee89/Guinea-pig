@@ -87,6 +87,8 @@ export const config = {
     // the whole point of that check existing.
     '/subscribe/:path*',
     '/browse/:path*',
+    // The profile page a model owns, added 23 Sep 2026 with the route (99).
+    '/profile/:path*',
     '/verify/:path*',
     // Auth screens need the cookie writer for sign-in and for the callbacks
     // that exchange a code for a session.

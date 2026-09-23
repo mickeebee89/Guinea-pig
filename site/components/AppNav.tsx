@@ -41,6 +41,10 @@ import { BOOKINGS_PATH } from '@/lib/routes'
 const LINKS = [
   // Models browse. A stylist has no use for a list of other stylists.
   { href: '/browse',        label: 'Browse', modelOnly: true },
+  // A model's own profile. Until 23 Sep she had NO route to anything she
+  // owns, while a stylist had three (Shop, Availability, Portfolio) - and the
+  // nine attributes behind this link are what a stylist picks on. Item 99.
+  { href: '/profile',       label: 'Profile', modelOnly: true },
   { href: BOOKINGS_PATH,    label: 'Bookings' },
   { href: '/shop',          label: 'Shop',         providerOnly: true },
   { href: '/availability',  label: 'Availability', providerOnly: true },
