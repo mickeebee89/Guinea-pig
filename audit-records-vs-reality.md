@@ -3483,6 +3483,55 @@ What the web does instead:
 the auth delete is retried. Every other failure leaves the account whole and
 says so.
 
+**✅ 0053 APPLIED AND WEB DELETION VERIFIED — 23 Sep 2026, from Micky's pasted
+output.**
+
+* **Block A:** `calls_withdraw` true, `dereferences_notices` true,
+  **`client_may_call` false** — the one that matters, because true would mean
+  any signed-in member could erase any account by id.
+* **Block B:** booking rows left **0**; notices that survived the deletes
+  **1**; title *"Your booking on 3 October at 9am has been cancelled"*; body
+  the neutral `withdrawn` wording naming the stylist and the treatment, **with
+  no mention of deletion, suspension or why.** Rolled back.
+
+**So the ordering works.** The notice was written before the data went, and
+survived a function that deletes notifications by `session_id` *before* it
+deletes the sessions. That is the whole migration, seen rather than reasoned.
+
+**── THE LIVE DELETION ──**
+
+`micky.buckfield+feetest@gmail.com` deleted itself through web Settings and was
+signed out. Afterwards: **login 0, profile 0, total_logins 5, total_profiles 5,
+login_without_profile 0.**
+
+**So no half-deleted account was left, and item 50's gap did not open on this
+deletion.** Stated precisely: this is one deletion where the auth delete
+succeeded. The gap is between two steps inside the edge function and is not
+closed by anything — it was not reached this time.
+
+**── ⚠️ A PAID ROW WENT WITH IT, AND THAT IS A RECORD-KEEPING FACT ──**
+
+This was a stylist account with a real **£14.99** `verification_payments` row.
+That row is gone; **Stripe keeps its own.** Nothing is wrong — erasure means
+erasure, and the money is Stripe's record to hold — but it follows that:
+
+* any figure derived from `verification_payments` now under-counts by one
+  against Stripe, permanently;
+* the admin dashboard's revenue tiles are **unaffected**, because they come
+  from Stripe (`revenue_summary`), which was the right decision and is now
+  load-bearing rather than merely tidy;
+* the failed-verification counts, which DO read `verification_payments`, drop
+  silently when an account leaves. Worth knowing before anyone reads them as a
+  trend.
+
+**── STILL UNTESTED, AND NOT CLAIMED ──**
+1. **The Stripe customer-side fallback** — this account had no subscription, so
+   the new code did not run. It is the part that exists for live money.
+2. **The billing-orphan surface** — nothing has produced a row, so the admin
+   panel has never rendered one.
+3. **A deletion where the auth delete fails** — the Try-again path, and the one
+   state where item 50's gap is reachable.
+
 **⚠️ 0053's ASSERT REFUSED IT, AND IT WAS RIGHT — 23 Sep 2026. NOTHING WAS
 CHANGED. SECOND INSTANCE TODAY OF READING A FILE INSTEAD OF THE DATABASE.**
 
@@ -9697,7 +9746,7 @@ platforms each failed it differently.
 | 82 | Model ID check live inside the apply flow. `/verify` still refuses models, by design | No |
 | 83 | ✅ **CLOSED 23 Sep** — sent, accepted, both emails, price_pence 1000 and consent v3 with 9 items on the same booking; 0052 applied 2h before it | No |
 | 84 | No generated Supabase types: every rpc name, argument and column is an unchecked string. Scoped, not built | No, but it is why 83 shipped broken |
-| 85 | Web account deletion built; 0053 **rewritten against the live function** after its ASSERT refused the first version. Not applied, not deployed | **Yes** — a web-only member still has no self-serve way out until it ships |
+| 85 | ✅ **CLOSED 23 Sep** — a real account deleted itself on the web, no half-deleted state. Untested: the Stripe customer fallback, the orphan surface, a failed auth delete | No |
 Carried in from before the audit, unchanged by it:
 
 | Item | State |
