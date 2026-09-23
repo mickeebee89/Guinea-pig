@@ -4597,6 +4597,8 @@ agree. They stop agreeing the moment anyone edits a slot after an application.
 
 Recorded as item 97. Not a web-versus-app gap, so not in this scope.
 
+**✅ ITEM 96 VERIFIED LIVE — 23 Sep 2026.** The model's application photo shows on the pending booking card for a web stylist, and her profile shows the verified badge, reviews, photos and bio. All four fields confirmed on screen.
+
 **75. A CHECK COULD STOP THE WEBSITE UPDATING, AND NOTHING NOTICED IT HAD —
 CHANGED 22 Sep 2026. `npm run verify` EXIT 0.**
 
@@ -10755,7 +10757,7 @@ platforms each failed it differently.
 | 84 | ✅ **ON for `site/` 23 Sep** — 5 errors, all fixed, no casts bar one declared wrapper. **Found two real consent defects nothing else here would have caught.** Freshness check now wired into `checks` and proven to fail. Still untyped: `mobile/` and `admin/` clients | No, but it is why 83 shipped broken |
 | 92 | ✅ **CLOSED 23 Sep** — verified both ways: chips filter with a postcode, and go inert with the list intact without one | No |
 | 94 | ✅ **CLOSED 23 Sep** — verified live both ways. The unique index exists, so duplicates were never possible and the heart's missing check is the defect | No |
-| 96 | Four fields the web queried and the app showed — application photos, `created_at` (the pending sort), the model's reviews, and her Verified badge. Built, **not deployed** | No |
+| 96 | ✅ **CLOSED 23 Sep** — all four verified on screen: the photo on the booking card, and the badge, reviews, photos and bio on her profile | No |
 | 97 | **`sessions.price_pence` is read by nothing in either client.** 0052 snapshots it so an edited slot cannot rewrite what was agreed; both clients show the SLOT's price today instead. They agree until someone edits a slot after an application | No, but it is a money display |
 | 95 | **Mobile's favourite heart fails silently** — no error handling on insert or delete, so a filled heart can sit over a row that does not exist. It also never says that saving subscribes her to notifications | No, but it tells her something untrue |
 | 93 | **A published shop's bio is keyboard-mash test text.** Live, on the only published shop, and it clears `public_stylists`' 40-character bar because that bar counts characters | No, but a model would see it |
