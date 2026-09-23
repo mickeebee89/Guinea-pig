@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { deriveIdCheck, type IdCheckState } from './idCheck'
 
 /**
  * The stylist's own shop: what it says, what it offers, and how far through
@@ -27,7 +28,12 @@ import type { SupabaseClient } from '@supabase/supabase-js'
  * `publishRefusal` below says the database will accept it.
  */
 
-export type IdCheckState = 'none' | 'pending' | 'approved' | 'rejected'
+/**
+ * Re-exported so existing callers keep importing it from here. The definition
+ * moved to queries/idCheck.ts when a model needed the same three words —
+ * one type, one derivation, two queries.
+ */
+export type { IdCheckState } from './idCheck'
 
 /**
  * The bio length needed to appear on the PUBLIC website. Nothing else.
@@ -206,11 +212,10 @@ export async function getStylistSetup(
     )
   }
 
-  const idCheck: IdCheckState = u.is_verified
-    ? 'approved'
-    : req?.status === 'pending' || req?.status === 'rejected'
-      ? req.status
-      : 'none'
+  // One definition of this rule, shared with the model-facing path — see
+  // queries/idCheck.ts. It used to live here, which meant a model needing the
+  // same three words would have had a second copy of it.
+  const { state: idCheck, note: idCheckNote } = deriveIdCheck(u.is_verified, req)
 
   return {
     providerId: prov.id,
@@ -222,7 +227,7 @@ export async function getStylistSetup(
     publishBlockers,
     websiteBlockers,
     idCheck,
-    idCheckNote: req?.notes?.trim() ? req.notes.trim() : null,
+    idCheckNote,
     isVerified: !!u.is_verified,
     feeSettled: !!payRes.data || !!u.is_founding_provider || !!u.provider_fee_waived,
     isFoundingProvider: !!u.is_founding_provider,

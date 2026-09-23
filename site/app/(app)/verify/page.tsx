@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { createSupabaseServerClient, requireUser } from '@/lib/supabase-server'
 import { getStylistSetup } from '@/lib/queries/shop'
 import { EmptyState } from '@/components/ui'
-import { SelfieCapture } from './SelfieCapture'
+import { SelfieCapture } from '@/components/SelfieCapture'
 import { FeePanel } from './FeePanel'
 
 export const metadata = { title: 'ID check' }

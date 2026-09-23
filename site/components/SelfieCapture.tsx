@@ -2,10 +2,17 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { submitSelfie } from './actions'
+import { submitSelfie } from '@/app/(app)/verify/actions'
 
 /**
  * Take the ID-check photo and send it.
+ *
+ * ── SHARED, SINCE 23 Sep 2026 ─────────────────────────────────────────────
+ * It lived in app/(app)/verify/ while only a stylist could do this. A model's
+ * ID check happens inside the apply flow, never on /verify (see that page's
+ * own note on why models must not have a standalone entry), so the capture
+ * moved here and the two surfaces share it. The action it posts to decides
+ * which rules apply to whom — this component only takes a photo.
  *
  * ── A FILE INPUT, NOT getUserMedia ────────────────────────────────────────
  * `capture="user"` opens the front camera directly on a phone, which is where

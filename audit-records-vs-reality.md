@@ -2899,6 +2899,85 @@ and no rows means nothing to measure rather than a pass**; D every hash is 64
 characters, matches a recomputation, and v2's differs from v3's; E an ordinary
 member can read the active document, rolled back.
 
+**82. THE MODEL ID CHECK ON THE WEB — BUILT 23 Sep 2026. `npm run verify`
+EXIT 0, mobile `tsc` EXIT 0. NO MIGRATION, NO ROUTE YET.**
+
+Step 4 of the web apply flow. A model on the web could not do the ID check at
+all: `/verify` refuses model accounts by design, and the only model-facing
+entry has ever been inside mobile's apply flow. The closed loop is now open at
+the server, and the step exists ready for the wizard.
+
+**── THE ONE DECISION THAT TOUCHES MONEY ──**
+
+`submitSelfie` refused anyone without a provider row: *"Only a stylist account
+can do the ID check here."* Correct while the web had no way for a model to
+apply, wrong now — and **the fix was not to drop the guard but to give a model
+the one that belongs to her:**
+
+> ⚠️ **A model must have an ACTIVE MEMBERSHIP to submit an ID check.**
+
+The app once had standalone "Get verified" buttons for models. They were
+removed because they made accounts that were **verified but not subscribed** —
+people who had done the work and still could not apply (`verify/page.tsx:25-27`
+records it). Keeping that rule in the UI alone would mean this action
+re-created those accounts the moment anything called it directly. **So the rule
+is on the server**, using the same membership test as the apply gate: waived
+counts, and it asks Stripe when our own row looks stale rather than refusing
+someone who has paid.
+
+Models have no fee, and never have. The £14.99 test stays on the stylist
+branch, still meaning paid OR Founding Provider OR waived.
+
+"You're already verified" is now checked **first**, because it is the same
+answer for both and the kindest one.
+
+**── ONE RULE, TWO QUERIES ──**
+
+"Is the ID check done, waiting, or refused" lived inside `getStylistSetup`,
+next to a provider id, a bio length and a publish blocker list. A model has
+none of those and needs the same three words.
+
+`lib/queries/idCheck.ts` now holds **`deriveIdCheck()`** and both callers use
+it; only the queries differ, because a stylist's page already has the row and
+a model's does not. `IdCheckState` moved with it and is re-exported from
+`shop.ts` so existing imports are untouched. Copying the derivation would have
+been two versions of one rule, which is how a rule comes to mean two things.
+
+**── THE COPY, AND THE MISTAKE IT NEARLY SHIPPED ──**
+
+⚠️ My first draft told the model to hold **"a handwritten note with your name
+and today's date"**. The product asks for **her first name and the word
+"Cavy"** (`verify/page.tsx:136`, `verify-payment.tsx:393`). A reviewer looking
+for one thing while our own instructions ask for another rejects her **for
+following them**, and the rejection note is the only thing that would ever tell
+her why.
+
+The four steps are now `/verify`'s, word for word, with a comment saying they
+must stay that way. The rest matches the dashboard: *"It isn't an identity
+check — nobody sees a passport or a driving licence, and no document is kept."*
+The retention line matches Privacy §9 exactly — *"up to 90 days after the
+check, or until you delete your account"* — rather than the rounder "90 days
+and then deleted" I first wrote.
+
+**── WHAT WAS BUILT ──**
+* `submitSelfie` — two branches, both guards kept, model membership enforced.
+* `lib/queries/idCheck.ts` — `deriveIdCheck`, `getIdCheck`, `IdCheckState`.
+* `components/IdCheckStep.tsx` — the step: four states, the reviewer's note on
+  a rejection, the capture, the retention line.
+* `components/SelfieCapture.tsx` — **moved** from `app/(app)/verify/`, because
+  two surfaces now share it. It only takes a photo; the action decides whose
+  rules apply.
+
+**── WHAT WAS NOT BUILT ──**
+* **No route, again.** The wizard is step 5. `IdCheckStep` must never be
+  rendered on a standalone page — its own header says so, and the server guard
+  is what makes that more than a hope.
+* No migration, so no checksum. No published-copy change: every line either
+  matches `/verify` or Privacy, deliberately.
+
+**── STILL TRUE, AND WORTH REPEATING ──**
+`/verify` continues to refuse model accounts. Nothing about this reopens it.
+
 **75. A CHECK COULD STOP THE WEBSITE UPDATING, AND NOTHING NOTICED IT HAD —
 CHANGED 22 Sep 2026. `npm run verify` EXIT 0.**
 
@@ -9051,6 +9130,7 @@ platforms each failed it differently.
 | 79 | Slot prices live. Untested: the mobile price field; no model can see a price until step 5 | No |
 | 80 | Consent surface built, **no route until step 5**. Terms §5 still needs its line about displayed prices | No |
 | 81 | ✅ **CLOSED 23 Sep** — v3 live with 6 ticks, 5 existing consents intact, mobile checkbox removed | No |
+| 82 | Model ID check built, **no route until step 5**. `/verify` still refuses models, by design | No |
 Carried in from before the audit, unchanged by it:
 
 | Item | State |

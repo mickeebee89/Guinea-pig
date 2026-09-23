@@ -1,6 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { hasActiveSubscription } from '@/lib/verification'
 import { createSupabaseServerClient, requireUser } from '@/lib/supabase-server'
 import type { ConfirmOutcome } from '@/components/PayForm'
 
@@ -49,9 +50,26 @@ export async function submitSelfie(form: FormData): Promise<VerifyResult> {
     return { ok: false, error: 'That doesn’t look like a photo. Try again.' }
   }
 
-  // Only providers, and only once the fee is settled. Mirrors mobile — and
-  // "settled" means paid OR Founding Provider OR waived, never just paid.
-  // Getting that wrong is what had founding stylists staring at a £14.99 wall.
+  // ── WHO IS ALLOWED TO SUBMIT ONE — TWO ANSWERS, NOT ONE ─────────────────
+  //
+  // Until 23 Sep this refused anyone without a provider row outright: "Only a
+  // stylist account can do the ID check here." That was right while the web
+  // had no way for a model to apply. It is wrong now that it does, and the
+  // fix is NOT to drop the guard — it is to give a model the one that belongs
+  // to her.
+  //
+  // ⚠️ A MODEL MUST HAVE AN ACTIVE MEMBERSHIP TO SUBMIT ONE.
+  // The app once had standalone "Get verified" buttons for models and they
+  // were removed, because they produced accounts that were verified but not
+  // subscribed — people who had done the work and still could not apply
+  // (verify/page.tsx:25-27 records the decision). Keeping that rule in the UI
+  // only would mean this action re-created the same stranded accounts the
+  // moment anything called it directly. So the rule lives here, on the server,
+  // where the UI cannot route around it.
+  //
+  // It is the same membership test the apply gate uses — waived counts, and it
+  // asks Stripe when our own row looks stale rather than refusing someone who
+  // has paid.
   const [{ data: provRow }, { data: userRow }, { data: payRow }] = await Promise.all([
     supabase.from('providers').select('id').eq('user_id', user.id).maybeSingle(),
     supabase.from('users')
@@ -60,18 +78,31 @@ export async function submitSelfie(form: FormData): Promise<VerifyResult> {
     supabase.from('verification_payments').select('id').eq('user_id', user.id).limit(1).maybeSingle(),
   ])
 
-  if (!provRow) {
-    return { ok: false, error: 'Only a stylist account can do the ID check here.' }
-  }
-
   const u = (userRow ?? {}) as {
     is_verified?: boolean; is_founding_provider?: boolean; provider_fee_waived?: boolean
   }
+
+  // Said first, because it is the same answer for both and the kindest one.
   if (u.is_verified) {
     return { ok: false, error: 'You’re already verified — there’s nothing to submit.' }
   }
-  if (!payRow && !u.is_founding_provider && !u.provider_fee_waived) {
-    return { ok: false, error: 'The one-off fee needs settling before the ID check.' }
+
+  if (provRow) {
+    // A stylist. "Settled" means paid OR Founding Provider OR waived, never
+    // just paid — getting that wrong is what had founding stylists staring at
+    // a £14.99 wall.
+    if (!payRow && !u.is_founding_provider && !u.provider_fee_waived) {
+      return { ok: false, error: 'The one-off fee needs settling before the ID check.' }
+    }
+  } else {
+    // A model. No fee — models have never had one — but membership first.
+    const { active } = await hasActiveSubscription(supabase, user.id).catch(() => ({ active: false }))
+    if (!active) {
+      return {
+        ok: false,
+        error: 'Your membership needs to be active before the ID check — the two go together when you apply.',
+      }
+    }
   }
 
   const path = `${user.id}/selfie-${Date.now()}.jpg`
