@@ -29,9 +29,35 @@ import { BOOKINGS_PATH } from '@/lib/routes'
  *     real, belong together, and are still free.
  */
 
+/**
+ * ⚠️ EVERY REFUSAL CARRIES A CODE, AND IT IS NOT DECORATION.
+ *
+ * On 23 Sep a submit was reported as "refused, saying the terms weren't
+ * ticked" — and that sentence could have come from three different places:
+ * this action's missing-fields branch, its all-agreed branch, or the wizard's
+ * own grey note when it holds no consent. They read almost identically to a
+ * person, so the report could not be acted on.
+ *
+ * The code names the layer. `consentRelated` is what decides whether the
+ * client may throw her ticks away, which it used to do on every refusal —
+ * including a slot race, which has nothing to do with consent and made every
+ * failure look like a consent failure.
+ */
+export type ApplyRefusalCode =
+  | 'fields_missing'      // the form arrived incomplete
+  | 'gate_membership'     // 0049's rule, checked here for a legible message
+  | 'gate_idcheck'
+  | 'consent_missing'     // no consent fields in the form at all
+  | 'consent_unreadable'  // the payload would not parse
+  | 'consent_moved'       // the document changed under the reader
+  | 'consent_unticked'    // an acknowledgement came back not agreed
+  | 'slot_taken'
+  | 'gate_database'       // CV003: the database refused, not us
+  | 'rpc_failed'
+
 export type ApplyResult =
   | { ok: true; sessionId: string }
-  | { ok: false; error: string; refresh?: boolean }
+  | { ok: false; error: string; code: ApplyRefusalCode; refresh?: boolean }
 
 export async function submitApplication(form: FormData): Promise<ApplyResult> {
   const user = await requireUser()
@@ -48,16 +74,16 @@ export async function submitApplication(form: FormData): Promise<ApplyResult> {
     .split(',').map(s => s.trim()).filter(Boolean)
 
   if (!providerId || !availabilityId || !treatmentId || !date || !startTime || !endTime) {
-    return { ok: false, error: 'Something was missing from your application. Start again from the slot.', refresh: true }
+    return { ok: false, error: 'Something was missing from your application. Start again from the slot.', code: 'fields_missing', refresh: true }
   }
 
   // ── The gates, in the order the product states them ──────────────────────
   const gate = await getGateState(supabase, user.id)
   if (!gate.subscribed) {
-    return { ok: false, error: 'Your membership isn’t active, so this can’t be sent yet.', refresh: true }
+    return { ok: false, error: 'Your membership isn’t active, so this can’t be sent yet.', code: 'gate_membership', refresh: true }
   }
   if (!gate.verified) {
-    return { ok: false, error: 'Your ID check isn’t done yet, so this can’t be sent.', refresh: true }
+    return { ok: false, error: 'Your ID check isn’t done yet, so this can’t be sent.', code: 'gate_idcheck', refresh: true }
   }
 
   // ── The consent, checked against the document itself ─────────────────────
@@ -65,14 +91,17 @@ export async function submitApplication(form: FormData): Promise<ApplyResult> {
   const consentHash = String(form.get('consent_hash') ?? '')
   const rawPayload = String(form.get('consent_payload') ?? '')
   if (!consentId || !consentHash || !rawPayload) {
-    return { ok: false, error: 'We didn’t receive your agreement to the terms. Please tick them again.', refresh: true }
+    console.error('[apply] consent fields missing from the form', {
+      hasId: !!consentId, hasHash: !!consentHash, hasPayload: !!rawPayload,
+    })
+    return { ok: false, error: 'We didn’t receive your agreement to the terms. Please tick them again.', code: 'consent_missing', refresh: true }
   }
 
   let payload: { consent_version?: number; acknowledgements?: unknown[] }
   try {
     payload = JSON.parse(rawPayload)
   } catch {
-    return { ok: false, error: 'We couldn’t read your agreement to the terms. Please tick them again.', refresh: true }
+    return { ok: false, error: 'We couldn’t read your agreement to the terms. Please tick them again.', code: 'consent_unreadable', refresh: true }
   }
 
   if (!(await consentStillCurrent(supabase, consentId, consentHash))) {
@@ -80,6 +109,7 @@ export async function submitApplication(form: FormData): Promise<ApplyResult> {
     return {
       ok: false,
       error: 'The terms were updated while you were reading them. We’ve loaded the new version — please read it and tick again.',
+      code: 'consent_moved',
       refresh: true,
     }
   }
@@ -87,7 +117,22 @@ export async function submitApplication(form: FormData): Promise<ApplyResult> {
   const acks = Array.isArray(payload.acknowledgements) ? payload.acknowledgements : []
   const allAgreed = acks.every(a => (a as { agreed?: boolean })?.agreed === true)
   if (acks.length === 0 || !allAgreed) {
-    return { ok: false, error: 'Please tick every box before sending your application.' }
+    // ⚠️ Logged with the KEYS, not just a count. "6 of 9 agreed" does not say
+    // which, and the difference between "she missed one" and "we sent one
+    // wrong" is the whole diagnosis. Keys and booleans only — the wording is
+    // in the document, and this is a server log.
+    console.error('[apply] acknowledgements not all agreed', {
+      count: acks.length,
+      state: acks.map(a => {
+        const ack = a as { key?: string; agreed?: boolean }
+        return `${ack.key ?? '?'}=${ack.agreed === true ? 'y' : 'n'}`
+      }),
+    })
+    return {
+      ok: false,
+      error: 'Please tick every box before sending your application.',
+      code: 'consent_unticked',
+    }
   }
 
   // ── The booking ──────────────────────────────────────────────────────────
@@ -124,12 +169,19 @@ export async function submitApplication(form: FormData): Promise<ApplyResult> {
   if (error) {
     console.error('[apply] create_session_with_consent failed', { code: error.code, message: error.message })
     // CV003 is 0049's apply gate, and its message is written for the member.
-    if (error.code === 'CV003') return { ok: false, error: error.message, refresh: true }
+    if (error.code === 'CV003') return { ok: false, error: error.message, code: 'gate_database', refresh: true }
     // 23505 is the booking guard: somebody took this slot first.
     if (error.code === '23505') {
-      return { ok: false, error: 'That slot has just been taken. Pick another time.', refresh: true }
+      return { ok: false, error: 'That slot has just been taken. Pick another time.', code: 'slot_taken', refresh: true }
     }
-    return { ok: false, error: 'We couldn’t send your application. Please try again.', refresh: true }
+    return {
+      ok: false,
+      // The database's own message is not shown: it can name columns and
+      // constraints. The log above has it in full.
+      error: 'We couldn’t send your application. Please try again.',
+      code: 'rpc_failed',
+      refresh: true,
+    }
   }
 
   const sessionId = String(data)

@@ -63,6 +63,8 @@ export function ApplyWizard({ ctx }: { ctx: ApplyContext }) {
   const [error, setError] = useState<string | null>(null)
   const [sentId, setSentId] = useState<string | null>(null)
   const [consent, setConsent] = useState<AcceptedConsent | null>(null)
+  /** Which layer refused, so a report can name it. See actions.ts. */
+  const [refusal, setRefusal] = useState<string | null>(null)
   const [photos, setPhotos] = useState<ApplyPhoto[]>(ctx.photos)
   const [uploading, setUploading] = useState(false)
 
@@ -163,9 +165,19 @@ export function ApplyWizard({ ctx }: { ctx: ApplyContext }) {
       const res = await submitApplication(fd)
       if (!res.ok) {
         setError(res.error)
-        // The server asked for fresh data: the slot went, the terms moved, or
-        // a gate closed. Re-reading is the only honest response.
-        if (res.refresh) { setConsent(null); router.refresh() }
+        setRefusal(res.code)
+        // ⚠️ HER TICKS ARE ONLY THROWN AWAY FOR A CONSENT REASON.
+        //
+        // This used to clear them on EVERY refusal that asked for fresh data —
+        // including a slot race, which has nothing to do with consent. The
+        // result was that a booking lost to someone else came back as "please
+        // read and tick the terms first", and that is exactly how a submit
+        // failure got reported on 23 Sep as a consent failure. Six ticks are
+        // not ours to discard because a stylist's diary moved.
+        if (res.code === 'consent_moved' || res.code === 'consent_missing' || res.code === 'consent_unreadable') {
+          setConsent(null)
+        }
+        if (res.refresh) router.refresh()
         return
       }
       noteStore.clear()
@@ -220,7 +232,18 @@ export function ApplyWizard({ ctx }: { ctx: ApplyContext }) {
       <h2 className="mb-4 font-display text-xl text-warm-dark">{STEPS[step - 1]}</h2>
 
       {error && (
-        <p role="alert" className="mb-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-800">{error}</p>
+        <div role="alert" className="mb-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-800">
+          <p>{error}</p>
+          {/* The code, said out loud. Three refusals read almost identically
+              to a person — "the terms weren't ticked" could be this action,
+              the database, or the note below — and without this, a report of
+              one cannot be told from a report of another. */}
+          {refusal && (
+            <p className="mt-1 text-xs text-red-800/70">
+              If this keeps happening, tell us this: {refusal}
+            </p>
+          )}
+        </div>
       )}
 
       {/* 1 ── date */}
@@ -405,7 +428,10 @@ export function ApplyWizard({ ctx }: { ctx: ApplyContext }) {
 
           {!consent && (
             <p className="mt-4 rounded-md bg-input-bg px-3 py-2 text-sm text-muted">
-              Please read and tick the terms first.{' '}
+              {/* Worded so it cannot be mistaken for the server's refusal of a
+                  submit. This one means "you have not been through step 6 on
+                  this page yet", nothing more. */}
+              You haven’t agreed the terms on this device yet.{' '}
               <button onClick={() => go(6)} className="font-bold text-rose hover:underline">
                 Go back
               </button>
