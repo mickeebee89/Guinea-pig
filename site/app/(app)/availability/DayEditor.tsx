@@ -4,6 +4,17 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { saveAvailability } from './actions'
 import type { Slot } from '@/lib/availability'
+import { penceToPounds, poundsToPence } from '@/lib/price'
+
+/**
+ * The price box's complaint, or null. Derived from the text on the slot rather
+ * than held in state, so it cannot get out of step with what is shown.
+ */
+function priceProblem(s: Slot): string | null {
+  if (s.priceInput === undefined) return null
+  const parsed = poundsToPence(s.priceInput)
+  return parsed.ok ? null : parsed.error
+}
 
 /**
  * Edit one day's slots.
@@ -37,6 +48,13 @@ export function DayEditor({
 
   const save = () => {
     setMsg(null); setError(null)
+    // A half-typed price must not save as whatever was valid last. The box
+    // keeps the text, so the only way to catch this is to ask before saving.
+    const badPrice = slots.findIndex(s => priceProblem(s) !== null)
+    if (badPrice !== -1) {
+      setError(`Check the price on the ${slots[badPrice].startTime} slot — ${priceProblem(slots[badPrice])}`)
+      return
+    }
     start(async () => {
       const res = await saveAvailability(date, slots)
       if (!res.ok) { setError(res.error); return }
@@ -91,6 +109,49 @@ export function DayEditor({
                 </button>
               )}
             </div>
+
+            {/* ── What this slot costs ───────────────────────────────────
+                Empty is a real answer, not a missing one: it means the price
+                is still settled in the chat, which is how every booking has
+                worked until now. So no placeholder that reads like a default,
+                and no "0" pre-filled — 0 means free, and saying "free" for
+                someone who simply has not decided is not ours to do. */}
+            {!s.isBooked && (
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <label className="text-xs text-muted" htmlFor={`price-${i}`}>
+                  What you’ll ask for this slot
+                </label>
+                <span className="text-sm text-muted" aria-hidden="true">£</span>
+                <input
+                  id={`price-${i}`}
+                  type="text"
+                  inputMode="decimal"
+                  value={s.priceInput ?? penceToPounds(s.pricePence)}
+                  placeholder="—"
+                  aria-describedby={`price-help-${i}`}
+                  aria-invalid={priceProblem(s) ? true : undefined}
+                  onChange={e => {
+                    // The typed text lives ON THE SLOT, not in state keyed by
+                    // row number: removing a slot shifts every index below it,
+                    // and a price that slides onto the wrong slot is worse than
+                    // no price at all. It also keeps "12." on screen on its way
+                    // to "12.50", which deriving the value from pence cannot.
+                    const v = e.target.value
+                    const parsed = poundsToPence(v)
+                    update(i, parsed.ok ? { priceInput: v, pricePence: parsed.pence } : { priceInput: v })
+                  }}
+                  className="min-h-11 w-24 rounded-md border border-hairline px-2 text-sm"
+                />
+                <span id={`price-help-${i}`} className={`text-xs ${priceProblem(s) ? 'text-danger' : 'text-muted'}`}>
+                  {priceProblem(s)
+                    ?? (s.pricePence === 0
+                      ? 'Shown to models as “Free”.'
+                      : s.pricePence == null
+                        ? 'Leave empty to agree it in the chat, as now.'
+                        : 'Shown to models before they apply. You still agree the final amount in the chat.')}
+                </span>
+              </div>
+            )}
 
             {treatments.length > 0 && !s.isBooked && (
               <fieldset className="mt-2">

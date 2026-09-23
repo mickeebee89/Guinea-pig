@@ -23,6 +23,18 @@ export interface Slot {
   startTime: string      // HH:MM
   endTime: string        // HH:MM
   treatmentIds: string[]
+  /**
+   * What the stylist asks for this slot, in pence. null is "not set", 0 is
+   * free, and they are different answers — see lib/price.ts. 0050.
+   */
+  pricePence?: number | null
+  /**
+   * CLIENT ONLY, never written: what the stylist has typed into the price box,
+   * so "12." survives on its way to "12.50". It lives on the slot rather than
+   * in state keyed by row number, because removing a slot shifts every index
+   * below it and a price sliding onto the wrong slot is worse than none.
+   */
+  priceInput?: string
   /** True when a session references this slot. Not editable, not deletable. */
   isBooked?: boolean
 }
@@ -37,7 +49,7 @@ export async function loadDay(
 ): Promise<Slot[]> {
   const { data, error } = await supabase
     .from('availability')
-    .select('id, start_time, end_time, active_treatments, is_taken')
+    .select('id, start_time, end_time, active_treatments, is_taken, price_pence')
     .eq('provider_id', providerId)
     .eq('date', date)
     .order('start_time')
@@ -46,6 +58,7 @@ export async function loadDay(
   const rows = (data ?? []) as {
     id: string; start_time: string; end_time: string
     active_treatments: string[] | null; is_taken: boolean | null
+    price_pence: number | null
   }[]
   const booked = await bookedAmong(supabase, rows.map(r => r.id))
 
@@ -54,6 +67,7 @@ export async function loadDay(
     startTime: hhmm(r.start_time),
     endTime: hhmm(r.end_time),
     treatmentIds: r.active_treatments ?? [],
+    pricePence: r.price_pence,
     isBooked: booked.has(r.id) || !!r.is_taken,
   }))
 }
@@ -94,6 +108,11 @@ export async function saveDay(
       start_time: toHHMMSS(s.startTime),
       end_time: toHHMMSS(s.endTime),
       active_treatments: s.treatmentIds,
+      // ⚠️ Present in EVERY payload, including when it is null. A PostgREST
+      // upsert only updates the columns it is given, so omitting this on a
+      // "no price" slot would silently keep whatever was there before and
+      // make clearing a price impossible.
+      price_pence: s.pricePence ?? null,
     }))
     const { error } = await supabase
       .from('availability')

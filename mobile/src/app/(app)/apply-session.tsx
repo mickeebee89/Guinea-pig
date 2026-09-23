@@ -21,6 +21,7 @@ import { hasActiveSubscription, isIdentityVerified } from '@/lib/verification'
 import { useAuth } from '@/context/auth'
 import { supabase } from '@/lib/supabase'
 import { signModelPhotos } from '@/lib/photoUrls'
+import { formatPrice } from '@/lib/price'
 import { ConsentGate, type AcceptedConsent } from '@/components/ConsentGate'
 import AvailabilityCalendar, { dateKey } from '@/components/AvailabilityCalendar'
 
@@ -63,7 +64,11 @@ const STEP_SUBS = [
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type AvailabilitySlot = { id: string; date: string; start_time: string; end_time: string; treatmentIds: string[] }
+type AvailabilitySlot = {
+  id: string; date: string; start_time: string; end_time: string; treatmentIds: string[]
+  /** Pence. null is "not set", 0 is free — never the same thing (0050). */
+  pricePence: number | null
+}
 type Treatment        = { id: string; name: string; category: string }
 // `path` is the storage object path stored in the DB / attached to the booking;
 // `photoUrl` is a short-lived signed URL used only for rendering the thumbnail.
@@ -235,7 +240,7 @@ export default function ApplySessionScreen() {
         const [{ data: availData, error: availError }, { data: treatData, error: treatError }, { data: provData }] = await Promise.all([
           supabase
             .from('availability')
-            .select('id, date, start_time, end_time, active_treatments')
+            .select('id, date, start_time, end_time, active_treatments, price_pence')
             .eq('provider_id', providerId)
             .gte('date', todayKey)
             .order('date'),
@@ -265,6 +270,7 @@ export default function ApplySessionScreen() {
           end_time:     r.end_time,
           // Per-slot treatment scoping (mirror availability.tsx's treatmentIds).
           treatmentIds: (r.active_treatments as string[] | null) ?? [],
+          pricePence:   (r.price_pence as number | null) ?? null,
         })))
         if (treatData) setTreatments(treatData as Treatment[])
         if (provData)  setProviderUserId((provData as any).user_id ?? null)
@@ -779,6 +785,13 @@ export default function ApplySessionScreen() {
                       <Text style={[styles.slotTimeText, isSelected && !taken && styles.slotTimeTextSelected, taken && styles.slotTimeTextTaken]}>
                         {fmtTime(slot.start_time)} – {fmtTime(slot.end_time)}
                       </Text>
+                      {/* The price, before she picks — which is the whole
+                          point of this feature. "Not set" is said plainly
+                          rather than left blank, so an unpriced slot reads as
+                          "ask in the chat" and not as "free". */}
+                      <Text style={[styles.slotPrice, slot.pricePence == null && styles.slotPriceUnset]}>
+                        {formatPrice(slot.pricePence) ?? 'Price not set'}
+                      </Text>
                     </View>
                     {taken ? (
                       <View style={styles.slotStripes}>
@@ -945,6 +958,20 @@ export default function ApplySessionScreen() {
                 <Text style={styles.confirmValue}>{selectedTreatment.name}</Text>
               </View>
             </View>
+
+            {/* Cost, on the last screen before she commits. The price is the
+                SLOT's, not the treatment's (0050) — a slot can offer several
+                treatments and they all carry this figure, so this row must
+                read the same as the one she tapped on the time step. */}
+            <ConfirmRow
+              icon="pricetag-outline"
+              label="Cost"
+              value={
+                formatPrice(selectedSlot.pricePence)
+                ?? 'Not set — agree it in the chat'
+              }
+              muted={selectedSlot.pricePence == null}
+            />
 
             {note.trim() ? (
               <ConfirmRow icon="chatbubble-outline" label="Note"   value={note.trim()} multiline />
@@ -1315,6 +1342,8 @@ const styles = StyleSheet.create({
     gap: 5,
     minWidth: 106,
   },
+  slotPrice:      { fontSize: 13, fontFamily: Fonts.bodyBold, color: Colors.roseDark, marginLeft: 8 },
+  slotPriceUnset: { color: Colors.muted, fontFamily: Fonts.body, fontSize: 12 },
   slotTimeText: {
     fontSize: 15,
     fontFamily: Fonts.bodyBold,

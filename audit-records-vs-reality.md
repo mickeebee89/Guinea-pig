@@ -2477,12 +2477,141 @@ part-way through the seven steps is refused at submit with CV003. That is
 correct behaviour and a worse moment to learn it. The web flow should re-check
 at submit rather than only on entry.
 
+**✅ 0049 APPLIED AND VERIFIED — 23 Sep 2026, from Micky's pasted output.**
+
+* **Pre-check: no rows** — nobody would be locked out. The ASSERT agreed on
+  apply, which is the same question asked twice on purpose.
+* **Block A:** overloads 2, `auth_may_call_own` true, **`auth_may_ask_about_others` false**,
+  `anon_may_call` false, trigger enabled, policy RESTRICTIVE.
+* **Block B:** model 3 members, 1 may apply; provider 3 members, 0 may apply.
+* **Block C:** the ineligible member refused with **CV003** — *"You need an
+  active Cavy membership before you can apply."* — and the eligible member
+  accepted. Rolled back.
+* **Block E:** `models_now_refused` 0.
+
+**⚠️ CORRECTION TO BLOCK C, AND IT MATTERED.** As written it picked ANY
+provider, picked one with no treatments, and the insert failed on
+`sessions.treatment_id` NOT NULL — so **the positive half proved nothing while
+the block still looked like it had passed**, because the refusal half was
+correct and printed first. It passed only after being changed to choose a
+provider that HAS a treatment and to put that treatment in the slot.
+
+Fixed in the migration file, below the footer, so the checksum is unchanged
+(`f4f8c90b…a823f`). Block D got the same fix.
+
+**The shape, again: a fixture that tests less than it appears to.** Block C's
+refusal half would have kept passing for ever while its acceptance half never
+ran once. The tell was an error about `treatment_id` in a block about
+membership — an error from the wrong subject is worth reading as a fixture
+fault, not a failure.
+
+**Block D was skipped**, correctly: the mobile app is in no store, so nothing
+is calling the 17-argument signature today. It stays in the file for the day
+that changes.
+
 **── VERIFY BLOCKS ──**
 A shape (including `auth_may_ask_about_others` must be FALSE); B the rule
 across the members who exist, counts and roles only; **C the one that matters**
 — an ineligible member refused with CV003 and an eligible one accepted, both
 as `authenticated` with real claims, rolled back; D the existing 17-argument
 mobile call still works; E nobody is locked out, asked again live.
+
+**79. A SLOT CAN CARRY A PRICE — BUILT 23 Sep 2026. `npm run verify` EXIT 0,
+mobile `tsc` EXIT 0. MIGRATION 0050 NOT APPLIED.**
+
+**Plainly:** a stylist can now say what a slot costs, and a model sees it
+before she applies instead of after she is accepted. Step 2 of the web apply
+flow (item 77's plan).
+
+`supabase/migrations/0050_a_slot_can_carry_a_price.sql`, checksum
+`532794a971f7c097af25da505d9500b0eca1c36a9af28133638d9f1cc9aaf812`, by hand —
+`--stamp` not run.
+
+**── THE MONEY DECISIONS, MADE BEFORE ANY CODE ──**
+
+* **`availability.price_pence`, integer, NULLABLE, CHECK 0–10000.** Pence, like
+  `verification_payments.amount_pence`: money in a float is how £14.99 becomes
+  £14.989999999999998. The £100 ceiling is a typo guard (£45 → £4500), not a
+  business rule, and it lives in the database so two clients cannot disagree
+  about it.
+* **⚠️ THREE STATES, NEVER TWO.** `null` = the stylist has not said → *"Price
+  not set"*; `0` = the stylist has said free → *"Free"*. **A DEFAULT OF 0 WOULD
+  HAVE PUBLISHED "FREE" ON BEHALF OF EVERY STYLIST WHO HAS NEVER SEEN THIS
+  FEATURE** — a promise the product would be making for them. Every existing
+  slot stays null, which is the correct starting state and not a gap to fill.
+* **Per slot, not per treatment**, as decided. A slot carries several
+  treatments (`active_treatments` is an array), so the figure cannot vary by
+  which one she picks — the treatment step restates the same number rather than
+  looking like it changes it.
+* **No price on a BOOKING yet.** `sessions` gains nothing here: the snapshot
+  belongs with the apply flow, so a stylist editing a slot afterwards cannot
+  rewrite what was agreed. **Privacy's claim that we hold "what it cost"
+  (legal.ts:462) therefore stays false until step 5.**
+
+**── PUBLISHED COPY: NOTHING CHANGED, DELIBERATELY ──**
+
+No Terms, Privacy or public-page edits in this step. The sentence Terms §5
+needs about displayed prices — that one is the stylist's asking figure and not
+an offer Cavy is party to — is due when a real member can first SEE a price,
+which is when the web apply flow ships. Writing it now would publish a term
+about a feature nobody can reach. **Logged so it cannot be forgotten: Terms §5
+before step 5 goes live.**
+
+In-product wording (not legal copy) does the work meanwhile, and says the same
+thing in both editors: *"Shown to models before they apply. You still agree the
+final amount in the chat."*
+
+**── WHERE IT IS WRITTEN, AND THE TRAP THAT WOULD HAVE HALF-BUILT IT ──**
+
+Both clients save slots through their own `saveDay`/`applySlotsToDates`
+helpers, upserting on `(provider_id, date, start_time, end_time)`. **A
+PostgREST upsert only updates the columns it is given.** So if one client sent
+`price_pence` and the other did not:
+* a price could never be CLEARED from the client that omits it, and
+* every slot that client created would be priceless for ever.
+
+Both helpers now send the column **in every payload, including when it is
+null** — `site/lib/availability.ts` and `mobile/src/lib/availability.ts`, each
+with the reason written beside it.
+
+**One editor on mobile covers both write paths:** `SlotPickerModal` is shared
+by the per-day editor and the bulk "apply to these days" flow, so the price
+field exists once and the two cannot drift.
+
+**── WHERE IT IS SHOWN ──**
+
+| Surface | Who sees it |
+|---|---|
+| Web day editor (`DayEditor.tsx`) | the stylist |
+| Mobile slot sheet (`SlotPickerModal.tsx`) | the stylist |
+| Mobile day list, on each slot row | the stylist |
+| **Mobile apply, step 2, on every slot** | **the model, before she picks** |
+| **Mobile apply, step 7 confirm, "Cost" row** | **the model, before she commits** |
+
+**⚠️ A model on the WEB still sees no price anywhere**, because the web shows
+days on a calendar and never lists slots — `/stylist/[id]` marks which days
+have openings and stops there. Web prices become visible to a model only when
+the apply flow lands. That is a true statement about scope, not a defect, and
+it is written here so the next person does not read "display wherever slots
+appear" as "models can see prices".
+
+**── THE TYPING TRAP, AND WHY THE TEXT LIVES ON THE SLOT ──**
+
+A controlled box whose value is derived from pence cannot be typed into: "12."
+parses as invalid, the value re-renders as "12", and the decimal point is
+impossible. So the raw text is kept — and kept **on the slot object**, not in
+state keyed by row number, because removing a slot shifts every index below it
+and a price sliding silently onto the wrong slot is worse than no price at all.
+
+Both editors refuse to save while a price is unparseable, rather than saving
+the last figure that happened to be valid on a slot the stylist believes says
+something else.
+
+**── REMINDER: HAPTICS ──** the mobile price field is a new interaction. The
+sheet's existing controls all buzz on press (`Haptics.impactAsync`); the text
+input has none, which is right for typing, but the save that now validates a
+price should keep the existing success/warning feedback. Worth a look when
+Micky next runs the app.
 
 **75. A CHECK COULD STOP THE WEBSITE UPDATING, AND NOTHING NOTICED IT HAD —
 CHANGED 22 Sep 2026. `npm run verify` EXIT 0.**
@@ -8633,7 +8762,7 @@ platforms each failed it differently.
 | 74 | Email notifications **proven end to end on live data**. Open: mobile has no email switch | No |
 | 75 | Drift check is new and unproven — its first real test is the next failed or skipped deploy | No |
 | 77 | **No published shop exists at all** — `/browse` and every public treatment page are empty while the site is open and indexed | **Yes** |
-| 78 | Apply gate written (0049), **not applied**. Until it is, anyone with a token can book without paying | **Yes** |
+| 79 | Slot prices built (0050), **not applied**. Terms §5 needs a line about displayed prices before the web apply flow goes live | No |
 
 Carried in from before the audit, unchanged by it:
 

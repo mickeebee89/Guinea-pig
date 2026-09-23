@@ -14,6 +14,14 @@ import {
   loadProviderId, loadTreatments, loadUpcomingDays,
   applySlotsToDates, notifyFavourites,
 } from '@/lib/availability'
+import { penceToPounds, poundsToPence } from '@/lib/price'
+
+// The modal refuses to save an unparseable price, so this only ever sees empty
+// text or a number. null is the safe reading of anything else: "not set".
+const priceOrNull = (pounds: string): number | null => {
+  const parsed = poundsToPence(pounds)
+  return parsed.ok ? parsed.pence : null
+}
 
 // Slots are keyed by time+treatments so "shared across all days" can be computed
 // honestly rather than assumed.
@@ -59,6 +67,8 @@ export default function AddAvailabilityScreen() {
   const [modalStart,    setModalStart]    = useState('09:00')
   const [modalEnd,      setModalEnd]      = useState('10:00')
   const [modalTreatIds, setModalTreatIds] = useState<string[]>([])
+  // Pounds as typed; '' is "agree it in the chat", which is a real answer.
+  const [modalPrice,    setModalPrice]    = useState('')
 
   useEffect(() => {
     let cancelled = false
@@ -151,6 +161,7 @@ export default function AddAvailabilityScreen() {
     setModalStart('09:00')
     setModalEnd('10:00')
     setModalTreatIds([])
+    setModalPrice('')
     setModalOpen(true)
   }
 
@@ -160,6 +171,7 @@ export default function AddAvailabilityScreen() {
     setModalStart(slot.startTime)
     setModalEnd(slot.endTime)
     setModalTreatIds(slot.treatmentIds)
+    setModalPrice(penceToPounds(slot.pricePence))
     setModalOpen(true)
   }
 
@@ -204,6 +216,10 @@ export default function AddAvailabilityScreen() {
           startTime:    modalStart,
           endTime:      modalEnd,
           treatmentIds: modalTreatIds,
+          // Every date in an all-days apply gets the same figure, which is what
+          // "apply these slots to these days" already means for times and
+          // treatments.
+          pricePence:   priceOrNull(modalPrice),
         }
         next[d] = sortSlots(
           replacing
@@ -509,6 +525,8 @@ export default function AddAvailabilityScreen() {
         startTime={modalStart}
         endTime={modalEnd}
         selectedTreatIds={modalTreatIds}
+        priceInput={modalPrice}
+        onChangePrice={setModalPrice}
         bottomInset={insets.bottom + 12}
         onChangeStart={t => {
           setModalStart(t)

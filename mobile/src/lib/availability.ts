@@ -21,6 +21,11 @@ export type TimeSlot = {
   startTime: string
   endTime: string
   treatmentIds: string[]
+  /**
+   * What the stylist asks for this slot, in pence. null is "not set" and 0 is
+   * free — different answers, see src/lib/price.ts. 0050, audit item 79.
+   */
+  pricePence: number | null
 }
 
 export type DaySlots = Record<string, TimeSlot[]>
@@ -149,7 +154,7 @@ export async function loadUpcomingDays(providerId: string): Promise<DaySlots> {
   const today = dateKey(new Date())
   const { data, error } = await supabase
     .from('availability')
-    .select('id, date, start_time, end_time, active_treatments')
+    .select('id, date, start_time, end_time, active_treatments, price_pence')
     .eq('provider_id', providerId)
     .gte('date', today)
     .order('date')
@@ -166,6 +171,7 @@ export async function loadUpcomingDays(providerId: string): Promise<DaySlots> {
       startTime:    hhmm(row.start_time as string),
       endTime:      hhmm(row.end_time as string),
       treatmentIds: (row.active_treatments as string[]) ?? [],
+      pricePence:   (row.price_pence as number | null) ?? null,
     })
   }
   return out
@@ -174,7 +180,7 @@ export async function loadUpcomingDays(providerId: string): Promise<DaySlots> {
 export async function loadDay(providerId: string, date: string): Promise<TimeSlot[]> {
   const { data, error } = await supabase
     .from('availability')
-    .select('id, date, start_time, end_time, active_treatments')
+    .select('id, date, start_time, end_time, active_treatments, price_pence')
     .eq('provider_id', providerId)
     .eq('date', date)
     .order('start_time')
@@ -185,6 +191,7 @@ export async function loadDay(providerId: string, date: string): Promise<TimeSlo
     startTime:    hhmm(row.start_time as string),
     endTime:      hhmm(row.end_time as string),
     treatmentIds: (row.active_treatments as string[]) ?? [],
+    pricePence:   (row.price_pence as number | null) ?? null,
   }))
 }
 
@@ -231,6 +238,11 @@ function slotRow(providerId: string, date: string, s: TimeSlot, resolve: (id: st
     start_time:        toHHMMSS(s.startTime),
     end_time:          toHHMMSS(s.endTime),
     active_treatments: s.treatmentIds.map(resolve).filter(Boolean) as string[],
+    // ⚠️ In EVERY payload, including when null. A PostgREST upsert updates only
+    // the columns it is given, so leaving this out would make a price
+    // impossible to clear, and would silently keep an old figure on a slot the
+    // stylist has just re-priced to "agree in the chat".
+    price_pence:       s.pricePence,
   }
 }
 

@@ -19,6 +19,15 @@ import {
   loadProviderId, loadTreatments, loadDay,
   saveDay, deleteDay, notifyFavourites,
 } from '@/lib/availability'
+import { formatPriceLong, penceToPounds, poundsToPence } from '@/lib/price'
+
+// The modal refuses to save an unparseable price, so by the time this runs the
+// text is either empty or a number. Anything else would be a bug upstream, and
+// null is the safe reading of it: "not set", never a guessed figure.
+const priceOrNull = (pounds: string): number | null => {
+  const parsed = poundsToPence(pounds)
+  return parsed.ok ? parsed.pence : null
+}
 
 // Edit ONE day. The date is named prominently at the top and is fixed for the whole
 // screen, so there is never any ambiguity about which day is being changed.
@@ -46,6 +55,8 @@ export default function EditDayScreen() {
   const [modalStart,    setModalStart]    = useState('09:00')
   const [modalEnd,      setModalEnd]      = useState('10:00')
   const [modalTreatIds, setModalTreatIds] = useState<string[]>([])
+  // Pounds as typed; '' is "agree it in the chat", which is a real answer.
+  const [modalPrice,    setModalPrice]    = useState('')
 
   const { loading, reload } = useLoader(`${userId ?? ''}|${date ?? ''}`, async stale => {
     if (!userId || !date) return
@@ -74,6 +85,7 @@ export default function EditDayScreen() {
     setModalStart('09:00')
     setModalEnd('10:00')
     setModalTreatIds([])
+    setModalPrice('')
     setModalOpen(true)
   }
 
@@ -83,6 +95,7 @@ export default function EditDayScreen() {
     setModalStart(slot.startTime)
     setModalEnd(slot.endTime)
     setModalTreatIds(slot.treatmentIds)
+    setModalPrice(penceToPounds(slot.pricePence))
     setModalOpen(true)
   }
 
@@ -108,6 +121,9 @@ export default function EditDayScreen() {
         startTime:    modalStart,
         endTime:      modalEnd,
         treatmentIds: modalTreatIds,
+        // The modal will not let an unparseable price through, so this is the
+        // figure the stylist saw — not a last-known-good one.
+        pricePence:   priceOrNull(modalPrice),
       }
       const updated = editingSlotId
         ? prev.map(s => (s.id === editingSlotId ? next : s))
@@ -249,6 +265,12 @@ export default function EditDayScreen() {
                       <View style={styles.slotTime}>
                         <Ionicons name="time-outline" size={14} color={Colors.warmDark} />
                         <Text style={styles.slotTimeText}>{slot.startTime}–{slot.endTime}</Text>
+                        {/* "Not set" is said out loud rather than shown as a
+                            blank, so a stylist can see at a glance which slots
+                            still send the model into the chat to ask. */}
+                        <Text style={[styles.slotPrice, slot.pricePence == null && styles.slotPriceUnset]}>
+                          {formatPriceLong(slot.pricePence)}
+                        </Text>
                       </View>
                       <View style={styles.slotStripes}>
                         {names.length === 0 ? (
@@ -315,6 +337,8 @@ export default function EditDayScreen() {
         startTime={modalStart}
         endTime={modalEnd}
         selectedTreatIds={modalTreatIds}
+        priceInput={modalPrice}
+        onChangePrice={setModalPrice}
         bottomInset={insets.bottom + 12}
         onChangeStart={t => {
           setModalStart(t)
@@ -367,6 +391,8 @@ const styles = StyleSheet.create({
     borderRadius: 12, paddingVertical: 10, paddingHorizontal: 12, marginBottom: 8, gap: 8,
   },
   slotTime:       { flexDirection: 'row', alignItems: 'center', gap: 4, minWidth: 100 },
+  slotPrice:      { fontSize: 12, fontFamily: Fonts.bodyBold, color: Colors.roseDark, marginLeft: 8 },
+  slotPriceUnset: { color: Colors.muted, fontFamily: Fonts.body },
   slotTimeText:   { fontFamily: Fonts.bodyBold, fontSize: 14, color: Colors.warmDark },
   slotStripes:    { flex: 1, flexDirection: 'row', flexWrap: 'wrap', gap: 4 },
   slotStripe:     { borderRadius: 5, paddingHorizontal: 7, paddingVertical: 3 },

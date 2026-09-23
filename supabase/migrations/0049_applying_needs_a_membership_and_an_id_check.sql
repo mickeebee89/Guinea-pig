@@ -326,14 +326,22 @@ notify pgrst, 'reload schema';
 --       raise exception 'ROLLED BACK. Every member is eligible, so the refusal cannot be tested on real data.';
 --     end if;
 --
---     select p.id into v_prov from public.providers p where p.is_published is true limit 1;
+--     -- ⚠️ CORRECTED 23 Sep 2026, AFTER ITS FIRST RUN. This used to pick any
+--     -- provider, picked one with NO treatments, and the insert then failed on
+--     -- sessions.treatment_id NOT NULL — so the POSITIVE half proved nothing
+--     -- while the block still "passed" on the refusal. Pick a provider that
+--     -- HAS a treatment, and put that treatment in the slot.
+--     select p.id, t.id into v_prov, v_treat
+--     from public.providers p
+--     join public.provider_treatments t on t.provider_id = p.id
+--     order by (p.is_published is true) desc
+--     limit 1;
 --     if v_prov is null then
---       select p.id into v_prov from public.providers p limit 1;
+--       raise exception 'ROLLED BACK. No provider with a treatment exists, so a booking cannot be built.';
 --     end if;
---     select t.id into v_treat from public.provider_treatments t where t.provider_id = v_prov limit 1;
 --
 --     insert into public.availability (provider_id, date, start_time, end_time, active_treatments, is_taken)
---     values (v_prov, current_date + 30, '10:00', '11:00', '{}', false)
+--     values (v_prov, current_date + 30, '10:00', '11:00', array[v_treat::text], false)
 --     returning id into v_slot;
 --
 --     execute format('set local role authenticated');
@@ -390,10 +398,14 @@ notify pgrst, 'reload schema';
 --       raise exception 'ROLLED BACK. No active consent document, so the RPC cannot be exercised.';
 --     end if;
 --
---     select p.id into v_prov from public.providers p limit 1;
---     select t.id into v_treat from public.provider_treatments t where t.provider_id = v_prov limit 1;
+--     -- Same correction as Block C: a provider with no treatment cannot carry
+--     -- a booking, because sessions.treatment_id is NOT NULL.
+--     select p.id, t.id into v_prov, v_treat
+--     from public.providers p
+--     join public.provider_treatments t on t.provider_id = p.id
+--     limit 1;
 --     insert into public.availability (provider_id, date, start_time, end_time, active_treatments, is_taken)
---     values (v_prov, current_date + 31, '12:00', '13:00', '{}', false) returning id into v_slot;
+--     values (v_prov, current_date + 31, '12:00', '13:00', array[v_treat::text], false) returning id into v_slot;
 --
 --     execute format('set local role authenticated');
 --     execute format('set local request.jwt.claims = %L', json_build_object('sub', v_me, 'role', 'authenticated')::text);

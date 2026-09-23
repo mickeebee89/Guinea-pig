@@ -1,8 +1,9 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal } from 'react-native'
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, TextInput } from 'react-native'
 import * as Haptics from 'expo-haptics'
 import { Ionicons } from '@expo/vector-icons'
 import { Colors, Fonts, Radius, Shadow } from '@/constants/Colors'
 import { TIMES, Treatment, treatmentColour } from '@/lib/availability'
+import { poundsToPence } from '@/lib/price'
 
 // Bottom-sheet for adding/editing ONE time slot: its start, its end, and the
 // treatments offered IN THAT SLOT. Treatments are per-slot by design (the DB
@@ -16,10 +17,13 @@ type Props = {
   startTime: string
   endTime: string
   selectedTreatIds: string[]
+  /** Pounds, as typed. '' means "not set" — a real answer, not a missing one. */
+  priceInput: string
   bottomInset: number
   onChangeStart: (t: string) => void
   onChangeEnd: (t: string) => void
   onToggleTreat: (id: string) => void
+  onChangePrice: (pounds: string) => void
   onSave: () => void
   onClose: () => void
 }
@@ -31,10 +35,12 @@ export default function SlotPickerModal({
   startTime,
   endTime,
   selectedTreatIds,
+  priceInput,
   bottomInset,
   onChangeStart,
   onChangeEnd,
   onToggleTreat,
+  onChangePrice,
   onSave,
   onClose,
 }: Props) {
@@ -42,7 +48,11 @@ export default function SlotPickerModal({
   const validEndTimes = TIMES.slice(startIdx + 1)
   // A slot with no treatments would read as "any treatment goes" on the model's
   // booking screen, so it can never be saved.
-  const canSave       = selectedTreatIds.length > 0 && TIMES.indexOf(endTime) > startIdx
+  // A price that has not parsed must not be saveable: the box keeps the text,
+  // so the only alternative is saving the last figure that happened to be
+  // valid, on a slot the stylist believes says something else.
+  const priceCheck    = poundsToPence(priceInput)
+  const canSave       = selectedTreatIds.length > 0 && TIMES.indexOf(endTime) > startIdx && priceCheck.ok
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
@@ -93,6 +103,35 @@ export default function SlotPickerModal({
                 )
               })}
             </ScrollView>
+
+            {/* ── What this slot costs ────────────────────────────────────
+                Empty is a real answer: it means the price is agreed in the
+                chat, which is how every booking has worked until now. No "0"
+                pre-filled — 0 means FREE, and saying "free" for a stylist who
+                simply has not decided is not ours to do. */}
+            <Text style={styles.modalSectionLabel}>What you’ll ask for this slot</Text>
+            <View style={styles.priceRow}>
+              <Text style={styles.priceSymbol}>£</Text>
+              <TextInput
+                style={styles.priceInput}
+                value={priceInput}
+                onChangeText={onChangePrice}
+                keyboardType="decimal-pad"
+                placeholder="—"
+                placeholderTextColor={Colors.muted}
+                maxLength={6}
+                accessibilityLabel="Price for this slot in pounds"
+              />
+            </View>
+            <Text style={[styles.priceHint, !priceCheck.ok && styles.priceHintBad]}>
+              {!priceCheck.ok
+                ? priceCheck.error
+                : priceInput.trim() === ''
+                  ? 'Leave empty to agree it in the chat, as now.'
+                  : priceCheck.pence === 0
+                    ? 'Models see this slot as “Free”.'
+                    : 'Models see this before they apply. You still agree the final amount in the chat.'}
+            </Text>
 
             {availableTreatments.length > 0 && (
               <>
@@ -179,6 +218,17 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.bodyBold, fontSize: 11, color: Colors.muted,
     textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8, marginTop: 16,
   },
+  priceRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: Colors.inputBg, borderWidth: 1.5, borderColor: Colors.border,
+    borderRadius: Radius.md, paddingHorizontal: 12,
+  },
+  priceSymbol: { fontFamily: Fonts.bodyBold, fontSize: 16, color: Colors.muted },
+  priceInput:  {
+    flex: 1, minHeight: 44, fontSize: 16, color: Colors.warmDark, paddingVertical: 8,
+  },
+  priceHint:    { fontSize: 12, lineHeight: 17, color: Colors.muted, marginTop: 6 },
+  priceHintBad: { color: Colors.roseDark },
   timeRow:  { gap: 6, paddingBottom: 4 },
   timeChip: {
     paddingHorizontal: 12, paddingVertical: 8, borderRadius: Radius.md,
