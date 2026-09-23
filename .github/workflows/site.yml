@@ -29,16 +29,27 @@ name: site
 # page there can break a link here (item 74). Without this, d0b0fb2's two
 # follow-up commits touched no site/ file, this workflow never ran, and Vercel
 # failed both deploys with nothing red anywhere (item 75).
+#
+# ⚠️ `supabase/migrations/**` and `scripts/**` joined the list on 23 Sep 2026,
+# for the same reason. `checks` now runs check-types-freshness.mjs, whose whole
+# job is to notice that a migration landed after the types were generated — so
+# the commit that adds the migration is precisely the one that must run it. A
+# filter of `site/**` alone would have deferred that to whenever site/ next
+# changed, which is the failure this list already exists to prevent.
 on:
   push:
     paths:
       - 'site/**'
       - 'supabase/functions/**'
+      - 'supabase/migrations/**'
+      - 'scripts/**'
       - '.github/workflows/site.yml'
   pull_request:
     paths:
       - 'site/**'
       - 'supabase/functions/**'
+      - 'supabase/migrations/**'
+      - 'scripts/**'
       - '.github/workflows/site.yml'
   # So it can be run by hand without touching a file.
   workflow_dispatch:

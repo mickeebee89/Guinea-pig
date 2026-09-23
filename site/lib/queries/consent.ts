@@ -78,6 +78,51 @@ export interface ConsentDocument {
   acknowledgements: ConsentAck[]
 }
 
+/**
+ * WHAT THE BROWSER IS ALLOWED TO SEND. Audit item 84b, 23 Sep 2026.
+ *
+ * Three things, and not one of them is wording: which document she was shown,
+ * the hash she was shown it under, and which boxes she ticked. The record
+ * itself is built on the server from the document — see toAcceptedConsent.
+ *
+ * WARNING: DO NOT ADD A FIELD TO THIS. Every field here is something a caller
+ * can choose, and everything a caller can choose has to be either verified or
+ * discarded. The document id is verified (read by id), the hash is verified
+ * (compared with the row), and the keys are discarded unless they match a key
+ * the document actually has. That is the whole reason it is only three.
+ */
+export interface AcceptedTicks {
+  consent_document_id: string
+  content_hash: string
+  ticked_keys: string[]
+}
+
+/**
+ * The other half of the contract, for a server action that receives the form.
+ *
+ * ⚠️ Returns null rather than throwing, and null must be treated as "refuse
+ * the application". It reads the three fields; it does not verify any of them.
+ * The caller must still call reReadConsentDocument(), and must build the
+ * record from the document that returns — never from anything in here.
+ *
+ * There is nothing to JSON.parse any more, and that is the change: this used
+ * to hand back a `payload` of unknown shape that went on to become the stored
+ * wording (item 84b).
+ */
+export function readConsentFields(form: FormData): AcceptedTicks | null {
+  const documentId = String(form.get('consent_document_id') ?? '')
+  const hash = String(form.get('consent_hash') ?? '')
+  if (!documentId || !hash) return null
+  return {
+    consent_document_id: documentId,
+    content_hash: hash,
+    // Keys only. A key the document does not have is ignored when the record
+    // is rebuilt, so this needs no validation of its own.
+    ticked_keys: String(form.get('ticked_keys') ?? '')
+      .split(',').map(k => k.trim()).filter(Boolean),
+  }
+}
+
 /** What the RPC needs, in the shape create_session_with_consent takes. */
 export interface AcceptedConsent {
   consent_document_id: string
@@ -157,36 +202,69 @@ export async function loadActiveConsentDocument(
   return { ok: true, doc }
 }
 
+export type ConsentReRead =
+  | { ok: true; doc: ConsentDocument }
+  /** The row exists and its hash has changed: the text moved under the reader. */
+  | { ok: false; reason: 'moved' }
+  /** The row could not be read at all. Not her fault, and not re-tickable. */
+  | { ok: false; reason: 'unreadable' }
+
 /**
- * At submit: is the document the browser says it read still that document?
+ * At submit: re-read the document the browser says it showed, BY ID, and
+ * confirm the hash still matches.
  *
- * ⚠️ Reads BY ID and compares the hash. It must never ask for "the active
- * document" instead — that is the race this exists to close. A false answer
- * means the text changed under the reader, and the application must be
- * refused and the new document shown, not quietly recorded against.
+ * ⚠️ IT MUST NEVER ASK FOR "THE ACTIVE DOCUMENT" INSTEAD. That is the race
+ * this exists to close: a version going active while she reads would record
+ * consent against text she never saw.
+ *
+ * ⚠️ IT RETURNS THE DOCUMENT, AND THAT IS THE POINT (item 84b). It used to
+ * return a boolean, `consentStillCurrent`, and the record was then built from
+ * the browser's own copy of the wording — so the server proved the text had
+ * not changed and then wrote down a version of it that it never looked at.
+ * Whatever is recorded is now taken from THIS document, which is the one the
+ * hash was verified against.
  */
-export async function consentStillCurrent(
+export async function reReadConsentDocument(
   supabase: SupabaseClient,
   documentId: string,
   shownHash: string,
-): Promise<boolean> {
-  if (!documentId || !shownHash) return false
+): Promise<ConsentReRead> {
+  if (!documentId || !shownHash) return { ok: false, reason: 'unreadable' }
   const { data, error } = await supabase
     .from('consent_documents')
-    .select('id, content_hash')
+    .select(SELECT)
     .eq('id', documentId)
     .maybeSingle()
-  if (error || !data) return false
-  return (data as { content_hash: string }).content_hash === shownHash
+  if (error) {
+    console.error('[consent] could not re-read the document at submit', {
+      code: error.code, message: error.message,
+    })
+    return { ok: false, reason: 'unreadable' }
+  }
+  // No row for an id the page itself issued minutes ago: deleted, or filtered.
+  // Either way there is nothing to verify against, so it is not 'moved'.
+  if (!data) return { ok: false, reason: 'unreadable' }
+
+  const doc = shape(data)
+  if (doc.contentHash !== shownHash) return { ok: false, reason: 'moved' }
+  return { ok: true, doc }
 }
 
 /**
- * The payload for the RPC.
+ * The payload for the RPC, BUILT FROM THE DOCUMENT.
  *
  * EVERY acknowledgement is recorded, not only the ticked ones, so the row
  * shows the whole document as presented rather than a filtered view of it.
  * Items that need no tick are recorded as agreed, which is what "notice"
  * means. Same rule as mobile's handleContinue.
+ *
+ * ⚠️ ON THE WEB THIS RUNS ON THE SERVER, AND `doc` MUST BE THE RE-READ ROW
+ * (item 84b, 23 Sep 2026). It used to run in the browser, inside ConsentGate,
+ * and its output was posted back as JSON — so the wording that went into a
+ * six-year record was the browser's copy of it, editable by whoever sent it.
+ * `tickedKeys` is the only part that may come from the client, and a key that
+ * is not in the document is ignored here by construction: this maps over the
+ * DOCUMENT's acknowledgements and merely asks the set whether each was ticked.
  */
 export function toAcceptedConsent(
   doc: ConsentDocument,

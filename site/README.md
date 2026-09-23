@@ -84,6 +84,7 @@ always should have: the build failing to compile.
 | `check-client-boundary.mjs` | Anything reachable from `(public)` touching cookies or the browser client |
 | `check-route-coverage.mjs` | An `(app)` route missing from the proxy matcher, so it stops refreshing its session cookie |
 | `check-links.mjs` | A link — in the site **or in an email** — pointing at no route, and a route nothing points at |
+| `../scripts/check-types-freshness.mjs` | Generated types older than the newest migration on disk. Resolves its paths from its own location, not the cwd |
 
 ### Generated database types — ON for this app (audit item 84)
 
@@ -112,10 +113,14 @@ SQL default as required and non-nullable. `apply/actions.ts` declares the real
 type once, in a wrapper used by that one call site. Do not widen it into a
 blanket cast — the other fifteen arguments are checked.
 
-**Still off:** `scripts/check-types-freshness.mjs` (refuses types older than the
-newest migration — the only staleness check possible without a database
-connection, since CI's keys cannot read `pg_proc`) is not wired into `checks`,
-and `mobile/` and `admin/` have their copies but untyped clients.
+`scripts/check-types-freshness.mjs` is wired into `checks` — it refuses types
+older than the newest migration, the only staleness check possible without a
+database connection, since CI's keys cannot read `pg_proc`. **It cannot say the
+types match the live database**, only that no migration has landed since they
+were generated. Proven to fail, not just to pass.
+
+**Still off:** `mobile/` and `admin/` have their copies of the types but
+untyped clients.
 
 ⚠️ **It checks names and shapes, never permission.** A typed query can return
 nothing because an RLS policy filtered it, which is most of this audit's

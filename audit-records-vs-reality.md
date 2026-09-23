@@ -3923,6 +3923,119 @@ after the change: three copies written, byte-identical, no warning.
 and `mobile/` and `admin/` clients are not typed. Both are now cheap, and both
 are separate decisions.
 
+**84c. THE CONSENT RECORD NOW CARRIES THE DOCUMENT'S OWN WORDING, NOT THE
+BROWSER'S COPY OF IT — 23 Sep 2026. `npm run verify` EXIT 0.**
+
+**Plainly:** `session_consents` is kept for six years and is meant to be read
+years later by someone who was not there. Until today the text in it was the
+text the browser posted back. The server proved the document had not changed,
+and then wrote down a copy of it that it had never looked at.
+
+84b's shape check closed the obvious half — nothing malformed could get in —
+but it could not tell that the wording was the document's wording, because it
+never read the document. This closes it at the root.
+
+**── WHAT THE BROWSER SENDS NOW ──**
+
+| Before | Now |
+|---|---|
+| `consent_document_id` | `consent_document_id` |
+| `consent_hash` | `consent_hash` |
+| `consent_payload` — the WHOLE record as JSON: version, every acknowledgement's `text`, every `agreed` flag | `ticked_keys` — a comma-separated list of the keys she ticked |
+
+**Three fields, and not one of them is wording.** The version, the text of
+every acknowledgement and the agreed flags are rebuilt on the server from the
+document it re-reads by id and hash-checks.
+
+**A key the document does not have needs no validation — it is ignored by
+construction.** `toAcceptedConsent` maps over the DOCUMENT's acknowledgements
+and merely asks the ticked set whether each was ticked. There is nothing a
+caller can add to that array, because a caller does not supply the array.
+
+**── THE THREE PIECES THAT MOVED ──**
+
+1. **`consentStillCurrent` → `reReadConsentDocument`.** It returned a boolean;
+   it now returns the row. That is the whole fix in one line: the thing that
+   verified the hash and the thing that supplied the wording are now the same
+   read. It also distinguishes **moved** (the hash changed) from
+   **unreadable** (the row could not be read at all), which used to be one
+   answer and one message — and “the terms were updated while you were reading
+   them” is a lie when the truth is that a query failed.
+2. **`toAcceptedConsent` moved from the browser to the server.** It was called
+   inside `ConsentGate`, a `'use client'` component, and its output was
+   `JSON.stringify`d into a hidden field. It is now called only in the server
+   action, on the re-read document.
+3. **`readConsentFields` moved out of `ConsentGate` into the query layer.** It
+   parses a `FormData` on the server, and it was living in a client module.
+   There is also nothing left for it to `JSON.parse`.
+
+**`parseAcknowledgements`, added this morning, is deleted.** It validated a
+thing the browser no longer sends. A validator kept alive after its input is
+gone is the next person's false reassurance.
+
+**── ⚠️ MOBILE IS NOT FIXED BY THIS, AND CANNOT BE ──**
+
+`mobile/src/components/ConsentGate.tsx:123` builds the same array client-side
+and `apply-session.tsx:590` hands it straight to the same function. **It has
+the same weakness, and none of today's change touches it.**
+
+The difference is structural, not an oversight: **the web has a server between
+the client and the database, and mobile does not.** A server action can re-read
+the document and rebuild the record; the app calls `create_session_with_consent`
+directly. So the only place the same property could be enforced for mobile is
+**inside the function itself** — take a document id and a set of ticked keys,
+and build the acknowledgements in SQL from `consent_documents`. That would fix
+both clients at once and make the web's rebuild redundant, which is an argument
+for doing it.
+
+Worth saying plainly: **mobile's exposure is smaller but not zero.** A phone
+app's own code is harder to edit than a browser's POST, but it is not a trusted
+environment, and the two clients now write records of different strength into
+the same table. **That asymmetry is the thing to remove, and it is a migration,
+not a client change.** Not done here; named as the next step.
+
+**── WHAT SHE SEES, UNCHANGED WHERE IT SHOULD BE ──**
+
+A box left unticked still reads *“Please tick every box before sending your
+application.”* — now decided by the DOCUMENT's list of tickable items rather
+than by the array she sent, so it cannot be satisfied by sending fewer.
+
+The two new refusals are both worded as ours, because they are:
+
+> We couldn’t check the terms you agreed to, so your application wasn’t sent.
+> Nothing has been saved — please try again shortly.
+
+> We couldn’t record your agreement to the terms, so your application wasn’t
+> sent. Nothing has been saved — please try again shortly.
+
+Neither tells her to re-tick, because re-ticking would not help. 84b's
+version-missing message did tell her to, and was right to at the time — the
+version came from her payload then. It comes from the document now, so a
+failure there is a broken document, not a broken submission.
+
+**── AND THE FRESHNESS CHECK IS ON ──**
+
+`check-types-freshness.mjs` is now the fifth entry in site's `npm run checks`.
+Two things had to change for it to be real:
+
+* **It resolved its paths from the current directory**, and `checks` runs with
+  the cwd set to `site/`. It now resolves them from its own location, so it
+  behaves the same run from anywhere. A cwd-relative version would have thrown
+  ENOENT in `checks` and passed when run by hand from the root.
+* **`supabase/migrations/**` and `scripts/**` joined the site workflow's path
+  filter.** A migration landing is exactly what makes the types stale, so the
+  commit that adds one is precisely the commit that must run this. `site/**`
+  alone would have deferred it until site/ next changed — the same failure that
+  put `supabase/functions/**` in that list after item 75.
+
+**Proven to fail, not just to pass:** an empty `0054_*.sql` was created and the
+check refused all three copies from `site/`, exit 1. File removed.
+
+⚠️ **It still cannot say the types match the live database.** It says they
+were generated against the newest migration ON DISK. A types file made against
+a migration that was written and never run passes this and is still wrong,
+which is precisely 0009.
+
 **75. A CHECK COULD STOP THE WEBSITE UPDATING, AND NOTHING NOTICED IT HAD —
 CHANGED 22 Sep 2026. `npm run verify` EXIT 0.**
 
@@ -10078,7 +10191,8 @@ platforms each failed it differently.
 | 81 | ✅ **CLOSED 23 Sep** — v3 live with 6 ticks, 5 existing consents intact, mobile checkbox removed | No |
 | 82 | Model ID check live inside the apply flow. `/verify` still refuses models, by design | No |
 | 83 | ✅ **CLOSED 23 Sep** — sent, accepted, both emails, price_pence 1000 and consent v3 with 9 items on the same booking; 0052 applied 2h before it | No |
-| 84 | ✅ **ON for `site/` 23 Sep** — 5 errors, all fixed, no casts bar one declared wrapper. **Found two real consent defects nothing else here would have caught.** Still off: the freshness check in `checks`, and typing `mobile/` and `admin/` | No, but it is why 83 shipped broken |
+| 84 | ✅ **ON for `site/` 23 Sep** — 5 errors, all fixed, no casts bar one declared wrapper. **Found two real consent defects nothing else here would have caught.** Freshness check now wired into `checks` and proven to fail. Still untyped: `mobile/` and `admin/` clients | No, but it is why 83 shipped broken |
+| 89 | **Mobile builds its consent record client-side and calls the same function.** The web now rebuilds it server-side (84c); mobile has no server to do that in, so the fix is inside `create_session_with_consent` — a migration, and it would make the web's rebuild redundant. Two clients currently write records of different strength into the same six-year table | No |
 | 85 | ✅ **CLOSED 23 Sep** — a real account deleted itself on the web, no half-deleted state. Untested: the Stripe customer fallback, the orphan surface, a failed auth delete | No |
 Carried in from before the audit, unchanged by it:
 

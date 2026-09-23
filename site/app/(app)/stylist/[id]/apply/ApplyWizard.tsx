@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { ConsentGate } from '@/components/ConsentGate'
 import { formatPrice } from '@/lib/price'
 import { downscaleToFile } from '@/lib/downscale'
-import type { AcceptedConsent } from '@/lib/queries/consent'
+import type { AcceptedTicks } from '@/lib/queries/consent'
 import type { ApplyContext, ApplyPhoto } from '@/lib/queries/apply'
 import { submitApplication, uploadApplicationPhoto } from './actions'
 
@@ -63,7 +63,12 @@ export function ApplyWizard({ ctx }: { ctx: ApplyContext }) {
   const [pending, start] = useTransition()
   const [error, setError] = useState<string | null>(null)
   const [sentId, setSentId] = useState<string | null>(null)
-  const [consent, setConsent] = useState<AcceptedConsent | null>(null)
+  /**
+   * Which document, which hash, which boxes — and nothing else (item 84b).
+   * This used to hold the whole assembled consent record, wording included,
+   * and post it. The server now rebuilds that from the document itself.
+   */
+  const [consent, setConsent] = useState<AcceptedTicks | null>(null)
   /** Which layer refused, so a report can name it. See actions.ts. */
   const [refusal, setRefusal] = useState<string | null>(null)
   const [photos, setPhotos] = useState<ApplyPhoto[]>(ctx.photos)
@@ -166,7 +171,7 @@ export function ApplyWizard({ ctx }: { ctx: ApplyContext }) {
       )
       fd.append('consent_document_id', consent.consent_document_id)
       fd.append('consent_hash', consent.content_hash)
-      fd.append('consent_payload', JSON.stringify(consent))
+      fd.append('ticked_keys', consent.ticked_keys.join(','))
 
       const res = await submitApplication(fd)
       if (!res.ok) {

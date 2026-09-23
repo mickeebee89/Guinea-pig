@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "checks": "eslint . --max-warnings=0 && node scripts/check-client-boundary.mjs && node scripts/check-route-coverage.mjs && node scripts/check-links.mjs",
+    "checks": "eslint . --max-warnings=0 && node scripts/check-client-boundary.mjs && node scripts/check-route-coverage.mjs && node scripts/check-links.mjs && node ../scripts/check-types-freshness.mjs",
     "verify": "npm run checks && npm run build",
     "check-boundary": "node scripts/check-client-boundary.mjs"
   },

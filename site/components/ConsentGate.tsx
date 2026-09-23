@@ -4,7 +4,7 @@ import { useState } from 'react'
 import {
   ackParts,
   allRequiredTicked,
-  toAcceptedConsent,
+  type AcceptedTicks,
   type ConsentDocument,
 } from '@/lib/queries/consent'
 
@@ -63,7 +63,7 @@ export function ConsentGate({
    * Without it, this renders the hidden fields and its own submit button, for
    * a caller that is already a <form>.
    */
-  onAccept?: (accepted: ReturnType<typeof toAcceptedConsent>) => void
+  onAccept?: (accepted: AcceptedTicks) => void
 }) {
   const [ticked, setTicked] = useState<string[]>([])
 
@@ -73,6 +73,21 @@ export function ConsentGate({
 
   const toggle = (key: string) =>
     setTicked(prev => (prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]))
+
+  /**
+   * WARNING: THIS IS EVERYTHING THE BROWSER IS ALLOWED TO SAY (item 84b).
+   *
+   * Which document, under which hash, and which boxes. No wording, no version,
+   * no `agreed` flags — all of those are rebuilt on the server from the
+   * document it re-reads. Until 23 Sep 2026 this component called
+   * toAcceptedConsent() and posted the whole record as JSON, which meant the
+   * text in a six-year evidence row was the browser's copy of it.
+   */
+  const accepted = (): AcceptedTicks => ({
+    consent_document_id: doc.id,
+    content_hash: doc.contentHash,
+    ticked_keys: ticked,
+  })
 
   return (
     <section className="rounded-lg border border-hairline bg-white p-5">
@@ -127,23 +142,21 @@ export function ConsentGate({
         </ul>
       </fieldset>
 
-      {/* What the server will be told it showed. Checked there, never trusted.
-          In onAccept mode the caller carries these instead. */}
+      {/* Which document, and which boxes. The server re-reads the document by
+          this id, checks this hash against it, and builds the record from the
+          row — so none of this is trusted, and none of it is wording.
+          In onAccept mode the caller carries the same three instead. */}
       {!onAccept && (
         <>
           <input type="hidden" name="consent_document_id" value={doc.id} />
           <input type="hidden" name="consent_hash" value={doc.contentHash} />
-          <input
-            type="hidden"
-            name="consent_payload"
-            value={JSON.stringify(toAcceptedConsent(doc, ticked))}
-          />
+          <input type="hidden" name="ticked_keys" value={ticked.join(',')} />
         </>
       )}
 
       <button
         type={onAccept ? 'button' : 'submit'}
-        onClick={onAccept ? () => onAccept(toAcceptedConsent(doc, ticked)) : undefined}
+        onClick={onAccept ? () => onAccept(accepted()) : undefined}
         disabled={!ready || pending || disabled}
         className="mt-6 inline-flex min-h-11 items-center rounded-[999px] bg-rose px-6 text-sm font-bold text-white disabled:bg-border disabled:text-muted"
       >
@@ -161,28 +174,4 @@ export function ConsentGate({
       </p>
     </section>
   )
-}
-
-/**
- * The other half of the contract, for the server action that receives the form.
- *
- * ⚠️ Returns null rather than throwing, and null must be treated as "refuse the
- * application". The caller still has to call consentStillCurrent() — this only
- * checks that the browser sent something shaped like consent, not that it is
- * the consent that is currently on file.
- */
-export function readConsentFields(form: FormData): {
-  documentId: string
-  hash: string
-  payload: unknown
-} | null {
-  const documentId = String(form.get('consent_document_id') ?? '')
-  const hash = String(form.get('consent_hash') ?? '')
-  const raw = String(form.get('consent_payload') ?? '')
-  if (!documentId || !hash || !raw) return null
-  try {
-    return { documentId, hash, payload: JSON.parse(raw) }
-  } catch {
-    return null
-  }
 }

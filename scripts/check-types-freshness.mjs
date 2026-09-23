@@ -20,12 +20,22 @@
  * 0009 is the standing example of exactly that gap (item 83). This narrows the
  * window; it does not close it.
  *
- * Not wired into `npm run checks` yet — see site/README.md. Adding it is the
- * last step of turning item 84 on, and should happen only once the flagged
- * calls have been triaged.
+ * Wired into site/'s `npm run checks` on 23 Sep 2026, once the five calls it
+ * flagged had been triaged and fixed (item 84b). It runs from `site/`, so
+ * every path here is resolved against this file's own location.
  */
 
 import { existsSync, readFileSync, readdirSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+import { dirname, join } from 'node:path'
+
+// ⚠️ RESOLVED FROM THIS FILE, NOT FROM THE CURRENT DIRECTORY. Wired into
+// `npm run checks` on 23 Sep 2026, which runs with the cwd set to `site/` —
+// and every path below is a repo-root path. A cwd-relative version would have
+// thrown ENOENT in `checks` and passed when run by hand from the root, which
+// is the most confusing way for a check to be wrong.
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
+const at = p => join(ROOT, p)
 
 const TYPES = [
   'site/lib/database.types.ts',
@@ -33,7 +43,7 @@ const TYPES = [
   'admin/lib/database.types.ts',
 ]
 
-const newest = readdirSync('supabase/migrations')
+const newest = readdirSync(at('supabase/migrations'))
   .map(f => /^(\d{4})_/.exec(f)?.[1])
   .filter(Boolean)
   .sort()
@@ -43,9 +53,9 @@ let failed = false
 const missing = []
 
 for (const path of TYPES) {
-  if (!existsSync(path)) { missing.push(path); continue }
+  if (!existsSync(at(path))) { missing.push(path); continue }
 
-  const stamp = /TYPES_STAMP:\s*(\d{4})/.exec(readFileSync(path, 'utf8'))?.[1]
+  const stamp = /TYPES_STAMP:\s*(\d{4})/.exec(readFileSync(at(path), 'utf8'))?.[1]
   if (!stamp) {
     console.error(`${path}: no TYPES_STAMP. It was not written by gen-supabase-types.mjs — regenerate it.`)
     failed = true

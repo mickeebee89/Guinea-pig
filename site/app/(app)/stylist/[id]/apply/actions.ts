@@ -2,7 +2,9 @@
 
 import { revalidatePath } from 'next/cache'
 import { createSupabaseServerClient, requireUser } from '@/lib/supabase-server'
-import { consentStillCurrent, type AcceptedConsent } from '@/lib/queries/consent'
+import {
+  allRequiredTicked, readConsentFields, reReadConsentDocument, toAcceptedConsent,
+} from '@/lib/queries/consent'
 import { getGateState } from '@/lib/verification'
 import { getBlockedIds } from '@/lib/blocks'
 import { BOOKINGS_PATH } from '@/lib/routes'
@@ -21,7 +23,9 @@ import type { Database } from '@/lib/database.types'
  *   * the CONSENT is re-read by id and its hash compared with the one the page
  *     says it showed. A mismatch means the text moved under the reader, and
  *     the application is refused rather than recorded against wording she
- *     never saw;
+ *     never saw. **The record is then built from that re-read row, never from
+ *     the browser** — the only thing the browser decides is which boxes were
+ *     ticked (item 84b);
  *   * the PRICE is not accepted from the form at all. The booking's price is
  *     snapshotted from the slot by a database trigger (0052);
  *   * the MEMBERSHIP and ID CHECK are re-checked here, and again by the
@@ -50,8 +54,8 @@ export type ApplyRefusalCode =
   | 'gate_membership'     // 0049's rule, checked here for a legible message
   | 'gate_idcheck'
   | 'consent_missing'     // no consent fields in the form at all
-  | 'consent_unreadable'  // the payload would not parse
-  | 'consent_malformed'   // it parsed, but it is not a consent record
+  | 'consent_unreadable'  // the document could not be re-read at submit
+  | 'consent_malformed'   // the document itself is not usable as a record
   | 'consent_moved'       // the document changed under the reader
   | 'consent_unticked'    // an acknowledgement came back not agreed
   | 'blocked'             // the two have blocked each other, either direction
@@ -98,45 +102,6 @@ function createSessionWithConsent(
   // assertion in this file. It widens nothing: `args` has already been checked
   // against CreateSessionArgs above, which is the true signature.
   return supabase.rpc('create_session_with_consent', args as CreateSessionArgs & { p_note: string })
-}
-
-type Acknowledgement = AcceptedConsent['acknowledgements'][number]
-
-/**
- * The acknowledgements, CHECKED rather than trusted. Audit item 84.
- *
- * WARNING: THIS IS EVIDENCE, AND IT ARRIVES FROM A BROWSER.
- *
- * What goes in here is denormalised into `session_consents` and kept for six
- * years (0006). It is the copy anyone reading the record sees first — the
- * hash pins the document, but nobody reads a hash. Until this function
- * existed, the whole array was `unknown[]` and the only check on it was that
- * every element had `agreed === true`. A caller could post acknowledgements
- * with rewritten `text`, or extra fields of their own, and they would be
- * stored verbatim as what she agreed to.
- *
- * So: every element must have the three fields, of the right types, non-empty.
- * The returned objects are REBUILT from those three fields, so anything else
- * that was sent is dropped rather than recorded.
- *
- * WARNING: WHAT THIS STILL DOES NOT DO. It checks the SHAPE, not the CONTENT:
- * it cannot tell that `text` is the document's own wording, because it never
- * reads the document. Closing that means rebuilding the array server-side from
- * the consent document and taking only the ticked KEYS from the browser, which
- * is a change to what the flow sends and is not made here unasked.
- */
-function parseAcknowledgements(value: unknown): Acknowledgement[] | null {
-  if (!Array.isArray(value) || value.length === 0) return null
-  const out: Acknowledgement[] = []
-  for (const item of value) {
-    if (typeof item !== 'object' || item === null || Array.isArray(item)) return null
-    const { key, text, agreed } = item as Record<string, unknown>
-    if (typeof key !== 'string' || key.trim() === '') return null
-    if (typeof text !== 'string' || text.trim() === '') return null
-    if (typeof agreed !== 'boolean') return null
-    out.push({ key, text, agreed })
-  }
-  return out
 }
 
 export async function submitApplication(form: FormData): Promise<ApplyResult> {
@@ -195,44 +160,27 @@ export async function submitApplication(form: FormData): Promise<ApplyResult> {
     }
   }
 
-  // ── The consent, checked against the document itself ─────────────────────
-  const consentId = String(form.get('consent_document_id') ?? '')
-  const consentHash = String(form.get('consent_hash') ?? '')
-  const rawPayload = String(form.get('consent_payload') ?? '')
-  if (!consentId || !consentHash || !rawPayload) {
-    console.error('[apply] consent fields missing from the form', {
-      hasId: !!consentId, hasHash: !!consentHash, hasPayload: !!rawPayload,
-    })
+  // ── The consent, BUILT FROM THE DOCUMENT ─────────────────────────
+  //
+  // ⚠️ THE BROWSER SENDS THREE THINGS AND NONE OF THEM IS WORDING (item 84b).
+  //
+  // Which document, the hash it was shown under, and which boxes were ticked.
+  // The version, the text of every acknowledgement and the agreed flags are
+  // all rebuilt here from the row that was just re-read and hash-checked.
+  //
+  // Until 23 Sep 2026 the browser posted the whole record as JSON and it was
+  // stored as sent. `session_consents` is kept for six years (0006) and its
+  // acknowledgements are the copy a person actually reads — the hash pins the
+  // document, but nobody reads a hash. So the wording in the evidence was the
+  // one part of it that had never been anywhere near the database.
+  const ticks = readConsentFields(form)
+  if (!ticks) {
+    console.error('[apply] consent fields missing from the form')
     return { ok: false, error: 'We didn’t receive your agreement to the terms. Please tick them again.', code: 'consent_missing', refresh: true }
   }
 
-  let payload: { consent_version?: unknown; acknowledgements?: unknown }
-  try {
-    payload = JSON.parse(rawPayload)
-  } catch {
-    return { ok: false, error: 'We couldn’t read your agreement to the terms. Please tick them again.', code: 'consent_unreadable', refresh: true }
-  }
-
-  // WARNING: THE VERSION IS REQUIRED, AND USED TO BE ALLOWED TO BE NULL.
-  //
-  // The call sent `payload.consent_version ?? null`, so a payload arriving
-  // without one would have written a consent row recording no version at all.
-  // That is the weakest possible evidence of an agreement — it says she
-  // agreed to something, and cannot say to what edition of it — and it would
-  // have been created silently, at the moment the record was supposed to be
-  // made. Refusing is the only honest answer, and the types are what found it.
-  const consentVersion = payload.consent_version
-  if (typeof consentVersion !== 'number' || !Number.isInteger(consentVersion) || consentVersion < 1) {
-    console.error('[apply] consent payload has no usable version', { got: typeof consentVersion })
-    return {
-      ok: false,
-      error: 'We couldn’t record which version of the terms you agreed to, so your application wasn’t sent. Nothing has been saved — please read them again and tick the boxes.',
-      code: 'consent_malformed',
-      refresh: true,
-    }
-  }
-
-  if (!(await consentStillCurrent(supabase, consentId, consentHash))) {
+  const reread = await reReadConsentDocument(supabase, ticks.consent_document_id, ticks.content_hash)
+  if (!reread.ok && reread.reason === 'moved') {
     // Not an error on her part: the wording changed while she was reading it.
     return {
       ok: false,
@@ -241,35 +189,53 @@ export async function submitApplication(form: FormData): Promise<ApplyResult> {
       refresh: true,
     }
   }
-
-  const acks = parseAcknowledgements(payload.acknowledgements)
-  if (!acks) {
-    // Deliberately NOT the generic 'that didn’t work'. A refusal here means
-    // her consent was not recorded, and a message that does not say so leaves
-    // her believing it was.
-    console.error('[apply] acknowledgements did not match the expected shape')
+  if (!reread.ok) {
+    // The document could not be read back at all. Nothing she can fix by
+    // re-ticking, so it must not be worded as though it were.
     return {
       ok: false,
-      error: 'Your agreement to the terms didn’t reach us in a form we could record, so your application wasn’t sent. Nothing has been saved — please read them again and tick the boxes.',
-      code: 'consent_malformed',
+      error: 'We couldn’t check the terms you agreed to, so your application wasn’t sent. Nothing has been saved — please try again shortly.',
+      code: 'consent_unreadable',
       refresh: true,
     }
   }
+  const doc = reread.doc
 
-  const allAgreed = acks.every(a => a.agreed === true)
-  if (!allAgreed) {
+  // Every tickable item in the DOCUMENT must be in her set. Asked of the
+  // document, not of the array she sent, so a caller cannot satisfy it by
+  // sending fewer items than the document has.
+  if (!allRequiredTicked(doc, ticks.ticked_keys)) {
     // ⚠️ Logged with the KEYS, not just a count. "6 of 9 agreed" does not say
     // which, and the difference between "she missed one" and "we sent one
     // wrong" is the whole diagnosis. Keys and booleans only — the wording is
     // in the document, and this is a server log.
-    console.error('[apply] acknowledgements not all agreed', {
-      count: acks.length,
-      state: acks.map(a => `${a.key}=${a.agreed ? 'y' : 'n'}`),
+    console.error('[apply] not every required box is ticked', {
+      required: doc.acknowledgements.filter(a => a.requires_tick).map(a => a.key),
+      ticked: ticks.ticked_keys,
     })
     return {
       ok: false,
       error: 'Please tick every box before sending your application.',
       code: 'consent_unticked',
+    }
+  }
+
+  const accepted = toAcceptedConsent(doc, ticks.ticked_keys)
+
+  // A canary on the DOCUMENT now, not on the browser: this used to be the
+  // guard that stopped `payload.consent_version ?? null` writing a consent
+  // with no version at all. The version comes from the row, so failing here
+  // means the row is not fit to be recorded against — which is our problem,
+  // and is worded as such.
+  if (!Number.isInteger(accepted.consent_version) || accepted.consent_version < 1) {
+    console.error('[apply] the consent document has no usable version', {
+      id: doc.id, version: doc.version,
+    })
+    return {
+      ok: false,
+      error: 'We couldn’t record your agreement to the terms, so your application wasn’t sent. Nothing has been saved — please try again shortly.',
+      code: 'consent_malformed',
+      refresh: true,
     }
   }
 
@@ -294,10 +260,13 @@ export async function submitApplication(form: FormData): Promise<ApplyResult> {
     p_location_type: 'provider',
     p_note: note || null,
     p_photo_urls: photoPaths,
-    p_consent_document_id: consentId,
-    p_consent_version: consentVersion,
-    p_content_hash: consentHash,
-    p_acknowledgements: acks,
+    p_consent_document_id: accepted.consent_document_id,
+    p_consent_version: accepted.consent_version,
+    // The document's OWN hash, from the row — not the one the browser sent.
+    // They were just compared and are equal, and taking it from the row is
+    // what keeps that true if this code is ever reordered.
+    p_content_hash: accepted.content_hash,
+    p_acknowledgements: accepted.acknowledgements,
     // ⚠️ FIFTEEN ARGUMENTS, MATCHING MOBILE EXACTLY. Do not add to this list
     // without reading the live signature first.
     //
