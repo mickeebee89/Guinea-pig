@@ -3221,6 +3221,27 @@ have not been read out of the database): the `price_pence` snapshot on that
 session, and the nine acknowledgements — six ticks including `patch_test` — in
 its `session_consents` row.
 
+**── THE LOOP IS CLOSED — 23 Sep 2026, VERIFIED from Micky's query on that
+exact booking ──**
+
+Booking created **09:39:02**, status pending, **`price_pence` 1000**,
+**9 acknowledgements**, **`consent_version` 3**. And `schema_migrations` shows
+**0052 applied at 07:21**, over two hours earlier.
+
+So on one real web-originated booking, all four of the things built this week
+are proved on the same row: the apply flow wrote it, **0052's trigger
+snapshotted the slot's £10 without any client sending a price**, **0051's v3
+document was the one agreed** (version 3, nine items), and 0047 emailed both
+parties.
+
+The ordering matters and was checked rather than assumed: 0052 was applied
+BEFORE the booking, so the 1000 is the trigger working, not a coincidence. Had
+it been applied after, that price would have been null for an honest reason and
+proved nothing.
+
+**Nothing in item 83 is now unverified except the paths listed under "what
+cannot be tested" — which are still untested, and still listed.**
+
 **⚠️ CORRECTION — 23 Sep 2026. THREE CLAIMS ABOVE ARE WRONG, AND THE ORIGINALS
 ARE LEFT WHERE THEY ARE SO THE MISTAKE IS LEGIBLE.**
 
@@ -9512,7 +9533,7 @@ platforms each failed it differently.
 | 80 | Consent surface built, **no route until step 5**. Terms §5 still needs its line about displayed prices | No |
 | 81 | ✅ **CLOSED 23 Sep** — v3 live with 6 ticks, 5 existing consents intact, mobile checkbox removed | No |
 | 82 | Model ID check live inside the apply flow. `/verify` still refuses models, by design | No |
-| 83 | ✅ **WORKING** — a web application was sent, accepted, and both emails arrived. Unread: the price snapshot and the consent row on that booking | No |
+| 83 | ✅ **CLOSED 23 Sep** — sent, accepted, both emails, price_pence 1000 and consent v3 with 9 items on the same booking; 0052 applied 2h before it | No |
 | 84 | No generated Supabase types: every rpc name, argument and column is an unchecked string. Scoped, not built | No, but it is why 83 shipped broken |
 Carried in from before the audit, unchanged by it:
 
