@@ -2852,6 +2852,45 @@ document over a copy change would stop every application.
 **v3 has the same three notices, so without that fix this migration would have
 shipped three more empty headings.**
 
+**✅ 0051 APPLIED AND VERIFIED — 23 Sep 2026, from Micky's pasted output.**
+
+* **Block A:** 1 active document, version **3**; v2 no longer active; 9 items,
+  6 ticks, 3 notices.
+* **Block B:** `patch_test` at **position 4**, immediately after
+  `age_and_health`, reading exactly as agreed. **All three notices carry their
+  full body text** — the check that would have caught the renderer bug if it
+  had still been there.
+* **Block C ⭐:** 5 consents against v2, **5 still matching, 0 moved.** The
+  deactivation recomputed v2's hash byte-identically, exactly as predicted, and
+  every consent recorded before today still proves what it was given against.
+* **Block D:** versions 1, 2 and 3 all 64 characters and current;
+  v2 and v3 differ.
+* **Block E:** an ordinary member reads version 3 with 6 ticks.
+
+**So the prediction that mattered was tested rather than trusted.** The
+reasoning said "deactivating v2 re-runs the hash trigger, and it is safe only
+because `is_active` is not one of the hashed fields". Block C is the difference
+between that being an argument and being a fact — 5 rows, 0 moved.
+
+**── THE MOBILE CHECKBOX IS OUT — 23 Sep 2026, `tsc` EXIT 0 ──**
+
+Three things removed together, because any one alone would have broken it:
+* the checkbox itself (`apply-session.tsx:994-1008`), with a comment left in
+  its place saying where the question went and why;
+* `patchTestAgreed` state;
+* **its condition on the Send button** (`:1052-1053`) — the button is now
+  `disabled={submitting}` alone. Removing the checkbox without this would have
+  left a button that could never enable, on the last screen of the flow.
+* the three dead styles it used.
+
+**Confirmed the button can still enable, and that nothing else was holding it
+up:** step 7 renders only when a date, slot and treatment are chosen
+(`:939`), it is only reachable through the consent gate (`onAccept` →
+`setStep(7)`), and `handleSubmit` still **fails closed on consent** at `:558`
+— *"No consent in hand means no booking"*. So the safety that the checkbox
+appeared to provide was never its to provide: it is the consent record, and
+that is now stronger by one tick.
+
 **── VERIFY BLOCKS ──**
 A exactly one active document and it is v3, with 9/6/3; B every item in order
 with the new tick word for word **and the notices' bodies present**; **C ⭐
@@ -9011,7 +9050,7 @@ platforms each failed it differently.
 | 77 | ✅ **CLOSED 23 Sep** — Micky republished his shop, so one is live. Item 11's condition (one LISTED stylist per CATEGORY) is still unmet with a single shop | No, but launch-relevant |
 | 79 | Slot prices live. Untested: the mobile price field; no model can see a price until step 5 | No |
 | 80 | Consent surface built, **no route until step 5**. Terms §5 still needs its line about displayed prices | No |
-| 81 | Consent v3 written (0051), **not applied**. After applying, the mobile patch-test checkbox must come out or the model is asked twice | No |
+| 81 | ✅ **CLOSED 23 Sep** — v3 live with 6 ticks, 5 existing consents intact, mobile checkbox removed | No |
 Carried in from before the audit, unchanged by it:
 
 | Item | State |
