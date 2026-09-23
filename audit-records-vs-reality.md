@@ -4599,6 +4599,75 @@ Recorded as item 97. Not a web-versus-app gap, so not in this scope.
 
 **✅ ITEM 96 VERIFIED LIVE — 23 Sep 2026.** The model's application photo shows on the pending booking card for a web stylist, and her profile shows the verified badge, reviews, photos and bio. All four fields confirmed on screen.
 
+**98. THE CONSOLE COULD NOT MAKE THE COMPARISON PRIVACY DESCRIBES — FIXED
+23 Sep 2026. admin `tsc` EXIT 0, admin `npm run build` EXIT 0. NOT DEPLOYED.**
+
+**Plainly:** the verification queue showed the selfie and nothing else.
+`profile_pic_url` appeared **zero times in the entire admin console** — checked
+across the queue, Users, Providers and Moderation. So a reviewer was deciding
+from a selfie and a name, and the thing the selfie is supposed to be compared
+against was not on the screen.
+
+**It is published in six places, including Privacy twice:**
+
+> **Privacy §7:** a selfie you take holding a handwritten note, **which a member
+> of our team looks at alongside your profile photo**
+
+Also `legal.ts:559`, `/for-stylists`, `/verify`, Settings, and mobile's
+verify-payment. A claim in a data-protection notice with no mechanism behind
+it — the exact shape this audit exists to find.
+
+**── THE FIX ──**
+
+Two photos side by side, captioned *"Selfie sent"* and *"Profile picture"*,
+both opening the existing lightbox. **No signing needed for the second one**:
+`profile-pics` is a public bucket (storage-lockdown.sql:15) and the column
+holds a full URL from `getPublicUrl`, unlike the selfie beside it, which is a
+path into a private bucket.
+
+**── ⚠️ WHAT A REVIEWER SEES WHEN THERE IS NO PROFILE PICTURE ──**
+
+**This is the COMMON case today, not an edge one.** Nothing in `site/` can set
+a profile picture, so every member who has only ever used the website has none.
+
+A distinct placeholder reading *"No profile picture"* — deliberately different
+wording from the selfie's *"No photo"*, because they mean different things: one
+is a missing file, the other is a fact about the decision being asked for. Plus
+a red banner:
+
+> **No profile picture to compare against.** Approving confirms a real person
+> sent a selfie — it cannot confirm their profile photo is their own, which is
+> what this check is for.
+
+On an already-decided request the second sentence becomes *"This was decided
+with nothing to compare the selfie against"*, which also makes past approvals
+auditable.
+
+**It does NOT block approval, and that is deliberate.** Blocking would strand
+every web-only stylist who has already paid the £14.99 — a worse outcome than a
+reviewer who knows what they are deciding. The person decides; the console's job
+is to stop them deciding blind.
+
+**── DOES THE PUBLISHED COPY NEED CHANGING? YES, AND IT IS NOT WRITTEN YET ──**
+
+Micky's question, and the honest answer is that the console fix does not make
+the sentence true — it makes it POSSIBLE. For a member with no profile picture
+it is still false, and there are only two ways to close that:
+
+* **(a) Require a profile picture before the ID check.** Product-correct: the
+  check is meaningless without one, and this is what makes the published
+  sentence true rather than softening it. **Blocked until the web can set an
+  avatar**, which is the next piece of work — requiring it today would refuse
+  every web-only stylist.
+* **(b) Soften the copy** to describe what actually happens.
+
+**Recommendation: (a), sequenced.** Do the avatar upload, then require a
+picture before the ID check, and the six published sentences become true as
+written. (b) is the fallback if the gate is not wanted.
+
+Not written, because it is published legal text and the sequencing is a
+decision, not a detail.
+
 **75. A CHECK COULD STOP THE WEBSITE UPDATING, AND NOTHING NOTICED IT HAD —
 CHANGED 22 Sep 2026. `npm run verify` EXIT 0.**
 
@@ -10758,6 +10827,7 @@ platforms each failed it differently.
 | 92 | ✅ **CLOSED 23 Sep** — verified both ways: chips filter with a postcode, and go inert with the list intact without one | No |
 | 94 | ✅ **CLOSED 23 Sep** — verified live both ways. The unique index exists, so duplicates were never possible and the heart's missing check is the defect | No |
 | 96 | ✅ **CLOSED 23 Sep** — all four verified on screen: the photo on the booking card, and the badge, reviews, photos and bio on her profile | No |
+| 98 | Verification queue now shows the profile picture beside the selfie — built, **not deployed**. Privacy §7's comparison was previously impossible in the console. **Open: the copy is still false for a member with no profile picture** | No, but Privacy §7 describes it |
 | 97 | **`sessions.price_pence` is read by nothing in either client.** 0052 snapshots it so an edited slot cannot rewrite what was agreed; both clients show the SLOT's price today instead. They agree until someone edits a slot after an application | No, but it is a money display |
 | 95 | **Mobile's favourite heart fails silently** — no error handling on insert or delete, so a filled heart can sit over a row that does not exist. It also never says that saving subscribes her to notifications | No, but it tells her something untrue |
 | 93 | **A published shop's bio is keyboard-mash test text.** Live, on the only published shop, and it clears `public_stylists`' 40-character bar because that bar counts characters | No, but a model would see it |

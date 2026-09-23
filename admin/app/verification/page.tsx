@@ -27,6 +27,14 @@ interface VerificationRequest {
     email: string
     role: string
     is_verified: boolean
+    /**
+     * What the selfie is supposed to be compared AGAINST. Audit item 98.
+     *
+     * The `profile-pics` bucket is PUBLIC (storage-lockdown.sql:15) and this
+     * column holds a full public URL, written by getPublicUrl — so unlike the
+     * selfie it needs no signing, and there is no expiry to manage.
+     */
+    profile_pic_url: string | null
   }
 }
 
@@ -72,6 +80,14 @@ function stylistApprovalBody(role: string | undefined, shops: ShopState[]): stri
         : 'Your shop is not public yet — open your dashboard to check it.')
 }
 
+/**
+ * Shown where the PROFILE PICTURE should be, and worded differently from
+ * NO_PHOTO_SVG on purpose. "No photo" beside the selfie means the file is
+ * missing; here it means the member never set one — which is a fact about the
+ * decision being asked for, not a broken image. Audit item 98.
+ */
+const NO_AVATAR_SVG = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="144" height="144"><rect fill="%23fdf7f4" width="144" height="144"/><text x="72" y="70" text-anchor="middle" fill="%23b08a7e" font-size="13">No profile</text><text x="72" y="88" text-anchor="middle" fill="%23b08a7e" font-size="13">picture</text></svg>'
+
 // Shown when there's no signed URL (missing image, or an old public-URL row).
 const NO_PHOTO_SVG = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="144" height="144"><rect fill="%23f5f0ed" width="144" height="144"/><text x="72" y="76" text-anchor="middle" fill="%239b8b86" font-size="14">No photo</text></svg>'
 
@@ -87,7 +103,7 @@ export default function VerificationQueuePage() {
   const { loading, reload } = useLoader(filter, async stale => {
     const { data, error } = await supabase
       .from('verification_requests')
-      .select('id, selfie_url, status, notes, created_at, reviewed_at, reviewed_by, reviewed_by_source, user:users!user_id(id, first_name, last_name, last_initial, email, role, is_verified)')
+      .select('id, selfie_url, status, notes, created_at, reviewed_at, reviewed_by, reviewed_by_source, user:users!user_id(id, first_name, last_name, last_initial, email, role, is_verified, profile_pic_url)')
       .eq('status', filter)
       .order('created_at', { ascending: false })
     if (error) console.error('verification requests load failed:', error)
@@ -280,16 +296,50 @@ export default function VerificationQueuePage() {
           {requests.map(req => (
             <div key={req.id} className="bg-white rounded-xl border border-black/5 shadow-sm overflow-hidden">
               <div className="flex gap-6 p-5">
-                {/* Selfie */}
-                <div className="shrink-0">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={signedUrls[req.id] || NO_PHOTO_SVG}
-                    alt="Verification selfie"
-                    className="w-36 h-36 object-cover rounded-xl border border-black/5 cursor-pointer hover:opacity-90 transition-opacity"
-                    onClick={() => { if (signedUrls[req.id]) setLightbox(signedUrls[req.id]) }}
-                    onError={e => { (e.target as HTMLImageElement).src = NO_PHOTO_SVG }}
-                  />
+                {/* ── THE TWO PHOTOS, SIDE BY SIDE. Audit item 98. ───────────
+                    Until 23 Sep 2026 this queue showed the SELFIE AND NOTHING
+                    ELSE. `profile_pic_url` appeared nowhere in the whole admin
+                    console, so the comparison every surface describes —
+
+                      Privacy §7: "a selfie you take holding a handwritten note,
+                      which a member of our team looks at alongside your profile
+                      photo"
+
+                    — was not something the tooling could do. A reviewer was
+                    deciding from a selfie and a name. Published in six places
+                    including Privacy twice, so this was a claim with no
+                    mechanism behind it, which is what this audit exists to
+                    find. */}
+                <div className="shrink-0 flex gap-3">
+                  <figure className="m-0">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={signedUrls[req.id] || NO_PHOTO_SVG}
+                      alt="Verification selfie"
+                      className="w-36 h-36 object-cover rounded-xl border border-black/5 cursor-pointer hover:opacity-90 transition-opacity"
+                      onClick={() => { if (signedUrls[req.id]) setLightbox(signedUrls[req.id]) }}
+                      onError={e => { (e.target as HTMLImageElement).src = NO_PHOTO_SVG }}
+                    />
+                    <figcaption className="mt-1 text-center text-xs text-[#3D2E2E]/50">Selfie sent</figcaption>
+                  </figure>
+
+                  <figure className="m-0">
+                    {/* The profile-pics bucket is public and this column holds a
+                        full URL, so no signing — unlike the selfie beside it. */}
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={req.user?.profile_pic_url || NO_AVATAR_SVG}
+                      alt={req.user?.profile_pic_url ? 'Profile picture' : 'No profile picture set'}
+                      className={`w-36 h-36 object-cover rounded-xl border border-black/5 transition-opacity ${
+                        req.user?.profile_pic_url ? 'cursor-pointer hover:opacity-90' : ''
+                      }`}
+                      onClick={() => { if (req.user?.profile_pic_url) setLightbox(req.user.profile_pic_url) }}
+                      onError={e => { (e.target as HTMLImageElement).src = NO_AVATAR_SVG }}
+                    />
+                    <figcaption className="mt-1 text-center text-xs text-[#3D2E2E]/50">
+                      Profile picture
+                    </figcaption>
+                  </figure>
                 </div>
 
                 {/* Info */}
@@ -317,6 +367,27 @@ export default function VerificationQueuePage() {
                     <span className="text-xs text-[#3D2E2E]/40 shrink-0">{formatDate(req.created_at)}</span>
                   </div>
                   <p className="text-sm text-[#3D2E2E]/50 mb-3">{req.user?.email ?? '—'}</p>
+
+                  {/* ⚠️ A COMPARISON AGAINST NOTHING IS NOT A COMPARISON.
+                      Audit item 98.
+
+                      This is the COMMON case today, not an edge one: nothing
+                      in site/ can set a profile picture, so every member who
+                      has only ever used the website has none. It says what is
+                      missing and what approving would and would not mean, and
+                      it does NOT block — blocking would strand every web-only
+                      stylist who has already paid the £14.99, which is a worse
+                      outcome than a reviewer who knows what they are deciding.
+                      The person decides; the console's job is to make sure
+                      they are not deciding blind. */}
+                  {req.user && !req.user.profile_pic_url && (
+                    <p className="text-xs text-red-700 bg-red-50 rounded-lg px-3 py-2 mb-3">
+                      <span className="font-semibold">No profile picture to compare against.</span>
+                      {filter === 'pending'
+                        ? ' Approving confirms a real person sent a selfie — it cannot confirm their profile photo is their own, which is what this check is for.'
+                        : ' This was decided with nothing to compare the selfie against.'}
+                    </p>
+                  )}
 
                   {req.user?.role === 'provider' && filter === 'pending' && (
                     <p className="text-xs text-amber-600 bg-amber-50 rounded-lg px-3 py-2 mb-3">
