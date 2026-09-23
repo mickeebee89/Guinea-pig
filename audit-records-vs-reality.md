@@ -2394,6 +2394,96 @@ path that returns the name is not the code path Block B proved.
 message them, look them up, and report them, whether or not that stylist is
 still trading. That was the point.
 
+**78. THE £4.99 GATE WAS A SCREEN, NOT A RULE — MIGRATION 0049 WRITTEN
+23 Sep 2026. `npm run build` EXIT 0. NOT APPLIED.**
+
+**Plainly:** anyone holding a valid Cavy token could book for free. The rule
+that a model needs an active membership AND an ID check lived in a mobile
+screen (`apply-session.tsx:200-224`), and the only function that creates a
+booking checks neither — `create_session_with_consent` checks that you are
+signed in and that consent was given, and stops there (`0009:52-56`).
+
+This is step 1 of the web apply flow (item 77's plan), shipped on its own
+because it closes a live hole and because building a second client first would
+add a second unguarded caller to a rule enforced nowhere.
+
+`supabase/migrations/0049_applying_needs_a_membership_and_an_id_check.sql`,
+checksum `f4f8c90b418d0984286c04d95e594691d57c75d2ba01a4e8459b7b4abb8a823f`,
+computed by hand — `--stamp` not run (item 60).
+
+**── THE RULE, AND THE ONE PLACE IT DIVERGES FROM THE CLIENTS ──**
+
+Both clients already agree on the rule (`site/lib/verification.ts:92-102`,
+`mobile/src/lib/verification.ts:61-73`): `users.subscription_waived`, or a
+`subscriptions` row with status `active`, `cancelling` or `past_due` — AND
+`users.is_verified`. `past_due` grants in all three places: a failed payment
+is a retry, not a lapse.
+
+**⚠️ The clients also require `current_period_end` in the future, and when it
+is not they ASK STRIPE and repair the row. The database cannot ask Stripe, so
+it does not check the date at all.** Requiring it would refuse precisely the
+case the clients exist to rescue — a live Stripe subscription whose local row
+is stale, which is audit item 47's missing webhook, still unfixed. This gate
+is a backstop against "never paid at all", not a billing reconciler. It
+refuses only what the clients would also refuse on the same data, never on a
+technicality the member cannot see.
+
+**── THE SHAPE: ONE RULE, TWO ENTRY POINTS, TWO LAYERS ──**
+
+* `model_may_apply(uuid)` — SECURITY DEFINER, **owner only**, revoked from
+  `public`, `anon` AND `authenticated`. Granted to nobody, because it would
+  answer "is this person a paying, verified member?" about any id someone
+  cared to guess, and that is personal data.
+* `model_may_apply()` — the caller's own answer, granted to `authenticated`.
+  One definition underneath both, because two copies of a rule is how a rule
+  comes to mean two things.
+* **A BEFORE INSERT trigger** raising **CV003** with a message naming which
+  half is missing (CV001 is 0042's banned word, CV002 is 0045's unsettled
+  stylist fee).
+* **A RESTRICTIVE INSERT policy** on `sessions` using the no-argument
+  function. This is the enforcement; the trigger is only the wording. Drop the
+  trigger and a refusal is still a refusal, just an ugly one.
+
+**Why a trigger rather than editing the RPC**, which is what was asked for:
+the visible outcome is identical — the error surfaces from the RPC call — and
+it avoids reproducing the whole of 0009's body to change its first line, where
+a transcription slip would be a booking bug. It also covers every path into
+the table rather than one function, which is the entire point of moving this
+out of a screen.
+
+**── IT REFUSES TO APPLY IF IT WOULD LOCK ANYONE OUT ──**
+
+The ASSERT block counts models who applied in the last 90 days and would fail
+the new rule, and **raises if that is not zero**, changing nothing. Micky also
+has the same query as a read-only pre-check (counts and roles, no addresses) in
+the DEPLOY notes. Asked twice on purpose: the pre-check is so he decides, the
+ASSERT is so a wrong decision cannot land.
+
+Recency is measured on `sessions.date` — a NOT NULL column that certainly
+exists. `sessions` is created by no migration (item 66), so its full column
+list still cannot be read from this repo.
+
+**── WHAT BREAKS FOR THE INSTALLED MOBILE BUILD: NOTHING, WITH ONE EDGE ──**
+
+The RPC signature is untouched, so the shipped app's 17-argument call is
+unchanged (Block D exercises exactly that call). A model who passes the app's
+own gate passes this one, because it is the same predicate minus a clause.
+
+**The edge, stated rather than hoped:** mobile runs its gate — including
+`sync_subscription`, which repairs a stale row — when the apply screen MOUNTS
+(`apply-session.tsx:200-224`, `mobile/src/lib/verification.ts:78`), **not
+immediately before the insert**. A membership that lapses while someone is
+part-way through the seven steps is refused at submit with CV003. That is
+correct behaviour and a worse moment to learn it. The web flow should re-check
+at submit rather than only on entry.
+
+**── VERIFY BLOCKS ──**
+A shape (including `auth_may_ask_about_others` must be FALSE); B the rule
+across the members who exist, counts and roles only; **C the one that matters**
+— an ineligible member refused with CV003 and an eligible one accepted, both
+as `authenticated` with real claims, rolled back; D the existing 17-argument
+mobile call still works; E nobody is locked out, asked again live.
+
 **75. A CHECK COULD STOP THE WEBSITE UPDATING, AND NOTHING NOTICED IT HAD —
 CHANGED 22 Sep 2026. `npm run verify` EXIT 0.**
 
@@ -8543,6 +8633,7 @@ platforms each failed it differently.
 | 74 | Email notifications **proven end to end on live data**. Open: mobile has no email switch | No |
 | 75 | Drift check is new and unproven — its first real test is the next failed or skipped deploy | No |
 | 77 | **No published shop exists at all** — `/browse` and every public treatment page are empty while the site is open and indexed | **Yes** |
+| 78 | Apply gate written (0049), **not applied**. Until it is, anyone with a token can book without paying | **Yes** |
 
 Carried in from before the audit, unchanged by it:
 
