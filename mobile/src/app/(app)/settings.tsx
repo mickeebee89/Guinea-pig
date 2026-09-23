@@ -14,6 +14,7 @@ import {
   Linking,
   KeyboardAvoidingView,
   Platform,
+  Switch,
 } from 'react-native'
 import { useRouter } from 'expo-router'
 import * as Haptics from 'expo-haptics'
@@ -43,6 +44,12 @@ type UserData = {
   subscription_status:       string | null
   subscription_next_billing: string | null
   subscription_waived:       boolean | null
+  /**
+   * Shared with the web switch and read by the send-email function, which
+   * treats anything but an explicit false as ON (0047). So null here is not
+   * "unknown" — it is "yes", and the toggle must show it that way.
+   */
+  notification_preferences:  { email?: { enabled?: boolean } } | null
 }
 
 type VerifStatus = 'none' | 'pending' | 'approved' | 'declined'
@@ -196,6 +203,49 @@ export default function SettingsScreen() {
   const [showNew,     setShowNew]     = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
 
+  // ── Email notifications ────────────────────────────────────────────────────
+  //
+  // One switch for all of them, matching the web exactly (item 74). The column
+  // is shared, so turning it off here turns it off there.
+  //
+  // ⚠️ DEFAULT ON, AND NULL MEANS ON. send-email reads
+  // `notification_preferences?.email?.enabled !== false`, so a member who has
+  // never touched this gets emails — nothing was backfilled and nothing needs
+  // to be. A toggle that showed OFF for null would tell every existing member
+  // the opposite of what is happening to them.
+  const [emailOn, setEmailOn] = useState(true)
+  const [emailSaving, setEmailSaving] = useState(false)
+
+  const toggleEmail = async (next: boolean) => {
+    if (!userId || emailSaving) return
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+    // Optimistic: the switch answers immediately, and goes back if the write
+    // fails. A control that waits on the network feels broken on a salon wifi.
+    setEmailOn(next)
+    setEmailSaving(true)
+    try {
+      const { data: current } = await supabase
+        .from('users').select('notification_preferences').eq('id', userId).single()
+      const prefs = ((current as any)?.notification_preferences ?? {}) as Record<string, unknown>
+
+      // Merged, never replaced: this column is not ours alone, and writing
+      // { email: … } over it would silently drop any other preference that
+      // arrives later.
+      const { error } = await supabase
+        .from('users')
+        .update({ notification_preferences: { ...prefs, email: { enabled: next } } })
+        .eq('id', userId)
+      if (error) throw error
+    } catch (e) {
+      console.warn('[settings] email preference save failed:', e)
+      setEmailOn(!next)
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning)
+      Alert.alert('Couldn’t save that', 'Your email setting didn’t change. Please try again.')
+    } finally {
+      setEmailSaving(false)
+    }
+  }
+
   // ── Load ───────────────────────────────────────────────────────────────────
 
   const { loading, reload } = useLoader(userId ?? '', async stale => {
@@ -203,7 +253,7 @@ export default function SettingsScreen() {
     try {
       const { data: ud } = await supabase
         .from('users')
-        .select('first_name, last_initial, role, profile_pic_url, is_verified, subscription_status, subscription_next_billing, subscription_waived')
+        .select('first_name, last_initial, role, profile_pic_url, is_verified, subscription_status, subscription_next_billing, subscription_waived, notification_preferences')
         .eq('id', userId)
         .single()
 
@@ -212,6 +262,9 @@ export default function SettingsScreen() {
           ...(ud as any),
           email: session?.user?.email ?? '',
         } as UserData)
+        // Anything but an explicit false is ON — the same reading send-email
+        // uses, so the switch cannot disagree with what is actually sent.
+        setEmailOn((ud as any).notification_preferences?.email?.enabled !== false)
 
         // Load provider bio if this user has a provider role
         const role = (ud as any).role as UserRole
@@ -788,6 +841,36 @@ export default function SettingsScreen() {
         )}
 
         {/* ─────────────── BLOCKED USERS ─────────────── */}
+        {/* ─────────────── NOTIFICATIONS ─────────────── */}
+        <Text style={styles.sectionTitle}>Emails</Text>
+        <View style={styles.card}>
+          <View style={styles.emailRow}>
+            <Ionicons name="mail-outline" size={20} color={Colors.muted} />
+            <View style={styles.emailText}>
+              <Text style={styles.emailLabel}>Email me when something happens on Cavy</Text>
+              <Text style={styles.emailSub}>
+                Applications, bookings accepted, declined or cancelled, new messages, your ID
+                check, a failed payment, and anything official from us. At most one email an hour
+                per conversation.
+              </Text>
+            </View>
+            <Switch
+              value={emailOn}
+              onValueChange={toggleEmail}
+              disabled={emailSaving}
+              trackColor={{ false: Colors.border, true: Colors.rose }}
+              thumbColor={Colors.white}
+              accessibilityLabel="Email me when something happens on Cavy"
+            />
+          </View>
+          {/* Said here as well as on the web: turning this off must not leave
+              anyone believing a password reset will stop arriving too. */}
+          <Text style={styles.emailFoot}>
+            We’ll still email you about your account itself — confirming your address, or
+            resetting your password.
+          </Text>
+        </View>
+
         <Text style={styles.sectionTitle}>Blocked users</Text>
         <View style={styles.card}>
           {blockedUsers.length === 0 ? (
@@ -1068,6 +1151,17 @@ const styles = StyleSheet.create({
 
   scroll: { paddingHorizontal: 16, paddingTop: 16 },
 
+  emailRow: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: 12,
+    paddingHorizontal: 16, paddingVertical: 14,
+  },
+  emailText:  { flex: 1 },
+  emailLabel: { fontFamily: Fonts.bodyBold, fontSize: 15, color: Colors.warmDark },
+  emailSub:   { fontSize: 13, lineHeight: 18, color: Colors.muted, marginTop: 4 },
+  emailFoot:  {
+    fontSize: 12, lineHeight: 17, color: Colors.muted,
+    paddingHorizontal: 16, paddingBottom: 14,
+  },
   sectionTitle: {
     fontSize: 11, fontWeight: '700', color: Colors.muted,
     textTransform: 'uppercase', letterSpacing: 0.8,

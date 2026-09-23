@@ -3693,6 +3693,60 @@ profile, and this matches it deliberately.
 Asked **twice**: on the page, so she is told before seven screens, and again in
 the action, because a block can arrive while she is filling the form in.
 
+**✅ VERIFIED ON THE LIVE SITE — 23 Sep 2026, from Micky's checks.**
+
+* Blocking the stylist from the model account and then trying to apply shows
+  the block message **before the wizard**, wording as written.
+* After unblocking, **the application goes through**.
+* A photo upload is **marginally quicker** — which is the honest description:
+  the saving is bandwidth on a 3–5MB file, and on a desk connection it is a
+  fraction of a second.
+
+**⚠️ ONE DIRECTION ONLY, AND IT CANNOT BE TESTED FROM ONE SIDE.** What was
+proved is *she blocked them*. The reverse — **they blocked her** — is the same
+`blocks` row read the other way round, and `getBlockedIds` returns the pair in
+both directions, so the code path is identical. But it was not exercised, and
+it would need the stylist account to do the blocking. Recorded as reasoned,
+not as tested.
+
+**88. THE MOBILE EMAIL SWITCH — BUILT 23 Sep 2026. mobile `tsc --noEmit`
+EXIT 0. NOTHING IN `site/`, SO NO BUILD CLAIM TO MAKE.**
+
+Item 74's last open piece. The column and the web switch have existed since
+20 Sep; a member with the app could only turn these emails off on the website
+or through the unsubscribe link in one of them.
+
+Settings → **Emails**, one switch, the web's wording word for word — including
+the line that matters most: *"We'll still email you about your account itself
+— confirming your address, or resetting your password."* Turning this off must
+not leave anyone believing a password reset will stop arriving too.
+
+**⚠️ NULL MEANS ON, AND THE TOGGLE HAS TO SHOW THAT.** `send-email` reads
+`notification_preferences?.email?.enabled !== false` (0047), so a member who
+has never touched this receives emails — nothing was backfilled and nothing
+needs to be. A switch that rendered null as OFF would tell every existing
+member the opposite of what is happening to them. It is seeded with the same
+comparison the function uses, so the two cannot disagree.
+
+**The write MERGES.** `{ ...prefs, email: { enabled } }`, never a replacement:
+the column is not this feature's alone, and overwriting it would silently drop
+any preference added later. Same rule as the web action.
+
+Optimistic, with a rollback and a warning haptic if the write fails — a
+control that waits on the network feels broken on salon wifi. **Haptics on the
+toggle**, light on press, warning on failure, matching the rest of the screen.
+
+**⚠️ ONE BUG CAUGHT BEFORE IT SHIPPED, WORTH RECORDING FOR THE SHAPE.** The
+copy went in carrying `’` and `—` escapes. In a JavaScript string
+those are valid and render as the character; **in JSX text they are four
+literal characters**, so the footnote would have read *"We’ll still email
+you"* on screen. `tsc` cannot see it, eslint cannot see it, and it would have
+looked fine in every diff. Found by reading the rendered text rather than the
+code, and confirmed by printing the code points: `0x5c` is a backslash.
+
+**Untested:** Micky has not yet reloaded the app to see it. `npx expo start -c
+--dev-client` — a stale Metro bundle will not have the switch at all.
+
 **75. A CHECK COULD STOP THE WEBSITE UPDATING, AND NOTHING NOTICED IT HAD —
 CHANGED 22 Sep 2026. `npm run verify` EXIT 0.**
 
@@ -9840,7 +9894,7 @@ platforms each failed it differently.
 | 13 | ✅ **CLOSED 23 Sep** — stale on both halves: both clients cancel, and 0029/0030 rewrote the wording. Was the last launch blocker | No |
 | 87 | A cancelled booking vanishes from both clients — lists show pending/accepted/completed only, and notifications are deletable, so a member can be left no record | No |
 | 14 | Admin revoke UI — `0027` ships the mechanism, nothing calls it | No, but revocation is SQL-only until then |
-| 74 | Email notifications **proven end to end on live data**. Open: mobile has no email switch | No |
+| 74 | ✅ **CLOSED 23 Sep** — proven end to end, and the mobile switch now exists (item 88). Untested on device |
 | 75 | Drift check is new and unproven — its first real test is the next failed or skipped deploy | No |
 | 77 | ✅ **CLOSED 23 Sep** — Micky republished his shop, so one is live. Item 11's condition (one LISTED stylist per CATEGORY) is still unmet with a single shop | No, but launch-relevant |
 | 79 | Slot prices live. Untested: the mobile price field; no model can see a price until step 5 | No |
