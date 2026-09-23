@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { createSupabaseServerClient, requireUser } from '@/lib/supabase-server'
-import { getBrowseStylists, getCategories, type BrowseStylist } from '@/lib/queries/browse'
+import { getBrowseStylists, getCategories, type BrowseResult } from '@/lib/queries/browse'
+import { RADII, radiusFromParam, formatMiles } from '@/lib/distance'
 import { getDashboardUser } from '@/lib/queries/dashboard'
 import { Avatar, EmptyState, LoadError } from '@/components/ui'
 
@@ -20,9 +21,10 @@ export const metadata = { title: 'Browse stylists' }
 export default async function BrowsePage({
   searchParams,
 }: {
-  searchParams: Promise<{ category?: string; place?: string }>
+  searchParams: Promise<{ category?: string; place?: string; within?: string }>
 }) {
-  const { category, place } = await searchParams
+  const { category, place, within } = await searchParams
+  const radius = radiusFromParam(within)
   const user = await requireUser()
   const supabase = await createSupabaseServerClient()
 
@@ -46,26 +48,36 @@ export default async function BrowsePage({
     )
   }
 
-  let stylists: BrowseStylist[] | null = null
+  let result: BrowseResult | null = null
   let categories: string[] = []
   try {
-    ;[stylists, categories] = await Promise.all([
-      getBrowseStylists(supabase, user.id, { category, place }),
+    ;[result, categories] = await Promise.all([
+      getBrowseStylists(supabase, user.id, { category, place, within: radius.miles }),
       getCategories(supabase).catch(() => []),
     ])
   } catch (e) {
     console.error('[browse] load failed', e)
   }
 
-  const qs = (next: { category?: string | undefined; place?: string | undefined }) => {
+  const qs = (next: {
+    category?: string | undefined
+    place?: string | undefined
+    within?: string | undefined
+  }) => {
     const p = new URLSearchParams()
     const c = 'category' in next ? next.category : category
     const pl = 'place' in next ? next.place : place
+    // The radius is carried through every other control, so choosing a
+    // treatment does not silently throw away a distance she picked.
+    const w = 'within' in next ? next.within : within
     if (c) p.set('category', c)
     if (pl) p.set('place', pl)
+    if (w) p.set('within', w)
     const s = p.toString()
     return s ? `/browse?${s}` : '/browse'
   }
+
+  const stylists = result?.items ?? null
 
   return (
     <>
@@ -78,6 +90,10 @@ export default async function BrowsePage({
           that can be shared or bookmarked. */}
       <form action="/browse" className="mb-4 flex flex-wrap gap-2">
         {category && <input type="hidden" name="category" value={category} />}
+        {/* A plain GET form replaces the whole query string, so anything not
+            named here is lost on submit. That is how a chosen distance
+            silently resets the moment she searches for a town. */}
+        {within && <input type="hidden" name="within" value={within} />}
         <label htmlFor="place" className="sr-only">Town, city or area</label>
         <input
           id="place"
@@ -133,13 +149,74 @@ export default async function BrowsePage({
         </nav>
       )}
 
+      {/* ⚠️ DISABLED, NOT HIDDEN, WHEN WE CANNOT PLACE HER.
+          Hiding it would mean a model who has set a postcode and one who has
+          not see different pages with no explanation of why. Disabled plus the
+          sentence underneath says what is missing and how to fix it — and a
+          control that looks live and does nothing is the exact failure the
+          updates feed shipped with (item 90). */}
+      {result && (
+        <nav aria-label="Distance" className="mb-4">
+          <ul className="flex flex-wrap items-center gap-1.5">
+            {RADII.map(r => (
+              <li key={r.key}>
+                {result.viewerHasLocation ? (
+                  <Link
+                    href={qs({ within: r.key === 'any' ? undefined : r.key })}
+                    aria-current={r.key === radius.key ? 'page' : undefined}
+                    className={`inline-flex min-h-11 items-center rounded-[999px] px-3 text-sm font-bold ${
+                      r.key === radius.key ? 'bg-rose text-white' : 'bg-input-bg text-muted hover:bg-soft-pink'
+                    }`}
+                  >
+                    {r.label}
+                  </Link>
+                ) : (
+                  <span
+                    aria-disabled="true"
+                    className="inline-flex min-h-11 cursor-not-allowed items-center rounded-[999px] bg-input-bg px-3 text-sm font-bold text-border"
+                  >
+                    {r.label}
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+
+          {!result.viewerHasLocation && (
+            <p className="mt-2 text-xs text-muted">
+              We don’t know where you are, so these aren’t sorted by distance.{' '}
+              <Link href="/settings" className="font-bold text-rose hover:underline">
+                Add your postcode
+              </Link>{' '}
+              and they will be. Searching by town works either way.
+            </p>
+          )}
+
+          {/* Said out loud. A list shortened in silence and a list with nothing
+              in it look identical, and only one is worth widening for. */}
+          {result.viewerHasLocation && result.unplaceableHidden > 0 && (
+            <p className="mt-2 text-xs text-muted">
+              {result.unplaceableHidden === 1
+                ? 'One stylist hasn’t told us where they are, so they’re not shown at this distance.'
+                : `${result.unplaceableHidden} stylists haven’t told us where they are, so they’re not shown at this distance.`}{' '}
+              Choose <span className="font-bold">Any distance</span> to include them.
+            </p>
+          )}
+        </nav>
+      )}
+
       {stylists === null ? (
         <LoadError what="stylists" />
       ) : stylists.length === 0 ? (
         <EmptyState title="No stylists to show">
-          {place || category
-            ? 'Nothing matches that yet. Try clearing the filters — Cavy is new, so there aren’t many stylists on it so far.'
-            : 'No stylists have published a shop yet. Cavy is new — this fills up as stylists join.'}
+          {/* radiusApplied, not radius.miles. They differ exactly when we
+              cannot place her, and telling someone her search was limited to
+              20 miles when it never was sends her to fix the wrong thing. */}
+          {result?.radiusApplied
+            ? `Nothing matches within ${result.radiusApplied} miles. Try a wider distance, or clear the other filters — Cavy is new, so there aren’t many stylists on it so far.`
+            : place || category
+              ? 'Nothing matches that yet. Try clearing the filters — Cavy is new, so there aren’t many stylists on it so far.'
+              : 'No stylists have published a shop yet. Cavy is new — this fills up as stylists join.'}
         </EmptyState>
       ) : (
         <ul className="space-y-3">
@@ -164,7 +241,18 @@ export default async function BrowsePage({
                       </span>
                     )}
                   </div>
-                  {s.location && <p className="mt-0.5 text-sm text-muted">{s.location}</p>}
+                  {/* Her own words for the area, then how far that is. The
+                      area is what she wrote; the distance is what we worked
+                      out, and it only appears when we actually know it. */}
+                  {(s.location || s.distanceMiles != null) && (
+                    <p className="mt-0.5 text-sm text-muted">
+                      {s.location}
+                      {s.location && s.distanceMiles != null && ' · '}
+                      {s.distanceMiles != null && (
+                        <span className="font-bold text-warm-dark">{formatMiles(s.distanceMiles)}</span>
+                      )}
+                    </p>
+                  )}
                   {/* Only claim a rating when reviews sit behind it — a 0 reads
                       as a bad stylist rather than a new one. */}
                   {s.reviewCount > 0 && s.rating != null && (

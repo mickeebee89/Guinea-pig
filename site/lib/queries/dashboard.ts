@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { indexById, displayName, type ProviderRef, type ProfileRef, type TreatmentRef } from './util'
+import { withinRadius, withoutCoords } from '@/lib/distance'
 
 /**
  * Everything both dashboards need, in one place.
@@ -403,18 +404,7 @@ export async function getProviderDashboard(
   }
 }
 
-/* ── stylist updates, distance-filtered ────────────────────────────────── */
-
-/** Miles. Same constant and formula as mobile/src/app/(app)/index.tsx:44. */
-function haversineMiles(lat1: number, lon1: number, lat2: number, lon2: number): number {
-  const R = 3958.8
-  const dLat = ((lat2 - lat1) * Math.PI) / 180
-  const dLon = ((lon2 - lon1) * Math.PI) / 180
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) ** 2
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-}
+/* ── stylist updates, distance-filtered ──────────────────────────── */
 
 export interface UpdateFeed {
   updates: (StylistUpdate & { distanceMiles: number | null })[]
@@ -493,7 +483,6 @@ export async function getStylistUpdates(
   ])
 
   const me = meRes.data as { latitude: number | null; longitude: number | null } | null
-  const hasLoc = me?.latitude != null && me?.longitude != null
 
   let hiddenByBlock = false
   const blocked = new Set(
@@ -534,55 +523,44 @@ export async function getStylistUpdates(
       // a fallback: nothing had ever written it, on any of the five live
       // accounts. A second place to look that can never hold anything makes
       // every reader believe the schema is harder than it is.
-      const lat = p.latitude
-      const lng = p.longitude
-      const distanceMiles =
-        hasLoc && lat != null && lng != null
-          ? haversineMiles(me!.latitude!, me!.longitude!, lat, lng)
-          : null
       return {
         providerId: p.id,
         name: p.name ?? 'Stylist',
         picUrl: p.profile_pic_url,
         text: sp.body,
         expiresAt: sp.expires_at,
-        distanceMiles,
+        // ONE coordinate pair since 0055. providers used to carry a second,
+        // location_lat/location_lng, read here as a fallback — and it was
+        // never a fallback: nothing had ever written it, on any of the five
+        // live accounts.
+        lat: p.latitude,
+        lng: p.longitude,
       }
     })
-    .sort((a, b) => (a.distanceMiles ?? Infinity) - (b.distanceMiles ?? Infinity))
 
-  // ⚠️ THE RADIUS ONLY APPLIES IF WE CAN PLACE THE VIEWER (item 90).
-  //
-  // It used to apply always, and the default is 20 miles — so a member with
-  // no coordinate of her own got a null distance for every stylist, the
-  // filter dropped every one of them, and the page said, in one breath:
-  //
-  //   "We don't have a location for your account, so these aren't filtered
-  //    by distance yet."
-  //   "No stylists have posted an update within 20 miles right now."
-  //
-  // The first sentence says the filter is off. The second IS the filter,
-  // emptying the list. EVERY web-only model saw both, because until 0054
-  // nothing on the website could give her a coordinate at all.
-  //
-  // A control that silently does nothing is the thing to remove. Mobile
-  // disables its distance chips when it cannot place you (index.tsx:882) and
-  // has been right about this the whole time.
-  const effectiveRadius = hasLoc ? radiusMiles : null
-
-  // A stylist with no coordinates is kept when no radius is set and dropped
-  // when one is — being unable to prove they are near is not proof they are.
-  // COUNTED rather than silently removed: an empty list and a filtered list
-  // look identical, and only one of them is worth widening the radius for.
-  const withinRadius = effectiveRadius == null
-    ? updates
-    : updates.filter(u => u.distanceMiles != null && u.distanceMiles <= effectiveRadius)
+  // ⚠️ THE RULE LIVES IN lib/distance.ts NOW, and this page is why it does:
+  // it applied its 20-mile default to members with no coordinate, dropped
+  // every row, and said "these aren't filtered by distance yet" directly above
+  // "no stylists have posted an update within 20 miles" (item 90). Browse was
+  // about to gain the same control from the same machinery, so the rule moved
+  // rather than being copied.
+  const placed = withinRadius(
+    updates,
+    me,
+    u => ({ lat: u.lat, lng: u.lng }),
+    radiusMiles,
+  )
 
   return {
-    updates: withinRadius,
-    viewerHasLocation: !!hasLoc,
+    // Purely nearest-first here, unlike browse — a status update is someone
+    // saying "I am free today", and the nearest person saying it is the most
+    // useful one. Browse has a bookability question to answer first.
+    updates: placed.items
+      .map(withoutCoords)
+      .sort((a, b) => (a.distanceMiles ?? Infinity) - (b.distanceMiles ?? Infinity)),
+    viewerHasLocation: placed.viewerHasLocation,
     hiddenByBlock,
-    radiusApplied: effectiveRadius,
-    unplaceableHidden: updates.length - withinRadius.length,
+    radiusApplied: placed.radiusApplied,
+    unplaceableHidden: placed.unplaceableHidden,
   }
 }

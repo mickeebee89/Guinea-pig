@@ -12,6 +12,7 @@ import { MonthCalendar, type CalendarMark } from '@/components/MonthCalendar'
 import { StylistSetupPanel } from '@/components/StylistSetup'
 import { Avatar, StatusPill, LoadError } from '@/components/ui'
 import { BOOKINGS_PATH } from '@/lib/routes'
+import { RADII, radiusFromParam } from '@/lib/distance'
 import { StatusComposer } from './StatusComposer'
 
 export const metadata = { title: 'Dashboard' }
@@ -126,13 +127,6 @@ function InApp({ what }: { what: string }) {
 
 /* ── page ──────────────────────────────────────────────────────────────── */
 
-const RADII = [
-  { key: '5',   label: '5 miles',  miles: 5 },
-  { key: '10',  label: '10 miles', miles: 10 },
-  { key: '20',  label: '20 miles', miles: 20 },
-  { key: 'any', label: 'Any distance', miles: null },
-] as const
-
 export default async function DashboardPage({
   searchParams,
 }: {
@@ -166,7 +160,9 @@ export default async function DashboardPage({
 
   // The feed is model-facing: it answers "who near me is free". A stylist has
   // no use for other stylists' availability.
-  const radius = RADII.find(r => r.key === within) ?? RADII[2]   // default 20 miles
+  // Shared with browse since item 92. Two pages offering different distances
+  // for the same idea would give a model two vocabularies for one thing.
+  const radius = radiusFromParam(within)
   const feed = isProvider ? null : await getStylistUpdates(supabase, user.id, radius.miles)
 
   // The apply gate. Models only — a stylist never applies for anything.

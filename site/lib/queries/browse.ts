@@ -1,21 +1,31 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { getBlockedIds } from '@/lib/blocks'
 import { categoryKey } from '@/lib/queries/shop'
+import { withinRadius, withoutCoords, type Placed } from '@/lib/distance'
 
 /**
  * Browse published stylists.
  *
- * ── USEFUL WITH NO LOCATION, BY DESIGN ────────────────────────────────────
- * A web-only signup has no latitude or longitude — nothing sets one until the
- * app does — and that is the DEFAULT state for anyone who never installs it.
- * So this must not be a distance-sorted list that degrades to empty; distance
- * is an enhancement that lands later.
+ * ── STILL USEFUL WITH NO LOCATION, WHICH IS THE WHOLE CONSTRAINT ───────
+ * ~~A web-only signup has no latitude or longitude — nothing sets one until
+ * the app does — ... distance is an enhancement that lands later.~~
+ * *Superseded 23 Sep 2026 (item 92). The website can set a coordinate now, so
+ * distance has landed — but the sentence that mattered still holds and is the
+ * reason the text box below did not go anywhere.*
  *
- * What replaces it for now is a plain text match on the stylist's own
- * location_text. Typing "Bromley" needs no permission prompt, no geocoding
- * dependency, and is more precise than a browser fix — which is also why the
- * manual box stays the primary path once coordinates arrive rather than
- * becoming a fallback nobody sees.
+ * A member who has not set a postcode still has no coordinate, and that is a
+ * normal state rather than a broken one. So the radius is an ADDITION to this
+ * page and never a precondition for it: with no postcode the distance
+ * controls are inert and visibly so, and the list is exactly what it was
+ * before. **The one thing this must never become is a distance-sorted list
+ * that degrades to empty**, which is precisely what the updates feed had been
+ * doing in silence until item 90.
+ *
+ * The plain text match on the stylist's own location_text stays, and stays
+ * PRIMARY. Typing "Bromley" needs no permission prompt, no geocoding
+ * dependency, and no postcode — it is the only location filter that works for
+ * someone who has given us nothing, and it is how she searches somewhere she
+ * is travelling to rather than somewhere she lives. A radius cannot do that.
  *
  * ── location_text, WITH location AS A FALLBACK ────────────────────────────
  * providers carries both. location_text is the live column that edit-shop
@@ -48,16 +58,31 @@ export interface BrowseFilters {
   category?: string
   /** Free text matched against the stylist's own location wording. */
   place?: string
+  /**
+   * Miles, or null for no limit. IGNORED when the viewer has no coordinate —
+   * see lib/distance.ts. Passing a number is a request, not an instruction.
+   */
+  within?: number | null
 }
+
+/**
+ * The list, plus why it is the length it is.
+ *
+ * ⚠️ A BARE ARRAY IS NOT ENOUGH ANY MORE. Three different facts can shorten
+ * this page and they need different sentences: nobody matched, a radius
+ * removed people we could not place, or the radius was never applied because
+ * we cannot place HER. The old signature could say none of them.
+ */
+export type BrowseResult = Placed<BrowseStylist>
 
 export async function getBrowseStylists(
   supabase: SupabaseClient,
   viewerId: string,
   filters: BrowseFilters = {},
-): Promise<BrowseStylist[]> {
+): Promise<BrowseResult> {
   let q = supabase
     .from('providers')
-    .select('id, user_id, name, bio, location_text, location, level, is_verified, rating, review_count, profile_pic_url')
+    .select('id, user_id, name, bio, location_text, location, level, is_verified, rating, review_count, profile_pic_url, latitude, longitude')
     .eq('is_published', true)
 
   if (filters.place?.trim()) {
@@ -65,16 +90,21 @@ export async function getBrowseStylists(
     if (p) q = q.or(`location_text.ilike.%${p}%,location.ilike.%${p}%`)
   }
 
-  const [provRes, blocked] = await Promise.all([
+  const [provRes, blocked, meRes] = await Promise.all([
     q,
     getBlockedIds(supabase, viewerId).catch(() => new Set<string>()),
+    // Her own coordinate. Read here rather than passed in, so no caller can
+    // hand this function a location that is not the viewer's.
+    supabase.from('users').select('latitude, longitude').eq('id', viewerId).maybeSingle(),
   ])
+  const me = meRes.data as { latitude: number | null; longitude: number | null } | null
 
   const rows = (provRes.data ?? []) as {
     id: string; user_id: string | null; name: string | null; bio: string | null
     location_text: string | null; location: string | null; level: string | null
     is_verified: boolean | null; rating: number | null; review_count: number | null
     profile_pic_url: string | null
+    latitude: number | null; longitude: number | null
   }[]
   const visible = rows
     .filter(r => !(r.user_id && blocked.has(r.user_id)))
@@ -101,7 +131,9 @@ export async function getBrowseStylists(
     // Copying the number without checking the reason travelled with it is the
     // same error as having two thresholds, wearing the opposite hat.
     .filter(r => !!r.name?.trim())
-  if (visible.length === 0) return []
+  if (visible.length === 0) {
+    return { items: [], viewerHasLocation: me?.latitude != null, radiusApplied: null, unplaceableHidden: 0 }
+  }
 
   const ids = visible.map(r => r.id)
   const today = new Date().toISOString().slice(0, 10)
@@ -126,8 +158,8 @@ export async function getBrowseStylists(
       .filter(a => !a.is_taken).map(a => a.provider_id),
   )
 
-  return visible
-    .map((r): BrowseStylist => ({
+  const shaped = visible
+    .map((r) => ({
       id: r.id,
       name: r.name ?? 'Stylist',
       bio: r.bio,
@@ -139,6 +171,8 @@ export async function getBrowseStylists(
       avatarUrl: r.profile_pic_url,
       categories: [...(cats.get(r.id) ?? [])].sort(),
       hasOpenSlots: openSlots.has(r.id),
+      lat: r.latitude,
+      lng: r.longitude,
     }))
     // Third leg of the content bar. Split from the two above only because
     // categories are not known until the treatments query has run.
@@ -151,15 +185,36 @@ export async function getBrowseStylists(
       !filters.category ||
       s.categories.some(c => categoryKey(c) === categoryKey(filters.category!)),
     )
-    // Bookable first. Without distance, "can I actually get an appointment"
-    // is the most useful thing to sort on — a five-star stylist with no slots
-    // is not a result anyone wanted. Rating breaks the tie, and only where
-    // there are reviews behind it.
-    .sort((a, b) =>
-      Number(b.hasOpenSlots) - Number(a.hasOpenSlots) ||
-      (b.reviewCount > 0 ? (b.rating ?? 0) : -1) - (a.reviewCount > 0 ? (a.rating ?? 0) : -1) ||
-      a.name.localeCompare(b.name),
-    )
+
+  const placed = withinRadius(shaped, me, s => ({ lat: s.lat, lng: s.lng }), filters.within ?? null)
+
+  return {
+    ...placed,
+    items: placed.items
+      .map(withoutCoords)
+      // ⚠️ BOOKABLE STILL COMES FIRST, AND DISTANCE SLOTS IN BEHIND IT.
+      //
+      // The original comment said "Without distance, 'can I actually get an
+      // appointment' is the most useful thing to sort on" — which correctly
+      // anticipated that distance would arrive and change the question. It
+      // does not change it as much as it looks:
+      //
+      //   * this page exists to end in an application, and a stylist with no
+      //     open slots CANNOT be applied to at all. Nearest-and-unbookable is
+      //     not a better result than three-miles-further-and-free;
+      //   * distance then decides among the ones she can actually book, which
+      //     is where it earns its place.
+      //
+      // Deliberately different from mobile, which sorts purely by distance —
+      // its list is not filtered to bookable, so it has no such first leg. And
+      // from the updates feed, where nearest-first is the whole point.
+      .sort((a, b) =>
+        Number(b.hasOpenSlots) - Number(a.hasOpenSlots) ||
+        (a.distanceMiles ?? Infinity) - (b.distanceMiles ?? Infinity) ||
+        (b.reviewCount > 0 ? (b.rating ?? 0) : -1) - (a.reviewCount > 0 ? (a.rating ?? 0) : -1) ||
+        a.name.localeCompare(b.name),
+      ),
+  }
 }
 
 /** The category filter list. Active categories only, in the app's own order. */

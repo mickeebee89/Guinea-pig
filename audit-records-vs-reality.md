@@ -4290,6 +4290,121 @@ repo reports today.** That is the state 0009 sat in for six weeks.
 **Not built.** It is a change to a step Micky runs by hand, so it is his call
 whether the extra argument is worth it.
 
+**✅ ITEM 90 VERIFIED LIVE — 23 Sep 2026. VERIFIED from pasted output.**
+
+| Block | Result |
+|---|---|
+| 0054 A | `BR1 2AB` accepted, `br1 2ab` refused, `BR12AB` refused, null accepted |
+| 0054 B | postcode and latitude written; a postcode with no coordinate refused; clearing with no arguments worked |
+| 0054 C | `users.latitude` and `providers.latitude` **both 51.389**; postcode read back as `ME4 4TZ` |
+| 0055 A | `dead_columns_left` 0, `providers_total` 2, `providers_placed` 2 |
+
+**Block C is the one that mattered.** The two numbers being equal is the entire
+reason `set_my_postcode` is one function rather than two client calls.
+
+**Live, both roles:**
+* stylist saved `ME5 8PQ` on /shop, read back *"Saved as ME5 8PQ"*, giving
+  51.33952 / 0.544438 **on both `users` and `providers`**;
+* model saved `ME5 8HQ` in Settings, giving 51.335139 / 0.55314;
+* the dashboard chips are usable, **the contradictory pair of sentences is
+  gone**, and with the stylist's status posted she appears under the 5 miles
+  chip. The chip choice survives a refresh through `?within=any`.
+
+**── TWO THINGS FROM THE SCREENSHOTS, BOTH CORRECTIONS TO MY OWN REPORT ──**
+
+1. **The avatar gap is narrower than I stated.** I wrote that a web-only
+   member *"has no avatar, permanently"* and led the journey report with it.
+   The model in the screenshots **has a profile picture, set from the app**.
+   The accurate claim is: **nothing in `site/` can SET one** — confirmed, zero
+   writes — so a member who has only ever used the website has none. Anyone
+   who has opened the app once does. A smaller population than I implied, and
+   the sentence I wrote did not say which.
+2. **A published shop is carrying keyboard-mash test text as its bio.** Not a
+   code fault and not in scope here, but it is live, it is on the one published
+   shop in the product, and `public_stylists`' 40-character bio bar will pass
+   it — the bar counts characters, and mash has plenty. Recorded so it is not
+   found by a model first.
+
+**92. RANGE FILTERING ON BROWSE, AND THE RULE MOVED OUT OF THE PAGE THAT
+LEARNED IT — BUILT 23 Sep 2026. `npm run verify` EXIT 0. NOT DEPLOYED.**
+
+**Plainly:** a model browsing stylists can now filter by how far away they are,
+the same way she already can on her dashboard — and the same way the app has
+always let her.
+
+**── WHAT WAS LIFTED, AND WHAT WAS NOT ──**
+
+`lib/distance.ts` is new and holds three things that had been about to exist
+twice: the haversine (one copy in the web, one in mobile, heading for three),
+the radius vocabulary, and **the rule**:
+
+> A radius applies only if we can place the viewer.
+
+That rule was learned by the updates feed the hard way (item 90) and was
+sitting inside it. Browse was about to take the same machinery, so it moved
+rather than being copied. **The feed now calls the shared version**, which is
+the part that makes this a refactor rather than a second implementation.
+
+**⚠️ The text search did NOT go anywhere, and that is deliberate.** A radius
+cannot do what it does:
+* it is the only location filter that works for someone who has given us
+  nothing — no postcode, no app;
+* it answers *"who is in Bromley"*, which is the question when she is
+  travelling somewhere rather than living there. A radius round her home
+  cannot express that at all.
+
+So the page carries both, and the header's old promise — *"distance is an
+enhancement that lands later"* — is struck through rather than deleted, with
+the half of it that still holds kept: **this must never become a
+distance-sorted list that degrades to empty.**
+
+**── THE SORT, WHICH IS THE ONE REAL DECISION ──**
+
+Bookable first, then distance, then rating. The original comment said *"Without
+distance, 'can I actually get an appointment' is the most useful thing to sort
+on"* — correctly anticipating that distance would arrive and change the
+question. It changes it less than it looks: **this page exists to end in an
+application, and a stylist with no open slots cannot be applied to at all.**
+Nearest-and-unbookable is not a better answer than three-miles-further-and-free.
+Distance then decides among the ones she can actually book.
+
+Deliberately different from mobile, which sorts purely by distance — its list
+is not filtered to bookable, so it has no such first leg — and from the updates
+feed, where nearest-first IS the point, because a status post is someone saying
+"I am free today".
+
+**── ⚠️ THE LINT CAUGHT A SAFETY PROBLEM, NOT A STYLE ONE ──**
+
+Computing a distance needs each stylist's coordinate, and the first version
+carried `lat`/`lng` on the objects it returned — straight to the browser, for
+every published stylist, to whoever is signed in.
+
+`public-web-views.sql` refuses to publish those with the reason written out:
+*"publishing a lone worker's coordinates is a safety exposure."* **Being behind
+the auth gate does not change what a coordinate is.** A model does not need a
+stylist's shop to the metre; she needs to know it is four miles away, and
+`distanceMiles` already says so.
+
+`withoutCoords()` now drops them in one place, named, with that reasoning
+attached. **It was found by `@typescript-eslint/no-unused-vars` complaining
+about a destructure-to-omit** — the zero-warning bar doing something it was
+never specifically aimed at.
+
+**── THE SMALL ONE THAT WOULD HAVE BITTEN ──**
+
+A plain GET form replaces the whole query string, so the town search would have
+thrown away a chosen distance every time. The hidden `within` input is there
+because of that, not for tidiness.
+
+**── WHAT TO TEST ──**
+
+With a postcode set: the chips filter and the cards show a distance; choosing a
+treatment or searching a town keeps the distance; the empty state at 5 miles
+says *"within 5 miles"* rather than the generic line. **Then clear the postcode
+in Settings**: the chips must go inert and grey with the "Add your postcode"
+line under them, and the list must come back unfiltered rather than empty —
+that is item 90's bug, checked on a second page.
+
 **75. A CHECK COULD STOP THE WEBSITE UPDATING, AND NOTHING NOTICED IT HAD —
 CHANGED 22 Sep 2026. `npm run verify` EXIT 0.**
 
@@ -10446,8 +10561,10 @@ platforms each failed it differently.
 | 82 | Model ID check live inside the apply flow. `/verify` still refuses models, by design | No |
 | 83 | ✅ **CLOSED 23 Sep** — sent, accepted, both emails, price_pence 1000 and consent v3 with 9 items on the same booking; 0052 applied 2h before it | No |
 | 84 | ✅ **ON for `site/` 23 Sep** — 5 errors, all fixed, no casts bar one declared wrapper. **Found two real consent defects nothing else here would have caught.** Freshness check now wired into `checks` and proven to fail. Still untyped: `mobile/` and `admin/` clients | No, but it is why 83 shipped broken |
+| 92 | Range filtering on browse — built, **not deployed**. The distance rule and the haversine now live in `lib/distance.ts`, shared with the updates feed | No |
+| 93 | **A published shop's bio is keyboard-mash test text.** Live, on the only published shop, and it clears `public_stylists`' 40-character bar because that bar counts characters | No, but a model would see it |
 | 91 | Types stamp names the newest migration FILE, not the newest applied — so it can read one ahead of the database. Claim corrected in both scripts; closing it properly needs a required `--applied=` argument, **your call** | No |
-| 90 | **Coordinates on the web — built, NOT APPLIED and NOT DEPLOYED.** 0054 (additive) then 0055 (drops the dead pair), with a site deploy between them. Until 0054 is applied the site does not build, by design | **Yes for a paying stylist** — web-only signups are invisible to distance search today |
+| 90 | ✅ **CLOSED 23 Sep** — 0054 and 0055 applied, both roles set a postcode live, `users` and `providers` agreed to six decimal places, and the contradictory dashboard sentences are gone | No |
 | 89 | **Mobile builds its consent record client-side and calls the same function.** The web now rebuilds it server-side (84c); mobile has no server to do that in, so the fix is inside `create_session_with_consent` — a migration, and it would make the web's rebuild redundant. Two clients currently write records of different strength into the same six-year table | No |
 | 85 | ✅ **CLOSED 23 Sep** — a real account deleted itself on the web, no half-deleted state. Untested: the Stripe customer fallback, the orphan surface, a failed auth delete | No |
 Carried in from before the audit, unchanged by it:
