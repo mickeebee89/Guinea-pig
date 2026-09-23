@@ -3198,6 +3198,94 @@ carry if a parameter ever appears — because nothing else would.
 nothing writes.** Harmless, and another mechanism with nothing behind it; noted
 rather than changed.
 
+**✅ A WEB APPLICATION WAS ACCEPTED, AND BOTH DIRECTIONS OF EMAIL WORK —
+23 Sep 2026, VERIFIED from Micky's checks.**
+
+The stylist accepted the application made through the web wizard, and **the
+model received the acceptance email**.
+
+So the chain closes in both directions on a **web-originated** booking:
+* model applies on the web → `create_session_with_consent` → the stylist's
+  `session_applied` notification, which since 0047 is also the thing that
+  emails them;
+* stylist accepts → the model's `session_accepted` notification → email.
+
+**What this proves that the earlier email test did not.** Item 74's proof was a
+chat message and two hand-sent test emails. This is a real booking's own
+notifications, on a booking the app had nothing to do with — the first evidence
+that the web apply flow's notification insert (`apply/actions.ts`) fires
+correctly and reaches an inbox, and that acceptance emails work at all.
+
+**Still not individually confirmed** (they follow from the same booking, but
+have not been read out of the database): the `price_pence` snapshot on that
+session, and the nine acknowledgements — six ticks including `patch_test` — in
+its `session_consents` row.
+
+**⚠️ CORRECTION — 23 Sep 2026. THREE CLAIMS ABOVE ARE WRONG, AND THE ORIGINALS
+ARE LEFT WHERE THEY ARE SO THE MISTAKE IS LEGIBLE.**
+
+**The actual fault: a file was read from the middle, past a header telling
+anyone not to use it.** `supabase/migrations/0009` was opened at line 55 — inside
+the section it preserves verbatim — and that preserved text was taken for the
+file's own. Its real first line is `-- SUPERSEDED BY 0010`, and its header says:
+
+> ⚠⚠ DO NOT RUN THIS FILE. IT WAS NEVER APPLIED, AND APPLYING IT NOW WOULD
+> BREAK BOOKING. ⚠⚠
+
+Which is the same failure as the bug it was diagnosing — trusting a file over
+the database — one level up.
+
+**1. ~~"Migration 0009's baseline is wrong, and it is the one file that cannot
+afford to be."~~ FALSE.** 0009 is not a description of the current function and
+never claimed to be. It is a step-0 capture written on 9 Aug 2026, committed
+before it was run, and overtaken the same day. It is kept ON PURPOSE, because
+it is the only place the pre-0010 definition survives — including the
+`p_device_info` parameter that 0010's reasoning argues about. Deleting it would
+leave 0010 arguing with something unreadable.
+
+**2. ~~"If the ledger records 0009 as applied, it is recording an effect the
+database does not have."~~ FALSE, and the query answered it.** **The ledger is
+complete: 0000 to 0052 all applied, with 0009 the single gap, and that gap is
+correct.** 0008 applied 9 Aug, 0010 on 10 Aug. Nothing is missing and nothing
+is lying.
+
+It is also already tooled for: `scripts/migration-status.mjs:129` parses the
+`SUPERSEDED BY` line and **verifies that 0010 is actually applied** before
+reporting 0009 as superseded rather than pending (`:18-21`). If 0010 were ever
+rolled back, 0009 reverts to PENDING — correctly, because the
+seventeen-argument function would then be the right one.
+
+**3. ~~"Privacy's 'no device information' is true BY ABSENCE, not by choice."~~
+FALSE — it was entirely a choice**, taken on 9 Aug 2026 and argued at length in
+0010, which dropped the parameter and the `session_consents.device_info` column
+together. Five recorded reasons: the contested fact is WHAT was agreed and
+`content_hash` answers it; an IP does not identify a person; device info is
+self-reported and unattested, so it proves nothing in the only case where it
+would matter; collecting it only on web would build a two-tier record whose
+weaker tier is the common one; and UK GDPR Art. 5(1)(c) minimisation. **0010
+flags it for the solicitor as a small migration to reverse** if they weigh
+evidential value differently.
+
+So it is a decision with an argument attached and a reversal path, not a gap.
+
+**4. And the note that "`run_retention_purge` scrubs a column nothing writes"
+is wrong twice over.** 0010 REMOVED that scrub, because dropping the two
+columns removed the only permitted update to `session_consents` — making it
+append-only with no edit path at all. 0010's own line is the one to keep:
+*"a permitted edit path tends to become a used one. The narrow case is where
+the next exception gets argued for."*
+
+**Why running 0009 now would break booking**, since the file is staying: it
+holds `CREATE OR REPLACE` for the seventeen-argument signature, Postgres treats
+a different argument list as a different function, so it would add a SECOND
+overload beside 0010's — and that overload still inserts into
+`session_consents.device_info`, a column that no longer exists.
+
+**Nothing in the three apps depends on 0009 having run.** Every reference to it
+is narrative: 0000–0008 and 0010 each close with the same paragraph citing it
+as the repo's standing example of "a migration written, committed, and never
+applied at all". `migration-status.mjs` reads it only to classify it.
+
 **── 5. WHAT CANNOT BE TESTED WITHOUT A REAL APPLICATION ──**
 
 Recorded as untested, not as working:
@@ -3249,8 +3337,9 @@ deploy, without a live attempt.
 1. **Generating it needs database access.** One command, run by Micky, with the
    project ref — the output is a types file and holds no secrets.
 2. **It goes stale the moment a migration lands.** A types file that quietly
-   describes last week's schema is the same class of thing as 0009's baseline,
-   which is what caused this. So regeneration has to be part of applying a
+   describes last week's schema is the same class of thing as reading 0009 —
+   ~~whose baseline caused this~~ *(corrected 23 Sep: 0009 did not cause it;
+   reading it from the middle, past a header saying DO NOT RUN, did)*. So regeneration has to be part of applying a
    migration, or the file has to be checked against the database by CI — and
    CI's Supabase variables are `sb_publishable_…` keys (item 38), which cannot
    read `pg_proc`. **This is the unresolved part and it is the important one.**
@@ -9423,7 +9512,7 @@ platforms each failed it differently.
 | 80 | Consent surface built, **no route until step 5**. Terms §5 still needs its line about displayed prices | No |
 | 81 | ✅ **CLOSED 23 Sep** — v3 live with 6 ticks, 5 existing consents intact, mobile checkbox removed | No |
 | 82 | Model ID check live inside the apply flow. `/verify` still refuses models, by design | No |
-| 83 | Web apply flow live; the RPC call now matches the live signature, **not yet re-tested** | **Yes** until an application succeeds |
+| 83 | ✅ **WORKING** — a web application was sent, accepted, and both emails arrived. Unread: the price snapshot and the consent row on that booking | No |
 | 84 | No generated Supabase types: every rpc name, argument and column is an unchecked string. Scoped, not built | No, but it is why 83 shipped broken |
 Carried in from before the audit, unchanged by it:
 

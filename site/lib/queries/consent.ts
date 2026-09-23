@@ -92,19 +92,27 @@ export interface AcceptedConsent {
  * ⚠️ NEVER SENT, AND IT CANNOT BE: THE FUNCTION HAS NO SUCH PARAMETER.
  *
  * The web's first real application failed with PGRST202 because its call
- * carried p_device_info. The live signature was then read: sixteen arguments,
- * one overload, and p_device_info is not among them. Migration 0009's
- * "baseline" lists it; the database does not have it.
+ * carried p_device_info. The live signature is sixteen arguments, one
+ * overload, and p_device_info is not among them.
  *
- * So Privacy's "no device information" is true BY ABSENCE, not by our choice —
- * there is no route through create_session_with_consent that could record any,
- * from either client. That is a stronger guarantee than a decision, and a more
- * fragile record of one: nothing here is stopping anyone, so if a parameter
- * ever appears, this comment is the only thing that says what it should carry.
+ * ── WHY IT IS NOT THERE, WHICH IS THE PART THAT MATTERS ───────────────────
+ * ~~It is absent, so the Privacy claim is true "by absence, not by choice".~~
+ * CORRECTED 23 Sep 2026. It was ENTIRELY a choice, taken on 9 Aug 2026 and
+ * argued at length in migration 0010, which dropped the parameter AND the
+ * session_consents.device_info column. Its five reasons are worth reading
+ * before anyone adds this back: the contested fact is WHAT was agreed and
+ * content_hash answers that; an IP does not identify a person; device info is
+ * self-reported and unattested, so it proves nothing in the only case where
+ * it would matter; collecting it only on web would build a two-tier record
+ * whose weaker tier is the common one; and UK GDPR Art. 5(1)(c).
  *
- * Kept, unused, for that reason. If it ever goes back it is the platform and
- * nothing else — mobile records device details, and matching it would make a
- * published statement false.
+ * 0010 flags it for the solicitor as a small migration to reverse if they
+ * weigh evidential value differently. So this is a recorded decision with an
+ * argument attached, not a gap — and it is reversible deliberately.
+ *
+ * Kept, unused, so that if a parameter ever comes back it carries the platform
+ * and nothing else: mobile records device details, and matching it would make
+ * a published statement false.
  */
 export const CONSENT_DEVICE_INFO = { platform: 'web' } as const
 

@@ -177,10 +177,18 @@ export async function submitApplication(form: FormData): Promise<ApplyResult> {
     //   …, p_acknowledgements jsonb, p_category_id uuid DEFAULT NULL
     //
     // SIXTEEN arguments. p_category_id exists and defaults, so omitting it is
-    // fine. **p_device_info DOES NOT EXIST** — migration 0009's baseline lists
-    // it, and the live function does not have it. These fifteen are therefore
-    // every argument this function takes bar one optional, and adding either
-    // of the others back would break every application again.
+    // fine. **p_device_info DOES NOT EXIST**: migration 0010 dropped it, and
+    // the column behind it, on 9 Aug 2026 — deliberately, with five reasons
+    // recorded in that file.
+    //
+    // ⚠️ The seventeen-argument version lives in migration 0009, which is
+    // marked SUPERSEDED BY 0010 on its first line and says, in its header,
+    // DO NOT RUN THIS FILE — IT WAS NEVER APPLIED. This call was written from
+    // that file's middle, past the header. The signature it records is the
+    // function as it was BEFORE 0010, kept only so 0010's reasoning has
+    // something to refer to.
+    //
+    // These fifteen are every argument this function takes bar one optional.
   })
 
   if (error) {
