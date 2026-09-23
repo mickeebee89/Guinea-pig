@@ -176,7 +176,6 @@ export default function ApplySessionScreen() {
   const [note,          setNote]         = useState('')
   const [submitting,    setSubmitting]   = useState(false)
   const [submitted,     setSubmitted]    = useState(false)
-  const [patchTestAgreed, setPatchTestAgreed] = useState(false)
   /**
    * ── A FAILED READ IS NOT AN EMPTY DIARY ────────────────────────────
    *
@@ -990,23 +989,15 @@ export default function ApplySessionScreen() {
             )}
           </View>
 
-          <TouchableOpacity
-            style={[styles.patchTestRow, patchTestAgreed && styles.patchTestRowAgreed]}
-            onPress={async () => {
-              await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
-              setPatchTestAgreed(v => !v)
-            }}
-            activeOpacity={0.8}
-          >
-            <Ionicons
-              name={patchTestAgreed ? 'checkbox' : 'square-outline'}
-              size={22}
-              color={patchTestAgreed ? Colors.rose : Colors.muted}
-            />
-            <Text style={styles.patchTestText}>
-              A patch test may be required before some treatments. Please book with enough time in advance for one to be carried out if needed.
-            </Text>
-          </TouchableOpacity>
+          {/* ── THE PATCH-TEST CHECKBOX WAS HERE, REMOVED 23 Sep 2026 ──────
+              It asked the same question consent v3 now asks as a tick
+              (`patch_test`, migration 0051) — one screen earlier, in weaker
+              words, and it recorded NOTHING. It was useState that gated this
+              button and then vanished; the tick is keyed, worded, hashed and
+              kept for six years in session_consents.
+
+              Leaving both would have asked the model twice and left the
+              unrecorded wording as the one gating the button. */}
           </>
         )}
 
@@ -1049,8 +1040,8 @@ export default function ApplySessionScreen() {
             </TouchableOpacity>
           ) : (
             <TouchableOpacity
-              style={[styles.actionBtn, (submitting || !patchTestAgreed) && styles.actionBtnDisabled]}
-              disabled={submitting || !patchTestAgreed}
+              style={[styles.actionBtn, submitting && styles.actionBtnDisabled]}
+              disabled={submitting}
               onPress={handleSubmit}
               activeOpacity={0.9}
             >
@@ -1516,29 +1507,6 @@ const styles = StyleSheet.create({
     height: 18,
     borderRadius: 2,
     flexShrink: 0,
-  },
-
-  // Patch-test disclaimer
-  patchTestRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 12,
-    padding: 14,
-    marginBottom: 4,
-    borderRadius: 16,
-    borderWidth: 1.5,
-    borderColor: Colors.rose,
-    backgroundColor: Colors.softPink + '40',
-  },
-  patchTestRowAgreed: {
-    borderColor: Colors.rose,
-    backgroundColor: Colors.softPink + '66',
-  },
-  patchTestText: {
-    flex: 1,
-    fontSize: 13,
-    color: Colors.warmDark,
-    lineHeight: 19,
   },
 
   // Bottom bar
