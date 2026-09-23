@@ -6,6 +6,7 @@ import { Avatar, EmptyState } from '@/components/ui'
 import { MonthCalendar, type CalendarMark } from '@/components/MonthCalendar'
 import { PortfolioGallery } from '@/components/PortfolioGallery'
 import { SafetyMenu } from '@/components/SafetyMenu'
+import { FavouriteButton } from './FavouriteButton'
 
 export const metadata = { title: 'Stylist' }
 
@@ -76,14 +77,27 @@ export default async function StylistPage({
               </p>
             )}
           </div>
-          {/* Reporting must not depend on having a booking with this person, and
-              must not depend on their account still being live. */}
+          {/* ⚠️ SAVE IS HIDDEN FOR A BLOCKED PAIR, AND THE SAFETY MENU IS NOT.
+              Asking to be told when someone posts new times is meaningless
+              when neither of you can book with the other — and offering it
+              beside the sentence explaining the block would read as if the
+              block were not real. Report and unblock stay, because those are
+              the two things she might actually want here. */}
           {!p.isOwner && (
-            <SafetyMenu
-              subject={{ providerId: id }}
-              name={p.name}
-              alreadyBlocked={p.isBlocked}
-            />
+            <div className="flex items-start gap-2">
+              {!p.isBlocked && (
+                <FavouriteButton
+                  providerId={p.id}
+                  stylistName={p.name}
+                  initial={p.isFavourite}
+                />
+              )}
+              <SafetyMenu
+                subject={{ providerId: id }}
+                name={p.name}
+                alreadyBlocked={p.isBlocked}
+              />
+            </div>
           )}
         </div>
       </header>

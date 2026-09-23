@@ -4405,6 +4405,109 @@ in Settings**: the chips must go inert and grey with the "Add your postcode"
 line under them, and the list must come back unfiltered rather than empty —
 that is item 90's bug, checked on a second page.
 
+**✅ ITEM 92 VERIFIED LIVE — 23 Sep 2026.** With a postcode set, the browse
+chips filter and the cards show a distance. With the postcode cleared, **the
+chips go inert with the "Add your postcode" line and the list comes back
+unfiltered rather than empty** — which is item 90's bug, checked on a second
+page and behaving.
+
+**94. THE DASHBOARD TOLD HER TO SAVE A STYLIST AND THE WEBSITE COULD NOT —
+BUILT 23 Sep 2026. `npm run verify` EXIT 0. NOT DEPLOYED.**
+
+**Plainly:** the web dashboard has always had a Favourites card reading *"No
+favourites yet. Save a stylist and they'll be here"* — an instruction the
+website could not carry out. There was no save control on `/stylist/[id]`, and
+no write to `favourites` anywhere in `site/`. An empty state that tells you to
+do something impossible reads as broken rather than empty.
+
+**── THE THREE QUESTIONS, ANSWERED BEFORE BUILDING ──**
+
+**1. What mobile's control does.** A heart on the stylist profile
+(`provider/[id].tsx:307-314`): light haptics, optimistic toggle, insert or
+delete. **No existence check and no error handling whatsoever** — a failed
+insert leaves a filled heart over a row that does not exist, so she believes
+she will be told about new times and never hears. There is a second, careful
+entry point in `verify-payment.tsx:230`, which checks first and treats 23505 as
+success. The two disagree about whether the table has a unique index.
+
+**2. What the table holds.** `id, user_id, provider_id, created_at`. Nothing
+else — no note, no ordering, no "why". RLS: the owner writes; **the owner OR
+the favourited stylist reads**.
+
+**3. ⚠️ DOES A STYLIST LEARN? THE ANSWER IS IN TWO HALVES AND BOTH MATTER.**
+
+* **Nothing shows her today.** No count, no list, no notification — verified
+  across the mobile provider dashboard, the web dashboard and the entire admin
+  console. `profile_pic_url`-style absence: the surface was never built.
+* **But she is permitted to see it, deliberately.** `fav_select` includes
+  `provider_id IN (select id from providers where user_id = auth.uid())`, and
+  `rls-lockdown.sql:62` labels it *"owner + favourited stylist read"*. That is
+  a decision, not an oversight.
+
+**So this is not a private bookmark, and it must not be worded as one.** The
+control carries no "only you can see this" claim anywhere.
+
+**── AND THE PART THAT CHANGES WHAT THE CONTROL MEANS ──**
+
+**A row in `favourites` is a SUBSCRIPTION.** `notifyFavourites`
+(`lib/availability.ts`) writes a `new_availability` notification to every
+favouriter each time that stylist posts times. So saving someone has a
+consequence beyond her own list — and **mobile's heart says nothing about it.**
+A model tapping it has no way to know she has just asked to be told things.
+
+The web control says it, in a line that appears once saved:
+
+> We'll tell you when {name} posts new times.
+
+**⚠️ AND IT DOES NOT SAY "EMAIL", BECAUSE IT IS NOT ONE.** My first draft of
+this said email. **0047 excludes `new_availability` from email on purpose** —
+it is a mass send, one per favouriter, every time — so it reaches her
+notifications list and a push on the app, and nothing else. Caught by reading
+0047's header rather than by assuming, which is the only reason the published
+sentence is true.
+
+**── A DUPLICATE ROW WOULD HAVE BEEN A DUPLICATE NOTIFICATION ──**
+
+**No file in this repo creates a unique index on `(user_id, provider_id)`.** The
+table predates the migration ledger. mobile's `verify-payment.tsx` handles
+23505 as though one exists; mobile's `provider/[id].tsx` inserts with no check
+at all, which only works if one does. **One of those two is wrong and the
+database has never been asked which.**
+
+Rather than guess, the code holds either way:
+* the web save checks first and treats 23505 as success;
+* the web unsave deletes **by the pair, not by id**, so it clears duplicates;
+* and `notifyFavourites` now **de-duplicates with a Set**. That is where the
+  harm would actually land — two rows mean a model notified twice every time
+  that stylist posts — and the Set also cleans up after any duplicates already
+  sitting in the table, from either client.
+
+**Still worth settling.** Read-only:
+
+```sql
+select indexname, indexdef from pg_indexes
+where schemaname = 'public' and tablename = 'favourites';
+
+select user_id, provider_id, count(*)
+from public.favourites group by 1, 2 having count(*) > 1;
+```
+
+**── TWO SMALL DECISIONS ──**
+
+* **Hidden for a blocked pair.** Asking to be told when someone posts times is
+  meaningless when neither of you can book with the other, and offering it
+  beside the sentence explaining the block would read as though the block were
+  not real. Report and unblock stay, because those are what she might want.
+* **Shown on a shop that is not taking bookings.** Deliberately: *"tell me when
+  they are back"* is exactly what a quiet shop is for.
+
+**── WHAT MOBILE STILL DOES WORSE, AND IS NOT CHANGED HERE ──**
+
+Its heart still fails silently and still says nothing about what saving does.
+Both are worth fixing and neither is in this scope; **the failure-silently one
+is the real defect**, because it tells her something untrue about what will
+reach her.
+
 **75. A CHECK COULD STOP THE WEBSITE UPDATING, AND NOTHING NOTICED IT HAD —
 CHANGED 22 Sep 2026. `npm run verify` EXIT 0.**
 
@@ -10561,7 +10664,9 @@ platforms each failed it differently.
 | 82 | Model ID check live inside the apply flow. `/verify` still refuses models, by design | No |
 | 83 | ✅ **CLOSED 23 Sep** — sent, accepted, both emails, price_pence 1000 and consent v3 with 9 items on the same booking; 0052 applied 2h before it | No |
 | 84 | ✅ **ON for `site/` 23 Sep** — 5 errors, all fixed, no casts bar one declared wrapper. **Found two real consent defects nothing else here would have caught.** Freshness check now wired into `checks` and proven to fail. Still untyped: `mobile/` and `admin/` clients | No, but it is why 83 shipped broken |
-| 92 | Range filtering on browse — built, **not deployed**. The distance rule and the haversine now live in `lib/distance.ts`, shared with the updates feed | No |
+| 92 | ✅ **CLOSED 23 Sep** — verified both ways: chips filter with a postcode, and go inert with the list intact without one | No |
+| 94 | Favourites on the web — built, **not deployed**. Saving is a SUBSCRIPTION to `new_availability`, and the control says so. Open: whether `favourites` has a unique index, which the two mobile call sites disagree about | No |
+| 95 | **Mobile's favourite heart fails silently** — no error handling on insert or delete, so a filled heart can sit over a row that does not exist. It also never says that saving subscribes her to notifications | No, but it tells her something untrue |
 | 93 | **A published shop's bio is keyboard-mash test text.** Live, on the only published shop, and it clears `public_stylists`' 40-character bar because that bar counts characters | No, but a model would see it |
 | 91 | Types stamp names the newest migration FILE, not the newest applied — so it can read one ahead of the database. Claim corrected in both scripts; closing it properly needs a required `--applied=` argument, **your call** | No |
 | 90 | ✅ **CLOSED 23 Sep** — 0054 and 0055 applied, both roles set a postcode live, `users` and `providers` agreed to six decimal places, and the contradictory dashboard sentences are gone | No |

@@ -483,7 +483,7 @@ export default async function DashboardPage({
 
               <Panel
                 title="Favourites" isEmpty={data.favourites.length === 0}
-                empty="No favourites yet. Save a stylist and they’ll be here."
+                empty="No favourites yet. Save a stylist from their page and they’ll be here, and we’ll tell you when they post new times."
               >
                 {data.favourites.length > 0 && (
                   <ul className="flex flex-wrap gap-3">

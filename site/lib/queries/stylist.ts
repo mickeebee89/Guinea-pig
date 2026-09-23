@@ -61,6 +61,13 @@ export interface StylistProfile {
   }[]
   /** Blocked either direction. The page says so rather than pretending. */
   isBlocked: boolean
+  /**
+   * The viewer has saved this stylist.
+   *
+   * Not a bookmark: the row is what subscribes her to `new_availability`
+   * notifications (notifyFavourites). See favourite-actions.ts.
+   */
+  isFavourite: boolean
   /** Dates in the next 60 days with an unbooked slot. */
   openDates: string[]
 }
@@ -91,7 +98,7 @@ export async function getStylistProfile(
   const today = new Date().toISOString().slice(0, 10)
   const in60 = new Date(Date.now() + 60 * 86_400_000).toISOString().slice(0, 10)
 
-  const [treatRes, portRes, revRes, blocked, availRes] = await Promise.all([
+  const [treatRes, portRes, revRes, blocked, availRes, favRes] = await Promise.all([
     // Category is the only column edit-shop reliably fills; `name` holds a copy
     // and duration/price are never written. Same note as mobile.
     supabase.from('provider_treatments').select('category').eq('provider_id', providerId),
@@ -110,6 +117,12 @@ export async function getStylistProfile(
     supabase.from('availability')
       .select('date, is_taken').eq('provider_id', providerId)
       .gte('date', today).lte('date', in60),
+    // maybeSingle rather than a count: nothing here proves the table has a
+    // unique index on the pair, and a count would turn a duplicate row into a
+    // wrong-looking number rather than a saved stylist.
+    supabase.from('favourites')
+      .select('id').eq('user_id', viewerId).eq('provider_id', providerId)
+      .maybeSingle(),
   ])
 
   const isOwner = !!prov.user_id && prov.user_id === viewerId
@@ -167,6 +180,7 @@ export async function getStylistProfile(
       reviewerName: displayName(r.reviewer_id ? nameMap[r.reviewer_id] : undefined, 'A member'),
     })),
     isBlocked: !!(prov.user_id && blocked.has(prov.user_id)),
+    isFavourite: !!favRes.data,
     openDates: [...new Set(
       ((availRes.data ?? []) as { date: string; is_taken: boolean | null }[])
         .filter(a => !a.is_taken).map(a => a.date),
