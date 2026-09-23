@@ -3142,6 +3142,62 @@ differs from what is running is worse than no baseline: it looks authoritative
 and is wrong" — and it was still read as authoritative, by me, three weeks
 later.
 
+**── THE LIVE SIGNATURE, READ AT LAST — 23 Sep 2026, VERIFIED from Micky's
+query. ONE OVERLOAD ──**
+
+    create_session_with_consent(
+      p_provider_id uuid, p_availability_id uuid, p_date date,
+      p_start_time time, p_end_time time, p_scheduled_at timestamptz,
+      p_duration_minutes integer, p_treatment_id uuid, p_location_type text,
+      p_note text, p_photo_urls text[], p_consent_document_id uuid,
+      p_consent_version integer, p_content_hash text,
+      p_acknowledgements jsonb, p_category_id uuid DEFAULT NULL)
+
+**16 arguments, 1 default, security invoker.** So `p_category_id` exists and
+defaults — omitting it is fine — and **`p_device_info` DOES NOT EXIST**. The
+fifteen now sent are every argument the function takes bar one optional.
+
+**Micky's reading of the error was wrong and he said so; the rule that saved
+it was "read the signature before removing a parameter".** PGRST202 lists what
+was sent, so either of the two extras could have been blamed, and removing
+only `p_category_id` would have failed identically — a second round on the
+same fault.
+
+**⚠️ MIGRATION 0009's BASELINE IS WRONG, AND IT IS THE ONE FILE THAT CANNOT
+AFFORD TO BE.** It records seventeen parameters including `p_device_info`; the
+database has sixteen and does not. Its own header says *"Nothing is renamed,
+reordered, reformatted or improved… a baseline that differs from what is
+running is worse than no baseline: it looks authoritative and is wrong"* — and
+it does, and it was.
+
+**That raises a question worth one query.** 0009 is `CREATE OR REPLACE` with a
+seventeen-argument signature. In Postgres that would have created a SECOND
+function rather than replacing the sixteen-argument one, and there is only one
+overload. So either 0009 never ran, or it ran and something later dropped and
+recreated the function. **If `schema_migrations` records 0009 as applied, the
+ledger is recording an effect the database does not have** — which is a
+different and worse class of problem than a stale comment:
+
+    select version, name, applied_at from public.schema_migrations
+     where version in ('0001','0009') order by version;
+
+Read-only. Worth knowing before the next migration leans on that ledger.
+
+**── PRIVACY'S "NO DEVICE INFORMATION" IS TRUE BY ABSENCE ──**
+
+`session_consents` has `device_info` (0005 scrubs it at 12 months), and
+**nothing can write it through this function, from either client**, because
+there is no parameter for it. The published claim holds not because we decided
+well but because the door is not there.
+
+That is a stronger guarantee than a decision and a more fragile record of one.
+`CONSENT_DEVICE_INFO` stays in `consent.ts`, unused, saying what it should
+carry if a parameter ever appears — because nothing else would.
+
+**And it means the 12-month scrub in `run_retention_purge` scrubs a column
+nothing writes.** Harmless, and another mechanism with nothing behind it; noted
+rather than changed.
+
 **── 5. WHAT CANNOT BE TESTED WITHOUT A REAL APPLICATION ──**
 
 Recorded as untested, not as working:
@@ -3156,6 +3212,63 @@ Recorded as untested, not as working:
    render and submit, which cannot be staged by hand without a second session.
 6. **Two models racing for one slot** — the 23505 message is written and
    unproven.
+
+**84. NOTHING CHECKS A DATABASE CALL IN THIS REPO — SCOPED 23 Sep 2026, NOT
+BUILT. Decision: Micky, 23 Sep.**
+
+**Plainly:** every call to the database from either client is an unchecked
+string and an object literal. `supabase.rpc('create_session_with_consent', {…})`
+compiles whether or not that function exists, whether or not those are its
+arguments, and whether or not the columns in a `.select()` are real. The first
+thing that disagrees is a live user.
+
+**What it has already cost, twice in one day:**
+* the web's first application, refused with PGRST202 because the call carried
+  `p_device_info`, which the live function has no parameter for (item 83);
+* and before that, on mobile, a chat query asking `provider_treatments` for a
+  `materials_cost` column that does not exist — **which failed the WHOLE query,
+  so no treatment showed in chat at all** (`chat/[sessionId].tsx:172-174`).
+
+Both are the same fault: a name written from a file rather than from the
+database.
+
+**── WHAT THE FIX IS ──**
+
+`supabase gen types typescript` against the live project, committed to the
+repo, and the clients' Supabase clients typed with it. Then:
+* an rpc name that does not exist is a **build failure**;
+* an argument object that does not match is a **build failure**;
+* a column that does not exist in a `.select()` is caught for the tables the
+  generator knows about.
+
+`npm run verify` and CI would both have refused item 83's call, before a
+deploy, without a live attempt.
+
+**── WHAT IT WOULD TAKE, AND THE PARTS THAT NEED A DECISION ──**
+
+1. **Generating it needs database access.** One command, run by Micky, with the
+   project ref — the output is a types file and holds no secrets.
+2. **It goes stale the moment a migration lands.** A types file that quietly
+   describes last week's schema is the same class of thing as 0009's baseline,
+   which is what caused this. So regeneration has to be part of applying a
+   migration, or the file has to be checked against the database by CI — and
+   CI's Supabase variables are `sb_publishable_…` keys (item 38), which cannot
+   read `pg_proc`. **This is the unresolved part and it is the important one.**
+3. **Three apps, three clients.** `site/`, `mobile/` and `admin/` share no code
+   and would each need the file, or one file and three imports across package
+   boundaries that do not exist today.
+4. **It would flag existing calls.** Useful, and not free: the count is unknown
+   until it runs, and some will be real bugs like the two above.
+
+**── WHAT IT WOULD NOT CATCH ──**
+
+RLS. A call can be perfectly typed and still return nothing because a policy
+filtered it, which is most of this audit's findings. Types are about names and
+shapes, never about permission — and a green build must not start reading as
+"the query works".
+
+**Until it exists, the standing rule from item 83:** read the signature before
+writing a call. `pg_get_function_arguments` over `pg_proc`, ten seconds.
 
 **75. A CHECK COULD STOP THE WEBSITE UPDATING, AND NOTHING NOTICED IT HAD —
 CHANGED 22 Sep 2026. `npm run verify` EXIT 0.**
@@ -9310,7 +9423,8 @@ platforms each failed it differently.
 | 80 | Consent surface built, **no route until step 5**. Terms §5 still needs its line about displayed prices | No |
 | 81 | ✅ **CLOSED 23 Sep** — v3 live with 6 ticks, 5 existing consents intact, mobile checkbox removed | No |
 | 82 | Model ID check live inside the apply flow. `/verify` still refuses models, by design | No |
-| 83 | Web apply flow live; first real attempt failed on the RPC argument list, fixed and **not yet re-tested**. No Supabase types, so no rpc() call in this repo is checked by anything | **Yes** until an application succeeds |
+| 83 | Web apply flow live; the RPC call now matches the live signature, **not yet re-tested** | **Yes** until an application succeeds |
+| 84 | No generated Supabase types: every rpc name, argument and column is an unchecked string. Scoped, not built | No, but it is why 83 shipped broken |
 Carried in from before the audit, unchanged by it:
 
 | Item | State |

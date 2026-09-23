@@ -171,10 +171,16 @@ export async function submitApplication(form: FormData): Promise<ApplyResult> {
     // was SENT, not what exists, so it names no culprit; it only proves the
     // set was wrong.
     //
-    // These fifteen are the set the installed app has been booking with for
-    // weeks, so they are the only ones with evidence behind them. The other
-    // two go back only once the live signature has been read, and only if it
-    // has them.
+    // ⚠️ THE LIVE SIGNATURE WAS THEN READ, AND IT SETTLES IT (23 Sep 2026,
+    // one overload, security invoker):
+    //
+    //   …, p_acknowledgements jsonb, p_category_id uuid DEFAULT NULL
+    //
+    // SIXTEEN arguments. p_category_id exists and defaults, so omitting it is
+    // fine. **p_device_info DOES NOT EXIST** — migration 0009's baseline lists
+    // it, and the live function does not have it. These fifteen are therefore
+    // every argument this function takes bar one optional, and adding either
+    // of the others back would break every application again.
   })
 
   if (error) {

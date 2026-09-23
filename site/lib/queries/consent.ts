@@ -89,20 +89,22 @@ export interface AcceptedConsent {
 /**
  * Device info for session_consents.
  *
- * ⚠️ NOT CURRENTLY SENT, AND THE RECORD SAYING OTHERWISE WAS CORRECTED.
- * The web's first real application failed with PGRST202 because its RPC call
- * carried p_device_info and p_category_id, and no overload matched the
- * resulting argument set. The call now sends the fifteen arguments the
- * installed app has been booking with, which are the only ones with live
- * evidence behind them, and those two are omitted until the live signature
- * has been read.
+ * ⚠️ NEVER SENT, AND IT CANNOT BE: THE FUNCTION HAS NO SUCH PARAMETER.
  *
- * Kept here, unused, because the DECISION behind it still stands and should
- * not have to be made again: if this ever goes back, it is the platform and
- * nothing else. Mobile records device details; Privacy publishes that we
- * record no device information, and that claim is one of the few the audit
- * found holding. Matching mobile exactly would make a published statement
- * false.
+ * The web's first real application failed with PGRST202 because its call
+ * carried p_device_info. The live signature was then read: sixteen arguments,
+ * one overload, and p_device_info is not among them. Migration 0009's
+ * "baseline" lists it; the database does not have it.
+ *
+ * So Privacy's "no device information" is true BY ABSENCE, not by our choice —
+ * there is no route through create_session_with_consent that could record any,
+ * from either client. That is a stronger guarantee than a decision, and a more
+ * fragile record of one: nothing here is stopping anyone, so if a parameter
+ * ever appears, this comment is the only thing that says what it should carry.
+ *
+ * Kept, unused, for that reason. If it ever goes back it is the platform and
+ * nothing else — mobile records device details, and matching it would make a
+ * published statement false.
  */
 export const CONSENT_DEVICE_INFO = { platform: 'web' } as const
 
