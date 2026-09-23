@@ -3,6 +3,7 @@
 import { SUPPORT_EMAIL } from '@/lib/site'
 
 import { revalidatePath } from 'next/cache'
+import { redirect } from 'next/navigation'
 import { createSupabaseServerClient, requireUser } from '@/lib/supabase-server'
 
 type Result = { ok: true } | { ok: false; error: string }
@@ -150,4 +151,83 @@ export async function cancelMembership(): Promise<CancelResult> {
   revalidatePath('/settings')
   revalidatePath('/dashboard')
   return { ok: true, cancelsAt: (data?.cancelsAt as string | null) ?? null }
+}
+
+/* ───────────────────────────────────────────────────────────────────────────
+ * DELETING YOUR OWN ACCOUNT
+ * ───────────────────────────────────────────────────────────────────────── */
+
+export type DeleteResult = { ok: false; error: string; retryable?: boolean }
+
+/**
+ * Permanently delete the signed-in member's own account. Audit item 85.
+ *
+ * ── IT DOES ALMOST NOTHING ITSELF, ON PURPOSE ─────────────────────────────
+ * The work is in the `delete-account` edge function: preflight, Stripe,
+ * delete_account_data in one transaction, storage, then the auth user. This
+ * invokes it **with her own JWT** — the function derives the target from the
+ * verified caller and never from a passed id, which is the whole of its safety
+ * model. Passing the service key here would hand it an id instead, and turn a
+ * self-service button into an "delete any account" endpoint.
+ *
+ * `delete_account_data` is revoked from authenticated (account-deletion-fix.sql:358),
+ * so the web could not take a shortcut past the function even if it wanted to.
+ *
+ * ── ⚠️ ITEM 50's GAP: THE WEB CANNOT PREVENT IT ───────────────────────────
+ * If the database transaction commits and the AUTH delete then fails, the
+ * login survives with no profile row — the one state where item 50's unguarded
+ * insert path is reachable. That happens inside the edge function, between two
+ * steps, and no amount of care out here closes it.
+ *
+ * What this can do is not make it worse:
+ *   * it does NOT sign her out on that failure, because signing out would
+ *     strand a half-deleted account with nobody able to reach it;
+ *   * it offers Try again, and re-invoking is safe — the preflight passes, the
+ *     RPC finds nothing left to delete, and the auth delete is retried.
+ *
+ * ── SIGN-OUT IS NOT OPTIONAL ON THE WEB ───────────────────────────────────
+ * Mobile just signs out. A browser holds a session cookie for a user that no
+ * longer exists, and every subsequent request tries to refresh a token for a
+ * deleted account. So on success: sign out, then redirect to a public page.
+ */
+export async function deleteMyAccount(): Promise<DeleteResult> {
+  const user = await requireUser()
+  const supabase = await createSupabaseServerClient()
+
+  const { data, error } = await supabase.functions.invoke('delete-account')
+
+  // A non-2xx comes back as an error here, with the body in `data` when the
+  // function answered at all. Both are read: the function distinguishes
+  // "nothing was removed" from "your data is gone but the account is not",
+  // and flattening them would tell someone their data survived when it did not.
+  const body = (data ?? {}) as { success?: boolean; error?: string; blockers?: string[] }
+
+  if (error || !body.success) {
+    const message = body.error ?? error?.message ?? ''
+    console.error('[settings] account deletion failed', {
+      userId: user.id, message, blockers: body.blockers,
+    })
+
+    // The one failure where her data is already gone. Its wording is the
+    // function's own and says so plainly; Try again is the only sane next step.
+    const partial = /could not be closed/i.test(message)
+    if (partial) {
+      return {
+        ok: false,
+        error: 'Your data was removed but the account could not be closed. Try again — it picks up where it stopped.',
+        retryable: true,
+      }
+    }
+
+    return {
+      ok: false,
+      error: message.trim()
+        ? `${message} If it keeps happening, email ${SUPPORT_EMAIL}.`
+        : `We couldn’t delete your account, and nothing has been removed. Please try again, or email ${SUPPORT_EMAIL}.`,
+    }
+  }
+
+  // Gone. Drop the cookie before anything else can try to use it.
+  await supabase.auth.signOut()
+  redirect('/?deleted=1')
 }

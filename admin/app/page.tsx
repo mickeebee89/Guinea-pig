@@ -19,6 +19,27 @@ interface Stats {
   /** Most recent NON-dry run of run_retention_purge, successful or not. */
   retentionLastRun: { ran_at: string; ok: boolean } | null
   retentionUnavailable: boolean
+  /** Deleted accounts whose Stripe billing could not be settled. */
+  billingOrphans: BillingOrphan[]
+  billingOrphansUnavailable: boolean
+}
+
+/**
+ * A deletion that could not stop the money.
+ *
+ * `details` holds the Stripe ids because the account is gone — there is no
+ * user row left to join to, and the customer id is the only handle anyone has
+ * to go and cancel it by hand in the Stripe dashboard.
+ */
+interface BillingOrphan {
+  created_at: string
+  details: {
+    user_id?: string
+    stripe_customer_id?: string | null
+    stripe_subscription_id?: string | null
+    cancelled?: string[]
+    warnings?: string[]
+  } | null
 }
 
 function StatCard({ label, value, sub, href, accent, alert }: {
@@ -89,6 +110,7 @@ export default function Dashboard() {
         // evidence that anything was deleted, and counting it would let a tile
         // stay green while the scheduled job was dead.
         { data: retentionRuns, error: retentionErr },
+        { data: billingOrphans, error: billingOrphansErr },
       ] = await Promise.all([
         supabase.from('reports').select('*', { count: 'exact', head: true }).eq('status', 'open'),
         supabase.from('users').select('*', { count: 'exact', head: true }),
@@ -100,6 +122,20 @@ export default function Dashboard() {
         supabase.from('verification_payments').select('amount').in('selfie_status', ['failed', 'locked']).gte('created_at', last7),
         supabase.from('retention_runs').select('ran_at, ok').eq('dry_run', false)
           .order('ran_at', { ascending: false }).limit(1),
+        // ⚠️ BILLING ORPHANS. When someone deletes their account and Stripe
+        // could not be settled — a failed cancel, or Stripe unreachable — the
+        // edge function records a row here and CARRIES ON, because a payment
+        // provider being down is not a lawful reason to refuse an erasure.
+        //
+        // That row is the only trace. The account is gone, so there is no user
+        // to notice, no email to reply to, and nobody being charged who can
+        // tell us. Until this tile existed the record was write-only, which is
+        // the same as not keeping it.
+        supabase.from('admin_audit_log')
+          .select('created_at, details')
+          .eq('action', 'billing_orphan_on_delete')
+          .order('created_at', { ascending: false })
+          .limit(20),
       ])
 
       // Revenue from Stripe (source of truth) so the dashboard matches Stripe + the Revenue page.
@@ -125,6 +161,8 @@ export default function Dashboard() {
         // ignore it.
         retentionLastRun:      (retentionRuns ?? [])[0] ?? null,
         retentionUnavailable:  !!retentionErr,
+        billingOrphans:        (billingOrphans ?? []) as BillingOrphan[],
+        billingOrphansUnavailable: !!billingOrphansErr,
       })
     }
     load()
@@ -135,6 +173,48 @@ export default function Dashboard() {
   return (
     <div>
       <h1 className="text-2xl font-bold text-[#3D2E2E] mb-6">Dashboard</h1>
+
+      {/* ── BILLING ORPHANS ──────────────────────────────────────────────
+          Someone deleted their account and Stripe was not settled. Nobody else
+          will ever report this: the account is gone, so the person being
+          charged has no way to tell us and we have no way to tell them. It is
+          shown whenever there is one, and hidden entirely when there are none,
+          because a permanent "0" trains the eye to skip it. */}
+      {stats && (stats.billingOrphansUnavailable || stats.billingOrphans.length > 0) && (
+        <section className="mb-8">
+          <h2 className="text-xs font-semibold uppercase tracking-widest text-[#3D2E2E]/40 mb-3">
+            Billing to cancel by hand
+          </h2>
+          {stats.billingOrphansUnavailable ? (
+            <p className="rounded-lg border border-[#C23A71]/30 bg-white p-4 text-sm text-[#3D2E2E]">
+              Could not read admin_audit_log, so it is unknown whether any deleted account is
+              still being charged.
+            </p>
+          ) : (
+            <div className="rounded-lg border border-[#C23A71]/30 bg-white p-4">
+              <p className="text-sm text-[#3D2E2E]">
+                <strong>{stats.billingOrphans.length}</strong> deleted account
+                {stats.billingOrphans.length === 1 ? '' : 's'} whose Stripe subscription could not
+                be cancelled. Cancel each in the Stripe dashboard — the person has no account left
+                and cannot do it themselves.
+              </p>
+              <ul className="mt-3 space-y-2 text-xs font-mono text-[#3D2E2E]/80">
+                {stats.billingOrphans.map((o, i) => (
+                  <li key={`${o.created_at}-${i}`} className="border-t border-[#3D2E2E]/10 pt-2">
+                    <span className="text-[#3D2E2E]/50">
+                      {new Date(o.created_at).toLocaleString('en-GB')}
+                    </span>{' '}
+                    customer {o.details?.stripe_customer_id ?? '—'}
+                    {o.details?.stripe_subscription_id
+                      ? ` · subscription ${o.details.stripe_subscription_id}`
+                      : ' · no subscription id on file'}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </section>
+      )}
 
       <section className="mb-8">
         <h2 className="text-xs font-semibold uppercase tracking-widest text-[#3D2E2E]/40 mb-3">Platform</h2>

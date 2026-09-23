@@ -3380,6 +3380,120 @@ shapes, never about permission — and a green build must not start reading as
 **Until it exists, the standing rule from item 83:** read the signature before
 writing a call. `pg_get_function_arguments` over `pg_proc`, ten seconds.
 
+**85. DELETING YOUR OWN ACCOUNT, ON THE WEB — BUILT 23 Sep 2026.
+`npm run verify` EXIT 0, admin `tsc` EXIT 0. MIGRATION 0053 NOT APPLIED, NOT
+DEPLOYED.**
+
+**Plainly:** the deletion page said *"In the app: Settings → Delete account. Or
+email us"*, and there is no app in any store. So a member who signed up on the
+website, used the website and never had an app to go to had exactly one
+self-serve route to an erasure right: an email to support.
+
+`supabase/migrations/0053_deleting_a_stylist_withdraws_them.sql`, checksum
+`c6d2f4ece78d7cba90a36e8a20a60840331c459e2d5603c6c4b9a72f809a8f66`, by hand.
+
+**── 1. STRIPE: OUR OWN ROW WAS NOT THE AUTHORITY ──**
+
+`delete-account` cancelled `subscriptions.stripe_subscription_id` and stopped.
+That row is exactly the one that goes stale because there is no Stripe webhook
+(items 47 and B) — and if it is stale or missing, **Stripe goes on billing
+someone who no longer has an account, an email from us, or any way to sign in
+and stop it.**
+
+Now: no usable subscription id but a `stripe_customer_id` → **ask Stripe**, list
+that customer's subscriptions, cancel every live one (`active`, `trialing`,
+`past_due`, `unpaid`, `paused`). The customer id is the durable handle; it is
+written once at checkout and does not go stale.
+
+**⚠️ If Stripe is unreachable, the erasure still proceeds.** A payment provider
+being down is not a lawful reason to refuse someone's deletion, and refusing
+would trap them in an account they have asked to leave. The unknown is recorded
+instead — which is what item 2 is for.
+
+**── 2. THE ORPHANS ARE NO LONGER WRITE-ONLY ──**
+
+One `billing_orphan_on_delete` row per account whose billing could not be
+settled, for any reason, carrying the Stripe ids, what was cancelled and what
+failed. The admin dashboard now shows them **only when there are any** — a
+permanent "0" trains the eye to skip it.
+
+**Nobody else will ever report this.** The account is gone, so the person being
+charged cannot tell us and we cannot tell them.
+
+**── 3. A DELETING STYLIST WITHDRAWS, RATHER THAN VANISHING ──**
+
+`delete_account_data` collected every session where the member is the model OR
+the provider and deleted them. **A stylist deleting their account silently
+deleted their models' bookings** — the appointment just stopped existing in her
+diary. Decision (Micky, option A): the same neutral notice a suspension gives.
+
+0053 calls **`_withdraw_stylist`** (0044) — the one rule suspension and
+revocation already use — so there is no second copy, and the notice says
+`withdrawn`: **not deletion, not suspension, not why.**
+
+**⚠️ THE TRAP IN THE ORDERING, WHICH IS THE WHOLE MIGRATION.** The notices must
+be written BEFORE the data goes, or there is nothing to write them from — no
+name, no treatment, no date. But they carry `session_id`, and those sessions
+are deleted seconds later by the same function: whatever the FK does, the
+notice is destroyed or blocks the delete. **And the email has already gone out
+by then** (0047 sends on the notification INSERT), so the model would hold an
+email about a cancellation with no record of it in the app.
+
+So the new notices are de-referenced — `session_id` nulled — on exactly the rows
+`_withdraw_stylist` just created, identified **by difference** (ids captured
+before the call) rather than by a timestamp, which would be a guess. The body
+still names the date, time and treatment (0030); only a link to a deleted
+booking is lost.
+
+The replacement was checked mechanically rather than by eye: every statement of
+the original body is present verbatim, and the single difference is the line
+this migration deliberately changes.
+
+**── 4. THE PANEL ──**
+
+Type **DELETE** to arm the button. Two gates that are different KINDS of act —
+reading, then typing — so a mis-tap cannot produce the word. **Not** her email
+(pasteable, shoulder-surfable, in autofill) and **not** her password: the
+session is already the authorisation, and a password field on a destructive
+form teaches the habit phishing relies on.
+
+The action invokes the edge function **with her own JWT**, because the
+function's safety model is that the target is the verified caller and never a
+passed id. `delete_account_data` is revoked from `authenticated` anyway, so the
+web could not take a shortcut past it.
+
+**On success it signs out and redirects.** Mobile just signs out; a browser
+holds a cookie for a user that no longer exists and would spend every
+subsequent request refreshing a token for a deleted account.
+
+**── ⚠️ ITEM 50's GAP: THE WEB CANNOT PREVENT IT, AND SAYS SO ──**
+
+If the database transaction commits and the AUTH delete then fails, the login
+survives with no profile row — the one state where item 50's unguarded insert
+path is reachable. **That happens inside the edge function, between two steps,
+and nothing in the web layer can close it.**
+
+What the web does instead:
+* **does NOT sign her out** on that failure — signing out would strand a
+  half-deleted account with nobody able to reach it;
+* offers **Try again**, and says so on screen.
+
+**Re-invoking is safe, and that is the mitigation**: the preflight passes
+(the rows are gone), `delete_account_data` finds nothing left to delete, and
+the auth delete is retried. Every other failure leaves the account whole and
+says so.
+
+**── 5. THE COPY ──**
+* Deletion page: *"**On the website: Settings → Delete account.** In the app:
+  Settings → Delete account. Or email us any time…"*
+* Privacy: *"…delete your account yourself at any time **on the website or in
+  the app**: Settings → Delete account."*
+* Terms: *"You can close your account at any time **from the website or the
+  app**, or by contacting us."*
+* All four documents dated **23 September 2026**.
+
+Apple 5.1.1(v) and Play are unaffected — the app already had this.
+
 **75. A CHECK COULD STOP THE WEBSITE UPDATING, AND NOTHING NOTICED IT HAD —
 CHANGED 22 Sep 2026. `npm run verify` EXIT 0.**
 
@@ -9535,6 +9649,7 @@ platforms each failed it differently.
 | 82 | Model ID check live inside the apply flow. `/verify` still refuses models, by design | No |
 | 83 | ✅ **CLOSED 23 Sep** — sent, accepted, both emails, price_pence 1000 and consent v3 with 9 items on the same booking; 0052 applied 2h before it | No |
 | 84 | No generated Supabase types: every rpc name, argument and column is an unchecked string. Scoped, not built | No, but it is why 83 shipped broken |
+| 85 | Web account deletion built, **0053 not applied and not deployed**. Untested end to end | **Yes** — a web-only member still has no self-serve way out until it ships |
 Carried in from before the audit, unchanged by it:
 
 | Item | State |

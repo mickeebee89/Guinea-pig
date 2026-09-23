@@ -226,7 +226,7 @@ export const TERMS: LegalDoc = {
         },
         {
           type: 'p',
-          text: 'You can close your account at any time from within the app or by contacting us. We may suspend or close an account if these terms or our Community Guidelines are broken, if we’re required to by law, or where necessary to protect members or the platform.',
+          text: 'You can close your account at any time from the website or the app, or by contacting us. We may suspend or close an account if these terms or our Community Guidelines are broken, if we’re required to by law, or where necessary to protect members or the platform.',
         },
       ],
     },
@@ -631,7 +631,7 @@ export const PRIVACY: LegalDoc = {
         },
         {
           type: 'p',
-          text: `To do any of these, email ${SUPPORT_EMAIL} and we’ll sort it out. You can delete your account yourself at any time in the app: Settings → Delete account.`,
+          text: `To do any of these, email ${SUPPORT_EMAIL} and we’ll sort it out. You can delete your account yourself at any time on the website or in the app: Settings → Delete account.`,
         },
       ],
     },
@@ -692,7 +692,7 @@ export const COMMUNITY: LegalDoc = {
   metaTitle: 'Community Guidelines',
   metaDescription:
     'How Cavy keeps things kind, safe and honest — for stylists and models alike.',
-  updated: '21 September 2026',
+  updated: '23 September 2026',
   intro:
     'Cavy only works if it’s a place people feel good about. These guidelines keep it kind, safe and honest for everyone — stylists and models alike. By using Cavy, you agree to follow them. Breaking them can mean losing access.',
   sections: [
@@ -878,7 +878,7 @@ export const DELETE_ACCOUNT: LegalDoc = {
     'How to delete your Cavy account and the data we hold about you.',
   // Bumped with the retained-reports clause. A legal page whose substance
   // changed under an unchanged revision date is its own small misstatement.
-  updated: '21 September 2026',
+  updated: '23 September 2026',
   intro:
     'You’re always in control of your data. Here’s how to remove your Cavy account and everything we hold about you.',
   sections: [
@@ -887,7 +887,10 @@ export const DELETE_ACCOUNT: LegalDoc = {
       blocks: [
         {
           type: 'p',
-          text: `In the app: Settings → Delete account. Or email us any time at ${SUPPORT_EMAIL} and we’ll handle it for you.`,
+          // Until 23 Sep 2026 this said "In the app:" and nothing else, while
+          // the app was in no store — so the only self-serve route to an
+          // erasure right was an email (audit item 85).
+          text: `On the website: Settings → Delete account. In the app: Settings → Delete account. Or email us any time at ${SUPPORT_EMAIL} and we’ll handle it for you.`,
         },
       ],
     },

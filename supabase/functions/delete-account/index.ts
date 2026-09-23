@@ -138,26 +138,77 @@ Deno.serve(async (req) => {
     // orphan so it can be cancelled by hand.
     const { data: subRow } = await db.from('subscriptions')
       .select('stripe_subscription_id, stripe_customer_id').eq('user_id', me).maybeSingle()
-    if (subRow?.stripe_subscription_id) {
+
+    // ⚠️ OUR ROW IS NOT THE AUTHORITY ON WHETHER SHE IS BEING CHARGED.
+    //
+    // This used to cancel `stripe_subscription_id` and stop. That reads our own
+    // subscriptions row — the row that goes stale precisely because there is no
+    // Stripe webhook (audit items 47 and B). If it is missing or stale there is
+    // nothing to cancel, the account is erased, and **Stripe goes on billing a
+    // person who no longer has an account, an email from us, or any way to sign
+    // in and stop it.**
+    //
+    // So when there is a customer but no usable subscription id, Stripe is
+    // asked directly. The customer id is the durable handle: it survives a
+    // stale subscription row, because it is written once at checkout.
+    const cancelled: string[] = []
+    const cancelOne = async (id: string) => {
       try {
-        await stripe.subscriptions.cancel(subRow.stripe_subscription_id)
+        await stripe.subscriptions.cancel(id)
+        cancelled.push(id)
+        return true
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e)
-        if (!/no such subscription|already canceled|resource_missing/i.test(msg)) {
-          warnings.push(`stripe_cancel: ${msg}`)
-          await optional('audit_billing_orphan', db.from('admin_audit_log').insert({
-            action: 'billing_orphan_on_delete',
-            admin_id: null,
-            target_user_id: null,
-            details: {
-              user_id: me,
-              stripe_subscription_id: subRow.stripe_subscription_id,
-              stripe_customer_id: subRow.stripe_customer_id,
-              error: msg,
-            },
-          }), warnings)
-        }
+        // Already gone is the outcome we wanted, by another route.
+        if (/no such subscription|already canceled|resource_missing/i.test(msg)) return true
+        warnings.push(`stripe_cancel ${id}: ${msg}`)
+        return false
       }
+    }
+
+    let billingHandled = true
+    if (subRow?.stripe_subscription_id) {
+      billingHandled = await cancelOne(subRow.stripe_subscription_id)
+    } else if (subRow?.stripe_customer_id) {
+      // No id on file. Ask Stripe what this customer actually has.
+      try {
+        const list = await stripe.subscriptions.list({
+          customer: subRow.stripe_customer_id,
+          status: 'all',
+          limit: 100,
+        })
+        const live = list.data.filter(s =>
+          ['active', 'trialing', 'past_due', 'unpaid', 'paused'].includes(s.status))
+        for (const s of live) {
+          if (!(await cancelOne(s.id))) billingHandled = false
+        }
+      } catch (e) {
+        // ⚠️ ERASURE STILL PROCEEDS. A payment provider being unreachable is
+        // not a lawful reason to refuse someone's deletion, and refusing would
+        // trap them in an account they have asked to leave. The unknown is
+        // recorded instead, which is what the orphan row is for.
+        billingHandled = false
+        warnings.push(`stripe_list: ${e instanceof Error ? e.message : String(e)}`)
+      }
+    }
+
+    // One row per account whose billing could not be settled, whatever the
+    // reason — a failed cancel, an unreachable Stripe, or a customer we could
+    // not ask about. It names what a person needs to go and cancel by hand.
+    if (!billingHandled) {
+      await optional('audit_billing_orphan', db.from('admin_audit_log').insert({
+        action: 'billing_orphan_on_delete',
+        admin_id: null,
+        target_user_id: null,
+        details: {
+          user_id: me,
+          stripe_subscription_id: subRow?.stripe_subscription_id ?? null,
+          stripe_customer_id: subRow?.stripe_customer_id ?? null,
+          cancelled,
+          warnings: warnings.slice(),
+          at: new Date().toISOString(),
+        },
+      }), warnings)
     }
 
     // ── 3. Database — one transaction, all or nothing ────────────────────────

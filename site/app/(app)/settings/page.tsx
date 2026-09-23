@@ -6,6 +6,7 @@ import { BlockedList, type BlockedPerson } from './BlockedList'
 import { getGateState } from '@/lib/verification'
 import { MembershipSection, type MembershipView } from './MembershipSection'
 import { EmailNotificationsSection } from './EmailNotificationsSection'
+import { DeleteAccountSection } from './DeleteAccountSection'
 
 export const metadata = { title: 'Settings' }
 
@@ -142,6 +143,13 @@ export default async function SettingsPage() {
       <section className="mb-8">
         <h2 className="mb-2 font-display text-lg text-warm-dark">Emails</h2>
         <EmailNotificationsSection enabled={emailNotifications} />
+      </section>
+
+      {/* Last, and visually quietest. It is a right, not a feature — it has to
+          be findable without being offered. */}
+      <section className="mb-8">
+        <h2 className="mb-2 font-display text-lg text-warm-dark">Your account</h2>
+        <DeleteAccountSection />
       </section>
 
       <section>
