@@ -77,6 +77,33 @@ call or an afternoon.
 
 ---
 
+## Before the app is submitted
+
+**Not the general backlog.** These are gated on preparing a mobile build, and
+the general list is things that might never be scheduled. **Read this section
+when a submission is being prepared — that is the whole point of it existing
+separately.**
+
+Mobile is unreleased and the web covers both roles, so none of this is urgent
+today. All of it is wrong to ship.
+
+⚠️ **IAP and the CSAE wording are NOT repeated here.** Both are submission-gated
+and both are already under **Blocking launch** above, where they have been
+since before this section existed. One item, one home — a checklist kept in two
+places is a checklist that disagrees with itself, which is the failure this
+whole audit started from.
+
+| | What | Why it waits, and why it cannot be forgotten |
+|---|---|---|
+| ★ **A model has no bookings list** | `/(app)/sessions` is stylist-only; her whole view of her own bookings is a dashboard of three capped queries — 5 upcoming, 10 pending, completed, and no cancelled booking anywhere. **A missing screen, not a missing filter** | **A whole journey missing on one client**, the same shape as the apply gap. The web has had `/bookings` for both roles since 2 Sep. Audit item 113 |
+| **Instagram handle** | Mobile accepts anything in `instagram_handle` and **turns it into a link** — `https://instagram.com/<value>` — so a stored email address goes to Instagram in the URL path. The web was fixed 24 Sep | Audit item 103. Harmless while nobody uses the app; the moment it ships it is a live disclosure |
+| **Favourite heart fails silently** | No error handling on the insert or the delete, so a filled heart can sit over a row that does not exist — she believes she will be told about new times and never hears | Audit item 95 |
+| **Cancelled bookings** | ✅ Stylist half fixed 24 Sep (item 109). **Untested on device** | Needs `npx expo start -c --dev-client` and a real cancelled booking |
+| **Lint** | mobile is at 73 errors + 6 tsc; site is at 0 and gated | A build that cannot be linted cannot be trusted to be reviewed |
+| **Member-area layout** | 2 of 12 routes checked at 375px. The three named as riskiest — `/availability`, the chat composer over the keyboard, the portfolio `<dialog>` on iOS — are all unchecked | |
+
+---
+
 ## Dated
 
 - **8 October** — the selfie-orphan check. A scheduled task fires, and the check
@@ -101,6 +128,7 @@ call or an afternoon.
 | `report-and-block-without-a-booking.md` | The safety reporting route |
 | `subscription-state-reconcile.md` | Subscription state, and the three accounts that were billing unseen |
 | `mobile/cavy-handover.md` | Mobile's parked launch state. **History — not current** |
+| ↑ **Before the app is submitted** (above) | The mobile-gated list. **Read it when preparing a build**, not when looking for something to do |
 
 ---
 

@@ -5556,6 +5556,65 @@ close it: ten 10MB photos is still a 100MB profile.
 it is recorded rather than done is that item 111 was a removal and adding a
 resize to the same change would have mixed two things.
 
+**★ 113. A MODEL ON MOBILE HAS NO BOOKINGS LIST AT ALL — FOUND 24 Sep 2026.
+NOT BUILT, AND DELIBERATELY NOT. FOR THE PRE-SUBMISSION LIST.**
+
+**Plainly:** on the app, a model cannot see her own bookings. Not "cannot see
+cancelled ones" — cannot see the list. There is no screen.
+
+**── WHAT SHE ACTUALLY HAS ──**
+
+`/(app)/sessions` returns early when there is no provider row
+(`sessions.tsx:119`) and is pushed from **`provider-dashboard.tsx` only**. It
+is a stylist screen that a model can neither reach nor use.
+
+Her whole view of her own bookings is the dashboard, and it is three separate
+capped queries (`index.tsx:327-331`):
+
+| | Limit |
+|---|---|
+| Upcoming (`accepted`, from today) | **5** |
+| Applications (`pending`) | **10** |
+| Completed | all, but no cancelled |
+
+**That is a summary, not a history.** A model with six upcoming bookings cannot
+see the sixth. A model with eleven outstanding applications cannot see the
+eleventh. And a cancelled booking appears nowhere at all, which is how this was
+found — item 109 went looking for a filter to widen and there was no list
+behind it.
+
+**── ⚠️ WHY THIS IS RECORDED AT THIS WEIGHT ──**
+
+Micky, 24 Sep: *"the same shape as the apply gap — a whole journey missing on
+one client."*
+
+That is exactly right, and it is the shape this audit keeps finding. It is not
+a defect inside a feature; it is a feature that was never built on one side,
+where the other side has had it since 2 September (`/bookings`, both roles).
+Every check in this repo passes on it. Nothing in either client errors. The
+screen simply is not there, and the only way to notice is to walk the journey
+as a model rather than to look for something broken.
+
+Compare: **item 49** (a model could not apply on the web for weeks) and
+**item 99** (a model had no route to anything she owns). Same class, third
+instance.
+
+**── WHY IT IS NOT BEING BUILT NOW ──**
+
+Micky's decision, 24 Sep: **mobile is unreleased and the web covers both roles,
+so it waits until the app is being prepared for submission.**
+
+Right, and worth stating so nobody re-opens it as an oversight: there are no
+real users on the app. A model today uses the website, where the list exists
+and is complete. Building a second bookings list now would be building against
+an app whose launch is parked, and it would need maintaining through whatever
+the web learns next.
+
+**⚠️ BUT IT DOES NOT GO ON THE GENERAL BACKLOG.** It is gated on app submission,
+and the general list is things that might never be scheduled. It is on
+**HANDOVER.md → "Before the app is submitted"**, with the other mobile-gated
+work, so that preparing a build means reading a list that has this on it.
+
 **109. MOBILE ALSO DROPPED CANCELLED BOOKINGS — THE STYLIST HALF FIXED
 24 Sep 2026. mobile `tsc --noEmit` EXIT 0. NOT TESTED ON DEVICE.**
 
@@ -5581,22 +5640,10 @@ for a null actor, **a block cascade would tell a stylist that a model had
 blocked her.** The comment in the card says so, because "we know who it was,
 why not say it" is a reasonable-sounding change.
 
-**── ⚠️ AND A BIGGER THING FOUND ON THE WAY — ITEM 113 ──**
+**── AND THE MODEL'S HALF IS NOT A FOURTH ARRAY ──**
 
-`/(app)/sessions` returns early when there is no provider row, and it is pushed
-from **`provider-dashboard.tsx` only**. So it is a stylist screen, and:
-
-**A MODEL ON MOBILE HAS NO BOOKINGS LIST AT ALL.**
-
-What she has is the dashboard, which runs three separate capped queries —
-5 upcoming, 10 pending, and completed (`index.tsx:327-331`). That is a summary,
-not a history. She cannot see a booking beyond those limits, and she cannot see
-a cancelled one anywhere.
-
-So item 109 is closed for the stylist and the model's half is not a fourth
-array — **it is a screen that does not exist.** The web has had `/bookings` for
-both roles since 2 Sep. Recorded as 113 rather than folded in here, because it
-is a build and not a filter.
+It is a screen that does not exist. **Item 113, recorded above this one at its
+own weight**, because it is a missing journey rather than a missing filter.
 
 **75. A CHECK COULD STOP THE WEBSITE UPDATING, AND NOTHING NOTICED IT HAD —
 CHANGED 22 Sep 2026. `npm run verify` EXIT 0.**
@@ -11766,9 +11813,9 @@ platforms each failed it differently.
 | 102 | ✅ **Instagram handle validated and editable on the web — built, not deployed.** An email address was stored in it and shown on a live profile. The rule runs on write AND on render, so values already stored are not displayed | No, but it published a member's email |
 | 103 | **Mobile accepts anything in `instagram_handle` and turns it into a link** — `https://instagram.com/<value>`, so a stored email goes to Instagram in the URL path. Needs the same parse and the same render guard. Also: only `status_posts` is content-screened anywhere | No while mobile is unreleased — **fix before it ships** |
 | 104 | **A member cannot change her own first name, on either client.** Set at signup, rendered on every profile, booking, review and chat, editable nowhere. A typo is permanent | No, but it is unfixable by anyone |
-| 109 | ✅ **Stylist half fixed 24 Sep, not tested on device.** Cancelled bookings show on mobile with the same three sentences as the web | No |
+| **113** | ★ **A MODEL ON MOBILE HAS NO BOOKINGS LIST AT ALL** — not a missing filter, a missing screen. `/(app)/sessions` is stylist-only; her dashboard is three capped queries (5, 10, all-completed) with no cancelled booking anywhere. **A whole journey missing on one client**, the same shape as items 49 and 99. **Not on this list — see HANDOVER.md → "Before the app is submitted"** | No while mobile is unreleased |
+| 109 | ✅ **Stylist half fixed 24 Sep, not tested on device.** Cancelled bookings show on mobile with the same three sentences as the web. The model's half IS item 113 | No |
 | 112 | **Portfolio uploads skip `lib/downscale.ts`** while the selfie and application photos both use it — so the images a model loads most of are the only ones not resized. One import and one line | No |
-| 113 | **A model on mobile has no bookings list at all.** `/(app)/sessions` is stylist-only; her dashboard runs three capped queries (5, 10, all-completed) and shows no cancelled booking anywhere. The web has had `/bookings` for both roles since 2 Sep | No, but she cannot see her own history |
 | 111 | ✅ **VERIFIED AND CLEARED 24 Sep.** The one video row was approved by a reviewer who could not watch it — the hypothesis and the only instance agree. Row and file removed | It could be uploaded from one place and MODERATED from none — the admin queue showed it with no controls. ⚠️ Existing rows need deleting by SQL, and the files by hand: a row delete does not touch storage | No |
 | 105 | ✅ **Removed from every surface 24 Sep, not deployed.** ⚠️ `public-web-views.sql` needs `drop view if exists public.public_stylists;` BEFORE re-running — `create or replace` cannot drop a column. Column drop is a later migration | No |
 | 101 | ✅ **ID check gated on having a profile picture — built, not deployed.** Privacy §7 is true as written, with no copy change. A stylist sets hers on `/shop`, a model on `/profile` | No |
