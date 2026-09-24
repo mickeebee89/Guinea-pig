@@ -279,8 +279,16 @@ notify pgrst, 'reload schema';
 --
 --   1. Apply this migration.
 --   2. node scripts/gen-supabase-types.mjs
---   3. npm run verify --prefix site, then push.
---   4. Blocks A to C below.
+--   3. ⚠⚠ WIRE "Your name" BACK INTO SETTINGS. It is built and deliberately
+--      NOT wired: settings/page.tsx reads `name_changes` for the cooldown
+--      note, and that table is not in the generated types until step 1 has
+--      run. Committing it wired would have pushed a tree that cannot build.
+--      The comment in settings/page.tsx marks the spot. Three things:
+--        * import { NameSection } from './NameSection'
+--        * the `lastChange` read (her own rows; RLS permits exactly that)
+--        * the <section> with NameSection, above "Where you are"
+--   4. npm run verify --prefix site, then push.
+--   5. Blocks A to C below.
 --
 --   ⚠️ An admin correcting a name from the SQL editor or the console is NOT
 --   rate-limited and IS logged, with changed_by recording who did it.
