@@ -5526,6 +5526,78 @@ row is `'photo'` now, so it carries no information — but removing a column
 from that view needs another `drop view` + re-run by hand, and Micky has just
 done one of those for item 105. Not worth a second for a column that is inert.
 
+**✅ ITEM 111 VERIFIED AND CLEARED — 24 Sep 2026.** The one video row was
+Micky's, and it was **approved**. Row deleted, file removed from storage.
+
+**That approval is the finding, not a footnote.** A reviewer approved a file
+they could not watch, because the admin queue rendered `<video>` with no
+`controls`. The argument for removing video rather than fixing playback was
+that a video could be uploaded and never moderated — and the one video that
+ever existed went through the queue and was approved unseen. The hypothesis
+and the only instance agree.
+
+**112. THE BIGGEST IMAGES ON THE SITE ARE THE ONLY ONES NOT RESIZED — RECORDED
+24 Sep 2026, NOT FIXED.**
+
+`lib/downscale.ts` exists because "a modern phone photo is 3–5MB, most of it
+detail nobody needs, and the upload happens on whatever signal a salon has."
+The ID-check selfie uses it. The application photos use it (item 86, which
+exists because they did NOT and it had to be shared).
+
+**Portfolio uploads do not.** They are the one surface that goes straight to
+the bucket at full size — and they are also the ones a model loads most of:
+a stylist's profile shows her whole gallery, where an application shows a
+handful of photos to one person.
+
+Item 111 dropped that cap from 50MB to 10MB, which narrows it. It does not
+close it: ten 10MB photos is still a 100MB profile.
+
+`downscaleToFile` is one import and one line at the call site. The only reason
+it is recorded rather than done is that item 111 was a removal and adding a
+resize to the same change would have mixed two things.
+
+**109. MOBILE ALSO DROPPED CANCELLED BOOKINGS — THE STYLIST HALF FIXED
+24 Sep 2026. mobile `tsc --noEmit` EXIT 0. NOT TESTED ON DEVICE.**
+
+The other half of item 87. `sessions.tsx` listed `pending, accepted, completed`
+only, so a cancelled booking vanished from the app exactly as it did from the
+web, with a deletable notification as the only trace.
+
+**── WHAT WAS BUILT ──**
+
+A fourth state array and a **Cancelled** section after Completed, shown only
+when it has something in it — the three above it describe the shape of the job
+and are permanent; this one describes an event, and an empty "Cancelled"
+heading on a stylist's first day is a section about nothing.
+
+**The same three sentences as the web**, deliberately: *"You cancelled this
+booking." / "{model} cancelled this booking." / "This booking was cancelled."*
+Two clients wording one fact differently is how one of them ends up wrong for
+longer — which is precisely what item 110 was, on this exact subject.
+
+**⚠️ The neutral case carries the same load here.** `cancelledBy` is 'platform'
+for a withdrawn stylist AND for a block cascade. If this named the other party
+for a null actor, **a block cascade would tell a stylist that a model had
+blocked her.** The comment in the card says so, because "we know who it was,
+why not say it" is a reasonable-sounding change.
+
+**── ⚠️ AND A BIGGER THING FOUND ON THE WAY — ITEM 113 ──**
+
+`/(app)/sessions` returns early when there is no provider row, and it is pushed
+from **`provider-dashboard.tsx` only**. So it is a stylist screen, and:
+
+**A MODEL ON MOBILE HAS NO BOOKINGS LIST AT ALL.**
+
+What she has is the dashboard, which runs three separate capped queries —
+5 upcoming, 10 pending, and completed (`index.tsx:327-331`). That is a summary,
+not a history. She cannot see a booking beyond those limits, and she cannot see
+a cancelled one anywhere.
+
+So item 109 is closed for the stylist and the model's half is not a fourth
+array — **it is a screen that does not exist.** The web has had `/bookings` for
+both roles since 2 Sep. Recorded as 113 rather than folded in here, because it
+is a build and not a filter.
+
 **75. A CHECK COULD STOP THE WEBSITE UPDATING, AND NOTHING NOTICED IT HAD —
 CHANGED 22 Sep 2026. `npm run verify` EXIT 0.**
 
@@ -11694,7 +11766,10 @@ platforms each failed it differently.
 | 102 | ✅ **Instagram handle validated and editable on the web — built, not deployed.** An email address was stored in it and shown on a live profile. The rule runs on write AND on render, so values already stored are not displayed | No, but it published a member's email |
 | 103 | **Mobile accepts anything in `instagram_handle` and turns it into a link** — `https://instagram.com/<value>`, so a stored email goes to Instagram in the URL path. Needs the same parse and the same render guard. Also: only `status_posts` is content-screened anywhere | No while mobile is unreleased — **fix before it ships** |
 | 104 | **A member cannot change her own first name, on either client.** Set at signup, rendered on every profile, booking, review and chat, editable nowhere. A typo is permanent | No, but it is unfixable by anyone |
-| 111 | ✅ **Video removed from the portfolio 24 Sep, not deployed.** It could be uploaded from one place and MODERATED from none — the admin queue showed it with no controls. ⚠️ Existing rows need deleting by SQL, and the files by hand: a row delete does not touch storage | No |
+| 109 | ✅ **Stylist half fixed 24 Sep, not tested on device.** Cancelled bookings show on mobile with the same three sentences as the web | No |
+| 112 | **Portfolio uploads skip `lib/downscale.ts`** while the selfie and application photos both use it — so the images a model loads most of are the only ones not resized. One import and one line | No |
+| 113 | **A model on mobile has no bookings list at all.** `/(app)/sessions` is stylist-only; her dashboard runs three capped queries (5, 10, all-completed) and shows no cancelled booking anywhere. The web has had `/bookings` for both roles since 2 Sep | No, but she cannot see her own history |
+| 111 | ✅ **VERIFIED AND CLEARED 24 Sep.** The one video row was approved by a reviewer who could not watch it — the hypothesis and the only instance agree. Row and file removed | It could be uploaded from one place and MODERATED from none — the admin queue showed it with no controls. ⚠️ Existing rows need deleting by SQL, and the files by hand: a row delete does not touch storage | No |
 | 105 | ✅ **Removed from every surface 24 Sep, not deployed.** ⚠️ `public-web-views.sql` needs `drop view if exists public.public_stylists;` BEFORE re-running — `create or replace` cannot drop a column. Column drop is a later migration | No |
 | 101 | ✅ **ID check gated on having a profile picture — built, not deployed.** Privacy §7 is true as written, with no copy change. A stylist sets hers on `/shop`, a model on `/profile` | No |
 | 99 | ✅ **VERIFIED LIVE 23 Sep.** A model's own profile on the web — built, **not deployed**. Avatar, bio, the nine attributes, photo management, Profile in the nav, and a link to what stylists see | No |

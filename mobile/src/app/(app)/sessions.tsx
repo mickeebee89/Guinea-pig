@@ -29,7 +29,7 @@ import PhotoViewerModal from '@/components/PhotoViewerModal'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type SessionStatus = 'pending' | 'accepted' | 'completed'
+type SessionStatus = 'pending' | 'accepted' | 'completed' | 'cancelled'
 
 type Sess = {
   id: string
@@ -43,6 +43,22 @@ type Sess = {
   photoUrls: string[]
   created_at: string
   status: SessionStatus
+  /**
+   * Who cancelled it, resolved against the stylist looking at it. Item 109.
+   *
+   * ⚠️ 'platform' IS NOT "we do not know". `sessions.cancelled_by` is left
+   * NULL deliberately when the platform cancels — a withdrawn stylist
+   * (0044:330) and a BLOCK CASCADE (0029:280), the second with the reason
+   * written out: "recording the blocker here would put 'who blocked whom' in
+   * the record".
+   *
+   * So this must never fall back to naming the other party. Doing so would
+   * tell a stylist that a model had blocked her.
+   */
+  cancelledBy: 'you' | 'them' | 'platform' | null
+  cancelledAt: string | null
+  /** Only ever set when a PERSON cancelled. Already sent to her in the notice. */
+  cancellationReason: string | null
   modelName: string
   modelPicUrl: string | null
   treatmentName: string | null
@@ -93,6 +109,7 @@ export default function SessionsScreen() {
   const [pending,       setPending]       = useState<Sess[]>([])
   const [confirmed,     setConfirmed]     = useState<Sess[]>([])
   const [completed,     setCompleted]     = useState<Sess[]>([])
+  const [cancelled,     setCancelled]     = useState<Sess[]>([])
   const [loadError,     setLoadError]     = useState(false)
   const [refreshing,    setRefreshing]    = useState(false)
   const [processingIds, setProcessingIds] = useState<Set<string>>(new Set())
@@ -120,15 +137,20 @@ export default function SessionsScreen() {
 
       const { data: rawSessions } = await supabase
         .from('sessions')
-        .select('id, model_user_id, date, start_time, end_time, treatment_id, note, photo_urls, created_at, status')
+        .select('id, model_user_id, date, start_time, end_time, treatment_id, note, photo_urls, created_at, status, cancelled_by, cancelled_at, cancellation_reason')
         .eq('provider_id', providerId)
-        .in('status', ['pending', 'accepted', 'completed'])
+        // ⚠️ 'cancelled' JOINED THIS LIST ON 24 Sep 2026 (item 109). Without
+        // it a cancelled booking simply vanished, and the only trace was a
+        // notification — deletable (0008) — so a stylist could be left with no
+        // record that a booking had ever existed. The web was fixed first
+        // (item 87); this is the other half.
+        .in('status', ['pending', 'accepted', 'completed', 'cancelled'])
         .order('date', { ascending: false })
 
       const rows = (rawSessions ?? []) as any[]
       if (rows.length === 0) {
         if (stale()) return
-        setPending([]); setConfirmed([]); setCompleted([])
+        setPending([]); setConfirmed([]); setCompleted([]); setCancelled([])
         setRefreshing(false)
         return
       }
@@ -169,6 +191,19 @@ export default function SessionsScreen() {
           photoUrls:        ((s.photo_urls ?? []) as string[]).map(p => signedPhotos.get(p) ?? p),
           created_at:       s.created_at,
           status:           s.status as SessionStatus,
+          // Resolved here, against the signed-in stylist, so no card has to
+          // hold a user id or decide what null means.
+          cancelledBy:      s.status !== 'cancelled'
+            ? null
+            : s.cancelled_by === null
+              ? 'platform'
+              : s.cancelled_by === userId
+                ? 'you'
+                : 'them',
+          cancelledAt:      s.cancelled_at ?? null,
+          // Withheld unless a PERSON cancelled — a platform cancellation
+          // records no reason, and inventing one is the opposite of neutral.
+          cancellationReason: s.cancelled_by === null ? null : (s.cancellation_reason ?? null),
           modelName:        m ? `${m.first_name ?? ''}${m.last_initial ? ' ' + m.last_initial + '.' : ''}`.trim() || 'Model' : 'Model',
           modelPicUrl:      m?.profile_pic_url ?? null,
           treatmentName:    t?.name ?? null,
@@ -181,6 +216,10 @@ export default function SessionsScreen() {
       setPending(enriched.filter(s => s.status === 'pending').sort((a, b) => b.created_at.localeCompare(a.created_at)))
       setConfirmed(enriched.filter(s => s.status === 'accepted').sort((a, b) => a.date.localeCompare(b.date)))
       setCompleted(enriched.filter(s => s.status === 'completed').sort((a, b) => b.date.localeCompare(a.date)))
+      // Newest cancellation first — what just happened is what she is looking
+      // for, not the oldest thing that fell through.
+      setCancelled(enriched.filter(s => s.status === 'cancelled')
+        .sort((a, b) => (b.cancelledAt ?? '').localeCompare(a.cancelledAt ?? '')))
     } catch (e) {
       console.error('sessions load failed:', e)
       if (!stale()) setLoadError(true)
@@ -410,6 +449,20 @@ export default function SessionsScreen() {
             />
           ))
         )}
+
+        {/* ── Cancelled ── item 109.
+            Last, and only when there is something in it. An empty "Cancelled"
+            heading on a stylist's first day is a section about nothing; the
+            three above are permanent because they describe the shape of the
+            job, and this one describes an event. */}
+        {cancelled.length > 0 && (
+          <>
+            <View style={[styles.sectionHeader, { marginTop: 8 }]}>
+              <Text style={styles.sectionTitle}>Cancelled</Text>
+            </View>
+            {cancelled.map(s => <CancelledCard key={s.id} s={s} onChat={() => goChat(s.id)} />)}
+          </>
+        )}
       </ScrollView>
 
       <PhotoViewerModal uri={enlargedPhoto} onClose={() => setEnlargedPhoto(null)} />
@@ -559,6 +612,52 @@ function ConfirmedCard({
   )
 }
 
+/**
+ * A booking that did not happen. Item 109.
+ *
+ * ⚠️ THE THREE CASES ARE NOT THREE WORDINGS, and the neutral one is
+ * load-bearing. `cancelledBy` is 'platform' for a withdrawn stylist AND for a
+ * block cascade, because both leave `sessions.cancelled_by` NULL on purpose.
+ * If this ever named the other party for a null actor, a block cascade would
+ * tell this stylist that the model had blocked her — which is the disclosure
+ * 0029:280 exists to prevent.
+ *
+ * Same sentences as the web (item 87), deliberately: two clients wording one
+ * fact differently is how one of them ends up wrong for longer.
+ */
+function CancelledCard({ s, onChat }: { s: Sess; onChat: () => void }) {
+  const line =
+    s.cancelledBy === 'you'  ? 'You cancelled this booking.'
+    : s.cancelledBy === 'them' ? `${s.modelName} cancelled this booking.`
+    : 'This booking was cancelled.'
+
+  return (
+    <View style={[styles.card, styles.cardCancelled]}>
+      <SessionBase s={s} />
+      <View style={styles.cancelledBox}>
+        <Text style={styles.cancelledLine}>{line}</Text>
+        {s.cancellationReason ? (
+          /* Already sent to her in the cancellation notice (0030), so this is
+             not a new disclosure — it is the same sentence somewhere it does
+             not get deleted. Quoted, because they are their words. */
+          <Text style={styles.cancelledReason}>“{s.cancellationReason}”</Text>
+        ) : null}
+        {s.cancelledAt ? (
+          <Text style={styles.cancelledWhen}>
+            {new Date(s.cancelledAt).toLocaleDateString('en-GB', {
+              day: 'numeric', month: 'short', year: 'numeric',
+            })}
+          </Text>
+        ) : null}
+      </View>
+      <TouchableOpacity style={styles.chatBtn} onPress={onChat} activeOpacity={0.85}>
+        <Ionicons name="chatbubble-outline" size={15} color={Colors.roseDark} />
+        <Text style={styles.chatBtnText}>Chat</Text>
+      </TouchableOpacity>
+    </View>
+  )
+}
+
 function CompletedCard({ s, onChat }: { s: Sess; onChat: () => void }) {
   return (
     <View style={[styles.card, styles.cardCompleted]}>
@@ -597,6 +696,17 @@ const styles = StyleSheet.create({
 
   sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
   sectionTitle:  { fontFamily: Fonts.heading, fontSize: 18, color: Colors.warmDark, letterSpacing: -0.2 },
+
+  // Cancelled (item 109). Muted rather than alarming: it is a record of
+  // something that did not happen, not a problem to solve.
+  cardCancelled:   { opacity: 0.85 },
+  cancelledBox: {
+    marginTop: 8, paddingHorizontal: 10, paddingVertical: 8,
+    borderRadius: Radius.sm, backgroundColor: Colors.inputBg,
+  },
+  cancelledLine:   { fontFamily: Fonts.bodyBold, fontSize: 13, color: Colors.warmDark },
+  cancelledReason: { marginTop: 3, fontSize: 13, lineHeight: 18, color: Colors.muted },
+  cancelledWhen:   { marginTop: 3, fontSize: 11, color: Colors.muted },
   badge: {
     backgroundColor: Colors.rose, borderRadius: Radius.pill,
     paddingHorizontal: 7, paddingVertical: 2, minWidth: 22, alignItems: 'center',
