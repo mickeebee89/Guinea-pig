@@ -4989,6 +4989,53 @@ photo captions, not shop names, not areas, not this field. Length caps are the
 whole of the rest. That is a decision nobody has made explicitly, and it is
 worth making — recorded as part of 103 rather than changed in passing.
 
+**106. THE FEEDBACK WAS IN THE WRONG PLACE, SO THE FIELD LOOKED DEAD —
+REPORTED BY MICKY, FIXED 24 Sep 2026. `npm run verify` EXIT 0.**
+
+**Plainly:** saving the Instagram handle appeared to do nothing — no "Saved.",
+no error. The attributes and the bio both said "Saved."; that field said
+nothing either way.
+
+**── THE CODE DID HAVE A SUCCESS MESSAGE. THE DESIGN WAS STILL WRONG. ──**
+
+A `{instaMsg && …}` span sat beside the button. What did not sit beside the
+button was the FAILURE: there was **one shared `error` for the whole form,
+rendered at the very bottom** — below all nine attributes, under a different
+heading, usually off-screen.
+
+So the first thing anyone does with a newly-validated field — type something
+to see it refused — produced a message several hundred pixels away, and the
+field read as inert. **"It shows nothing on success either" is the correct
+description of using it**, even though a success message existed: if the first
+attempt is refused and the refusal is invisible, you never find out there is a
+second half.
+
+I read the code, confirmed the span was present, and was about to say so. The
+span being present was not the question.
+
+**A second symptom of the same cause:** one shared `pending`, so saving the bio
+put the word "Saving…" on the Instagram button at the same time.
+
+**── THE RULE THIS SETTLES ──**
+
+**A control must never report on work it did not do, and a message must appear
+where the thing it is about is.**
+
+Now one `feedback` at a time, tagged with the field that produced it and
+rendered beside that field; `busy` tracks WHICH field is saving. The
+refusal — which is three lines, because it explains the rule — renders under
+the row rather than inside it, so it cannot push the buttons around as it
+appears. `role="alert"` on failures only: announcing nine "Saved."s to a
+screen reader as she works down the list is worse than silence.
+
+**── THE SAME SHAPE, NOT FIXED, IN ONE MORE PLACE ──**
+
+`PhotoManager` has one error line at the top of the photo section for every
+operation in it. A delete that fails at the bottom of a long grid reports
+itself above the fold. Lower stakes than the above — the controls are closer
+and the messages are short — but it is the same mistake and is named here
+rather than found later.
+
 **75. A CHECK COULD STOP THE WEBSITE UPDATING, AND NOTHING NOTICED IT HAD —
 CHANGED 22 Sep 2026. `npm run verify` EXIT 0.**
 
@@ -11148,6 +11195,7 @@ platforms each failed it differently.
 | 92 | ✅ **CLOSED 23 Sep** — verified both ways: chips filter with a postcode, and go inert with the list intact without one | No |
 | 94 | ✅ **CLOSED 23 Sep** — verified live both ways. The unique index exists, so duplicates were never possible and the heart's missing check is the defect | No |
 | 96 | ✅ **CLOSED 23 Sep** — all four verified on screen: the photo on the booking card, and the badge, reviews, photos and bio on her profile | No |
+| 106 | ✅ **Per-field feedback on `/profile`** — one shared error rendered below all nine attributes made a refused Instagram handle invisible, so the field looked dead. Same shape still in `PhotoManager`, named not fixed | No |
 | 102 | ✅ **Instagram handle validated and editable on the web — built, not deployed.** An email address was stored in it and shown on a live profile. The rule runs on write AND on render, so values already stored are not displayed | No, but it published a member's email |
 | 103 | **Mobile accepts anything in `instagram_handle` and turns it into a link** — `https://instagram.com/<value>`, so a stored email goes to Instagram in the URL path. Needs the same parse and the same render guard. Also: only `status_posts` is content-screened anywhere | No while mobile is unreleased — **fix before it ships** |
 | 104 | **A member cannot change her own first name, on either client.** Set at signup, rendered on every profile, booking, review and chat, editable nowhere. A typo is permanent | No, but it is unfixable by anyone |
