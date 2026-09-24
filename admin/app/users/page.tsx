@@ -80,6 +80,15 @@ export default function UsersPage() {
    * failure the flag/waive/comp actions already guard against downstream.
    */
   const [upcomingCount, setUpcomingCount] = useState<number | null>(null)
+  /**
+   * The message the STYLIST reads. Separate from `reason`, which she never
+   * sees. Audit item 117.
+   *
+   * ⚠️ TWO BOXES ON PURPOSE. `reason` is moderation evidence and may name the
+   * person who reported her; publishing it would be the disclosure this
+   * product refuses everywhere else. This box is written for her.
+   */
+  const [message, setMessage] = useState('')
   const [duration, setDuration] = useState('7')
 
   const { loading, reload } = useLoader(`${role}|${verified}`, async stale => {
@@ -187,6 +196,7 @@ export default function UsersPage() {
   function openModal(user: User, action: string) {
     setModal({ user, action })
     setReason('')
+    setMessage('')
     setUpcomingCount(null)
     if (action !== 'revoke_verification') return
     void (async () => {
@@ -228,12 +238,15 @@ export default function UsersPage() {
       const { data, error } = await supabase.rpc('revoke_verification', {
         p_user_id: user.id,
         p_reason:  reason.trim(),
+        // Optional. Null rather than '' so the function's own nullif sees it
+        // the way it expects, and she gets the no-message wording.
+        p_message: message.trim() || undefined,
       })
       if (error) {
         alert(`Could not revoke verification.\n\n${adminErrorText(error)}\n\nNothing has changed.`)
         return
       }
-      const r = (data ?? {}) as { cancelled_bookings?: number }
+      const r = (data ?? {}) as { cancelled_bookings?: number; message_sent?: boolean }
       const n = r.cancelled_bookings ?? 0
       alert(
         `${user.first_name}'s verification is revoked and their shop is hidden.\n\n` +
@@ -244,10 +257,14 @@ export default function UsersPage() {
             `a decision about them.`) +
         `\n\nThey can submit a new ID check whenever they like; the old request row is gone, ` +
         `so /verify offers them the submit path again.\n\n` +
-        `⚠️ They have NOT been told. Nothing notifies the stylist — see audit item 117.`,
+        (r.message_sent
+          ? 'They have been told, by notification and email, and your message to them was included.'
+          : 'They have been told, by notification and email \u2014 with no message from you, so they ' +
+            'have the facts and the support address and nothing about why.'),
       )
       setModal(null)
       setReason('')
+      setMessage('')
       reload()
       return
     }
@@ -298,6 +315,7 @@ export default function UsersPage() {
 
     setModal(null)
     setReason('')
+    setMessage('')
     reload()
   }
 
@@ -538,9 +556,9 @@ export default function UsersPage() {
                   They can submit a new ID check straight away — the old request row is deleted so
                   /verify offers them the submit path again.
                 </p>
-                <p className="font-semibold">
-                  ⚠️ The stylist is not told. Nothing notifies them (audit item 117) — they find
-                  out by looking.
+                <p>
+                  She is told, by notification and email — what changed, that her shop is hidden,
+                  how many bookings were cancelled, and how to do the ID check again (item 117).
                 </p>
               </div>
             )}
@@ -558,6 +576,24 @@ export default function UsersPage() {
                       to nobody but an admin — the model's notice never carries it. */}
                   Recorded against this account and kept for six years. The stylist and the
                   models never see it. {reason.trim().length}/10
+                </p>
+              </div>
+            )}
+
+            {modal.action === 'revoke_verification' && (
+              <div className="mb-4">
+                <label className="text-xs font-medium text-[#3D2E2E]/60 block mb-1">
+                  Message to the stylist — optional, and the only part she reads
+                </label>
+                <textarea value={message} onChange={e => setMessage(e.target.value)} rows={3}
+                  placeholder="e.g. The photo you sent didn’t match your profile picture."
+                  className="border border-black/10 rounded-lg px-3 py-2 text-sm w-full resize-none" />
+                <p className="mt-1 text-[11px] text-[#3D2E2E]/50">
+                  {/* The whole reason there are two boxes. */}
+                  ⚠️ <strong>Never name anyone here.</strong> This goes to her by notification and
+                  email. Leave it blank and she gets the facts and the support address, but nothing
+                  she can act on — and she can reapply immediately, so she may just send the same
+                  thing again.
                 </p>
               </div>
             )}

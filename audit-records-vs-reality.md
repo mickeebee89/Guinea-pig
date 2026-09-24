@@ -5919,6 +5919,113 @@ deliberate act, Confirm is disabled under 10 characters, and the count reads
 The modal says both facts out loud: the reason is kept six years and nobody
 but an admin sees it, and the stylist is not notified.
 
+**117. A REVOKED STYLIST IS TOLD — BUILT 24 Sep 2026. MIGRATION 0057 NOT
+APPLIED. admin build EXIT 0.**
+
+Her verification was cleared, her shop hidden, her bookings cancelled and every
+model written to — and nothing was written to her. She found out by looking.
+
+**── ⚠️ DOES SHE SEE THE ADMIN'S REASON? NO — SHE SEES A DIFFERENT FIELD ──**
+
+Both obvious answers are wrong, which is why this needed deciding rather than
+picking.
+
+**"Show her the reason"** — `p_reason` is written for an admin, as evidence,
+and may name a third party: *"a model reported that…"*. Publishing it verbatim
+would disclose **who reported her** — the exact thing this product refuses
+everywhere else: who blocked whom (0029:280), who cancelled under a withdrawn
+notice (0044:329).
+
+**"Tell her nothing"** — she can reapply **the moment this runs**, because
+deleting her `verification_requests` row is what re-opens `/verify`. So
+"removed, no reason" is not merely unkind, it is a **loop**: she resubmits the
+same thing and is revoked again, learning nothing either time.
+
+**So: two fields, two audiences.**
+
+| | |
+|---|---|
+| `p_reason` | **Mandatory**, ≥10 chars, unchanged. Evidence → `moderation_actions`, six-year retention, **admins only, never shown** |
+| `p_message` | **Optional**, written FOR HER, and the only part she reads |
+
+With no message she still gets the fact, the consequences and a route to
+support — never a reason invented on her behalf, and **never "we're not able to
+explain why"**, which is the MODEL's sentence and is wrong here. **She is not a
+third party to her own revocation.**
+
+The console's second box says *"Never name anyone here"* directly under it, and
+warns that leaving it blank gives her nothing to act on when she can reapply
+immediately.
+
+**── WHAT IT SAYS ──**
+
+> **Your ID check has been removed**
+>
+> Your ID check has been removed, so your shop is hidden and isn't taking new
+> bookings.
+>
+> *[N upcoming bookings have been cancelled and those models have been told.
+> They were told the booking is off and that it was our decision, not yours.]*
+>
+> *[the admin's message, if there is one]*
+>
+> You can do the ID check again whenever you're ready — it's under Verify. Your
+> shop, treatments and times are all still there.
+>
+> If you think this is wrong, reply to this email or write to support@…
+
+**It names the shop and the bookings deliberately.** She will notice both, so
+silence on them is its own message — and worse, she might not connect an empty
+diary to this and go looking for a fault. **It also tells her what the models
+were told**, because they will ask her. The count comes from
+`_withdraw_stylist`, so it is what happened rather than what we expect happened.
+
+**── IT EMAILS, AND THE TYPE IS WHY ──**
+
+`'verification'` is already one of 0047's seven emailed types, so this reaches
+her inbox **with no change to the email trigger**. That is also right on merit:
+her shop is dark and her diary is empty NOW, and an in-app notification she
+opens on Thursday is not good enough when every model she was booked with was
+emailed on Monday.
+
+**── ⚠️ THE SIGNATURE CHANGES, AND `create or replace` WOULD HAVE BROKEN IT ──**
+
+Adding a DEFAULTED third argument with `create or replace` leaves **both**
+functions in place — and a two-argument call then becomes **ambiguous and
+fails at runtime**, in the console, on a destructive action. 0057 drops the
+two-argument version first. The console goes out with the migration.
+
+**── DO SUSPENSION AND BAN NEED THE SAME? YES, AND ONE IS WORSE THAN I
+EXPECTED ──**
+
+Checked: `_admin_apply_user_action`'s `'suspend'` and `'ban'` branches write
+the suspension and call `_withdraw_stylist` and **notify nobody**. Only
+`'warn'` notifies.
+
+But they are not equivalent to revocation, and the difference is which client:
+
+* **Mobile has `SuspensionGate`**, which stops a suspended or banned user at
+  the door with an explanation from `my_suspension()`. So on the app she learns
+  what happened the moment she opens it.
+* **The web has no gate at all.** `my_suspension` is called in exactly one
+  place — `shop/actions.ts:293`, for one action. Everywhere else a suspended
+  member meets RLS refusals with no explanation.
+* **Revocation has no gate anywhere**, because it is not a suspension. That is
+  why it was the worst of the three and why it was done first.
+
+So: **suspend and ban need the notification too**, and the web needs a
+suspension gate more than it needs that notification. Recorded as **119** and
+**120** rather than folded in — a suspension message has a duration and a ban's
+is permanent, so it is not one shared sentence, and the web gate is a different
+piece of work again.
+
+**── ⚠️ AND `'warn'` HAS THE OPPOSITE FAULT — ITEM 118 ──**
+
+It puts the admin's **raw `p_reason`** straight into the member's notification
+body (0044:472-478). Same field, same evidence, published to the subject with
+nothing between. It is the landmine 0057 exists to avoid, already armed, in the
+one action that does notify. Not fixed here; recorded.
+
 **75. A CHECK COULD STOP THE WEBSITE UPDATING, AND NOTHING NOTICED IT HAD —
 CHANGED 22 Sep 2026. `npm run verify` EXIT 0.**
 
@@ -12068,7 +12175,11 @@ platforms each failed it differently.
 | 87 | ✅ **VERIFIED LIVE (web) 24 Sep.** Cancelled shows under Past with who cancelled and why; a platform cancellation stays neutral, which also protects a block cascade from naming the blocker | No |
 | 109 | **Mobile still drops cancelled bookings from the list** — the other half of 87. Needs a fourth state array, and the neutral-wording rule must travel with it | No while mobile is unreleased |
 | 14 | ✅ **Built 24 Sep, not deployed.** Users page, beside Verify, only for a verified account. The confirmation is the COUNT of bookings it would cancel, read when the modal opens | No |
-| 117 | **A revoked stylist is told nothing.** Her verification is cleared, her shop hidden and her bookings cancelled, and no notification is written to her — while every model she was booked with gets a considered message. No decision recording that as deliberate | No, but it is her livelihood |
+| 117 | ✅ **Built 24 Sep — 0057 NOT APPLIED.** She is told, by notification and email, with a separate optional message field. The admin's REASON is never shown: it may name the person who reported her | No |
+| 118 | **`'warn'` publishes the admin's raw reason to the member** (0044:472) — the same evidence field, with nothing between it and the subject. The landmine 0057 was built to avoid, already armed | No, but one warning could name a reporter |
+| 119 | **Suspend and ban notify nobody.** Only `'warn'` does. Mobile's `SuspensionGate` explains it at the door; the web has no gate, so a suspended member there meets refusals with no explanation | No |
+| 120 | **The web has no suspension gate.** `my_suspension` is called once, for one action in `shop/actions.ts`. Mobile stops a suspended user at the door and explains; the web does not | No |
+| ~~117~~ | ~~**A revoked stylist is told nothing.** Her verification is cleared, her shop hidden and her bookings cancelled, and no notification is written to her — while every model she was booked with gets a considered message~~ *(superseded by the row above, 24 Sep)* | — |
 | 74 | ✅ **CLOSED 23 Sep** — proven end to end, and the mobile switch now exists (item 88). Untested on device |
 | 75 | Drift check is new and unproven — its first real test is the next failed or skipped deploy | No |
 | 77 | ✅ **CLOSED 23 Sep** — Micky republished his shop, so one is live. Item 11's condition (one LISTED stylist per CATEGORY) is still unmet with a single shop | No, but launch-relevant |
