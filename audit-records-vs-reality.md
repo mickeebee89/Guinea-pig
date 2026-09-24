@@ -5357,6 +5357,86 @@ status pending or accepted. A cancellation simply stops the slot being blocked.
 A comment in both files says so, because "goes back on their calendar" is the
 kind of phrasing someone would helpfully reinstate.
 
+**105. `providers.level` REMOVED FROM EVERY SURFACE — 24 Sep 2026. Decision:
+Micky. site `npm run verify` EXIT 0, admin `tsc` EXIT 0. ⚠️ ONE MANUAL STEP.**
+
+**Plainly:** a grey chip on the stylist profile showed the raw contents of a
+column nobody could set, see or correct — beside the Verified badge, so it read
+as a second system-issued fact about her.
+
+**── WHAT WAS ACTUALLY IN IT, WHICH IS NOT WHAT I FIRST RECORDED ──**
+
+Two corrections to item 105's original line, both found by checking:
+
+* **It is not written as `'beginner'` at row creation.** The signup trigger
+  (0011:168) inserts `(user_id)` only, so `level` is **NULL** for every stylist
+  created the normal way. `'beginner'` comes only from mobile's **fallback**
+  insert (provider-dashboard.tsx:337), used when no provider row exists.
+* **Browse never rendered it.** It was selected and carried into
+  `BrowseStylist.level` and no card ever printed it.
+
+So it was never "every stylist is labelled a beginner". It was **an arbitrary
+subset carrying a label nobody chose, decided by which code path happened to
+create their row** — two identical stylists, different profiles, and no way for
+either of them or a model to know why.
+
+**── WHY REMOVED RATHER THAN MADE TRUE ──**
+
+Not because it went stale. Two better reasons:
+
+1. **It was the only claim on that profile the product asserted ABOUT a person**
+   rather than taking from her or from her work. Name, bio, photo and
+   treatments are hers. Rating, review count and Verified are earned and
+   evidenced. This was us telling a model what to think about a stranger, on no
+   basis, with no way for her to see or contest it.
+2. **Both honest replacements already exist on the page.** Self-set is what the
+   BIO is, in her own words and with no fixed vocabulary — and a self-set level
+   invites "Expert", which would then be published unverified. Derived-from-work
+   is what the RATING and REVIEW COUNT already are. A third signal competing
+   with two better ones.
+
+The demo fixtures show what someone once intended — `Student`, `Trainee`,
+`Newly qualified`, a vocabulary about training stage — and no live code has
+ever written any of them.
+
+**── THE FOUR TOUCHES ──**
+
+| | |
+|---|---|
+| `/stylist/[id]` | the chip, gone |
+| `getStylistProfile` | out of the interface, the select and the return |
+| `getBrowseStylists` | out of all three — it was selected and never used |
+| Admin → Providers | header and cell gone. `created_at` and `shop_handle` say the same thing about plumbing without keeping a member-facing column alive for an internal purpose (Micky, 24 Sep) |
+
+**── ⚠️ THE MANUAL STEP, AND THE TRAP IN IT ──**
+
+`public_stylists` published `p.level` to **anon** — no public page rendered it,
+but it was in the API response.
+
+**`create or replace view` CANNOT DROP A COLUMN.** Re-running
+`public-web-views.sql` as-is raises *"cannot drop columns from view"*. The view
+has to be dropped first:
+
+```sql
+drop view if exists public.public_stylists;
+```
+
+then run the file. No other view depends on it — checked — so no cascade, and
+the REVOKE/GRANT in the file re-applies the grants the drop removes. A warning
+block now sits above the view saying exactly this, next to the one already
+there for `status_text`, which will need the same treatment later.
+
+**Order does not matter relative to the deploy.** Nothing in `site/` selects
+`level` from the view, and anon reads degrade to an empty list rather than
+throwing (`lib/stylists.ts`), so the sub-second window while the view is absent
+costs nothing.
+
+**── THE COLUMN ITSELF ──**
+
+Still there, dropped in a later migration sequenced **behind this deploy** —
+the same order 0055 needed, and for the same reason: a live build that still
+names a dropped column fails the whole select.
+
 **75. A CHECK COULD STOP THE WEBSITE UPDATING, AND NOTHING NOTICED IT HAD —
 CHANGED 22 Sep 2026. `npm run verify` EXIT 0.**
 
@@ -11525,7 +11605,7 @@ platforms each failed it differently.
 | 102 | ✅ **Instagram handle validated and editable on the web — built, not deployed.** An email address was stored in it and shown on a live profile. The rule runs on write AND on render, so values already stored are not displayed | No, but it published a member's email |
 | 103 | **Mobile accepts anything in `instagram_handle` and turns it into a link** — `https://instagram.com/<value>`, so a stored email goes to Instagram in the URL path. Needs the same parse and the same render guard. Also: only `status_posts` is content-screened anywhere | No while mobile is unreleased — **fix before it ships** |
 | 104 | **A member cannot change her own first name, on either client.** Set at signup, rendered on every profile, booking, review and chat, editable nowhere. A typo is permanent | No, but it is unfixable by anyone |
-| 105 | `providers.level` is written once as `'beginner'` and rendered as a chip on her profile and card for ever. Editable nowhere | No |
+| 105 | ✅ **Removed from every surface 24 Sep, not deployed.** ⚠️ `public-web-views.sql` needs `drop view if exists public.public_stylists;` BEFORE re-running — `create or replace` cannot drop a column. Column drop is a later migration | No |
 | 101 | ✅ **ID check gated on having a profile picture — built, not deployed.** Privacy §7 is true as written, with no copy change. A stylist sets hers on `/shop`, a model on `/profile` | No |
 | 99 | ✅ **VERIFIED LIVE 23 Sep.** A model's own profile on the web — built, **not deployed**. Avatar, bio, the nine attributes, photo management, Profile in the nav, and a link to what stylists see | No |
 | 100 | **A profile picture is not moderated, on either client.** Live the moment it is uploaded; report/block and the ID-check comparison are the only controls, both after the fact. Not introduced by 99 — written down by it | No |

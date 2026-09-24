@@ -1,5 +1,31 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { getBlockedIds } from '@/lib/blocks'
+// ⚠️ `providers.level` IS GONE FROM EVERY SURFACE — item 105, 24 Sep 2026.
+//
+// It rendered as a grey chip beside the pink Verified badge, showing the raw
+// stored string. What was actually in the column:
+//
+//   * NULL for every stylist created by the signup trigger (0011:168, the
+//     normal path) — so no chip at all;
+//   * 'beginner' only for rows created by mobile's FALLBACK insert
+//     (provider-dashboard.tsx:337).
+//
+// So it was not "every stylist is labelled a beginner". It was an arbitrary
+// subset carrying a label nobody chose, decided by which code path happened to
+// create the row, and invisible to both the stylist and the model.
+//
+// Removed rather than fixed, and the reason is not that it went stale:
+//
+//   1. It was the ONLY claim on that profile the product asserted ABOUT a
+//      person rather than taking from her or from her work. Name, bio, photo
+//      and treatments are hers; rating, review count and Verified are earned.
+//   2. Both honest replacements already exist on the page. Self-set is what
+//      the BIO is, in her own words. Derived-from-work is what the RATING and
+//      REVIEW COUNT are. A third signal competing with two better ones.
+//
+// The column is still there and is dropped in a later migration, sequenced
+// behind this deploy — the same order 0055 needed.
+
 import { indexById, displayName, type ProfileRef } from './util'
 
 /**
@@ -33,7 +59,6 @@ export interface StylistProfile {
   name: string
   bio: string | null
   location: string | null
-  level: string | null
   isVerified: boolean
   /**
    * False when the shop is hidden. Since 0048 a member holding a booking can
@@ -80,7 +105,7 @@ export async function getStylistProfile(
   const { data: p } = await supabase
     .from('providers')
     .select(
-      'id, user_id, name, bio, location_text, location, level, is_verified, is_published, ' +
+      'id, user_id, name, bio, location_text, location, is_verified, is_published, ' +
       'rating, review_count, profile_pic_url, banner_url',
     )
     .eq('id', providerId)
@@ -90,7 +115,7 @@ export async function getStylistProfile(
   const prov = p as unknown as {
     id: string; user_id: string | null; name: string | null
     bio: string | null; location_text: string | null; location: string | null
-    level: string | null; is_verified: boolean | null; is_published: boolean | null
+    is_verified: boolean | null; is_published: boolean | null
     rating: number | null; review_count: number | null
     profile_pic_url: string | null; banner_url: string | null
   }
@@ -151,7 +176,6 @@ export async function getStylistProfile(
     bio: prov.bio,
     // See the header: location_text is the live column, location is the dead one.
     location: prov.location_text ?? prov.location ?? null,
-    level: prov.level,
     isVerified: !!prov.is_verified,
     isPublished: !!prov.is_published,
     rating: prov.rating,

@@ -9,7 +9,6 @@ import type { ActionResult } from '@/lib/adminActions'
 interface Provider {
   id: string
   shop_handle: string
-  level: string
   region: string
   location_text: string | null
   user: { id: string; first_name: string; last_initial: string | null; email: string; is_verified: boolean; fraud_flagged: boolean }
@@ -36,7 +35,7 @@ export default function ProvidersPage() {
     try {
       const { data, error } = await supabase
         .from('providers')
-        .select(`id, shop_handle, level, region, location_text,
+        .select(`id, shop_handle, region, location_text,
           user:users!user_id(id, first_name, last_initial, email, is_verified, fraud_flagged)`)
         .order('shop_handle')
       if (error) { if (!stale()) setLoadError(error.message); return }
@@ -175,7 +174,6 @@ export default function ProvidersPage() {
               <tr className="border-b border-black/5 text-[#3D2E2E]/50 text-xs uppercase tracking-wide">
                 <th className="text-left px-4 py-3">Shop</th>
                 <th className="text-left px-4 py-3">Owner</th>
-                <th className="text-left px-4 py-3">Level</th>
                 <th className="text-left px-4 py-3">Region</th>
                 <th className="text-left px-4 py-3">Verified</th>
                 <th className="text-left px-4 py-3">Sessions</th>
@@ -193,7 +191,6 @@ export default function ProvidersPage() {
                   <td className="px-4 py-3 text-[#3D2E2E]/60">
                     {p.user ? `${p.user.first_name} ${p.user.last_initial ?? ''}.` : <span className="italic text-[#3D2E2E]/30">Not visible</span>}
                   </td>
-                  <td className="px-4 py-3 capitalize">{p.level}</td>
                   <td className="px-4 py-3">{p.region}</td>
                   <td className="px-4 py-3">
                     <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${p.user?.is_verified ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>

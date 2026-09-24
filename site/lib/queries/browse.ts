@@ -43,7 +43,6 @@ export interface BrowseStylist {
   name: string
   bio: string | null
   location: string | null
-  level: string | null
   isVerified: boolean
   rating: number | null
   reviewCount: number
@@ -82,7 +81,7 @@ export async function getBrowseStylists(
 ): Promise<BrowseResult> {
   let q = supabase
     .from('providers')
-    .select('id, user_id, name, bio, location_text, location, level, is_verified, rating, review_count, profile_pic_url, latitude, longitude')
+    .select('id, user_id, name, bio, location_text, location, is_verified, rating, review_count, profile_pic_url, latitude, longitude')
     .eq('is_published', true)
 
   if (filters.place?.trim()) {
@@ -101,7 +100,7 @@ export async function getBrowseStylists(
 
   const rows = (provRes.data ?? []) as {
     id: string; user_id: string | null; name: string | null; bio: string | null
-    location_text: string | null; location: string | null; level: string | null
+    location_text: string | null; location: string | null
     is_verified: boolean | null; rating: number | null; review_count: number | null
     profile_pic_url: string | null
     latitude: number | null; longitude: number | null
@@ -164,7 +163,6 @@ export async function getBrowseStylists(
       name: r.name ?? 'Stylist',
       bio: r.bio,
       location: r.location_text ?? r.location ?? null,
-      level: r.level,
       isVerified: !!r.is_verified,
       rating: r.rating,
       reviewCount: r.review_count ?? 0,

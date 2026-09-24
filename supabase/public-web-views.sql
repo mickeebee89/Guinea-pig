@@ -78,6 +78,24 @@ where tc.is_active is true;
 --   * shop_handle — client-generated as "first-lastinitial", not unique, not
 --     editable, and a real first name. Not fit to be a URL key (see `slug`).
 -- ---------------------------------------------------------------------------
+-- ⚠⚠ RUNNING THIS FILE AS-IS WILL FAIL ON THIS VIEW, ONCE.
+--
+-- `create or replace view` CANNOT DROP A COLUMN. `p.level` was removed on
+-- 24 Sep 2026 (item 105), so replacing this view in place raises
+-- "cannot drop columns from view". The view must be dropped first:
+--
+--     drop view if exists public.public_stylists;
+--
+-- No other view depends on it — checked — so no cascade is needed, and the
+-- REVOKE/GRANT further down re-applies the grants that the drop removes.
+--
+-- The same note already exists a few lines below for status_text, which will
+-- need exactly this when status_posts supersedes it.
+--
+-- Order does not matter relative to the site deploy: nothing in site/ selects
+-- `level` from this view, and the anon reads degrade to an empty list rather
+-- than throwing (lib/stylists.ts), so the sub-second window while the view is
+-- absent costs nothing.
 create or replace view public.public_stylists
 with (security_barrier = true) as
 select
@@ -112,7 +130,11 @@ select
   p.profile_pic_url,
   p.banner_url,
   p.is_verified,
-  p.level,
+  -- `p.level` stood here until 24 Sep 2026 (item 105). It was published to
+  -- anon even though no public page ever rendered it, and what it held was
+  -- NULL for every stylist the signup trigger created and 'beginner' only for
+  -- rows made by mobile's fallback insert. Removed from every surface; the
+  -- column itself goes in a later migration, behind the deploy.
 
   -- Ephemeral stylist status. Kept as-is this phase; status_posts supersedes it
   -- later, which is the one change that will need a drop/create + re-grant.

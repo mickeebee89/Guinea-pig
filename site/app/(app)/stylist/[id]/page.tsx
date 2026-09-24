@@ -61,11 +61,8 @@ export default async function StylistPage({
                   Verified
                 </span>
               )}
-              {p.level && (
-                <span className="inline-flex items-center rounded-[999px] bg-input-bg px-2.5 py-0.5 text-xs font-bold text-muted">
-                  {p.level}
-                </span>
-              )}
+              {/* The `level` chip stood here until 24 Sep 2026. See
+                  lib/queries/stylist.ts for why it is gone (item 105). */}
             </div>
             {p.location && <p className="mt-1 text-sm text-muted">{p.location}</p>}
             {/* Only claim a rating when there is one behind it. A 0 shown as a
