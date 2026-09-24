@@ -6113,8 +6113,68 @@ But `revoke_verification` requires **ten** characters (0044). So a reason of
 is a decision about three live actions, not a detail to slip into a one-line
 migration — **recorded as 122** rather than absorbed.
 
-**123. A HAND-RUN FILE HELD THE LEAK 0058 HAD JUST CLOSED — BUILT 24 Sep 2026.
-NOT YET RUN. site verify EXIT 0.**
+**119. SUSPEND AND BAN SAY SO — BUILT 24 Sep 2026. MIGRATION 0061 NOT APPLIED.
+admin build EXIT 0, mobile tsc EXIT 0, site `next build` EXIT 0.**
+
+Of the eight admin actions only `'warn'` ever wrote a notification. Suspend and
+ban — which stop someone applying, messaging and reviewing, and for a stylist
+hide her shop and cancel every upcoming booking — wrote the suspension row and
+said nothing to the person it is about.
+
+**── WHY THE NOTIFICATION AND NOT JUST THE GATE (120) ──**
+
+A gate only works on somebody who comes back and opens the app. The likeliest
+next thing a suspended member does is try something, fail, and leave — and a
+**ban means they may never open it again at all**. The notification reaches
+them where they already are, and it is the only thing that does. That is why
+119 came before 120 rather than after it.
+
+**── A NEW TYPE, AND WHY NOT THE EASY ONE ──**
+
+`'admin_suspension'`, added to 0047's WHEN clause so it emails. Reusing
+`'admin_warning'` would have needed no trigger change at all — rejected
+because **both clients render notifications by type**, so a ban would have
+arrived wearing a warning's icon and, on mobile, a warning's detail layout and
+its "flagged for breaching our community guidelines" hint. A type that
+misdescribes its row is how a list of eight events stops being trustworthy.
+
+Mobile gains an icon entry for the same reason `payment_failed` has one: without
+it, *"your account is suspended"* renders as the generic grey dot. Its detail
+label is **"What this means"**, not "Reason" — the same distinction
+SuspensionGate had to make.
+
+**── ⚠️ A BAN NOW REQUIRES A MESSAGE. A SUSPENSION DOES NOT. ──**
+
+Decided by Micky on the argument that a ban's notification is **the last thing
+this product ever sends that person**, and a permanent closure with no reason
+at all is the worst version of that. A suspension has a date and an end to fall
+back on, so its message stays optional and the notice stands up without one.
+
+Disabled Confirm on all three console pages, so it is refused before the button
+rather than after it. **`providers/page.tsx` had no such rule at all** and now
+does — it could ban from a third surface with nothing typed.
+
+**── THE SHOP SENTENCE IS SHARED, NOT COPIED ──**
+
+0057 already writes *"N upcoming bookings have been cancelled and those models
+have been told…"* for a revocation. Suspend and ban need the same words for the
+same event, so `_withdrawn_sentence()` is extracted and takes
+`_withdraw_stylist`'s own return value — what happened, not what we expect
+happened. A second copy would mean two members being told different things
+about one event.
+
+**── WHAT THE BAN NOTICE DELIBERATELY DOES NOT SAY ──**
+
+No date, no "until", and **no promise of a route back**. "You can appeal and
+we'll reconsider" is a sentence this product cannot keep. It says they can
+write to us, which is true, and claims nothing beyond it.
+
+**123. A HAND-RUN FILE HELD THE LEAK 0058 HAD JUST CLOSED — CLOSED 24 Sep 2026.**
+
+**✅ Run clean, 24 Sep.** `my_suspension()` now returns `(banned,
+suspended_until, message)` with execute granted to `authenticated` and `anon`,
+so the corrected file is what the database holds and re-running it is now safe
+from any prior state.
 
 **Plainly:** one of the SQL files that gets pasted in by hand still contained
 the old version of a function a migration had replaced hours earlier. Running
@@ -12566,10 +12626,10 @@ platforms each failed it differently.
 | 117 | ✅ **0057 APPLIED 24 Sep 07:53, types regenerated.** She is told, by notification and email, with a separate optional message field. The admin's REASON is never shown: it may name the person who reported her | No |
 | 118 | **The evidence field reaches members TWO ways.** `'warn'` publishes it in a notification (0045:308), and `suspend`/`ban` write it to `suspensions.reason`, which **`my_suspension()` returns to the member** — a SECURITY DEFINER function they may call, so it is not a client-side choice. ✅ **CLOSED 24 Sep — 0058 applied.** `suspensions.member_message` added, `my_suspension()` returns it instead of `reason`, and a fifth parameter added to all four functions by drop-and-recreate. A warning now requires a message | No, but a reason could name a reporter |
 | 121 | ✅ **CLOSED 24 Sep.** warn now requires a reason as well as a message | No |
-| 123 | ⚠️ **Built 24 Sep, NOT YET RUN.** Five hand-run `supabase/*.sql` files hold functions a migration has since replaced, including `delete_account_data` (0053) and `my_suspension` (0058, the item-118 leak). `my_suspension` corrected and made re-runnable; the rest marked; `check-handrun-drift.mjs` now fails on an undeclared overlap | Not by itself — but running one of those files is |
+| 123 | ✅ **CLOSED 24 Sep.** Five hand-run `supabase/*.sql` files hold functions a migration has since replaced, including `delete_account_data` (0053) and `my_suspension` (0058, the item-118 leak). `my_suspension` corrected and made re-runnable; the rest marked; `check-handrun-drift.mjs` now fails on an undeclared overlap | Not by itself — but running one of those files is |
 | 124 | **A banned member cannot delete their account on mobile.** `SuspensionGate` wraps the whole `(app)` stack and offers only Sign out. In-app deletion is an Apple 5.1.1(v) and Play requirement, and the right does not pause because someone is banned | **Yes, for a store submission** |
 | 122 | **Three actions accept a one-character reason.** warn, suspend and ban require only non-empty; `revoke_verification` requires ten. A reason of "x" is a record of nothing | No |
-| 119 | **Suspend and ban notify nobody.** Only `'warn'` does. Mobile's `SuspensionGate` explains it at the door; the web has no gate, so a suspended member there meets refusals with no explanation | No |
+| 119 | ✅ **Built 24 Sep — 0061 NOT APPLIED.** Both now notify and email, carrying the member's message and what happened to the shop. A ban's message is mandatory; a suspension's is not | No |
 | 120 | **The web has no suspension gate.** `my_suspension` is called once, for one action in `shop/actions.ts`. Mobile stops a suspended user at the door and explains; the web does not | No |
 | ~~117~~ | ~~**A revoked stylist is told nothing.** Her verification is cleared, her shop hidden and her bookings cancelled, and no notification is written to her — while every model she was booked with gets a considered message~~ *(superseded by the row above, 24 Sep)* | — |
 | 74 | ✅ **CLOSED 23 Sep** — proven end to end, and the mobile switch now exists (item 88). Untested on device |

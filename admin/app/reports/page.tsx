@@ -469,7 +469,9 @@ export default function ReportsPage() {
                 <label className="text-xs font-medium text-[#3D2E2E]/60 block mb-1">
                   {actionModal.action === 'warn'
                     ? `Message to them — required. This IS the warning. ${message.trim().length}/10`
-                    : 'Message to them — optional, and the only part they read'}
+                    : actionModal.action === 'ban'
+                      ? `Message to them — required. The last thing we ever send them. ${message.trim().length}/10`
+                      : 'Message to them — optional, and the only part they read'}
                 </label>
                 <textarea value={message} onChange={e => setMessage(e.target.value)} rows={3}
                   placeholder="e.g. Please keep messages to arranging the appointment."
@@ -478,7 +480,9 @@ export default function ReportsPage() {
                   ⚠️ <strong>Never name anyone here.</strong>{' '}
                   {actionModal.action === 'warn'
                     ? 'A warning is nothing but this message. It is sent by notification and email, and without it they only learn they are in trouble.'
-                    : 'They see the notice and the date either way. This is the only part that says why.'}
+                    : actionModal.action === 'ban'
+                      ? 'A ban is permanent and this is the last thing we ever send them, so it cannot be blank. It is sent by notification and email.'
+                      : 'They see the notice and the date either way. This is the only part that says why.'}
                 </p>
               </div>
             )}
@@ -488,11 +492,14 @@ export default function ReportsPage() {
               <button onClick={doAction}
                 // Matches 0058's warn branch, so she is not refused AFTER pressing it.
                 // 0058's message and 0059's reason. A warning needs both.
-                disabled={actionModal.action === 'warn'
-                  && (message.trim().length < 10 || !reason.trim())}
+                disabled={(actionModal.action === 'warn'
+                    && (message.trim().length < 10 || !reason.trim()))
+                  // 0061, item 119. A ban's message is mandatory.
+                  || (actionModal.action === 'ban' && message.trim().length < 10)}
                 className="px-4 py-2 text-sm rounded-lg text-white font-medium disabled:bg-gray-300 disabled:text-gray-500"
-                style={actionModal.action === 'warn'
-                    && (message.trim().length < 10 || !reason.trim())
+                style={(actionModal.action === 'warn'
+                      && (message.trim().length < 10 || !reason.trim()))
+                    || (actionModal.action === 'ban' && message.trim().length < 10)
                   ? undefined : { backgroundColor: '#8C4A58' }}>
                 Confirm
               </button>

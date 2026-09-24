@@ -608,9 +608,11 @@ export default function UsersPage() {
                 <label className="text-xs font-medium text-[#3D2E2E]/60 block mb-1">
                   {modal.action === 'warn'
                     ? `Message to them — required. This IS the warning. ${message.trim().length}/10`
-                    : modal.action === 'revoke_verification'
-                      ? 'Message to the stylist — optional, and the only part she reads'
-                      : 'Message to them — optional, and the only part they read'}
+                    : modal.action === 'ban'
+                      ? `Message to them — required. The last thing we ever send them. ${message.trim().length}/10`
+                      : modal.action === 'revoke_verification'
+                        ? 'Message to the stylist — optional, and the only part she reads'
+                        : 'Message to them — optional, and the only part they read'}
                 </label>
                 <textarea value={message} onChange={e => setMessage(e.target.value)} rows={3}
                   placeholder={
@@ -624,6 +626,8 @@ export default function UsersPage() {
                   ⚠️ <strong>Never name anyone here.</strong>{' '}
                   {modal.action === 'warn'
                     ? 'A warning is nothing but this message. It is sent by notification and email, and without it they only learn they are in trouble.'
+                    : modal.action === 'ban'
+                      ? 'A ban is permanent and this is the last thing we ever send them, so it cannot be blank. It is sent by notification and email.'
                     : modal.action === 'revoke_verification'
                       ? 'This goes to her by notification and email. Leave it blank and she gets the facts and the support address, but nothing she can act on — and she can reapply immediately, so she may just send the same thing again.'
                       : 'They see the notice and the date either way. This is the only part that says why.'}
@@ -643,10 +647,14 @@ export default function UsersPage() {
                        // 0059, item 121. A warning needs BOTH: the message
                        // because it IS the warning, the reason because an
                        // action with no evidence is not a record.
-                       || (modal.action === 'warn' && reason.trim().length === 0)}
+                       || (modal.action === 'warn' && reason.trim().length === 0)
+                       // 0061, item 119. A ban is permanent and its notification
+                       // is the last thing this product ever sends them.
+                       || (modal.action === 'ban' && message.trim().length < 10)}
                 className="px-4 py-2 text-sm rounded-lg text-white font-medium disabled:bg-gray-300 disabled:text-gray-500"
                 style={(modal.action === 'revoke_verification' && reason.trim().length < 10)
                     || (modal.action === 'warn' && (message.trim().length < 10 || !reason.trim()))
+                    || (modal.action === 'ban' && message.trim().length < 10)
                   ? undefined
                   : { backgroundColor: '#8C4A58' }}
               >

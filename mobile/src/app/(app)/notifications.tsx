@@ -61,6 +61,11 @@ const TYPE_CFG: Record<string, IconCfg> = {
   // which is the wrong weight for the only warning they get before Stripe
   // gives up and the subscription ends.
   payment_failed:   { icon: 'card',                color: Colors.error,   bg: '#FEF2F2',              filter: 'Activity' },
+  // 0061, item 119. Same reasoning as payment_failed directly above: without an
+  // entry it falls back to the generic grey dot, and "your account is
+  // suspended" is not a generic grey dot. It carries a ban as well as a
+  // suspension — the title and body say which, and an icon cannot.
+  admin_suspension: { icon: 'lock-closed',         color: Colors.error,   bg: '#FEF2F2',              filter: 'Activity' },
 }
 
 const DEFAULT_CFG: IconCfg = {
@@ -403,9 +408,17 @@ export default function NotificationsScreen() {
                  one fell off the bottom of a small phone, which is the same
                  failure as the two-line clamp one level up. */
               <ScrollView style={styles.modalReasonBox} contentContainerStyle={{ padding: 12 }}>
-                {(detailNotif?.type === 'admin_warning' || detailNotif?.type === 'admin_message') && (
+                {(detailNotif?.type === 'admin_warning'
+                  || detailNotif?.type === 'admin_message'
+                  || detailNotif?.type === 'admin_suspension') && (
                   <Text style={styles.modalReasonLabel}>
-                    {detailNotif?.type === 'admin_warning' ? 'Note from the team' : 'Message'}
+                    {detailNotif?.type === 'admin_warning' ? 'Note from the team'
+                      /* 0061. NOT "Reason": what this carries is the admin's
+                         MESSAGE, and the reason is evidence the member never
+                         sees (item 118). The same distinction SuspensionGate
+                         had to make. */
+                      : detailNotif?.type === 'admin_suspension' ? 'What this means'
+                      : 'Message'}
                   </Text>
                 )}
                 <Text style={styles.modalReasonText}>{detailNotif.body}</Text>
@@ -517,6 +530,10 @@ function NotifItem({
   ) || (
     ['new_availability', 'stylist_invite'].includes(n.type) && !!n.data?.provider_id
   ) || n.type === 'verification' || n.type === 'admin_warning'
+    // 0061. The body runs to several paragraphs — what is blocked, what
+    // happened to the shop, the message, where to write — and the card clamps
+    // to two lines. Not opening it would hide most of what it says.
+    || n.type === 'admin_suspension'
 
   return (
     <TouchableOpacity

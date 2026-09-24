@@ -268,7 +268,9 @@ export default function ProvidersPage() {
                 <label className="text-xs font-medium text-[#3D2E2E]/60 block mb-1">
                   {modal.action === 'warn'
                     ? `Message to them — required. This IS the warning. ${message.trim().length}/10`
-                    : 'Message to them — optional, and the only part they read'}
+                    : modal.action === 'ban'
+                      ? `Message to them — required. The last thing we ever send them. ${message.trim().length}/10`
+                      : 'Message to them — optional, and the only part they read'}
                 </label>
                 <textarea value={message} onChange={e => setMessage(e.target.value)} rows={3}
                   placeholder="e.g. Please keep messages to arranging the appointment."
@@ -277,14 +279,23 @@ export default function ProvidersPage() {
                   ⚠️ <strong>Never name anyone here.</strong>{' '}
                   {modal.action === 'warn'
                     ? 'A warning is nothing but this message. It is sent by notification and email, and without it they only learn they are in trouble.'
-                    : 'They see the notice and the date either way. This is the only part that says why.'}
+                    : modal.action === 'ban'
+                      ? 'A ban is permanent and this is the last thing we ever send them, so it cannot be blank. It is sent by notification and email.'
+                      : 'They see the notice and the date either way. This is the only part that says why.'}
                 </p>
               </div>
             )}
 
             <div className="flex gap-3 justify-end">
               <button onClick={() => setModal(null)} className="px-4 py-2 text-sm rounded-lg bg-gray-100 text-gray-600">Cancel</button>
-              <button onClick={doAction} className="px-4 py-2 text-sm rounded-lg text-white font-medium" style={{ backgroundColor: '#8C4A58' }}>
+              <button onClick={doAction}
+                // 0061, item 119. The database refuses a messageless ban; this
+                // means she is told that before pressing a permanent button
+                // rather than after.
+                disabled={modal.action === 'ban' && message.trim().length < 10}
+                className="px-4 py-2 text-sm rounded-lg text-white font-medium disabled:bg-gray-300 disabled:text-gray-500"
+                style={modal.action === 'ban' && message.trim().length < 10
+                  ? undefined : { backgroundColor: '#8C4A58' }}>
                 Confirm
               </button>
             </div>
