@@ -1,7 +1,7 @@
 // GENERATED FILE — DO NOT EDIT BY HAND.
 //
 // Written by scripts/gen-supabase-types.mjs from the live database.
-// TYPES_STAMP: 0057
+// TYPES_STAMP: 0058
 //
 // Regenerate whenever a migration is applied:
 //   node scripts/gen-supabase-types.mjs
@@ -1790,6 +1790,7 @@ export type Database = {
           banned: boolean
           created_at: string
           id: string
+          member_message: string | null
           reason: string
           suspended_until: string | null
           user_id: string
@@ -1798,6 +1799,7 @@ export type Database = {
           banned?: boolean
           created_at?: string
           id?: string
+          member_message?: string | null
           reason: string
           suspended_until?: string | null
           user_id: string
@@ -1806,6 +1808,7 @@ export type Database = {
           banned?: boolean
           created_at?: string
           id?: string
+          member_message?: string | null
           reason?: string
           suspended_until?: string | null
           user_id?: string
@@ -2323,6 +2326,7 @@ export type Database = {
         Args: {
           p_action: string
           p_duration_days: number
+          p_message?: string
           p_reason: string
           p_user_id: string
         }

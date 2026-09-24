@@ -6083,8 +6083,14 @@ right and was still news, which is what a record that is read but not believed
 looks like.
 
 **118. THE EVIDENCE FIELD REACHES MEMBERS TWO WAYS, AND ONE IS NOT A UI CHOICE
-— BUILT 24 Sep 2026. MIGRATION 0058 NOT APPLIED. admin build EXIT 0, mobile
-tsc CLEAN, site `next build` EXIT 0.**
+— BUILT AND APPLIED 24 Sep 2026. 0058 applied, preflight all eight true, no
+errors. site verify EXIT 0, mobile tsc EXIT 0, admin build EXIT 0.**
+
+*Types regenerated after applying, and the three hand-written entries matched
+the generated ones exactly — regeneration added only `_admin_apply_user_action`,
+which is in the schema but callable by no client role. Worth noting because
+hand-editing generated types is a thing to do sparingly and check afterwards,
+not a habit.*
 
 Recorded yesterday as *"'warn' publishes the admin's raw reason"*. Reading it
 properly for the fix found a second route, and it is the more serious one.
@@ -12323,7 +12329,7 @@ platforms each failed it differently.
 | 109 | **Mobile still drops cancelled bookings from the list** — the other half of 87. Needs a fourth state array, and the neutral-wording rule must travel with it | No while mobile is unreleased |
 | 14 | ✅ **Built 24 Sep, not deployed.** Users page, beside Verify, only for a verified account. The confirmation is the COUNT of bookings it would cancel, read when the modal opens | No |
 | 117 | ✅ **0057 APPLIED 24 Sep 07:53, types regenerated.** She is told, by notification and email, with a separate optional message field. The admin's REASON is never shown: it may name the person who reported her | No |
-| 118 | **The evidence field reaches members TWO ways.** `'warn'` publishes it in a notification (0045:308), and `suspend`/`ban` write it to `suspensions.reason`, which **`my_suspension()` returns to the member** — a SECURITY DEFINER function they may call, so it is not a client-side choice. ✅ **Built 24 Sep — 0058 NOT APPLIED.** `suspensions.member_message` added, `my_suspension()` returns it instead of `reason`, and a fifth parameter added to all four functions by drop-and-recreate. A warning now requires a message | No, but a reason could name a reporter |
+| 118 | **The evidence field reaches members TWO ways.** `'warn'` publishes it in a notification (0045:308), and `suspend`/`ban` write it to `suspensions.reason`, which **`my_suspension()` returns to the member** — a SECURITY DEFINER function they may call, so it is not a client-side choice. ✅ **CLOSED 24 Sep — 0058 applied.** `suspensions.member_message` added, `my_suspension()` returns it instead of `reason`, and a fifth parameter added to all four functions by drop-and-recreate. A warning now requires a message | No, but a reason could name a reporter |
 | 121 | **A warning still needs no REASON.** Suspend and ban require one; warn never has, and `admin_audit_log.admin_note` is nullable — so a warning can be issued with an explanation for the member and no evidence for the record | No |
 | 119 | **Suspend and ban notify nobody.** Only `'warn'` does. Mobile's `SuspensionGate` explains it at the door; the web has no gate, so a suspended member there meets refusals with no explanation | No |
 | 120 | **The web has no suspension gate.** `my_suspension` is called once, for one action in `shop/actions.ts`. Mobile stops a suspended user at the door and explains; the web does not | No |
