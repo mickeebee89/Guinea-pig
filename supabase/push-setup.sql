@@ -63,6 +63,16 @@ create trigger notify_push after insert on public.notifications
   for each row execute function public.tg_notify_push();
 
 -- 4) Trigger: new chat message -> push the OTHER party (no notifications row) -
+-- MIGRATION-OWNS: tg_message_push 0047 — ⚠️ THIS COPY IS SUPERSEDED.
+--
+-- Migration 0047 replaced this function. This is a hand-run file, so nothing
+-- applies it and nothing has kept it in step. RE-RUNNING THIS FILE WOULD
+-- REVERT 0047 TO THE VERSION BELOW.
+--
+-- Re-running this would undo the emailing 0047 added.
+--
+-- Read pg_get_functiondef first and bring this copy forward before running
+-- any of it. Found by scripts/check-handrun-drift.mjs, audit item 123.
 create or replace function public.tg_message_push()
 returns trigger language plpgsql security definer set search_path = public as $$
 declare

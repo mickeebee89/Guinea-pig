@@ -35,6 +35,14 @@
 
 drop function if exists public.nearby_models(double precision, double precision, double precision);
 
+-- MIGRATION-OWNS: nearby_models 0018 — ⚠️ THIS COPY IS SUPERSEDED.
+--
+-- Migration 0018 replaced this function. This is a hand-run file, so nothing
+-- applies it and nothing has kept it in step. RE-RUNNING THIS FILE WOULD
+-- REVERT 0018 TO THE VERSION BELOW.
+--
+-- Read pg_get_functiondef first and bring this copy forward before running
+-- any of it. Found by scripts/check-handrun-drift.mjs, audit item 123.
 CREATE FUNCTION public.nearby_models(
   p_lat       double precision DEFAULT NULL::double precision,
   p_lng       double precision DEFAULT NULL::double precision,

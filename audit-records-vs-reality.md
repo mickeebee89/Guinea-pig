@@ -6113,6 +6113,73 @@ But `revoke_verification` requires **ten** characters (0044). So a reason of
 is a decision about three live actions, not a detail to slip into a one-line
 migration — **recorded as 122** rather than absorbed.
 
+**123. A HAND-RUN FILE HELD THE LEAK 0058 HAD JUST CLOSED — BUILT 24 Sep 2026.
+NOT YET RUN. site verify EXIT 0.**
+
+**Plainly:** one of the SQL files that gets pasted in by hand still contained
+the old version of a function a migration had replaced hours earlier. Running
+that file would have put the fault back.
+
+**── WHAT WAS FOUND ──**
+
+`suspension-enforcement.sql:73-89` still defined `my_suspension()` returning
+`(banned, suspended_until, **reason**)` with `select s.reason` — the exact
+route item 118 was about, closed by 0058 that morning.
+
+**It would have failed rather than silently reverted**, because `create or
+replace` cannot rename a `RETURNS TABLE` column. **That is luck, not design**,
+and it fails in the worst possible place: the statements above it commit, the
+grant below it never runs, and the obvious way to clear the error is to drop
+the function and run it again — **which reinstates the leak.**
+
+**── ⚠️ AND IT WAS NOT ONE FILE. IT WAS FIVE ──**
+
+Cross-referencing every `supabase/*.sql` against every migration:
+
+| file | function | owned by |
+|---|---|---|
+| `account-deletion-fix.sql` | `delete_account_data` | **0053** |
+| `account-deletion-fix.sql` | `guard_session_consents` | 0010 |
+| `nearby-models-any.sql` | `nearby_models` | 0018 |
+| `nearby-models-attributes.sql` | `nearby_models` | 0018 |
+| `push-setup.sql` | `tg_message_push` | **0047** |
+| `suspension-enforcement.sql` | `my_suspension` | 0058 |
+
+**`delete_account_data` is the worst of them** — account deletion is a legal
+obligation AND an Apple 5.1.1(v) requirement, so a silent revert there is the
+most expensive one on the list. `tg_message_push` would undo the emailing 0047
+added.
+
+**── THE FIX IS THE CHECK, NOT THE EDIT ──**
+
+Correcting one file would have left four, and left the class. So:
+
+* **`my_suspension` corrected** to return `member_message`, with `drop` then
+  `create` in a transaction — matching what every POLICY in that file already
+  does — so the file is re-runnable **from any prior state** rather than only
+  from the right one. That was the underlying fault: a hand-run file that is
+  not idempotent is a file that punishes the person who runs it.
+* **The other four carry a loud marker** naming the migration that owns them
+  and saying that re-running would revert it.
+* **`scripts/check-handrun-drift.mjs`** fails `checks` on any overlap that has
+  not been declared with `-- MIGRATION-OWNS: <fn> <migration>`. A new hand-run
+  file with a stale copy now cannot pass silently.
+
+**── ✅ AND THE CHECK WAS PROVEN TO FAIL ──**
+
+Marker removed from `push-setup.sql` → **exit 1**, naming the file, the
+function and the migration. Restored → exit 0, six declared overlaps. Item 75
+is the standing reminder that a drift check nobody has seen fail is not
+evidence of anything.
+
+**── ⚠️ WHAT A PASS DOES NOT MEAN ──**
+
+A marker is a claim by whoever wrote it, not a comparison. The honest check is
+`pg_get_functiondef`, which needs a connection CI has not got (item 38). **This
+makes the drift visible and forces a decision; it does not verify it** — the
+same limit `check-types-freshness.mjs` states about itself, and the same one
+that let 0044 and 0045 quietly replace a body 0039's file still describes.
+
 **✅ 0059 AND 0060 VERIFIED — 24 Sep 2026. ITEMS 115 AND 100 CLOSED.**
 
 **0059 Block A.** A warning with a message but no reason is refused — *"warn
@@ -12499,6 +12566,8 @@ platforms each failed it differently.
 | 117 | ✅ **0057 APPLIED 24 Sep 07:53, types regenerated.** She is told, by notification and email, with a separate optional message field. The admin's REASON is never shown: it may name the person who reported her | No |
 | 118 | **The evidence field reaches members TWO ways.** `'warn'` publishes it in a notification (0045:308), and `suspend`/`ban` write it to `suspensions.reason`, which **`my_suspension()` returns to the member** — a SECURITY DEFINER function they may call, so it is not a client-side choice. ✅ **CLOSED 24 Sep — 0058 applied.** `suspensions.member_message` added, `my_suspension()` returns it instead of `reason`, and a fifth parameter added to all four functions by drop-and-recreate. A warning now requires a message | No, but a reason could name a reporter |
 | 121 | ✅ **CLOSED 24 Sep.** warn now requires a reason as well as a message | No |
+| 123 | ⚠️ **Built 24 Sep, NOT YET RUN.** Five hand-run `supabase/*.sql` files hold functions a migration has since replaced, including `delete_account_data` (0053) and `my_suspension` (0058, the item-118 leak). `my_suspension` corrected and made re-runnable; the rest marked; `check-handrun-drift.mjs` now fails on an undeclared overlap | Not by itself — but running one of those files is |
+| 124 | **A banned member cannot delete their account on mobile.** `SuspensionGate` wraps the whole `(app)` stack and offers only Sign out. In-app deletion is an Apple 5.1.1(v) and Play requirement, and the right does not pause because someone is banned | **Yes, for a store submission** |
 | 122 | **Three actions accept a one-character reason.** warn, suspend and ban require only non-empty; `revoke_verification` requires ten. A reason of "x" is a record of nothing | No |
 | 119 | **Suspend and ban notify nobody.** Only `'warn'` does. Mobile's `SuspensionGate` explains it at the door; the web has no gate, so a suspended member there meets refusals with no explanation | No |
 | 120 | **The web has no suspension gate.** `my_suspension` is called once, for one action in `shop/actions.ts`. Mobile stops a suspended user at the door and explains; the web does not | No |

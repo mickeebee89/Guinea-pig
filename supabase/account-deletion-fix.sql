@@ -209,6 +209,14 @@ end $$;
 --    is referenced in older scripts.
 -- ---------------------------------------------------------------------------
 
+-- MIGRATION-OWNS: guard_session_consents 0010 — ⚠️ THIS COPY IS SUPERSEDED.
+--
+-- Migration 0010 replaced this function. This is a hand-run file, so nothing
+-- applies it and nothing has kept it in step. RE-RUNNING THIS FILE WOULD
+-- REVERT 0010 TO THE VERSION BELOW.
+--
+-- Read pg_get_functiondef first and bring this copy forward before running
+-- any of it. Found by scripts/check-handrun-drift.mjs, audit item 123.
 create or replace function public.guard_session_consents()
 returns trigger language plpgsql
 set search_path to 'public' as $$
@@ -293,6 +301,16 @@ create trigger trg_lock_moderation
 --    Deliberately does NOT touch session_consents or moderation_actions. Those
 --    survive by design, are now self-contained, and are purged by retention.
 -- ---------------------------------------------------------------------------
+-- MIGRATION-OWNS: delete_account_data 0053 — ⚠️ THIS COPY IS SUPERSEDED.
+--
+-- Migration 0053 replaced this function. This is a hand-run file, so nothing
+-- applies it and nothing has kept it in step. RE-RUNNING THIS FILE WOULD
+-- REVERT 0053 TO THE VERSION BELOW.
+--
+-- Account deletion is a legal obligation and a store requirement, so a silent revert here is the most expensive one in this list.
+--
+-- Read pg_get_functiondef first and bring this copy forward before running
+-- any of it. Found by scripts/check-handrun-drift.mjs, audit item 123.
 create or replace function public.delete_account_data(p_user uuid)
 returns jsonb language plpgsql security definer
 set search_path to 'public' as $$
