@@ -1,6 +1,6 @@
 # Cavy — where things stand
 
-_Current picture, 7 September 2026. **This file says where we are; it is not a
+_Current picture, 24 September 2026. **This file says where we are; it is not a
 record of how we got here.** For that, see `audit-records-vs-reality.md` and the
 per-item write-ups it links._
 
@@ -17,32 +17,65 @@ maintained, not advanced — though the last fortnight touched all three, becaus
 most of what the audit found spanned them.
 
 Web slices 1–3 are shipped: member area, chat, the shop editor, browse, the ID
-check, report/block, and cancellation. The site is live on Vercel.
+check, report/block, and cancellation. Since then: the apply flow, account
+deletion, a model's own profile, postcodes and distance filtering, favourites,
+and name changes. **The site is live on Vercel and has been the live product
+since 14 Sep.**
 
-**Migrations `0000`–`0030` are applied**, `0009` superseded and must never be
-run. The ledger is the authority, not this line:
+**Migrations `0000`–`0056` are applied**, `0009` superseded and must never be
+run. The ledger is the authority, not this line — which said `0030` until
+24 Sep, twenty-six migrations out of date:
 
 ```bash
 $env:SUPABASE_SERVICE_ROLE_KEY = '<service-role-key>'; node scripts/migration-status.mjs
 ```
 
-**A three-week audit closed on 4 Sep.** Fourteen items; the last five it found by
-looking rather than by being listed. Everything below is what it left.
+**A three-week audit closed on 4 Sep** with fourteen items. **It did not stay
+closed** — it is at 113 and still finding things, because each fix walks a
+journey and journeys keep ending somewhere nobody had looked. Everything below
+is what it has left.
 
 ---
 
-## Blocking launch — five, all decisions or chores
+## ⚠️ Split 24 Sep 2026: these were one list and they are not one thing
 
-**No missing features.** Nothing here needs designing or building; each needs a
-call or an afternoon.
+The old heading was **"Blocking launch — five, all decisions or chores"**, and
+it mixed two unrelated gates. **Two of the five could not block the web launch
+at any point**, because they are Apple and Google requirements — so the heading
+overstated what stood in the way of the thing that actually shipped.
+
+And the web **launched on 14 Sep**. Nothing below blocks a launch any more.
+What is left is a **live product with gaps**, which is a different and in one
+case worse thing: a gap in something nobody has yet is a to-do, and a gap in
+something that is serving traffic is happening now.
+
+---
+
+## Blocking a store submission
+
+Neither of these has ever blocked the web. Both stop a mobile build going out.
+**See also "Before the app is submitted" below**, which holds the engineering
+work; these two are decisions and paperwork.
 
 | | What | What it needs |
 |---|---|---|
-| **IAP** | Stripe pays for an in-app digital unlock. Apple's #1 rejection risk | **A decision**, before iOS submit. Consider asking App Review directly |
+| **IAP** | Stripe pays for an in-app digital unlock. Apple's #1 rejection risk | **A decision.** Consider asking App Review directly |
+| **CSAE wording** | Play declaration recorded done; the **submitted text** has never been read against what the product does | A check, ~20 minutes. It is a child-safety declaration to a platform |
+| **Play CSAE contact** | Still needs updating by hand after the support-address move (21 Sep) | A Play Console edit. Was buried in the Sender domain row below, which is web work |
+
+---
+
+## The live web product — what is still missing from it
+
+**No missing features.** Each needs a call or an afternoon. But read the
+worst-first list in the audit record before picking one: the order here is
+historical, not by harm.
+
+| | What | What it needs |
+|---|---|---|
 | **Teardown** | ✅ **Done 21 Sep 2026 (audit item 64):** 58 hand-made accounts deleted by `scripts/delete-test-accounts.mjs`; 5 logins remain, the keep-list. ~~`teardown.mjs` matches `@seed.guineapig.invalid` and refuses any other suffix, by design~~ | ~~The hand-made accounts (`@acoxs.com`, `@bevriz.com`, gmail, hotmail) cleared **separately**~~ *(done 21 Sep)* |
-| **CSAE wording** | Play declaration recorded done; the **submitted text** has never been read against what the product does | A check, ~20 minutes |
 | **Listing bar** | Six SEO treatment pages render zero stylists | **One real stylist with a 40-character bio.** Not an inventory problem — see item 11 for the query that says which bar each stylist fails |
-| **Sender domain** | ✅ **Moved 20 Sep 2026:** sending as `no-reply@cavybeauty.com`, name "Cavy", verified by a real signup email. Templates now use `token_hash` links, so they work on any device. **Still open:** 3 of the 5 templates untested against a real inbox (magic link, invite, change email). ✅ Support address moved to `support@cavybeauty.com` on 21 Sep 2026 in both apps, the legal documents, `stripe-payment` and the template source (audit item 62); **the Play Console child-safety contact still needs updating by hand**. ~~and support addresses in both apps still read `support@guineapigapp.co.uk`~~ *(superseded 21 Sep)*. ~~Still `no-reply@guineapigapp.co.uk`; five auth templates never tested against a real inbox~~ *(superseded 20 Sep; audit item 62)* | One test send each for the remaining three; deploy `stripe-payment`; update the Play Console CSAE contact. ~~Moving the support address is a separate decision~~ *(done 21 Sep)* |
+| **Sender domain** | ✅ **Moved 20 Sep 2026:** sending as `no-reply@cavybeauty.com`, name "Cavy", verified by a real signup email. Templates now use `token_hash` links, so they work on any device. **Still open:** 3 of the 5 templates untested against a real inbox (magic link, invite, change email). ✅ Support address moved to `support@cavybeauty.com` on 21 Sep 2026 in both apps, the legal documents, `stripe-payment` and the template source (audit item 62); the Play Console child-safety contact **has moved to "Blocking a store submission" above**, since it is a Play Console edit rather than web work. ~~and support addresses in both apps still read `support@guineapigapp.co.uk`~~ *(superseded 21 Sep)*. ~~Still `no-reply@guineapigapp.co.uk`; five auth templates never tested against a real inbox~~ *(superseded 20 Sep; audit item 62)* | One test send each for the remaining three; deploy `stripe-payment`. ~~update the Play Console CSAE contact~~ *(moved to the submission list)*. ~~Moving the support address is a separate decision~~ *(done 21 Sep)* |
 
 ---
 
