@@ -249,21 +249,56 @@ notify pgrst, 'reload schema';
 --   5. Blocks A and B below.
 -- ===========================================================================
 --
--- ── BLOCK A — she is told, and the reason is not in it. Rolls back ───────
+-- ⚠️ CORRECTED 24 Sep 2026, AFTER IT FAILED ON ITS FIRST RUN.
+--
+-- Both blocks below originally called revoke_verification with no JWT claim
+-- set, and got:
+--
+--     ERROR: revoke_verification is admin-only
+--
+-- The function's FIRST line is `if not public.is_admin()`, and is_admin() is
+-- `exists (select 1 from admins where user_id = auth.uid())`. In the SQL
+-- editor **auth.uid() is NULL**, so is_admin() is false and an admin-only
+-- function refuses the owner of the database.
+--
+-- Every other verify block in this ledger sets the claim first — 0054's B and
+-- C, 0056's A and B — and these two were written without it. The blocks are
+-- the part of a migration that gets no rehearsal, which is the same lesson
+-- item 108 recorded about the ASSERT.
+--
+-- ⚠️ AND `reset role` HAS TO COME BEFORE THE SELECT. The function is SECURITY
+-- DEFINER so its own writes bypass RLS, but the block's own read of
+-- `notifications` would run as that admin — and notifications are readable by
+-- their owner. Reading the STYLIST's row needs the owner's role back.
+--
+-- Put YOUR admin user id in v_admin. To see which ids qualify:
+--
+--     select user_id from public.admins;
+--
+-- ── BLOCK A — she is told, and the reason is not in it. Rolls back ───
 --
 --   Uses the provider test account. ⚠️ READ THE BODY. The admin's REASON must
 --   not appear anywhere in it; the MESSAGE must.
 --
 --   do $$
 --   declare
+--     v_admin   uuid := 'ff06d568-8936-45fa-ad5f-0b88c150ec30';   -- must be in public.admins
 --     v_stylist uuid := '517c2853-50bb-4e8f-87fe-d79311bc37c0';
 --     v_note record;
 --     v_leaked boolean;
 --   begin
+--     perform set_config('request.jwt.claims',
+--       json_build_object('sub', v_admin, 'role', 'authenticated')::text, true);
+--     set local role authenticated;
+--
 --     perform public.revoke_verification(
 --       v_stylist,
 --       'INTERNAL EVIDENCE: a model called Sarah reported this account.',
 --       'The photo you sent did not match your profile picture.');
+--
+--     -- Back to the owner BEFORE reading: as the admin, RLS would hide the
+--     -- stylist's own notification row.
+--     reset role;
 --
 --     select title, body into v_note
 --     from public.notifications
@@ -280,11 +315,18 @@ notify pgrst, 'reload schema';
 --
 --   do $$
 --   declare
+--     v_admin   uuid := 'ff06d568-8936-45fa-ad5f-0b88c150ec30';
 --     v_stylist uuid := '517c2853-50bb-4e8f-87fe-d79311bc37c0';
 --     v_body text;
 --   begin
+--     perform set_config('request.jwt.claims',
+--       json_build_object('sub', v_admin, 'role', 'authenticated')::text, true);
+--     set local role authenticated;
+--
 --     perform public.revoke_verification(
 --       v_stylist, 'INTERNAL EVIDENCE: no message given on purpose.');
+--
+--     reset role;
 --
 --     select body into v_body from public.notifications
 --     where user_id = v_stylist and type = 'verification'

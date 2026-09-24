@@ -5919,8 +5919,29 @@ deliberate act, Confirm is disabled under 10 characters, and the count reads
 The modal says both facts out loud: the reason is kept six years and nobody
 but an admin sees it, and the stylist is not notified.
 
-**117. A REVOKED STYLIST IS TOLD — BUILT 24 Sep 2026. MIGRATION 0057 NOT
-APPLIED. admin build EXIT 0.**
+**117. A REVOKED STYLIST IS TOLD — BUILT 24 Sep 2026, 0057 APPLIED 07:53.
+admin build EXIT 0.**
+
+**⚠️ BOTH VERIFY BLOCKS FAILED ON THEIR FIRST RUN, AND THE FAULT WAS MINE.**
+`revoke_verification is admin-only` — because the function's first line is
+`if not public.is_admin()`, and `is_admin()` is
+`exists (select 1 from admins where user_id = auth.uid())`. **In the SQL
+editor `auth.uid()` is NULL**, so an admin-only function refuses the owner of
+the database.
+
+Every other verify block in this ledger sets the JWT claim first — 0054's B
+and C, 0056's A and B — and I wrote these two without it, then told Micky it
+would "run as you, so is_admin() passes". It does not.
+
+**The blocks are the part of a migration that gets no rehearsal**, which is
+the same lesson item 108 recorded about the ASSERT, one migration earlier.
+Corrected in place; the edits are below the MIGRATION FOOTER so the applied
+checksum is untouched, which was checked rather than assumed.
+
+A second thing the fix needed: **`reset role` before the SELECT.** The
+function is SECURITY DEFINER so its writes bypass RLS, but the block's own
+read of `notifications` runs as that admin, and a notification is readable by
+its owner — so reading the STYLIST's row needs the owner's role back.
 
 Her verification was cleared, her shop hidden, her bookings cancelled and every
 model written to — and nothing was written to her. She found out by looking.
