@@ -6082,8 +6082,8 @@ row with `role = 'model'`, and how it got one is not established"*, and that
 right and was still news, which is what a record that is read but not believed
 looks like.
 
-**121. A WARNING NEEDS EVIDENCE TOO — BUILT 24 Sep 2026. MIGRATION 0059 NOT
-APPLIED. admin build EXIT 0.**
+**121. A WARNING NEEDS EVIDENCE TOO — CLOSED 24 Sep 2026. 0059 applied and
+verified.**
 
 The mirror of 118, and it was created by fixing 118. 0058 made the member's
 message mandatory for a warning and left the reason optional, because warn was
@@ -6113,9 +6113,34 @@ But `revoke_verification` requires **ten** characters (0044). So a reason of
 is a decision about three live actions, not a detail to slip into a one-line
 migration — **recorded as 122** rather than absorbed.
 
-**100 + 115. SOMETHING LOOKS AT WHAT GETS PUBLISHED — BUILT 24 Sep 2026.
-MIGRATION 0060 NOT APPLIED, VIEW FILE NOT RE-RUN. site verify EXIT 0 but for
-the types stamp, `next build` EXIT 0, admin build EXIT 0.**
+**✅ 0059 AND 0060 VERIFIED — 24 Sep 2026. ITEMS 115 AND 100 CLOSED.**
+
+**0059 Block A.** A warning with a message but no reason is refused — *"warn
+needs a reason"*. A reason but no message is refused with the ten-character
+message. The body that does publish carries **only the member's message**;
+**reason leaked: false**. Both guards hold, including 0058's, which is the one
+a carried-forward body could quietly have lost.
+
+**0060 Block A.** Mash in one run, mash with spaces, a short bio and an empty
+bio all return a sentence. **A real, plainly written bio returns NULL** — the
+assertion that mattered most, because a bar too tight excludes real stylists,
+which is worse than the fault it fixes.
+
+**0060 Block B.** `clean_or_hit` empty, null input empty, `list_rows` 1. The
+list is configured, so the loud-failure path is not being silently taken.
+
+**0060 Block C.** `reviewed_at` null after upload, set after marking, **null
+again after a new picture**, and marking it seen did not reset its own clock —
+so the review is not undone by the thing that recorded it.
+
+**And `public_stylists` still returns 1**, so the real bio clears the new bar
+on live data, not only in the block's fixtures. That is the check that turns
+Block A's last row from a fixture into a fact: **the one genuine shop on the
+site was not excluded by tightening the bar.**
+
+**100 + 115. SOMETHING LOOKS AT WHAT GETS PUBLISHED — CLOSED 24 Sep 2026.
+0060 applied, the view file re-run by hand, types regenerated, Blocks A, B and
+C all as expected.**
 
 Taken as one piece because they are one problem: nothing looks at what a
 stylist publishes before the public does.
@@ -12473,7 +12498,7 @@ platforms each failed it differently.
 | 14 | ✅ **Built 24 Sep, not deployed.** Users page, beside Verify, only for a verified account. The confirmation is the COUNT of bookings it would cancel, read when the modal opens | No |
 | 117 | ✅ **0057 APPLIED 24 Sep 07:53, types regenerated.** She is told, by notification and email, with a separate optional message field. The admin's REASON is never shown: it may name the person who reported her | No |
 | 118 | **The evidence field reaches members TWO ways.** `'warn'` publishes it in a notification (0045:308), and `suspend`/`ban` write it to `suspensions.reason`, which **`my_suspension()` returns to the member** — a SECURITY DEFINER function they may call, so it is not a client-side choice. ✅ **CLOSED 24 Sep — 0058 applied.** `suspensions.member_message` added, `my_suspension()` returns it instead of `reason`, and a fifth parameter added to all four functions by drop-and-recreate. A warning now requires a message | No, but a reason could name a reporter |
-| 121 | ✅ **Built 24 Sep — 0059 NOT APPLIED.** warn now requires a reason as well as a message | No |
+| 121 | ✅ **CLOSED 24 Sep.** warn now requires a reason as well as a message | No |
 | 122 | **Three actions accept a one-character reason.** warn, suspend and ban require only non-empty; `revoke_verification` requires ten. A reason of "x" is a record of nothing | No |
 | 119 | **Suspend and ban notify nobody.** Only `'warn'` does. Mobile's `SuspensionGate` explains it at the door; the web has no gate, so a suspended member there meets refusals with no explanation | No |
 | 120 | **The web has no suspension gate.** `my_suspension` is called once, for one action in `shop/actions.ts`. Mobile stops a suspended user at the door and explains; the web does not | No |
@@ -12501,13 +12526,13 @@ platforms each failed it differently.
 | 109 | ✅ **Stylist half fixed 24 Sep, not tested on device.** Cancelled bookings show on mobile with the same three sentences as the web. The model's half IS item 113 | No |
 | 116 | ✅ **The web checked for two roles and there are three — fixed 24 Sep, not deployed.** A `'both'` account saw no stylist nav links. Latent: no such accounts exist. `lib/roles.ts` names the question. **Open:** `ensureProfile.ts` would create no provider row for a 'both' signup, unreachable today | No |
 | 114 | ✅ **Treatment pages self-noindex below 3 stylists — built 24 Sep, not deployed.** The page and the sitemap share the constant AND the count. Replaces a judgement that had to be remembered | No |
-| 115 | ✅ **Built 24 Sep — 0060 NOT APPLIED, VIEW NOT RE-RUN.** `bio_publish_problem()` keeps the 40 characters and adds six words, five distinct, no run over 25, plus the banned-word screen. Returns the stylist's own sentence, shared by the view and `websiteBlockers` | No |
+| 115 | ✅ **CLOSED 24 Sep.** `bio_publish_problem()` keeps the 40 characters and adds six words, five distinct, no run over 25, plus the banned-word screen. Returns the stylist's own sentence, shared by the view and `websiteBlockers` | No |
 | 112 | ✅ **Fixed 24 Sep, not deployed.** Portfolio uploads resize before sending, and the cap moved to AFTER the resize — it was refusing 12MB camera photos that shrink to a few hundred KB | No |
 | 111 | ✅ **VERIFIED AND CLEARED 24 Sep.** The one video row was approved by a reviewer who could not watch it — the hypothesis and the only instance agree. Row and file removed | It could be uploaded from one place and MODERATED from none — the admin queue showed it with no controls. ⚠️ Existing rows need deleting by SQL, and the files by hand: a row delete does not touch storage | No |
 | 105 | ✅ **Removed from every surface 24 Sep, not deployed.** ⚠️ `public-web-views.sql` needs `drop view if exists public.public_stylists;` BEFORE re-running — `create or replace` cannot drop a column. Column drop is a later migration | No |
 | 101 | ✅ **ID check gated on having a profile picture — built, not deployed.** Privacy §7 is true as written, with no copy change. A stylist sets hers on `/shop`, a model on `/profile` | No |
 | 99 | ✅ **VERIFIED LIVE 23 Sep.** A model's own profile on the web — built, **not deployed**. Avatar, bio, the nine attributes, photo management, Profile in the nav, and a link to what stylists see | No |
-| 100 | ✅ **Built 24 Sep — 0060 NOT APPLIED.** The avatar records rather than gates: gating it would strand people out of the ID check (item 101), and no classifier can screen an image. The console lists what nobody has looked at, oldest first, with how long it has waited | No |
+| 100 | ✅ **CLOSED 24 Sep.** The avatar records rather than gates: gating it would strand people out of the ID check (item 101), and no classifier can screen an image. The console lists what nobody has looked at, oldest first, with how long it has waited | No |
 | 98 | Verification queue now shows the profile picture beside the selfie — built, **not deployed**. Privacy §7's comparison was previously impossible in the console. **Open: the copy is still false for a member with no profile picture** | No, but Privacy §7 describes it |
 | 97 | **`sessions.price_pence` is read by nothing in either client.** 0052 snapshots it so an edited slot cannot rewrite what was agreed; both clients show the SLOT's price today instead. They agree until someone edits a slot after an application | No, but it is a money display |
 | 95 | **Mobile's favourite heart fails silently** — no error handling on insert or delete, so a filled heart can sit over a row that does not exist. It also never says that saving subscribes her to notifications | No, but it tells her something untrue |

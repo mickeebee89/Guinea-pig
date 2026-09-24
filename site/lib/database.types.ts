@@ -1,7 +1,7 @@
 // GENERATED FILE — DO NOT EDIT BY HAND.
 //
 // Written by scripts/gen-supabase-types.mjs from the live database.
-// TYPES_STAMP: 0058
+// TYPES_STAMP: 0060
 //
 // Regenerate whenever a migration is applied:
 //   node scripts/gen-supabase-types.mjs
@@ -2373,24 +2373,16 @@ export type Database = {
         }
         Returns: Json
       }
-      admin_mark_profile_pic_seen: {
-        Args: { p_user_id: string }
-        Returns: Json
-      }
-      banned_word_hit: {
-        Args: { p_text: string }
-        Returns: string
-      }
-      bio_publish_problem: {
-        Args: { p_bio: string }
-        Returns: string
-      }
       admin_decide_status_post: {
         Args: { p_decision: string; p_note?: string; p_post_id: string }
         Returns: Json
       }
       admin_decide_verification: {
         Args: { p_decision: string; p_note?: string; p_request_id: string }
+        Returns: Json
+      }
+      admin_mark_profile_pic_seen: {
+        Args: { p_user_id: string }
         Returns: Json
       }
       apply_subscription_state: {
@@ -2407,7 +2399,9 @@ export type Database = {
         }
         Returns: undefined
       }
+      banned_word_hit: { Args: { p_text: string }; Returns: string }
       banned_words_check: { Args: { p_text: string }; Returns: string }
+      bio_publish_problem: { Args: { p_bio: string }; Returns: string }
       cancel_booking: {
         Args: { p_reason?: string; p_session_id: string }
         Returns: Json
