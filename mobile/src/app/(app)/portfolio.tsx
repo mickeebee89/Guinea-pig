@@ -543,9 +543,15 @@ function PhotoCard({ item, onDelete }: { item: PortfolioItem; onDelete: (i: Port
       activeOpacity={0.85}
     >
       <Image source={{ uri: item.media_url }} style={styles.gridImg} resizeMode="cover" />
+      {/* ⚠️ A play icon over an <Image> pointed at a VIDEO file, which renders
+          blank — so a video tile was an empty square with a play button that
+          did nothing. Video was removed from the product on 24 Sep 2026
+          (item 111); mobile never accepted it (MediaTypeOptions.Images, and
+          media_type is hardcoded 'photo'), so this only ever showed rows
+          uploaded from the web. Says what it is instead. */}
       {item.media_type === 'video' && (
         <View style={styles.playOverlay}>
-          <Ionicons name="play-circle" size={28} color="rgba(255,255,255,0.9)" />
+          <Text style={styles.unsupportedText}>Not supported</Text>
         </View>
       )}
       <TouchableOpacity
@@ -630,7 +636,11 @@ const styles = StyleSheet.create({
   playOverlay: {
     position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
     alignItems: 'center', justifyContent: 'center',
-    backgroundColor: 'rgba(0,0,0,0.25)',
+    backgroundColor: 'rgba(0,0,0,0.45)',
+  },
+  unsupportedText: {
+    color: 'rgba(255,255,255,0.95)', fontSize: 11, fontFamily: Fonts.bodyBold,
+    textAlign: 'center', paddingHorizontal: 6,
   },
   deleteBtn: {
     position: 'absolute', top: 5, right: 5,

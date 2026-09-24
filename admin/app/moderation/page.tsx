@@ -564,7 +564,16 @@ export default function ModerationPage() {
                     {item.media_type === 'photo' ? (
                       <Image src={item.media_url} alt="" fill className="object-cover" unoptimized />
                     ) : (
-                      <video src={item.media_url} className="w-full h-full object-cover" />
+                      /* ⚠️ This was a <video> with NO `controls`, so a reviewer
+                         saw a static black box and approved or rejected
+                         something they could not watch. Video was removed from
+                         the product on 24 Sep 2026 (item 111) and that is one
+                         of the reasons: it could be uploaded, and it could
+                         never be MODERATED. Rows from before then still need a
+                         decision, so this says what it is. */
+                      <div className="w-full h-full flex items-center justify-center bg-black/5 text-xs text-[#3D2E2E]/50 text-center px-2">
+                        Video — no longer supported, reject it
+                      </div>
                     )}
                   </div>
                   <div className="p-3">

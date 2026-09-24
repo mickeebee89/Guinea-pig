@@ -5437,6 +5437,95 @@ Still there, dropped in a later migration sequenced **behind this deploy** —
 the same order 0055 needed, and for the same reason: a live build that still
 names a dropped column fails the whole select.
 
+**111. THE PRODUCT ACCEPTED A FILE IT COULD NOT SHOW — VIDEO REMOVED FROM THE
+PORTFOLIO, 24 Sep 2026. site `npm run verify` EXIT 0, admin build EXIT 0,
+mobile `tsc` EXIT 0. ⚠️ ONE SQL STEP, BELOW.**
+
+**Plainly:** Micky uploaded a video to his portfolio and it did not play back.
+Video could be uploaded from exactly one place and could not be displayed
+properly from any.
+
+**── EVERYWHERE IT WAS, BEFORE ──**
+
+| | |
+|---|---|
+| **Accepted** | `site/…/PortfolioManager.tsx` only — `accept="image/*,video/*"`, 50MB cap, `media_type: isVideo ? 'video' : 'photo'` |
+| **Mobile** | **Never accepted it** — `MediaTypeOptions.Images`, `media_type` hardcoded `'photo'`. Rendered an `<Image>` pointed at the video file with a play icon over it: a blank square with a button that did nothing |
+| **Admin queue** | `<video>` with **no `controls`** — a static black box |
+| **Web profile** | `PortfolioGallery` — `<video>` tile and lightbox, the only two that could actually play |
+| **Public view** | `public_stylist_portfolio` carries `media_type` and a `null::text as poster_url` placeholder. Ungranted, so nothing served it |
+| **Published copy** | **None.** Nothing in `legal.ts` or any `(public)` page mentions video, so no Privacy or Terms change falls due |
+
+**── ⚠️ WHY THIS IS A REMOVAL AND NOT A PLAYBACK FIX ──**
+
+The upload itself looks correct — it sets `contentType` from the file and
+stores a public URL — so I cannot say from the code alone which screen Micky
+watched fail. It does not matter, because of this:
+
+**The admin moderation queue rendered video with no `controls`.** A reviewer
+was being asked to approve or reject something they **could not watch**. So a
+video could be uploaded, and could never be moderated.
+
+Approving unwatchable media is not a thing to make prettier. Everything else —
+mobile's blank tile, the 50MB cap, no compression — is an argument for tidying
+up. That one is an argument for not having the feature.
+
+**── WHAT CHANGED ──**
+
+* Upload is **photos only**, and the cap drops 50MB → **10MB**. The 50 existed
+  to let a video through; nothing here downscales before upload, so the cap is
+  the only thing between a 40MB camera file and every model loading that
+  profile. *(Portfolio uploads still do not use `lib/downscale.ts`, which the
+  selfie and application photos both do. Worth fixing, not this change.)*
+* `media_type` is always `'photo'` — what mobile has always written, so the
+  two clients now agree where they did not.
+* **Approved video rows are excluded from the profile gallery**
+  (`queries/stylist.ts`), so no model sees a tile that cannot work.
+* Every renderer says what it is instead of showing a broken player: her own
+  portfolio page says *"Video isn't supported — remove this and add a photo"*,
+  mobile says *"Not supported"*, the admin queue says *"Video — no longer
+  supported, reject it"*.
+
+**── ⚠️ THE ROW AND THE FILE THAT ALREADY EXIST ──**
+
+**Nothing now points a member at something that will not render** — hidden from
+the profile, labelled everywhere else. But the row and the file are still
+there, and neither goes away on its own.
+
+**Find them first** — there may be more than the one:
+
+```sql
+select pi.id, pi.provider_id, p.name, pi.media_url,
+       pi.moderation_status, pi.created_at
+from public.portfolio_items pi
+join public.providers p on p.id = pi.provider_id
+where pi.media_type = 'video'
+order by pi.created_at;
+```
+
+**Then remove the rows:**
+
+```sql
+delete from public.portfolio_items where media_type = 'video';
+```
+
+**⚠️ THE FILES DO NOT GO WITH THEM.** A row delete does not touch storage —
+the same limitation the admin console's "Remove images" already states in its
+own alert. `portfolio-photos` is a **public** bucket, so an orphaned video
+stays readable by URL to anyone who has it. Delete the objects in
+Dashboard → Storage → portfolio-photos, under the stylist's user-id folder.
+The `media_url` in the SELECT above is the path to look for.
+
+They are also swept on account deletion, which clears `${userId}/` in that
+bucket — so this is storage cost and a live URL, not a permanent exposure.
+
+**── WHAT WAS LEFT ALONE, AND WHY ──**
+
+`media_type` stays as a column and stays in `public_stylist_portfolio`. Every
+row is `'photo'` now, so it carries no information — but removing a column
+from that view needs another `drop view` + re-run by hand, and Micky has just
+done one of those for item 105. Not worth a second for a column that is inert.
+
 **75. A CHECK COULD STOP THE WEBSITE UPDATING, AND NOTHING NOTICED IT HAD —
 CHANGED 22 Sep 2026. `npm run verify` EXIT 0.**
 
@@ -11605,6 +11694,7 @@ platforms each failed it differently.
 | 102 | ✅ **Instagram handle validated and editable on the web — built, not deployed.** An email address was stored in it and shown on a live profile. The rule runs on write AND on render, so values already stored are not displayed | No, but it published a member's email |
 | 103 | **Mobile accepts anything in `instagram_handle` and turns it into a link** — `https://instagram.com/<value>`, so a stored email goes to Instagram in the URL path. Needs the same parse and the same render guard. Also: only `status_posts` is content-screened anywhere | No while mobile is unreleased — **fix before it ships** |
 | 104 | **A member cannot change her own first name, on either client.** Set at signup, rendered on every profile, booking, review and chat, editable nowhere. A typo is permanent | No, but it is unfixable by anyone |
+| 111 | ✅ **Video removed from the portfolio 24 Sep, not deployed.** It could be uploaded from one place and MODERATED from none — the admin queue showed it with no controls. ⚠️ Existing rows need deleting by SQL, and the files by hand: a row delete does not touch storage | No |
 | 105 | ✅ **Removed from every surface 24 Sep, not deployed.** ⚠️ `public-web-views.sql` needs `drop view if exists public.public_stylists;` BEFORE re-running — `create or replace` cannot drop a column. Column drop is a later migration | No |
 | 101 | ✅ **ID check gated on having a profile picture — built, not deployed.** Privacy §7 is true as written, with no copy change. A stylist sets hers on `/shop`, a model on `/profile` | No |
 | 99 | ✅ **VERIFIED LIVE 23 Sep.** A model's own profile on the web — built, **not deployed**. Avatar, bio, the nine attributes, photo management, Profile in the nav, and a link to what stylists see | No |

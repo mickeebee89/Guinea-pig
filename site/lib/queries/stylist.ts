@@ -186,7 +186,13 @@ export async function getStylistProfile(
       ((treatRes.data ?? []) as { category: string | null }[])
         .map(t => t.category).filter(Boolean) as string[],
     )],
-    portfolio: portRows.filter(i => i.moderation_status === 'approved')
+    // ⚠️ APPROVED VIDEO ROWS ARE EXCLUDED (item 111). Video was removed from
+    // the product on 24 Sep 2026 and nothing can play one, so a row approved
+    // before then would be a tile that does not work on a profile a model is
+    // deciding from. Her own portfolio page still shows it, with a line
+    // telling her to remove it — hidden here, visible to her.
+    portfolio: portRows
+      .filter(i => i.moderation_status === 'approved' && i.media_type !== 'video')
       .map(i => ({ id: i.id, mediaUrl: i.media_url, mediaType: i.media_type })),
     // Shown to the owner only. Everyone else must not learn that an item is
     // sitting in a queue, let alone see it.

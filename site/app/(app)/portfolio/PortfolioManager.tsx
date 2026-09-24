@@ -11,13 +11,40 @@ export interface PortfolioRow {
   moderationStatus: string | null
 }
 
-/** Supabase's default object size cap. Above this the upload fails with a 413. */
-const MAX_BYTES = 50 * 1024 * 1024
+/**
+ * 10MB. It was 50 — Supabase's default object cap — which existed to let a
+ * video through. A photo does not need it, and nothing here downscales before
+ * upload, so the cap is the only thing between a 40MB camera file and every
+ * model who loads this stylist's profile.
+ *
+ * (Portfolio uploads do NOT use lib/downscale.ts, which the selfie and the
+ * application photos both do. That is worth fixing and is not this change.)
+ */
+const MAX_BYTES = 10 * 1024 * 1024
 
 /**
  * Upload and remove portfolio media.
  *
- * ── VIDEO IS NEW HERE, NOT PORTED ─────────────────────────────────────────
+ * ── ⚠️ VIDEO WAS ACCEPTED HERE AND IS NOT ANY MORE — ITEM 111, 24 Sep 2026
+ *
+ * This was the ONLY place in the product that could upload a video, and
+ * nothing could show one back:
+ *
+ *   * MOBILE rendered an <Image> pointed at the video file with a play icon
+ *     over it — a blank square with a button that did nothing;
+ *   * THE ADMIN QUEUE rendered a <video> with NO `controls`, so a reviewer saw
+ *     a static black box and had to approve or reject something they could not
+ *     watch. **A video could be uploaded and could never be moderated.**
+ *
+ * That second one is the reason this is a removal rather than a playback fix.
+ * Approving unwatchable media is not a thing to make prettier.
+ *
+ * Mobile never accepted video (MediaTypeOptions.Images, media_type hardcoded
+ * 'photo'), so the two clients now agree, which they did not before.
+ *
+ * The old note, kept because it explains the rows that exist:
+ * ~~VIDEO IS NEW HERE, NOT PORTED… It RENDERS video if a row happens to have
+ * media_type 'video'.~~
  * The mobile portfolio screen only ever picks images
  * (portfolio.tsx:168, MediaTypeOptions.Images) and hardcodes media_type:
  * 'photo'. It RENDERS video if a row happens to have media_type 'video', but
@@ -49,14 +76,15 @@ export function PortfolioManager({
   const upload = async (file: File) => {
     setError(null); setNotice(null)
 
-    const isVideo = file.type.startsWith('video/')
-    const isImage = file.type.startsWith('image/')
-    if (!isVideo && !isImage) {
-      setError('That needs to be an image or a video.')
+    // ⚠️ PHOTOS ONLY. Video was accepted here — the only entry point in the
+    // product — and removed on 24 Sep 2026 (item 111) because nothing could
+    // show it back. See the header.
+    if (!file.type.startsWith('image/')) {
+      setError('That needs to be a photo.')
       return
     }
     if (file.size > MAX_BYTES) {
-      setError(`That file is ${(file.size / 1024 / 1024).toFixed(0)}MB. The limit is 50MB — try a shorter clip.`)
+      setError(`That photo is ${(file.size / 1024 / 1024).toFixed(0)}MB. The limit is 10MB — try a smaller one.`)
       return
     }
 
@@ -65,7 +93,7 @@ export function PortfolioManager({
       // Keyed by USER id, matching mobile (portfolio.tsx:213). That path is
       // what makes account deletion sweep these files: the delete-account
       // function clears `${userId}/` in this bucket.
-      const ext = file.name.split('.').pop()?.toLowerCase() || (isVideo ? 'mp4' : 'jpg')
+      const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg'
       /* Inside an upload handler, not a render body. A unique filename per
          upload is the point, and the rule does not track that this runs from
          an event. */
@@ -82,7 +110,9 @@ export function PortfolioManager({
       const { error: insErr } = await supabase.from('portfolio_items').insert({
         provider_id: providerId,
         media_url: urlData.publicUrl,
-        media_type: isVideo ? 'video' : 'photo',
+        // Always 'photo' now, matching what mobile has always written
+        // (portfolio.tsx:229). The column stays because existing rows use it.
+        media_type: 'photo',
       })
       if (insErr) throw insErr
 
@@ -118,16 +148,16 @@ export function PortfolioManager({
     <>
       <div className="rounded-lg border border-hairline bg-white p-5">
         <label htmlFor="media" className="block text-sm font-bold text-warm-dark">
-          Add a photo or video
+          Add a photo
         </label>
         <p className="mt-1 text-xs text-muted">
-          Up to 50MB. Videos play on your profile without a cover image, and aren’t compressed —
+          Up to 10MB. Photos appear on your profile once they’ve been reviewed —
           a shorter clip loads faster for the people looking at it.
         </p>
         <input
           id="media"
           type="file"
-          accept="image/*,video/*"
+          accept="image/*"
           disabled={busy}
           onChange={e => { const f = e.target.files?.[0]; if (f) upload(f); e.target.value = '' }}
           className="mt-3 block w-full text-sm text-muted file:mr-3 file:min-h-11 file:rounded-[999px] file:border-0 file:bg-rose file:px-5 file:text-sm file:font-bold file:text-white"
@@ -145,7 +175,12 @@ export function PortfolioManager({
             <li key={item.id} className="overflow-hidden rounded-md border border-hairline bg-white">
               <div className="aspect-square">
                 {item.mediaType === 'video' ? (
-                  <video src={item.mediaUrl} preload="metadata" playsInline controls className="h-full w-full object-cover" />
+                  /* A row that predates 24 Sep 2026. Nothing can upload one
+                     now, and this says so rather than showing a player that
+                     does not work (item 111). */
+                  <div className="flex h-full w-full items-center justify-center bg-input-bg px-2 text-center text-xs text-muted">
+                    Video isn’t supported — remove this and add a photo
+                  </div>
                 ) : (
                   // eslint-disable-next-line @next/next/no-img-element -- Supabase Storage
                   <img src={item.mediaUrl} alt="" loading="lazy" className="h-full w-full object-cover" />

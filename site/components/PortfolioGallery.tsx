@@ -58,7 +58,14 @@ export function PortfolioGallery({ items, stylistName }: { items: PortfolioMedia
               aria-label={`Open image ${i + 1} of ${items.length} from ${stylistName}’s work`}
             >
               {item.mediaType === 'video' ? (
-                <video src={item.mediaUrl} preload="none" playsInline className="h-full w-full object-cover" />
+                /* Video was removed on 24 Sep 2026 (item 111) and approved
+                   rows from before then are hidden by the filter in
+                   queries/stylist.ts, so this should never render. Kept as a
+                   visible placeholder rather than a broken player, because a
+                   silent empty tile is how nobody notices it is still here. */
+                <div className="flex h-full w-full items-center justify-center bg-input-bg text-xs text-muted">
+                  Unavailable
+                </div>
               ) : (
                 // eslint-disable-next-line @next/next/no-img-element -- Supabase Storage, unknown dimensions
                 <img src={item.mediaUrl} alt="" loading="lazy" className="h-full w-full object-cover" />
@@ -78,7 +85,7 @@ export function PortfolioGallery({ items, stylistName }: { items: PortfolioMedia
         {current && (
           <div className="relative flex flex-col items-center">
             {current.mediaType === 'video' ? (
-              <video src={current.mediaUrl} controls playsInline autoPlay className="max-h-[80dvh] max-w-[95vw] rounded-lg" />
+              <p className="rounded-lg bg-white px-6 py-10 text-sm text-muted">This item isn’t available.</p>
             ) : (
               // eslint-disable-next-line @next/next/no-img-element -- as above
               <img src={current.mediaUrl} alt={`${stylistName}’s work, ${index + 1} of ${items.length}`}
