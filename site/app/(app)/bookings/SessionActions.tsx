@@ -124,8 +124,21 @@ export function SessionActions({
               happen, stated flatly. No "are you sure", no "please consider",
               no count of how little notice they are giving. */}
           <p className="mt-1 text-sm text-muted">
+            {/* ⚠️ NO POSSESSIVE HERE, AND IT IS NOT STYLE. This read
+                "the time slot goes back on THEIR calendar", where "their"
+                resolves to `otherName` — the OTHER party. Right for a model
+                cancelling (the stylist has a calendar); wrong for a stylist
+                cancelling, where it pointed at the model, who has no calendar
+                at all. The availability calendar is the stylist's own, always.
+
+                "Free for someone else to book" is true whichever side is
+                reading, and it is also more accurate than what it replaced:
+                nothing ever REMOVED the slot from a calendar. No code writes
+                availability.is_taken on booking — every taken-slot reader keys
+                on sessions with status pending or accepted — so a cancellation
+                simply stops the slot being blocked. Item 110. */}
             {shortNotice && <>This booking is within the next 24 hours. </>}
-            {otherName} will be told, and the time slot goes back on their calendar.
+            {otherName} will be told, and the time slot is free for someone else to book.
             This can’t be undone.
           </p>
 

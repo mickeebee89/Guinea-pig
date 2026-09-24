@@ -5308,6 +5308,55 @@ app splits the list into three state arrays rather than filtering one, so
 cancelled needs a fourth — and the neutral-wording rule above has to travel
 with it, or the app will name an actor the web deliberately does not.
 
+**✅ ITEM 87 VERIFIED LIVE (web) — 24 Sep 2026.** Cancelling moves the booking
+to Past with *"You cancelled this booking."* and the date, and an earlier
+platform-cancelled booking shows *"This booking was cancelled."* with **no
+actor and no reason** — the neutral path confirmed on real data rather than
+reasoned about.
+
+**110. "THEIR CALENDAR" POINTED AT THE PERSON WHO HASN'T GOT ONE — FOUND BY
+MICKY 24 Sep 2026, FIXED ON BOTH CLIENTS. site `npm run verify` EXIT 0,
+mobile `tsc --noEmit` EXIT 0.**
+
+**Plainly:** the cancel confirmation said *"{otherName} will be told, and the
+time slot goes back on their calendar."* `otherName` is the OTHER party, so
+"their" resolves to whoever you are cancelling on.
+
+**── WHAT IT RENDERED AS, PER ROLE ──**
+
+| Cancelling as | Renders | |
+|---|---|---|
+| **Model** | "Priya will be told, and the time slot goes back on **their** calendar." | **Right.** The stylist has an availability calendar |
+| **Stylist** | "Model B. will be told, and the time slot goes back on **their** calendar." | **Wrong.** It points at the model, who has no calendar. The availability calendar is the stylist's own |
+
+So the sentence was correct exactly half the time, which is why it survived:
+whoever wrote it was thinking as a model, and reading it back as a model
+confirms it.
+
+**── THE SAME SENTENCE WAS IN BOTH CLIENTS ──**
+
+Micky asked whether it was reused. It was: **`mobile/src/components/CancelSheet.tsx:71`,
+word for word.** Mobile's is wrong in the same case and only in the same case —
+`otherName` is `otherParty?.name` when a stylist cancels from chat, and
+`cancelTarget?.name` on the model's dashboard, where it is right.
+
+Fixed in both, together. Two clients wording the same fact differently is how
+one of them stays wrong for longer.
+
+**── THE REPLACEMENT, AND WHY IT IS ALSO MORE ACCURATE ──**
+
+> {otherName} will be told, and the time slot is free for someone else to book.
+
+True whichever side is reading, with no possessive to resolve. And it fixes a
+second, quieter inaccuracy: **nothing ever removed the slot from a calendar.**
+No code writes `availability.is_taken` on booking — 0029's own note says there
+is no is_taken bookkeeping, and every taken-slot reader keys on sessions with
+status pending or accepted. A cancellation simply stops the slot being blocked.
+"Goes back on" described a restoration that never happened.
+
+A comment in both files says so, because "goes back on their calendar" is the
+kind of phrasing someone would helpfully reinstate.
+
 **75. A CHECK COULD STOP THE WEBSITE UPDATING, AND NOTHING NOTICED IT HAD —
 CHANGED 22 Sep 2026. `npm run verify` EXIT 0.**
 
@@ -11453,7 +11502,8 @@ platforms each failed it differently.
 |---|---|---|
 | 12 | Stylist banners cannot be set — read in four places, written nowhere | No |
 | 13 | ✅ **CLOSED 23 Sep** — stale on both halves: both clients cancel, and 0029/0030 rewrote the wording. Was the last launch blocker | No |
-| 87 | ✅ **Fixed on the web 24 Sep, not deployed.** Cancelled shows under Past with who cancelled and why; a platform cancellation stays neutral, which also protects a block cascade from naming the blocker | No |
+| 110 | ✅ **Cancel confirmation said "their calendar" of the party who has none** — right for a model, wrong for a stylist. Fixed on BOTH clients; the replacement is also more accurate, since nothing ever removed the slot from a calendar | No |
+| 87 | ✅ **VERIFIED LIVE (web) 24 Sep.** Cancelled shows under Past with who cancelled and why; a platform cancellation stays neutral, which also protects a block cascade from naming the blocker | No |
 | 109 | **Mobile still drops cancelled bookings from the list** — the other half of 87. Needs a fourth state array, and the neutral-wording rule must travel with it | No while mobile is unreleased |
 | 14 | Admin revoke UI — `0027` ships the mechanism, nothing calls it | No, but revocation is SQL-only until then |
 | 74 | ✅ **CLOSED 23 Sep** — proven end to end, and the mobile switch now exists (item 88). Untested on device |

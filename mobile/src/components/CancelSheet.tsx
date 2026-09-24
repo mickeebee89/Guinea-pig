@@ -67,8 +67,17 @@ export default function CancelSheet({
           <Text style={styles.title}>Cancel your booking with {otherName}?</Text>
 
           <Text style={styles.consequence}>
+            {/* ⚠️ NO POSSESSIVE. This read "goes back on THEIR calendar",
+                where "their" is `otherName`, the OTHER party — right when a
+                model cancels, wrong when a STYLIST cancels from chat, where it
+                pointed at the model, who has no calendar. The availability
+                calendar is the stylist's own.
+
+                Fixed on both clients together (item 110): the web carried the
+                identical sentence, and two clients wording the same fact
+                differently is how one of them ends up wrong for longer. */}
             {shortNotice ? 'This booking is within the next 24 hours. ' : ''}
-            {otherName} will be told, and the time slot goes back on their calendar.
+            {otherName} will be told, and the time slot is free for someone else to book.
             This can’t be undone.
           </Text>
 
