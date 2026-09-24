@@ -4,7 +4,7 @@ import { notFound } from 'next/navigation'
 import { RoleGate } from '@/components/RoleGate'
 import { StylistCard } from '@/components/StylistCard'
 import { countByCategory, stylistsByCategory } from '@/lib/stylists'
-import { SITE_URL, TREATMENTS, getTreatment } from '@/lib/site'
+import { SITE_URL, TREATMENTS, getTreatment, MIN_STYLISTS_TO_INDEX } from '@/lib/site'
 
 export const revalidate = 900
 
@@ -28,10 +28,22 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const t = getTreatment((await params).treatment)
   if (!t) return {}
+
+  // ⚠️ THE PAGE DECIDES FOR ITSELF (item 114). Below the threshold it renders
+  // normally for a person and asks not to be ranked. `follow` stays true: the
+  // page is thin, not untrustworthy, and its links should still be crawled.
+  //
+  // The SITEMAP uses the same count and the same constant — a sitemap that
+  // lists a noindexed page is a site contradicting itself, and the two living
+  // in different files is how that happens.
+  const count = await countByCategory(t.dbSlug)
+  const thin = count < MIN_STYLISTS_TO_INDEX
+
   return {
     title: `${t.category} models wanted`,
     description: t.summary,
     alternates: { canonical: `/${t.slug}` },
+    ...(thin ? { robots: { index: false, follow: true } } : {}),
     openGraph: {
       title: `${t.category} models wanted · Cavy`,
       description: t.summary,

@@ -5694,6 +5694,59 @@ JPEG bytes inside it — which is how a browser ends up refusing to render a
 photo that uploaded perfectly well. The extension now comes from the file being
 sent.
 
+**114. A TREATMENT PAGE NOW DECIDES FOR ITSELF WHETHER IT IS WORTH INDEXING —
+BUILT 24 Sep 2026. `npm run verify` EXIT 0. NOT DEPLOYED.**
+
+**Plainly:** below three stylists, a treatment page asks not to be ranked. As
+stylists join, it starts asking. Nobody has to remember.
+
+**── WHY IT HAD TO STOP BEING A DECISION ──**
+
+`PUBLIC_SITE_MODE` is all-or-nothing — index everything or index nothing — so
+"is there enough on the site yet" was a judgement somebody had to remember to
+re-make. **Item 11's query showed what forgetting costs**: all six treatment
+pages had been indexing ONE stylist, the same one on every page, whose bio was
+test gibberish.
+
+Micky, 24 Sep: *"That way the decision stops being something I have to
+remember."* That is the whole design goal, and it is a better one than getting
+the number right.
+
+**── THREE, AND IT IS A JUDGEMENT NOT A FINDING ──**
+
+* **One is a stub** — and it was also the specific problem: with one stylist in
+  every category, **all six pages showed the same card**, so they were
+  near-duplicates of each other. That is the doorway shape, not merely thin. A
+  threshold fixes it as a side effect.
+* **Two still reads as "there is nobody here".**
+* **Three** is the smallest number that looks like a LIST rather than an
+  example, and the smallest at which two treatment pages are likely to differ
+  from each other in substance.
+
+One constant in `lib/site.ts`, argued with in the comment, changeable in one
+place.
+
+**── ⚠️ THE PAGE AND THE SITEMAP SHARE THE COUNT, NOT JUST THE NUMBER ──**
+
+A sitemap that lists a page which answers `noindex` is a site telling a crawler
+two different things about one URL. They use the same constant AND the same
+`countByCategory`, because two files each computing "is this page worth it" is
+exactly how the answers drift — which is the failure this session has now found
+in the types stamp, the cancel copy, and the avatar write.
+
+The sitemap is async now. Six head-counts an hour. `countByCategory` degrades
+to 0 on any failure, so a database wobble hides the treatment pages for an hour
+rather than advertising pages that will answer noindex. **Quiet is the safe
+direction.**
+
+**── WHAT IT DOES NOT CHANGE ──**
+
+A page below the threshold **still renders, still lists whoever is on it, and
+is still reachable and linkable.** It simply does not ask to be ranked. This
+changes what crawlers see, not what people see — which is why it is safe to
+leave `mode=live` rather than flipping the whole site back to noindex and
+teaching the domain that its pages come and go.
+
 **75. A CHECK COULD STOP THE WEBSITE UPDATING, AND NOTHING NOTICED IT HAD —
 CHANGED 22 Sep 2026. `npm run verify` EXIT 0.**
 
@@ -11864,6 +11917,8 @@ platforms each failed it differently.
 | 104 | **A member cannot change her own first name, on either client.** Set at signup, rendered on every profile, booking, review and chat, editable nowhere. A typo is permanent | No, but it is unfixable by anyone |
 | **113** | ★ **A MODEL ON MOBILE HAS NO BOOKINGS LIST AT ALL** — not a missing filter, a missing screen. `/(app)/sessions` is stylist-only; her dashboard is three capped queries (5, 10, all-completed) with no cancelled booking anywhere. **A whole journey missing on one client**, the same shape as items 49 and 99. **Not on this list — see HANDOVER.md → "Before the app is submitted"** | No while mobile is unreleased |
 | 109 | ✅ **Stylist half fixed 24 Sep, not tested on device.** Cancelled bookings show on mobile with the same three sentences as the web. The model's half IS item 113 | No |
+| 114 | ✅ **Treatment pages self-noindex below 3 stylists — built 24 Sep, not deployed.** The page and the sitemap share the constant AND the count. Replaces a judgement that had to be remembered | No |
+| 115 | **The 40-character bio bar is a length test, and mash cleared it (item 93).** What would replace it needs a human look, and the only existing per-stylist human touchpoint is the verification decision — which does not currently show the shop. **Reported, not built** | No, but it gates the public site |
 | 112 | ✅ **Fixed 24 Sep, not deployed.** Portfolio uploads resize before sending, and the cap moved to AFTER the resize — it was refusing 12MB camera photos that shrink to a few hundred KB | No |
 | 111 | ✅ **VERIFIED AND CLEARED 24 Sep.** The one video row was approved by a reviewer who could not watch it — the hypothesis and the only instance agree. Row and file removed | It could be uploaded from one place and MODERATED from none — the admin queue showed it with no controls. ⚠️ Existing rows need deleting by SQL, and the files by hand: a row delete does not touch storage | No |
 | 105 | ✅ **Removed from every surface 24 Sep, not deployed.** ⚠️ `public-web-views.sql` needs `drop view if exists public.public_stylists;` BEFORE re-running — `create or replace` cannot drop a column. Column drop is a later migration | No |

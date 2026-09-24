@@ -180,6 +180,44 @@ export interface City {
   name: string
 }
 
+/**
+ * How many stylists a treatment page needs before it asks to be indexed.
+ * Audit item 114.
+ *
+ * ══════════════════════════════════════════════════════════════════════════
+ *  WHY A PAGE DECIDES THIS ABOUT ITSELF
+ * ══════════════════════════════════════════════════════════════════════════
+ * `PUBLIC_SITE_MODE` is all-or-nothing: index everything or index nothing.
+ * That made "is there enough on the site yet" a judgement somebody had to
+ * remember to re-make, and on 24 Sep item 11's query showed what forgetting
+ * costs — all six treatment pages had been indexing ONE stylist, whose bio
+ * was test gibberish (item 93).
+ *
+ * A page that knows its own count can answer for itself, and keeps answering
+ * as inventory arrives. Nothing to remember and nothing to flip back.
+ *
+ * ── WHY THREE, AND IT IS A JUDGEMENT ──────────────────────────────────────
+ * Not a finding. The reasoning, so it can be argued with:
+ *
+ *   * ONE is a stub. It is also the specific problem we had: with one stylist
+ *     in every category, all six pages showed THE SAME CARD — so they were
+ *     near-duplicates of each other, which is the doorway shape, not merely
+ *     thin. A threshold fixes that as a side effect.
+ *   * TWO still reads as "there is nobody here".
+ *   * THREE is the smallest number that looks like a LIST rather than an
+ *     example, and the smallest at which two treatment pages are likely to
+ *     differ from each other in substance.
+ *
+ * Higher would be safer for the domain and would keep the pages dark longer,
+ * which costs nothing today and costs real traffic later. Three is the point
+ * where a page starts being worth showing a stranger.
+ *
+ * ⚠️ THIS CHANGES WHAT CRAWLERS SEE, NOT WHAT PEOPLE SEE. A page below the
+ * threshold still renders, still lists whoever is on it, and is still
+ * reachable and linkable. It just does not ask to be ranked.
+ */
+export const MIN_STYLISTS_TO_INDEX = 3
+
 export const CITIES: readonly City[] = [
   { slug: 'london',     name: 'London' },
   { slug: 'manchester', name: 'Manchester' },
