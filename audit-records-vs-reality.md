@@ -5140,6 +5140,79 @@ failure as reading a repo file instead of the live database (0009, 0053) —
 reasoning about an artefact that is not the one in play — and it now has three
 instances across two days.
 
+**108. A MIGRATION REFUSED ITSELF ON A FUNCTION THAT EXISTS — MY CHECK WAS
+WRONG, NOT THE DATABASE. 24 Sep 2026. Nothing was applied.**
+
+**Plainly:** 0056's ASSERT said *"is_suspended(uuid) is missing."* It is not
+missing. Micky read the live function list: `public`, `is_suspended`, args
+`uid uuid`, one overload.
+
+**── EXACTLY WHAT I DID, AND WHY IT FAILS ──**
+
+```sql
+if to_regproc('public.is_suspended(uuid)') is null then   -- WRONG
+```
+
+**`to_regproc` takes a function NAME. `to_regprocedure` takes a name AND its
+argument types.** Handed a signature, `to_regproc` cannot parse it as a plain
+qualified name — and **the whole `to_reg*` family returns NULL on failure
+rather than raising**, which is the entire reason to use them instead of a
+cast. So "you called the wrong function" came back indistinguishable from
+"that function does not exist".
+
+**Both checks were wrong**, `is_admin()` as well; the first one raised, so the
+second was never reached.
+
+**── ⚠️ AND THE CONVENTION WAS ALREADY THERE ──**
+
+Every other migration in this ledger uses `to_regprocedure` — 0018, 0035,
+0039, 0040, 0041, 0042, 0044, 0045, 0053. **Fourteen uses, and 0056 is the only
+`to_regproc` anywhere in the repo.**
+
+Worse: **0044 checks THIS EXACT FUNCTION**, in almost the same words —
+`to_regprocedure('public.is_suspended(uuid)')`. I had read 0044 in this session,
+for `_withdraw_stylist`. This is not a subtlety I could not have known; it is a
+line I had already seen and did not copy.
+
+**── DOES THE CALL HAVE THE SAME FAULT? NO, AND HERE IS WHY ──**
+
+Micky asked whether calling it with a different parameter name would fail too.
+Checked, all three call sites:
+
+```sql
+using (user_id = auth.uid() or public.is_admin());   -- policy
+if v_uid is null or public.is_admin() then           -- guard
+if public.is_suspended(v_uid) then                   -- guard
+```
+
+**All positional.** A parameter's name is only used in a call that names it —
+`is_suspended(uid => v_uid)` — and nothing here does. So the fact that the
+argument is called `uid` is irrelevant to every call in this file. **It would
+have mattered**, and would have failed the same way, had I written the named
+form with the wrong name. The concern was the right one to raise; it just does
+not bite here.
+
+**── HOW I SHOULD HAVE CAUGHT IT WITHOUT APPLYING ──**
+
+Micky: *"I would expect reading the live function list to be the first step
+when a migration depends on one."* That is right, and there is already a memory
+note saying exactly this — **read-the-live-definition-first** — written on
+23 Sep after 0009 and 0053. I applied it to the function BODIES I was replacing
+and not to the function EXISTENCE I was asserting, as though the rule were
+about bodies. It is about not reasoning from an artefact that is not the one in
+play, and an ASSERT is exactly that kind of reasoning.
+
+**The mechanism, added to 0056 and worth doing on every migration from here: a
+PREFLIGHT block.** Every precondition the ASSERT tests, repeated as a read-only
+SELECT that ANSWERS instead of raising. Four rows, all of which must say yes.
+It takes ten seconds, it changes nothing, and it would have shown `present =
+false` for a function that exists — which is a contradiction, and a
+contradiction points at the CHECK.
+
+**An ASSERT that has never been run is an untested claim about the schema.** It
+is the only code in a migration that gets no rehearsal, and it is the code that
+decides whether anything else runs at all.
+
 **75. A CHECK COULD STOP THE WEBSITE UPDATING, AND NOTHING NOTICED IT HAD —
 CHANGED 22 Sep 2026. `npm run verify` EXIT 0.**
 
@@ -11299,6 +11372,7 @@ platforms each failed it differently.
 | 92 | ✅ **CLOSED 23 Sep** — verified both ways: chips filter with a postcode, and go inert with the list intact without one | No |
 | 94 | ✅ **CLOSED 23 Sep** — verified live both ways. The unique index exists, so duplicates were never possible and the heart's missing check is the defect | No |
 | 96 | ✅ **CLOSED 23 Sep** — all four verified on screen: the photo on the booking card, and the badge, reviews, photos and bio on her profile | No |
+| 108 | ✅ **0056's ASSERT used `to_regproc` where the whole ledger uses `to_regprocedure`**, so it refused itself on a function that exists. Fixed; PREFLIGHT block added so an ASSERT can be tested before it runs | No — nothing was applied |
 | 104 | **Editing your own name — built, 0056 NOT APPLIED, not deployed.** The site does not build until it is, by design | No |
 | 107 | ✅ **Six client components could not report a thrown server action** — no `catch` anywhere, so a rejection rendered nothing and the control looked dead. One `attempt()` helper now, which rethrows Next's redirect | No |
 | 106 | ✅ **Per-field feedback on `/profile`** — one shared error rendered below all nine attributes made a refused Instagram handle invisible, so the field looked dead. Same shape still in `PhotoManager`, named not fixed | No |

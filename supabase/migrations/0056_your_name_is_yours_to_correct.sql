@@ -76,11 +76,27 @@ begin
     raise exception '0056: public.name_changes already exists. Read it before applying.';
   end if;
   -- The cooldown and the suspension check both lean on these.
-  if to_regproc('public.is_suspended(uuid)') is null then
-    raise exception '0056: is_suspended(uuid) is missing.';
+  --
+  -- ⚠️ to_regprocedure, NOT to_regproc. The first version of this file used
+  -- to_regproc and the migration refused itself on a function that plainly
+  -- exists.
+  --
+  --   to_regproc('public.is_suspended')          -- a NAME
+  --   to_regprocedure('public.is_suspended(uuid)') -- a NAME AND ITS ARGUMENTS
+  --
+  -- Handed a signature, to_regproc cannot parse it as a plain name, and the
+  -- whole to_reg* family returns NULL on failure instead of raising — which is
+  -- the point of them, and is what turned "you called the wrong function" into
+  -- "is_suspended(uuid) is missing". Both checks below were wrong; the first
+  -- one raised, so the second was never reached.
+  --
+  -- Every other migration in this ledger already uses to_regprocedure,
+  -- including 0044, which checks THIS EXACT FUNCTION in the same words.
+  if to_regprocedure('public.is_suspended(uuid)') is null then
+    raise exception '0056: public.is_suspended(uuid) is missing (suspension-enforcement.sql).';
   end if;
-  if to_regproc('public.is_admin()') is null then
-    raise exception '0056: is_admin() is missing.';
+  if to_regprocedure('public.is_admin()') is null then
+    raise exception '0056: public.is_admin() is missing.';
   end if;
   -- 0040's guard runs BEFORE UPDATE on the same table. Ours must not be the
   -- only thing standing between a member and her own gates.
@@ -263,7 +279,7 @@ create trigger trg_log_users_name_change
 
 -- MIGRATION FOOTER
 insert into public.schema_migrations (version, name, checksum)
-values ('0056', 'your_name_is_yours_to_correct', '976cf79e9f79cb8d7bd1fb2b98c57bc90f88ea770d55f8a18f743db025ea94f2');
+values ('0056', 'your_name_is_yours_to_correct', 'c4c932ff6741e93a7360b8f6e37d25e7e9145ca48cfa88dc863932c7d44fa693');
 
 commit;
 
@@ -271,12 +287,44 @@ notify pgrst, 'reload schema';
 
 
 -- ===========================================================================
+-- ⚠️ PREFLIGHT — RUN THIS BEFORE THE MIGRATION. Read-only, changes nothing.
+--
+-- The ASSERT block is code, and on 24 Sep 2026 it was WRONG: it used
+-- to_regproc where it needed to_regprocedure, and refused the migration on a
+-- function that plainly existed. The migration was blamed for the database
+-- being wrong when the truth was the reverse.
+--
+-- An ASSERT that has never been run is an untested claim about the schema. So
+-- every precondition it tests is repeated here as a SELECT that ANSWERS rather
+-- than raises. Four rows, all of which must say yes:
+--
+--   select 'is_suspended(uuid)' as needs,
+--          to_regprocedure('public.is_suspended(uuid)') is not null as present
+--   union all
+--   select 'is_admin()',
+--          to_regprocedure('public.is_admin()') is not null
+--   union all
+--   select 'trg_guard_users_protected_columns (0040)',
+--          exists (select 1 from pg_trigger
+--                  where tgname = 'trg_guard_users_protected_columns'
+--                    and not tgisinternal)
+--   union all
+--   select 'name_changes does NOT exist yet',
+--          to_regclass('public.name_changes') is null;
+--
+-- If any `present` is false, STOP and find out why before changing the
+-- migration — the answer is as likely to be in the check as in the database.
+-- ===========================================================================
+--
+-- ===========================================================================
 -- DEPLOY
 --
 --   Additive. Safe to apply against the build that is live now: nothing calls
 --   the new table, and the guard only fires on an update that changes a name,
 --   which no shipped code does.
 --
+--   0. The PREFLIGHT block above. It takes ten seconds and it is the step that
+--      would have caught the to_regproc mistake without applying anything.
 --   1. Apply this migration.
 --   2. node scripts/gen-supabase-types.mjs
 --   3. ⚠⚠ WIRE "Your name" BACK INTO SETTINGS. It is built and deliberately
