@@ -5832,6 +5832,93 @@ The question now has a name: `lib/roles.ts`, with `isStylist`, `isModel` and
 `isBoth`. **Naming it once is what stops the fourth instance**, because
 `role === 'provider'` will keep reading as correct.
 
+**14. ADMIN REVOKE HAD NO UI — BUILT 24 Sep 2026. admin `tsc` EXIT 0, admin
+build EXIT 0. NOT DEPLOYED.**
+
+`revoke_verification` has existed since 0027 and **nothing has ever called it**,
+so undoing a mistaken approval meant hand-written SQL against a live database.
+
+**── WHAT IT DOES, READ FROM 0044 (the current body; 0027 created it, 0028
+trimmed one sentence, 0044 rewrote it) ──**
+
+| | |
+|---|---|
+| `0044:385` | refuses unless `is_admin()` |
+| `0044:391` | **a reason of ≥10 characters is mandatory** — "this removes someone's ability to trade, and 'an admin decided to' is not a record" |
+| `0044:397` | `users.is_verified = false` |
+| → `0027:166` | `trg_unpublish_on_verification_lost` fires and sets `is_published = false` (`0027:156`), so it cannot leave a published-but-unverified shop |
+| `0044:401` | **deletes the `verification_requests` row** — deliberately, so `/verify` offers the submit path again |
+| `0044:405` | calls `_withdraw_stylist` |
+| `0044:409` | writes `moderation_actions` — admin, target, `'revoke_verification'`, reason |
+| | **One transaction.** A failure anywhere leaves none of it done |
+
+**`_withdraw_stylist` (0044:295-353)**: hides **live** shops only, stamping
+`first_published_at` so auto-publish cannot put one back; cancels every
+**pending or accepted booking dated today or later** where she is the stylist;
+leaves **`cancelled_by` NULL** (`0044:329`) because the platform cancelled; and
+writes each model a `session_cancelled` notice.
+
+**Can she reapply? Yes, immediately, and nothing extra is needed** — deleting
+the request row is what re-opens `/verify` for her.
+
+**── WHAT THE MODEL IS TOLD (0044:246-267) ──**
+
+**One message for revocation, suspension AND ban**, and the comment says it
+must stay one: it must not name which, and **it must never take `p_reason`** —
+"the admin's reason is moderation evidence about the stylist, not something to
+publish to a model."
+
+It says: our decision, not theirs and not yours; they can't take bookings at
+the moment; **we're not able to explain why**; nothing about your account has
+changed; email support if anything worried you.
+
+**── ⚠️ WHAT THE STYLIST IS TOLD: NOTHING. ITEM 117. ──**
+
+Checked rather than assumed: the only notification inserts in 0027 and 0044 are
+to the **model** (`0027:218`, `0044:347`) and the `'warn'` branch
+(`0044:472`). **No row is ever written to the stylist.**
+
+So her verification is cleared, her shop is hidden, her bookings are cancelled,
+and she finds out **by looking.** Meanwhile every model she was booked with
+gets a considered message.
+
+I could find no decision recording that as deliberate — 0027's header argues
+about the MODEL's notice at length and does not mention hers. Recorded as
+**item 117**, not fixed here: telling her is a product and copy decision
+(suspension tells her via `'warn'`, so the product does sometimes), and it is
+not something to slip into a UI build.
+
+**── WHERE THE CONTROL WENT, AND THE CONFIRMATION ──**
+
+**Users page, beside Verify**, shown **only when `is_verified` is true** —
+offering "revoke" on an unverified account is a button that can only fail, and
+the inverse of Verify belongs next to it. Its own RPC, not an
+`admin_act_on_user` action: it reverses a decision, carries its own mandatory
+reason, and returns a count this page has to show back.
+
+**The confirmation is a number, not a type-to-confirm box.** The modal reads
+how many upcoming bookings would be cancelled **when it opens**, for that user,
+and says so before the button. A type-to-confirm is effort without information;
+**knowing that four real appointments are about to be cancelled on four real
+people is the part that cannot be undone.** The mandatory reason is the second
+deliberate act, Confirm is disabled under 10 characters, and the count reads
+"Checking…" rather than a confident 0 if the read fails.
+
+**── THE REASON FIELD ──**
+
+* **Recorded:** yes — `moderation_actions`, append-only, six-year retention.
+* **Seen by the member:** **no.** Not by the models (the notice never takes it,
+  by design) and not by the stylist (she is told nothing at all).
+* **Does the neutral rule apply?** To the model's notice, absolutely, and it
+  already does. **It does not follow that the STYLIST must be told nothing** —
+  those are different questions, and conflating them is how item 117 stayed
+  invisible. Neutrality exists so one member learns nothing about another's
+  conduct or safety decisions. The stylist is not a third party to her own
+  revocation.
+
+The modal says both facts out loud: the reason is kept six years and nobody
+but an admin sees it, and the stylist is not notified.
+
 **75. A CHECK COULD STOP THE WEBSITE UPDATING, AND NOTHING NOTICED IT HAD —
 CHANGED 22 Sep 2026. `npm run verify` EXIT 0.**
 
@@ -11980,7 +12067,8 @@ platforms each failed it differently.
 | 110 | ✅ **Cancel confirmation said "their calendar" of the party who has none** — right for a model, wrong for a stylist. Fixed on BOTH clients; the replacement is also more accurate, since nothing ever removed the slot from a calendar | No |
 | 87 | ✅ **VERIFIED LIVE (web) 24 Sep.** Cancelled shows under Past with who cancelled and why; a platform cancellation stays neutral, which also protects a block cascade from naming the blocker | No |
 | 109 | **Mobile still drops cancelled bookings from the list** — the other half of 87. Needs a fourth state array, and the neutral-wording rule must travel with it | No while mobile is unreleased |
-| 14 | Admin revoke UI — `0027` ships the mechanism, nothing calls it | No, but revocation is SQL-only until then |
+| 14 | ✅ **Built 24 Sep, not deployed.** Users page, beside Verify, only for a verified account. The confirmation is the COUNT of bookings it would cancel, read when the modal opens | No |
+| 117 | **A revoked stylist is told nothing.** Her verification is cleared, her shop hidden and her bookings cancelled, and no notification is written to her — while every model she was booked with gets a considered message. No decision recording that as deliberate | No, but it is her livelihood |
 | 74 | ✅ **CLOSED 23 Sep** — proven end to end, and the mobile switch now exists (item 88). Untested on device |
 | 75 | Drift check is new and unproven — its first real test is the next failed or skipped deploy | No |
 | 77 | ✅ **CLOSED 23 Sep** — Micky republished his shop, so one is live. Item 11's condition (one LISTED stylist per CATEGORY) is still unmet with a single shop | No, but launch-relevant |

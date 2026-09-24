@@ -70,6 +70,16 @@ export default function UsersPage() {
 
   const [modal, setModal] = useState<{ user: User; action: string } | null>(null)
   const [reason, setReason]   = useState('')
+  /**
+   * How many upcoming bookings a revoke would cancel. Null while it is being
+   * read, so the modal says "checking" rather than a confident 0.
+   *
+   * ⚠️ READ WHEN THE MODAL OPENS, not from a row this page loaded earlier.
+   * The number is the whole reason that panel is worth having, and a stale one
+   * would understate what is about to happen to real people — the same stale-row
+   * failure the flag/waive/comp actions already guard against downstream.
+   */
+  const [upcomingCount, setUpcomingCount] = useState<number | null>(null)
   const [duration, setDuration] = useState('7')
 
   const { loading, reload } = useLoader(`${role}|${verified}`, async stale => {
@@ -165,9 +175,82 @@ export default function UsersPage() {
    *     flips inside the same transaction and returns what the value BECAME, so
    *     a stale page can no longer silently do the opposite of what was clicked.
    */
+  /**
+   * Open the modal, and for a revoke go and count what it would cancel.
+   *
+   * The same definition `_withdraw_stylist` uses (0044:320-323): pending or
+   * accepted, dated today or later, where this user is the STYLIST. Written
+   * out here rather than shared, because the function is in SQL and this is a
+   * read-only preview of it — if the two ever disagree the function wins, and
+   * the alert afterwards reports what it actually did.
+   */
+  function openModal(user: User, action: string) {
+    setModal({ user, action })
+    setReason('')
+    setUpcomingCount(null)
+    if (action !== 'revoke_verification') return
+    void (async () => {
+      try {
+        const today = new Date().toISOString().slice(0, 10)
+        const { data: prov } = await supabase
+          .from('providers').select('id').eq('user_id', user.id).maybeSingle()
+        const providerId = (prov as { id?: string } | null)?.id
+        if (!providerId) { setUpcomingCount(0); return }
+        const { count } = await supabase
+          .from('sessions').select('id', { count: 'exact', head: true })
+          .eq('provider_id', providerId)
+          .in('status', ['pending', 'accepted'])
+          .gte('date', today)
+        setUpcomingCount(count ?? 0)
+      } catch {
+        // Leave it null. "Checking…" that never resolves is honest; a 0 that
+        // is really a failed read would tell her nobody is affected.
+        setUpcomingCount(null)
+      }
+    })()
+  }
+
   async function doAction() {
     if (!modal) return
     const { user, action } = modal
+
+    // ══ REVOKE IS ITS OWN FUNCTION, NOT AN admin_act_on_user ACTION ══════
+    //
+    // `revoke_verification(uuid, text)` has existed since 0027 and **nothing
+    // has ever called it** (audit item 14), so undoing a mistaken approval
+    // meant hand-written SQL on a live database.
+    //
+    // It is not folded into admin_act_on_user because it is not a user action
+    // in that sense: it reverses a DECISION, requires its own mandatory reason
+    // (≥10 characters, enforced in the database), and returns how many
+    // bookings it cancelled — which is the number this page has to show back.
+    if (action === 'revoke_verification') {
+      const { data, error } = await supabase.rpc('revoke_verification', {
+        p_user_id: user.id,
+        p_reason:  reason.trim(),
+      })
+      if (error) {
+        alert(`Could not revoke verification.\n\n${adminErrorText(error)}\n\nNothing has changed.`)
+        return
+      }
+      const r = (data ?? {}) as { cancelled_bookings?: number }
+      const n = r.cancelled_bookings ?? 0
+      alert(
+        `${user.first_name}'s verification is revoked and their shop is hidden.\n\n` +
+        (n === 0
+          ? 'No upcoming bookings needed cancelling.'
+          : `${n} upcoming booking${n === 1 ? '' : 's'} cancelled. Each model has been told ` +
+            `the stylist can't take bookings at the moment — not why, and not that this was ` +
+            `a decision about them.`) +
+        `\n\nThey can submit a new ID check whenever they like; the old request row is gone, ` +
+        `so /verify offers them the submit path again.\n\n` +
+        `⚠️ They have NOT been told. Nothing notifies the stylist — see audit item 117.`,
+      )
+      setModal(null)
+      setReason('')
+      reload()
+      return
+    }
 
     const { data, error } = await supabase.rpc('admin_act_on_user', {
       p_user_id:       user.id,
@@ -331,7 +414,7 @@ export default function UsersPage() {
                   <td className="px-4 py-2 whitespace-nowrap">
                     <div className="flex gap-1 flex-nowrap items-center">
                       {/* Primary: the actions used constantly for review/comp setup. */}
-                      <button onClick={() => { setModal({ user: u, action: 'verify' }); setReason('') }}
+                      <button onClick={() => { openModal(u, 'verify') }}
                         title="Mark this user identity-verified"
                         className="text-[11px] px-2 py-1 rounded-md font-medium bg-blue-100 text-blue-700">
                         Verify
@@ -376,9 +459,15 @@ export default function UsersPage() {
                         { a: 'suspend',   glyph: '⏸',                          title: 'Suspend',   color: 'bg-orange-100 text-orange-700' },
                         { a: 'ban',       glyph: '⛔',                          title: 'Ban',       color: 'bg-red-100 text-red-700' },
                         { a: 'reinstate', glyph: '↩',                          title: 'Reinstate', color: 'bg-green-100 text-green-700' },
+                        // ⚠️ ONLY FOR SOMEONE WHO IS VERIFIED. Offering "revoke"
+                        // on an unverified account is a button that can only
+                        // fail, and the inverse of Verify belongs beside it.
+                        ...(u.is_verified
+                          ? [{ a: 'revoke_verification', glyph: '✖', title: 'Revoke verification', color: 'bg-red-100 text-red-700' }]
+                          : []),
                         { a: 'flag',      glyph: u.fraud_flagged ? '⚐' : '⚑',  title: u.fraud_flagged ? 'Unflag fraud' : 'Flag fraud', color: 'bg-gray-100 text-gray-600' },
                       ].map(({ a, glyph, title, color }) => (
-                        <button key={a} onClick={() => { setModal({ user: u, action: a }); setReason('') }}
+                        <button key={a} onClick={() => { openModal(u, a) }}
                           title={title}
                           className={`w-6 h-6 flex items-center justify-center rounded-md text-xs leading-none ${color}`}>
                           {glyph}
@@ -399,7 +488,9 @@ export default function UsersPage() {
       {modal && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
           <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl">
-            <h2 className="text-lg font-bold text-[#3D2E2E] mb-1 capitalize">{modal.action} user</h2>
+            <h2 className="text-lg font-bold text-[#3D2E2E] mb-1 capitalize">
+              {modal.action === 'revoke_verification' ? 'Revoke verification' : `${modal.action} user`}
+            </h2>
             <p className="text-sm text-[#3D2E2E]/60 mb-4">{modal.user.first_name} {modal.user.last_name ?? (modal.user.last_initial ? `${modal.user.last_initial}.` : '')} — {modal.user.email}</p>
 
             {modal.action === 'suspend' && (
@@ -419,6 +510,58 @@ export default function UsersPage() {
                 the shop — the stylist does that themselves.
               </p>
             )}
+            {modal.action === 'revoke_verification' && (
+              /* ══ THE COST, WITH THE NUMBER, BEFORE THE BUTTON. ═══════════
+                 This removes someone's ability to trade. The friction that
+                 belongs here is not a type-to-confirm box — that is effort
+                 without information. It is knowing how many real appointments
+                 are about to be cancelled on real people, which is the part
+                 that cannot be undone.
+
+                 The reason field below is the second deliberate act, and the
+                 database refuses anything under 10 characters regardless. */
+              <div className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-800 space-y-2">
+                <p className="font-semibold">
+                  {upcomingCount === null
+                    ? 'Checking how many bookings this affects…'
+                    : upcomingCount === 0
+                      ? 'No upcoming bookings will be cancelled.'
+                      : `${upcomingCount} upcoming booking${upcomingCount === 1 ? '' : 's'} will be cancelled.`}
+                </p>
+                <p>
+                  Their shop is hidden and their verification is cleared. Each model is told the
+                  stylist can’t take bookings at the moment — <strong>not why</strong>, and not
+                  that it was a decision about them. Lifting this later does not republish the
+                  shop; the stylist does that.
+                </p>
+                <p>
+                  They can submit a new ID check straight away — the old request row is deleted so
+                  /verify offers them the submit path again.
+                </p>
+                <p className="font-semibold">
+                  ⚠️ The stylist is not told. Nothing notifies them (audit item 117) — they find
+                  out by looking.
+                </p>
+              </div>
+            )}
+
+            {modal.action === 'revoke_verification' && (
+              <div className="mb-4">
+                <label className="text-xs font-medium text-[#3D2E2E]/60 block mb-1">
+                  Reason — required, at least 10 characters
+                </label>
+                <textarea value={reason} onChange={e => setReason(e.target.value)} rows={3}
+                  placeholder="What happened, in enough detail to be read back in a year."
+                  className="border border-black/10 rounded-lg px-3 py-2 text-sm w-full resize-none" />
+                <p className="mt-1 text-[11px] text-[#3D2E2E]/50">
+                  {/* Recorded in moderation_actions, append-only, kept six years. Shown
+                      to nobody but an admin — the model's notice never carries it. */}
+                  Recorded against this account and kept for six years. The stylist and the
+                  models never see it. {reason.trim().length}/10
+                </p>
+              </div>
+            )}
+
             {['warn','suspend','ban'].includes(modal.action) && (
               <div className="mb-4">
                 <label className="text-xs font-medium text-[#3D2E2E]/60 block mb-1">Reason / note</label>
@@ -429,7 +572,17 @@ export default function UsersPage() {
 
             <div className="flex gap-3 justify-end">
               <button onClick={() => setModal(null)} className="px-4 py-2 text-sm rounded-lg bg-gray-100 text-gray-600">Cancel</button>
-              <button onClick={doAction} className="px-4 py-2 text-sm rounded-lg text-white font-medium" style={{ backgroundColor: '#8C4A58' }}>
+              <button
+                onClick={doAction}
+                // The database enforces this too (0044:391). Disabling here
+                // means she is not told "at least 10 characters" AFTER writing
+                // a reason and pressing a destructive button.
+                disabled={modal.action === 'revoke_verification' && reason.trim().length < 10}
+                className="px-4 py-2 text-sm rounded-lg text-white font-medium disabled:bg-gray-300 disabled:text-gray-500"
+                style={modal.action === 'revoke_verification' && reason.trim().length < 10
+                  ? undefined
+                  : { backgroundColor: '#8C4A58' }}
+              >
                 Confirm
               </button>
             </div>
