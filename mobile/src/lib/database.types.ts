@@ -1,7 +1,7 @@
 // GENERATED FILE — DO NOT EDIT BY HAND.
 //
 // Written by scripts/gen-supabase-types.mjs from the live database.
-// TYPES_STAMP: 0056
+// TYPES_STAMP: 0057
 //
 // Regenerate whenever a migration is applied:
 //   node scripts/gen-supabase-types.mjs
@@ -2304,7 +2304,6 @@ export type Database = {
           has_open_slots: boolean | null
           id: string | null
           is_verified: boolean | null
-          level: string | null
           location: string | null
           location_slug: string | null
           name: string | null
@@ -2314,6 +2313,7 @@ export type Database = {
           review_count: number | null
           short_id: string | null
           slug: string | null
+          status_text: string | null
         }
         Relationships: []
       }
@@ -2487,7 +2487,7 @@ export type Database = {
         }[]
       }
       revoke_verification: {
-        Args: { p_reason: string; p_user_id: string }
+        Args: { p_message?: string; p_reason: string; p_user_id: string }
         Returns: Json
       }
       run_email_reconcile: {

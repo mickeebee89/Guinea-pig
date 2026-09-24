@@ -12175,7 +12175,7 @@ platforms each failed it differently.
 | 87 | ✅ **VERIFIED LIVE (web) 24 Sep.** Cancelled shows under Past with who cancelled and why; a platform cancellation stays neutral, which also protects a block cascade from naming the blocker | No |
 | 109 | **Mobile still drops cancelled bookings from the list** — the other half of 87. Needs a fourth state array, and the neutral-wording rule must travel with it | No while mobile is unreleased |
 | 14 | ✅ **Built 24 Sep, not deployed.** Users page, beside Verify, only for a verified account. The confirmation is the COUNT of bookings it would cancel, read when the modal opens | No |
-| 117 | ✅ **Built 24 Sep — 0057 NOT APPLIED.** She is told, by notification and email, with a separate optional message field. The admin's REASON is never shown: it may name the person who reported her | No |
+| 117 | ✅ **0057 APPLIED 24 Sep 07:53, types regenerated.** She is told, by notification and email, with a separate optional message field. The admin's REASON is never shown: it may name the person who reported her | No |
 | 118 | **`'warn'` publishes the admin's raw reason to the member** (0044:472) — the same evidence field, with nothing between it and the subject. The landmine 0057 was built to avoid, already armed | No, but one warning could name a reporter |
 | 119 | **Suspend and ban notify nobody.** Only `'warn'` does. Mobile's `SuspensionGate` explains it at the door; the web has no gate, so a suspended member there meets refusals with no explanation | No |
 | 120 | **The web has no suspension gate.** `my_suspension` is called once, for one action in `shop/actions.ts`. Mobile stops a suspended user at the door and explains; the web does not | No |
