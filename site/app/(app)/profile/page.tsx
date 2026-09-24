@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { createSupabaseServerClient, requireUser } from '@/lib/supabase-server'
 import { getMyProfile } from '@/lib/queries/my-profile'
 import { getDashboardUser } from '@/lib/queries/dashboard'
+import { isModel as isModelRole } from '@/lib/roles'
 import { EmptyState, LoadError } from '@/components/ui'
 import { AvatarUpload } from '@/components/AvatarUpload'
 import { AttributesForm } from './AttributesForm'
@@ -33,7 +34,8 @@ export default async function ProfilePage() {
   // from a stylist is not a gate, and a stylist who typed the URL would get a
   // page for editing model attributes that her account has no use for.
   const me = await getDashboardUser(supabase, user.id)
-  if (me.role === 'provider') {
+  // A 'both' account has a model side, so it gets this page (item 116).
+  if (!isModelRole(me.role)) {
     return (
       <>
         <h1 className="mb-6 font-display text-3xl text-warm-dark">Your profile</h1>

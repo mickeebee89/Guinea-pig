@@ -1,6 +1,7 @@
 import { createSupabaseServerClient, requireUser } from '@/lib/supabase-server'
 import { getConversations } from '@/lib/queries/conversations'
 import { getDashboardUser } from '@/lib/queries/dashboard'
+import { isStylist as isStylistRole, isModel as isModelRole } from '@/lib/roles'
 import { getUnreadNotificationCount } from '@/lib/queries/notifications'
 import { AppNav } from '@/components/AppNav'
 
@@ -43,7 +44,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   let unread = 0
   let unreadNotifications = 0
+  // Default to the MODEL nav if the role read fails: browsing and applying are
+  // harmless to offer, where offering a shop editor to someone with no shop is
+  // a link to a refusal.
   let isProvider = false
+  let isModel = true
   try {
     const supabase = await createSupabaseServerClient()
     const [convs, me, notes] = await Promise.all([
@@ -52,7 +57,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       getUnreadNotificationCount(supabase, user.id),
     ])
     unread = convs.reduce((n, c) => n + c.unreadCount, 0)
-    isProvider = me.role === 'provider'
+    isProvider = isStylistRole(me.role)
+    isModel = isModelRole(me.role)
     unreadNotifications = notes
   } catch (e) {
     console.error('[app layout] unread count failed', e)
@@ -60,7 +66,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="min-h-dvh bg-cream">
-      <AppNav unread={unread} unreadNotifications={unreadNotifications} isProvider={isProvider} />
+      <AppNav
+        unread={unread}
+        unreadNotifications={unreadNotifications}
+        isProvider={isProvider}
+        isModel={isModel}
+      />
       <main className="mx-auto max-w-4xl px-4 py-8 sm:px-6">{children}</main>
     </div>
   )

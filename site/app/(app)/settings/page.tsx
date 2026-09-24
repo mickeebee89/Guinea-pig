@@ -9,6 +9,7 @@ import { EmailNotificationsSection } from './EmailNotificationsSection'
 import { DeleteAccountSection } from './DeleteAccountSection'
 import { PostcodeField } from '@/components/PostcodeField'
 import { NameSection } from './NameSection'
+import { isModel as isModelRole } from '@/lib/roles'
 
 export const metadata = { title: 'Settings' }
 
@@ -89,7 +90,9 @@ export default async function SettingsPage() {
   const emailNotifications =
     (me as { notification_preferences?: { email?: { enabled?: boolean } } } | null)
       ?.notification_preferences?.email?.enabled !== false
-  const isModel = role === 'model' || role === 'both'
+  // This file had it right before item 116 existed — it is the only place on
+  // the web that ever checked for 'both'. Same test, shared name now.
+  const isModel = isModelRole(role)
   const holdsSubscription = !!membership.status && membership.status !== 'expired'
   const showMembership = isModel || holdsSubscription
 

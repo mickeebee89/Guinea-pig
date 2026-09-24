@@ -3,6 +3,7 @@ import { createSupabaseServerClient, requireUser } from '@/lib/supabase-server'
 import { getBrowseStylists, getCategories, type BrowseResult } from '@/lib/queries/browse'
 import { RADII, radiusFromParam, formatMiles } from '@/lib/distance'
 import { getDashboardUser } from '@/lib/queries/dashboard'
+import { isModel as isModelRole } from '@/lib/roles'
 import { Avatar, EmptyState, LoadError } from '@/components/ui'
 
 export const metadata = { title: 'Browse stylists' }
@@ -35,7 +36,9 @@ export default async function BrowsePage({
   // typed the URL got a list of stylists to book — including themselves. Saying
   // whose page this is beats relying on nobody finding it.
   const me = await getDashboardUser(supabase, user.id)
-  if (me.role === 'provider') {
+  // isModel rather than `role !== 'provider'`: identical today, and it stays
+  // correct if a fourth role ever appears. A 'both' account browses (item 116).
+  if (!isModelRole(me.role)) {
     return (
       <>
         <h1 className="mb-6 font-display text-3xl text-warm-dark">Browse stylists</h1>

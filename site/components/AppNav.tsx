@@ -53,15 +53,27 @@ const LINKS = [
   { href: '/settings',      label: 'Settings' },
 ]
 
+/**
+ * ⚠️ TWO FLAGS, NOT ONE, BECAUSE A 'both' ACCOUNT IS BOTH. Item 116.
+ *
+ * This took `isProvider` and derived "is a model" as its negation, which is
+ * only true while there are two roles. `users.role` permits **three**, and a
+ * 'both' account was therefore shown Browse and Profile and NOT Shop,
+ * Availability or Portfolio — every stylist tool working, and linked from
+ * nowhere.
+ */
 export function AppNav({
-  unread = 0, unreadNotifications = 0, isProvider = false,
+  unread = 0, unreadNotifications = 0, isProvider = false, isModel = true,
 }: {
   unread?: number
   unreadNotifications?: number
   isProvider?: boolean
+  isModel?: boolean
 }) {
   const links = LINKS.filter(
-    l => (!l.providerOnly || isProvider) && (!l.modelOnly || !isProvider),
+    // Each link asks about the role it needs, rather than about the negation
+    // of the other one. A 'both' account passes both tests and sees the lot.
+    l => (!l.providerOnly || isProvider) && (!l.modelOnly || isModel),
   )
 
   return (

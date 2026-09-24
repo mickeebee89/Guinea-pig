@@ -153,6 +153,15 @@ export default async function DashboardPage({
   const unread = convs.reduce((n, c) => n + c.unreadCount, 0)
   const recentNotes = notes.slice(0, 4)
 
+  // ⚠️ STRICT ON PURPOSE, UNLIKE THE NAV (item 116). A dashboard has to pick
+  // one, and picking the stylist view for a 'both' account would take away her
+  // applications, favourites and the updates feed in exchange for panels that
+  // summarise things the nav now links to directly.
+  //
+  // Mobile makes the same choice — index.tsx:150 routes a 'both' account to the
+  // model screen — and offers a switcher in Settings. The web needs no
+  // switcher while /bookings shows BOTH roles' sessions, which is where a
+  // stylist's applications actually are.
   const isProvider = me.role === 'provider'
   const data = isProvider
     ? await getProviderDashboard(supabase, user.id)

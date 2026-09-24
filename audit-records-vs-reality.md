@@ -5747,6 +5747,91 @@ changes what crawlers see, not what people see — which is why it is safe to
 leave `mode=live` rather than flipping the whole site back to noindex and
 teaching the domain that its pages come and go.
 
+**⚠️ THREE CORRECTIONS TO THE 23 Sep JOURNEYS REPORT — found by re-checking it
+as a verification pass on 24 Sep, not by re-reading it.**
+
+**1. `providers.level`.** I wrote *"written once as `'beginner'` at row creation"*
+and *"rendered as a chip on her profile **and browse card**"*. Both wrong. The
+signup trigger (0011:168) writes **NULL**; `'beginner'` came only from mobile's
+fallback insert. And browse selected it and never rendered it. *(Corrected in
+item 105 when it was removed.)*
+
+**2. The avatar gap was wider in my words than in fact.** I wrote that a
+web-only member *"has no avatar, permanently"* and led the report with it.
+Micky's screenshots showed a model with one, set from the app. The accurate
+claim was always the narrower one: **nothing in `site/` could SET a profile
+picture**, so it bit only someone who had never opened the app. *(Corrected
+when he raised it; fixed in items 99 and 101.)*
+
+**3. ⚠️ "Notifications are deletable (0008)" — the policy permits it and
+NEITHER CLIENT OFFERS IT.** I used this to argue item 87. Checked properly:
+both clients have mark-read and mark-all-read (`notification-actions.ts` exports
+exactly `markAllRead` and `markOneRead`; mobile updates `read_at` and nothing
+else). **There is no delete control anywhere.**
+
+The argument for item 87 survives — a feed is not a record, the rows are
+purged on retention, and the API permits a delete even if no button does — but
+the sentence claimed a member could do something a member cannot do, which is
+the same class of error as everything this audit exists to find. It happened to
+point at the right fix, which is how an unchecked claim survives.
+
+**116. THE WEB CHECKED FOR TWO ROLES AND THERE ARE THREE — FIXED 24 Sep 2026.
+`npm run verify` EXIT 0. LATENT, NOT LIVE.**
+
+**Plainly:** an account with `role = 'both'` was shown Browse and Profile and
+**not** Shop, Availability or Portfolio. Every stylist tool existed, worked,
+and was linked from nowhere.
+
+**Not live.** The role query, 24 Sep: **model 3, provider 2, no 'both'.** Fixed
+anyway — a predicate that is wrong for a value the column permits is wrong now
+and harmless by luck.
+
+**── THE SHAPE, WHICH IS WHY IT READ AS CORRECT ──**
+
+`AppNav` took ONE flag, `isProvider`, and derived "is a model" as its
+**negation**. That is only true while there are two roles. `role === 'provider'`
+looks like it means "is a stylist", and it does — it is the *else* branch that
+was wrong.
+
+It now takes two flags and each link asks about the role it needs. A 'both'
+account passes both tests and sees the lot.
+
+**── ⚠️ THE DASHBOARD IS DELIBERATELY STILL STRICT ──**
+
+It was not "one predicate in two files", and flipping the second would have
+made things worse. **A nav can show both sets of links; a dashboard has to pick
+one.** Giving a 'both' account the stylist view would take away her
+applications, favourites and the updates feed, in exchange for panels that
+summarise things the nav now links to directly.
+
+Mobile makes the same choice — `index.tsx:150` routes a 'both' account to the
+model screen — and offers a switcher in Settings. **That switcher writes
+nothing**: `switchRole` is two `router.replace` calls between two dashboards
+that both already exist. The web needs no equivalent while `/bookings` shows
+**both roles' sessions**, which is where a stylist's applications actually are.
+
+**── THE OTHER TWO APPS ──**
+
+Checked while looking, as asked:
+
+* **admin** — already correct. `users/page.tsx` tests
+  `(u.role === 'provider' || u.role === 'both')` in three places.
+* **mobile** — `settings.tsx:599-601` derives `isProvider`, `isModel` and
+  `isBoth` properly, and is where the web's missing case was visible all along.
+  `index.tsx:150` is strict, deliberately, as above. `ensureProfile.ts:83` uses
+  `role === 'provider'` to decide whether to create a provider row — **that one
+  is a real gap**: a 'both' signup would get no provider row. It is unreachable
+  today because signup offers only two roles (`sign-up/actions.ts:43` refuses
+  anything but model or provider), so 'both' can only be set by hand. Recorded,
+  not changed, since changing it would be writing for a path nothing creates.
+
+* **`site/`** had exactly one place that already handled 'both' —
+  `settings/page.tsx`, which is what made this a slip rather than a decision.
+
+The question now has a name: `lib/roles.ts`, with `isStylist`, `isModel` and
+`isBoth`. **Naming it once is what stops the fourth instance**, because
+`role === 'provider'` will keep reading as correct.
+
 **75. A CHECK COULD STOP THE WEBSITE UPDATING, AND NOTHING NOTICED IT HAD —
 CHANGED 22 Sep 2026. `npm run verify` EXIT 0.**
 
@@ -11917,6 +12002,7 @@ platforms each failed it differently.
 | 104 | **A member cannot change her own first name, on either client.** Set at signup, rendered on every profile, booking, review and chat, editable nowhere. A typo is permanent | No, but it is unfixable by anyone |
 | **113** | ★ **A MODEL ON MOBILE HAS NO BOOKINGS LIST AT ALL** — not a missing filter, a missing screen. `/(app)/sessions` is stylist-only; her dashboard is three capped queries (5, 10, all-completed) with no cancelled booking anywhere. **A whole journey missing on one client**, the same shape as items 49 and 99. **Not on this list — see HANDOVER.md → "Before the app is submitted"** | No while mobile is unreleased |
 | 109 | ✅ **Stylist half fixed 24 Sep, not tested on device.** Cancelled bookings show on mobile with the same three sentences as the web. The model's half IS item 113 | No |
+| 116 | ✅ **The web checked for two roles and there are three — fixed 24 Sep, not deployed.** A `'both'` account saw no stylist nav links. Latent: no such accounts exist. `lib/roles.ts` names the question. **Open:** `ensureProfile.ts` would create no provider row for a 'both' signup, unreachable today | No |
 | 114 | ✅ **Treatment pages self-noindex below 3 stylists — built 24 Sep, not deployed.** The page and the sitemap share the constant AND the count. Replaces a judgement that had to be remembered | No |
 | 115 | **The 40-character bio bar is a length test, and mash cleared it (item 93).** What would replace it needs a human look, and the only existing per-stylist human touchpoint is the verification decision — which does not currently show the shop. **Reported, not built** | No, but it gates the public site |
 | 112 | ✅ **Fixed 24 Sep, not deployed.** Portfolio uploads resize before sending, and the cap moved to AFTER the resize — it was refusing 12MB camera photos that shrink to a few hundred KB | No |
