@@ -449,7 +449,9 @@ export default function ReportsPage() {
               <label className="text-xs font-medium text-[#3D2E2E]/60 block mb-1">
                 {['dismiss', 'resolve'].includes(actionModal.action)
                   ? 'Why are you closing this? (recorded in the audit log)'
-                  : 'Reason — evidence for the record, never shown to them'}
+                  : actionModal.action === 'warn'
+                    ? 'Reason — required, evidence for the record, never shown to them'
+                    : 'Reason — evidence for the record, never shown to them'}
               </label>
               <textarea value={reason} onChange={e => setReason(e.target.value)} rows={3}
                 placeholder={
@@ -485,9 +487,12 @@ export default function ReportsPage() {
               <button onClick={() => setActionModal(null)} className="px-4 py-2 text-sm rounded-lg bg-gray-100 text-gray-600">Cancel</button>
               <button onClick={doAction}
                 // Matches 0058's warn branch, so she is not refused AFTER pressing it.
-                disabled={actionModal.action === 'warn' && message.trim().length < 10}
+                // 0058's message and 0059's reason. A warning needs both.
+                disabled={actionModal.action === 'warn'
+                  && (message.trim().length < 10 || !reason.trim())}
                 className="px-4 py-2 text-sm rounded-lg text-white font-medium disabled:bg-gray-300 disabled:text-gray-500"
-                style={actionModal.action === 'warn' && message.trim().length < 10
+                style={actionModal.action === 'warn'
+                    && (message.trim().length < 10 || !reason.trim())
                   ? undefined : { backgroundColor: '#8C4A58' }}>
                 Confirm
               </button>

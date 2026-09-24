@@ -6082,6 +6082,52 @@ row with `role = 'model'`, and how it got one is not established"*, and that
 right and was still news, which is what a record that is read but not believed
 looks like.
 
+**121. A WARNING NEEDS EVIDENCE TOO — BUILT 24 Sep 2026. MIGRATION 0059 NOT
+APPLIED. admin build EXIT 0.**
+
+The mirror of 118, and it was created by fixing 118. 0058 made the member's
+message mandatory for a warning and left the reason optional, because warn was
+the only one of the three that never required one and `admin_audit_log.
+admin_note` is nullable. So for a few hours a warning could be issued with a
+carefully written sentence for the member and **nothing for the record** — the
+exact inverse of the fault 0058 existed to fix.
+
+0059 requires both. `create or replace` is safe here: no argument is added, so
+0058's ambiguity trap does not apply and grants survive.
+
+**── THE BODY WAS EXTRACTED, NOT RETYPED ──**
+
+0058's function text was carried across programmatically and the ASSERT
+refuses to run unless the LIVE body is the one 0058 installed — 0044's check,
+`pg_get_functiondef` … *"is not the 0039 body"*. That is what makes carrying a
+body forward safe: a file cannot be trusted on its own, but a file plus a proof
+that the database agrees with it can be. Block A re-proves 0058's message guard
+as well as 0059's, because a body carried forward is exactly where a guard goes
+missing.
+
+**── ⚠️ AND IT LEAVES THE LEDGER INCONSISTENT, DELIBERATELY ──**
+
+The bar is **non-empty**, matching suspend and ban, which is what was asked for.
+But `revoke_verification` requires **ten** characters (0044). So a reason of
+`"x"` now passes warn, suspend and ban, and fails only revocation. Raising that
+is a decision about three live actions, not a detail to slip into a one-line
+migration — **recorded as 122** rather than absorbed.
+
+**✅ 0058 VERIFIED — 24 Sep 2026, Blocks A, B and C.**
+
+**A.** A messageless warning is **refused** — *"a warning needs a message of at
+least 10 characters…"*. The warning that does send carries only *"Please keep
+messages to arranging the appointment."* **reason leaked: false.**
+
+**B.** The member sees `banned false`, `until 2026-10-01`, and the message
+*"Messages to other members must stay about the appointment."* The evidence
+naming Sarah stays in `suspensions.reason`. **evidence reached the member:
+false** — read through `my_suspension()` from the member's own session, which
+is the only reading that proves the route is shut.
+
+**C.** A member reads **0 rows** from `suspensions` directly, so the RLS finding
+holds after the change as well as before it.
+
 **118. THE EVIDENCE FIELD REACHES MEMBERS TWO WAYS, AND ONE IS NOT A UI CHOICE
 — BUILT AND APPLIED 24 Sep 2026. 0058 applied, preflight all eight true, no
 errors. site verify EXIT 0, mobile tsc EXIT 0, admin build EXIT 0.**
@@ -12330,7 +12376,8 @@ platforms each failed it differently.
 | 14 | ✅ **Built 24 Sep, not deployed.** Users page, beside Verify, only for a verified account. The confirmation is the COUNT of bookings it would cancel, read when the modal opens | No |
 | 117 | ✅ **0057 APPLIED 24 Sep 07:53, types regenerated.** She is told, by notification and email, with a separate optional message field. The admin's REASON is never shown: it may name the person who reported her | No |
 | 118 | **The evidence field reaches members TWO ways.** `'warn'` publishes it in a notification (0045:308), and `suspend`/`ban` write it to `suspensions.reason`, which **`my_suspension()` returns to the member** — a SECURITY DEFINER function they may call, so it is not a client-side choice. ✅ **CLOSED 24 Sep — 0058 applied.** `suspensions.member_message` added, `my_suspension()` returns it instead of `reason`, and a fifth parameter added to all four functions by drop-and-recreate. A warning now requires a message | No, but a reason could name a reporter |
-| 121 | **A warning still needs no REASON.** Suspend and ban require one; warn never has, and `admin_audit_log.admin_note` is nullable — so a warning can be issued with an explanation for the member and no evidence for the record | No |
+| 121 | ✅ **Built 24 Sep — 0059 NOT APPLIED.** warn now requires a reason as well as a message | No |
+| 122 | **Three actions accept a one-character reason.** warn, suspend and ban require only non-empty; `revoke_verification` requires ten. A reason of "x" is a record of nothing | No |
 | 119 | **Suspend and ban notify nobody.** Only `'warn'` does. Mobile's `SuspensionGate` explains it at the door; the web has no gate, so a suspended member there meets refusals with no explanation | No |
 | 120 | **The web has no suspension gate.** `my_suspension` is called once, for one action in `shop/actions.ts`. Mobile stops a suspended user at the door and explains; the web does not | No |
 | ~~117~~ | ~~**A revoked stylist is told nothing.** Her verification is cleared, her shop hidden and her bookings cancelled, and no notification is written to her — while every model she was booked with gets a considered message~~ *(superseded by the row above, 24 Sep)* | — |

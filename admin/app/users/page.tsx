@@ -589,7 +589,9 @@ export default function UsersPage() {
             {['warn','suspend','ban'].includes(modal.action) && (
               <div className="mb-4">
                 <label className="text-xs font-medium text-[#3D2E2E]/60 block mb-1">
-                  Reason — evidence for the record, never shown to them
+                  {modal.action === 'warn'
+                    ? 'Reason — required, evidence for the record, never shown to them'
+                    : 'Reason — evidence for the record, never shown to them'}
                 </label>
                 <textarea value={reason} onChange={e => setReason(e.target.value)} rows={3}
                   placeholder="e.g. third report this month; messaged two models after being asked to stop"
@@ -637,10 +639,14 @@ export default function UsersPage() {
                 // means she is not told "at least 10 characters" AFTER writing
                 // a reason and pressing a destructive button.
                 disabled={(modal.action === 'revoke_verification' && reason.trim().length < 10)
-                       || (modal.action === 'warn' && message.trim().length < 10)}
+                       || (modal.action === 'warn' && message.trim().length < 10)
+                       // 0059, item 121. A warning needs BOTH: the message
+                       // because it IS the warning, the reason because an
+                       // action with no evidence is not a record.
+                       || (modal.action === 'warn' && reason.trim().length === 0)}
                 className="px-4 py-2 text-sm rounded-lg text-white font-medium disabled:bg-gray-300 disabled:text-gray-500"
                 style={(modal.action === 'revoke_verification' && reason.trim().length < 10)
-                    || (modal.action === 'warn' && message.trim().length < 10)
+                    || (modal.action === 'warn' && (message.trim().length < 10 || !reason.trim()))
                   ? undefined
                   : { backgroundColor: '#8C4A58' }}
               >
