@@ -1,7 +1,7 @@
 // GENERATED FILE — DO NOT EDIT BY HAND.
 //
 // Written by scripts/gen-supabase-types.mjs from the live database.
-// TYPES_STAMP: 0055
+// TYPES_STAMP: 0056
 //
 // Regenerate whenever a migration is applied:
 //   node scripts/gen-supabase-types.mjs
@@ -759,6 +759,54 @@ export type Database = {
           target_user_id?: string
         }
         Relationships: []
+      }
+      name_changes: {
+        Row: {
+          changed_at: string
+          changed_by: string | null
+          id: string
+          new_first_name: string
+          new_last_initial: string | null
+          old_first_name: string | null
+          old_last_initial: string | null
+          user_id: string
+        }
+        Insert: {
+          changed_at?: string
+          changed_by?: string | null
+          id?: string
+          new_first_name: string
+          new_last_initial?: string | null
+          old_first_name?: string | null
+          old_last_initial?: string | null
+          user_id: string
+        }
+        Update: {
+          changed_at?: string
+          changed_by?: string | null
+          id?: string
+          new_first_name?: string
+          new_last_initial?: string | null
+          old_first_name?: string | null
+          old_last_initial?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "name_changes_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "public_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "name_changes_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       notifications: {
         Row: {

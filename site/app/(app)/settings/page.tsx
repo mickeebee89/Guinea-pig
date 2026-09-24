@@ -8,6 +8,7 @@ import { MembershipSection, type MembershipView } from './MembershipSection'
 import { EmailNotificationsSection } from './EmailNotificationsSection'
 import { DeleteAccountSection } from './DeleteAccountSection'
 import { PostcodeField } from '@/components/PostcodeField'
+import { NameSection } from './NameSection'
 
 export const metadata = { title: 'Settings' }
 
@@ -73,6 +74,15 @@ export default async function SettingsPage() {
     .from('users')
     .select('role, notification_preferences, postcode, first_name, last_initial')
     .eq('id', user.id).maybeSingle()
+
+  // The last change drives the cooldown note, so she is told the rule BEFORE
+  // she tries rather than by a refusal. Her own rows only — name_changes'
+  // policy permits exactly that, and an admin's view of everyone (0056).
+  const { data: lastChange } = await supabase
+    .from('name_changes').select('changed_at')
+    .eq('user_id', user.id)
+    .order('changed_at', { ascending: false })
+    .limit(1).maybeSingle()
   const role = (me as { role?: string } | null)?.role
   const postcode = (me as { postcode?: string | null } | null)?.postcode ?? null
   // Default ON: null, a missing key, or anything but an explicit false (item 74).
@@ -144,14 +154,22 @@ export default async function SettingsPage() {
         </section>
       )}
 
-      {/* ⚠️ "Your name" (item 104) IS BUILT AND NOT WIRED IN HERE YET.
-          NameSection and name-actions.ts are committed; this page reads
-          `name_changes` for the cooldown note and that table does not exist in
-          the generated types until 0056 is applied. Wiring it now would mean
-          pushing a tree that cannot build, which is how a site quietly stops
-          updating (item 75).
+      {/* Account-level, so it comes first and shows for both roles. A
+          stylist's /shop name is her SHOP's name, which can be a salon; this
+          is the one that appears on her reviews, bookings and messages.
 
-          Three lines to restore, in 0056's DEPLOY block. */}
+          Wired in once 0056 was applied — it reads `name_changes`, which is
+          not in the generated types until then, so committing it earlier
+          would have pushed a tree that cannot build (item 75's failure). */}
+      <section className="mb-8">
+        <h2 className="mb-2 font-display text-lg text-warm-dark">Your name</h2>
+        <NameSection
+          firstName={(me as { first_name?: string } | null)?.first_name ?? ''}
+          lastInitial={(me as { last_initial?: string | null } | null)?.last_initial ?? null}
+          changedAt={(lastChange as { changed_at: string } | null)?.changed_at ?? null}
+        />
+      </section>
+
       {/* ⚠️ SHOWN TO BOTH ROLES, AND IT IS THE ONLY COPY FOR A MODEL.
           A model has no profile page on this website at all, so there is
           nowhere else to put this — and until it existed, nothing on the web

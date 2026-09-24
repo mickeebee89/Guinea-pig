@@ -11372,8 +11372,8 @@ platforms each failed it differently.
 | 92 | ✅ **CLOSED 23 Sep** — verified both ways: chips filter with a postcode, and go inert with the list intact without one | No |
 | 94 | ✅ **CLOSED 23 Sep** — verified live both ways. The unique index exists, so duplicates were never possible and the heart's missing check is the defect | No |
 | 96 | ✅ **CLOSED 23 Sep** — all four verified on screen: the photo on the booking card, and the badge, reviews, photos and bio on her profile | No |
+| 104 | ✅ **A member can correct her own name — 0056 applied 24 Sep, wired into Settings, deployed.** The rule lives in the database because the column was already member-writable through the API | No |
 | 108 | ✅ **0056's ASSERT used `to_regproc` where the whole ledger uses `to_regprocedure`**, so it refused itself on a function that exists. Fixed; PREFLIGHT block added so an ASSERT can be tested before it runs | No — nothing was applied |
-| 104 | **Editing your own name — built, 0056 NOT APPLIED, not deployed.** The site does not build until it is, by design | No |
 | 107 | ✅ **Six client components could not report a thrown server action** — no `catch` anywhere, so a rejection rendered nothing and the control looked dead. One `attempt()` helper now, which rethrows Next's redirect | No |
 | 106 | ✅ **Per-field feedback on `/profile`** — one shared error rendered below all nine attributes made a refused Instagram handle invisible, so the field looked dead. Same shape still in `PhotoManager`, named not fixed | No |
 | 102 | ✅ **Instagram handle validated and editable on the web — built, not deployed.** An email address was stored in it and shown on a live profile. The rule runs on write AND on render, so values already stored are not displayed | No, but it published a member's email |
