@@ -5036,6 +5036,80 @@ itself above the fold. Lower stakes than the above — the controls are closer
 and the messages are short — but it is the same mistake and is named here
 rather than found later.
 
+**107. A SERVER ACTION CAN THROW, AND NOTHING CAUGHT IT — SIX COMPONENTS,
+ONE MISSING `catch`. FOUND BY MICKY 24 Sep 2026. `npm run verify` EXIT 0.**
+
+**Plainly:** pasting an email into the Instagram field did not save it and said
+nothing at all. **Item 106 was not the cause** — that fix was already live
+(`/api/version` reported `0ed5fe4`, checked before answering rather than
+assumed, which is the only reason this was found instead of explained away).
+
+**── WHICH OF THE TWO IT WAS ──**
+
+Micky asked precisely: is the action refusing and the page failing to surface
+it, or is the input discarding the value before submit?
+
+**Neither, exactly — and the input is eliminated first.** There is no
+client-side check on that field at all; `parseInstagram` runs only on the
+server. Nothing was discarded.
+
+**The action was called and its outcome never arrived.** Every client component
+written this session had the same shape:
+
+```
+start(async () => {
+  const res = await someServerAction(x)    // <- can THROW
+  if (!res.ok) { setError(res.error); return }
+})
+```
+
+A server action can **reject** as well as return `{ ok: false }`: a dropped
+connection, an exception on the server, or a client bundle older than the
+deployment it is posting to — which makes Next fail to find the action
+entirely, and is the likeliest cause here, since a deploy had just landed under
+an open tab. On any of those the promise rejects, the handler unwinds, and
+**nothing renders.** The control looks dead.
+
+**⚠️ SIX COMPONENTS, ALL MINE, ALL THE SAME**: the bio, the nine attributes,
+the photo manager, the avatar upload, the postcode box, the favourite button
+and the shop details form. Not one had a `catch` around the await. Item 106
+moved the message to the right place; it could not make a message appear that
+was never produced.
+
+**── THE FIX ──**
+
+`lib/attempt.ts` — one helper, used by all six. It returns a refusal instead of
+throwing, and it also catches a second silent case: **an action that resolves
+with nothing usable**, which would otherwise read as success.
+
+**⚠️ IT RETHROWS NEXT'S CONTROL FLOW.** `redirect()` and `notFound()` work by
+throwing, and `requireUser()` calls redirect (supabase-server.ts:86). Swallowing
+those would mean a member whose session had expired pressed Save and was told
+"something went wrong" instead of being taken to sign in. They are identified
+by their `digest` and passed straight through.
+
+**⚠️ AND THE MESSAGE DOES NOT CLAIM NOTHING WAS SAVED.** A throw can happen
+after the write as easily as before it — an avatar can be in the bucket with
+the row unwritten. *"Nothing has changed"* is the comfortable sentence and it
+would sometimes be a lie, so it says what is true:
+
+> Something went wrong and we couldn't tell what. Reload the page to see what
+> saved, then try again.
+
+**── THE PATTERN WORTH KEEPING ──**
+
+Three fixes, three days apart in character, same field:
+
+1. **102** — nothing validated it, so an email was stored and published.
+2. **106** — the refusal rendered at the bottom of the form, far from the box.
+3. **107** — the refusal was never produced, because a throw had nowhere to go.
+
+**Each fix was correct and none of them was sufficient**, because each time the
+reported symptom — *"it does nothing"* — was consistent with several causes and
+I stopped at the first one that explained it. The thing that finally settled it
+was checking the DEPLOYED commit before reasoning about the code, which took
+one command and should have come first both times.
+
 **75. A CHECK COULD STOP THE WEBSITE UPDATING, AND NOTHING NOTICED IT HAD —
 CHANGED 22 Sep 2026. `npm run verify` EXIT 0.**
 
@@ -11195,6 +11269,7 @@ platforms each failed it differently.
 | 92 | ✅ **CLOSED 23 Sep** — verified both ways: chips filter with a postcode, and go inert with the list intact without one | No |
 | 94 | ✅ **CLOSED 23 Sep** — verified live both ways. The unique index exists, so duplicates were never possible and the heart's missing check is the defect | No |
 | 96 | ✅ **CLOSED 23 Sep** — all four verified on screen: the photo on the booking card, and the badge, reviews, photos and bio on her profile | No |
+| 107 | ✅ **Six client components could not report a thrown server action** — no `catch` anywhere, so a rejection rendered nothing and the control looked dead. One `attempt()` helper now, which rethrows Next's redirect | No |
 | 106 | ✅ **Per-field feedback on `/profile`** — one shared error rendered below all nine attributes made a refused Instagram handle invisible, so the field looked dead. Same shape still in `PhotoManager`, named not fixed | No |
 | 102 | ✅ **Instagram handle validated and editable on the web — built, not deployed.** An email address was stored in it and shown on a live profile. The rule runs on write AND on render, so values already stored are not displayed | No, but it published a member's email |
 | 103 | **Mobile accepts anything in `instagram_handle` and turns it into a link** — `https://instagram.com/<value>`, so a stored email goes to Instagram in the URL path. Needs the same parse and the same render guard. Also: only `status_posts` is content-screened anywhere | No while mobile is unreleased — **fix before it ships** |

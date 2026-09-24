@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { saveMyPostcode } from '@/lib/queries/postcode-action'
+import { attempt } from '@/lib/attempt'
 
 /**
  * The postcode box. One component, both roles. Audit item 90.
@@ -41,7 +42,7 @@ export function PostcodeField({
   const save = () => {
     setMsg(null); setError(null)
     start(async () => {
-      const res = await saveMyPostcode(value)
+      const res = await attempt(() => saveMyPostcode(value), 'postcode:save')
       if (!res.ok) {
         // ⚠️ The box keeps what she typed. Clearing it on a failure would
         // make a service outage cost her the typing as well, and she would
@@ -94,8 +95,8 @@ export function PostcodeField({
         {saved && !pending && (
           <button
             onClick={() => { setValue(''); start(async () => {
-              const res = await saveMyPostcode('')
-              if (!res.ok) { setError(res.error); return }
+              const res = await attempt(() => saveMyPostcode(''), 'postcode:clear')
+              if (!res.ok) { setError(res.error ?? 'That didn’t save.'); return }
               setSaved(null); setMsg('Removed.'); router.refresh()
             }) }}
             className="inline-flex min-h-11 items-center px-2 text-sm font-bold text-muted hover:text-warm-dark hover:underline"

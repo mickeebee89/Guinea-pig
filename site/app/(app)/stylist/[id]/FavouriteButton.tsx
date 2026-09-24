@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { setFavourite } from './favourite-actions'
+import { attempt } from '@/lib/attempt'
 
 /**
  * Save a stylist. Audit item 94.
@@ -38,13 +39,13 @@ export function FavouriteButton({
     setError(null)
     setSaved(next)          // optimistic
     start(async () => {
-      const res = await setFavourite(providerId, next)
+      const res = await attempt(() => setFavourite(providerId, next), 'favourite')
       if (!res.ok) {
         setSaved(!next)     // and back, because it did not happen
-        setError(res.error)
+        setError(res.error ?? 'That didn’t save.')
         return
       }
-      setSaved(res.saved)
+      setSaved(next)
     })
   }
 

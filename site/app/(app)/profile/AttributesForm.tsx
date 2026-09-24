@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { saveAttribute, saveBio, saveInstagram } from './actions'
 import { ATTRIBUTE_DEFS, BIO_MAX } from '@/lib/queries/my-profile'
 import { isValidInstagramHandle } from '@/lib/instagram'
+import { attempt } from '@/lib/attempt'
 
 /**
  * The bio, the Instagram handle and the nine attributes. Audit item 99.
@@ -66,7 +67,10 @@ export function AttributesForm({
     setBusy(field)
     start(async () => {
       try {
-        const res = await work()
+        // attempt(), not a bare await: a server action can THROW as well as
+        // return { ok: false }, and an unhandled rejection here rendered
+        // nothing at all — the control just appeared dead (item 107).
+        const res = await attempt(work, `profile:${field}`)
         setFeedback({
           field,
           text: res.ok ? done : (res.error ?? 'That didn’t save.'),
@@ -87,10 +91,10 @@ export function AttributesForm({
     setBusy(field)
     start(async () => {
       try {
-        const res = await saveAttribute(key, value)
+        const res = await attempt(() => saveAttribute(key, value), `profile:${field}`)
         if (!res.ok) {
           setValues(v => ({ ...v, [key]: previous }))   // and back
-          setFeedback({ field, text: res.error, bad: true })
+          setFeedback({ field, text: res.error ?? 'That didn’t save.', bad: true })
           return
         }
         setFeedback({ field, text: 'Saved.', bad: false })

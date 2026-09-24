@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { saveShopDetails } from './actions'
+import { attempt } from '@/lib/attempt'
 import { PostcodeField } from '@/components/PostcodeField'
 
 const LIMITS = { name: 80, bio: 500, location: 120 } as const
@@ -33,8 +34,8 @@ export function ShopDetailsForm({
   const save = () => {
     setMsg(null); setError(null)
     start(async () => {
-      const res = await saveShopDetails({ name, bio, locationText })
-      if (!res.ok) { setError(res.error); return }
+      const res = await attempt(() => saveShopDetails({ name, bio, locationText }), 'shop:details')
+      if (!res.ok) { setError(res.error ?? 'That didn’t save.'); return }
       setMsg('Saved.')
       router.refresh()
     })

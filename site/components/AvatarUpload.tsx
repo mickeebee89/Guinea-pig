@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { downscale } from '@/lib/downscale'
 import { uploadAvatar } from '@/lib/queries/avatar-action'
 import { Avatar } from '@/components/ui'
+import { attempt } from '@/lib/attempt'
 
 /**
  * A profile picture. BOTH ROLES. Audit items 99 and 101.
@@ -57,8 +58,8 @@ export function AvatarUpload({
 
       const fd = new FormData()
       fd.append('avatar', toSend)
-      const res = await uploadAvatar(fd)
-      if (!res.ok) { setError(res.error); return }
+      const res = await attempt(() => uploadAvatar(fd), 'avatar')
+      if (!res.ok) { setError(res.error ?? 'That didn’t upload.'); return }
       setUrl(res.url)
       start(() => router.refresh())
     } finally {

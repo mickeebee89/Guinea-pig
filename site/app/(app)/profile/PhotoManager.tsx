@@ -6,6 +6,7 @@ import { downscaleToFile } from '@/lib/downscale'
 import { uploadApplicationPhoto } from '../stylist/[id]/apply/actions'
 import { savePhotoCaption, setPhotoCategory, deletePhoto, addPhotoCategory } from './actions'
 import type { MyPhoto } from '@/lib/queries/my-profile'
+import { attempt } from '@/lib/attempt'
 
 /**
  * Her photo library. Audit item 99.
@@ -46,8 +47,8 @@ export function PhotoManager({
         const small = await downscaleToFile(file, 'photo.jpg')
         const fd = new FormData()
         fd.append('photo', small)
-        const res = await uploadApplicationPhoto(fd)
-        if (!res.ok) { setError(res.error); break }
+        const res = await attempt(() => uploadApplicationPhoto(fd), 'photo:upload')
+        if (!res.ok) { setError(res.error ?? 'That didn’t upload.'); break }
       }
       router.refresh()
     } finally {
@@ -58,7 +59,7 @@ export function PhotoManager({
   const run = (fn: () => Promise<{ ok: boolean; error?: string }>) => {
     setError(null)
     start(async () => {
-      const res = await fn()
+      const res = await attempt(fn, 'photo:action')
       if (!res.ok) { setError(res.error ?? 'That didn’t work.'); return }
       router.refresh()
     })
