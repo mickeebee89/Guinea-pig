@@ -76,7 +76,11 @@ export default async function ProfilePage() {
         </section>
 
         <section className="rounded-lg border border-hairline bg-white p-5 shadow-soft">
-          <AttributesForm initial={profile.attributes} initialBio={profile.bio} />
+          <AttributesForm
+            initial={profile.attributes}
+            initialBio={profile.bio}
+            initialInstagram={profile.instagram}
+          />
         </section>
 
         <section className="rounded-lg border border-hairline bg-white p-5 shadow-soft">

@@ -4872,6 +4872,123 @@ from item 98 if they have no photo.
 both have a photo; the gate is most likely to be seen first by a genuinely
 web-only signup, which is exactly who it is for.
 
+**102. AN EMAIL ADDRESS WAS STORED IN instagram_handle AND SHOWN TO EVERY
+SIGNED-IN MEMBER — FOUND BY MICKY 24 Sep 2026, FIXED ON THE WEB THE SAME DAY.
+`npm run verify` EXIT 0. NOT DEPLOYED.**
+
+**Plainly:** a model's profile rendered *"@someone.something@gmail.com"* where
+the Instagram handle goes. Her email address was on her profile, visible to
+anyone signed in who opened it. Micky cleared his own value directly in SQL.
+
+Two separate faults, and the second is the one that made it unfixable.
+
+**── 1. WHAT VALIDATED THE FIELD: NOTHING, ANYWHERE ──**
+
+| | |
+|---|---|
+| **Mobile** | Strips a leading `@` and pulls the handle out of a pasted instagram.com URL (`model-profile.tsx:674`). **No format check at all** — anything else is stored verbatim. This is how an email got in |
+| **Web** | No input existed, so nothing to validate |
+| **Database** | `users.instagram_handle` is plain `text`, no CHECK. 0040's guard is a denylist and deliberately leaves this member-writable |
+
+**── 2. ⚠️ IT IS A LINK ON MOBILE, AND THAT IS WORSE THAN A DISCLOSURE ──**
+
+The web renders it as **text**. **Mobile renders it as a tappable link** and
+opens `https://instagram.com/<value>` (`model/[id].tsx:506`).
+
+**With an email address in the column, that URL carries the address in its
+PATH** — to Instagram's servers, into their request logs, and into the device's
+browser history. A field nobody validated became a way of handing one member's
+email address to a third party by tapping their profile.
+
+**── 3. AND A WEB-ONLY MODEL COULD NEITHER ADD NOR REMOVE ONE ──**
+
+The value rendered on `/model/[id]` and `/profile` had no input for it. So the
+field was **write-only from the app and read-only on the web** — the same shape
+as every other gap this audit has found, except that here the unremovable
+value was her email address.
+
+**── THE FIX, AND WHY THE RULE IS USED TWICE ──**
+
+`lib/instagram.ts` holds one rule, used on the way IN and on the way OUT.
+
+**Accepted:** a bare username, a leading `@`, a pasted instagram.com URL (any
+form), or empty to clear. The username must be Instagram's own rule — 1–30
+characters of letters, numbers, full stops and underscores, not starting or
+ending with a full stop. **Deliberately no stricter**: a handle we refuse is a
+real person unable to enter their real handle, which is worse than one that
+leads nowhere.
+
+Checked against the real values, including the one that caused this:
+
+```
+REFUSE  "micky.BuckfieldForge.gardenart@gmail.com"
+REFUSE  "@micky.BuckfieldForge.gardenart@gmail.com"
+ACCEPT  "@cavybeauty"                        -> cavybeauty
+ACCEPT  "https://instagram.com/cavybeauty?igsh=abc" -> cavybeauty
+CLEARED ""
+REFUSE  "07700 900123"   REFUSE ".leadingdot"   REFUSE 31 characters
+```
+
+**Validated in the SERVER ACTION, not only on the input**, because a server
+action is callable directly and an input-only check is a suggestion.
+
+**── ⚠️ WHAT HAPPENS TO A VALUE ALREADY STORED THAT FAILS THE NEW RULE ──**
+
+**It is not rendered.** Validating the write protects only what is written
+from today — the column already holds whatever four months of unvalidated
+writes put there, **and mobile can still write more until it gets the same
+rule.** So `/model/[id]` runs the same check before displaying, and a value
+that fails shows as nothing at all.
+
+**Her own `/profile` is the deliberate exception: it SHOWS the bad value**,
+with a line saying it is not being displayed and asking her to replace or
+remove it. A value she cannot see is one she cannot clear, which is exactly
+how this one survived. There is a Remove button beside it.
+
+Nothing is rewritten in the database. A bad value stays until she clears it,
+and stays invisible meanwhile.
+
+**── ⚠️ MOBILE NEEDS BOTH HALVES AND IS NOT CHANGED HERE ── ITEM 103**
+
+Mobile still accepts anything and **still turns it into a link**, which is the
+more harmful of the two surfaces. It needs the same parse on write and the same
+guard on render.
+
+Not done here because the scope was the web, and because **mobile is not
+released** — the launch is parked and there are no real users on it. That is
+the only reason this is proportionate to record rather than fix; if mobile
+ships before it is done, the link is the thing to fix first.
+
+**── THE SAME-STATE AUDIT: WHAT ELSE IS RENDERED BUT NOT SETTABLE ──**
+
+Asked for, and it found more.
+
+| Field | Rendered on | Settable on web | Settable on mobile |
+|---|---|---|---|
+| `instagram_handle` | model profile | **now yes** | yes, unvalidated |
+| **`first_name` / `last_initial`** | **everywhere** — every profile, booking card, review, chat | **NO** | **NO** |
+| `providers.level` | stylist profile, browse card | **NO** | **NO** — written once as `'beginner'` at row creation |
+| `providers.banner_url` | stylist profile | NO | NO *(already item 12)* |
+
+**`first_name` is the serious one.** VERIFIED: it is written into auth metadata
+at signup, copied into `public.users` by `ensureProfile`, and **changed by
+nothing on either client afterwards.** A member who signs up with a typo in her
+own name carries it on every profile, every booking and every review she ever
+leaves, with no way to correct it and no support route that can either.
+Recorded as **item 104**.
+
+`providers.level` renders as a chip on a stylist's profile and card. Every
+stylist is `'beginner'` for ever, and it is presented as information about her.
+Recorded as **item 105**.
+
+**── AND ON VALIDATION MORE BROADLY ──**
+
+The only free text screened for content anywhere in the product is
+**`status_posts`**, gated by `banned_words_check` since 0032. Not bios, not
+photo captions, not shop names, not areas, not this field. Length caps are the
+whole of the rest. That is a decision nobody has made explicitly, and it is
+worth making — recorded as part of 103 rather than changed in passing.
+
 **75. A CHECK COULD STOP THE WEBSITE UPDATING, AND NOTHING NOTICED IT HAD —
 CHANGED 22 Sep 2026. `npm run verify` EXIT 0.**
 
@@ -11031,6 +11148,10 @@ platforms each failed it differently.
 | 92 | ✅ **CLOSED 23 Sep** — verified both ways: chips filter with a postcode, and go inert with the list intact without one | No |
 | 94 | ✅ **CLOSED 23 Sep** — verified live both ways. The unique index exists, so duplicates were never possible and the heart's missing check is the defect | No |
 | 96 | ✅ **CLOSED 23 Sep** — all four verified on screen: the photo on the booking card, and the badge, reviews, photos and bio on her profile | No |
+| 102 | ✅ **Instagram handle validated and editable on the web — built, not deployed.** An email address was stored in it and shown on a live profile. The rule runs on write AND on render, so values already stored are not displayed | No, but it published a member's email |
+| 103 | **Mobile accepts anything in `instagram_handle` and turns it into a link** — `https://instagram.com/<value>`, so a stored email goes to Instagram in the URL path. Needs the same parse and the same render guard. Also: only `status_posts` is content-screened anywhere | No while mobile is unreleased — **fix before it ships** |
+| 104 | **A member cannot change her own first name, on either client.** Set at signup, rendered on every profile, booking, review and chat, editable nowhere. A typo is permanent | No, but it is unfixable by anyone |
+| 105 | `providers.level` is written once as `'beginner'` and rendered as a chip on her profile and card for ever. Editable nowhere | No |
 | 101 | ✅ **ID check gated on having a profile picture — built, not deployed.** Privacy §7 is true as written, with no copy change. A stylist sets hers on `/shop`, a model on `/profile` | No |
 | 99 | ✅ **VERIFIED LIVE 23 Sep.** A model's own profile on the web — built, **not deployed**. Avatar, bio, the nine attributes, photo management, Profile in the nav, and a link to what stylists see | No |
 | 100 | **A profile picture is not moderated, on either client.** Live the moment it is uploaded; report/block and the ID-check comparison are the only controls, both after the fact. Not introduced by 99 — written down by it | No |

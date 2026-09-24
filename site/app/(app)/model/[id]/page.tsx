@@ -4,6 +4,7 @@ import { createSupabaseServerClient, requireUser } from '@/lib/supabase-server'
 import { getModelProfile } from '@/lib/queries/model'
 import { Avatar, EmptyState } from '@/components/ui'
 import { SafetyMenu } from '@/components/SafetyMenu'
+import { isValidInstagramHandle } from '@/lib/instagram'
 
 export const metadata = { title: 'Model' }
 
@@ -62,8 +63,18 @@ export default async function ModelPage({
                 </span>
               )}
             </div>
-            {m.instagram && (
-              <p className="mt-1 text-sm text-muted">@{m.instagram.replace(/^@/, '')}</p>
+            {/* ⚠️ CHECKED ON THE WAY OUT, NOT JUST ON THE WAY IN (item 102).
+                Nothing validated this field for four months and an EMAIL
+                ADDRESS was found in it, rendered here to every signed-in
+                member who opened the profile. Validating the write protects
+                only what is written from today; this protects what is already
+                stored, and what mobile writes until it gets the same rule.
+
+                A value that fails shows as nothing at all. She still sees it
+                on her own /profile, where she can correct or clear it — a
+                value she cannot see is one she cannot remove. */}
+            {isValidInstagramHandle(m.instagram) && (
+              <p className="mt-1 text-sm text-muted">@{m.instagram!.trim()}</p>
             )}
             {/* Only claim an average when reviews sit behind it. A 0 reads as a
                 bad model rather than a new one — same rule as the stylist card. */}

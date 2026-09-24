@@ -2,8 +2,9 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { saveAttribute, saveBio } from './actions'
+import { saveAttribute, saveBio, saveInstagram } from './actions'
 import { ATTRIBUTE_DEFS, BIO_MAX } from '@/lib/queries/my-profile'
+import { isValidInstagramHandle } from '@/lib/instagram'
 
 /**
  * The nine attributes and the bio. Audit item 99.
@@ -19,14 +20,17 @@ import { ATTRIBUTE_DEFS, BIO_MAX } from '@/lib/queries/my-profile'
  * saved on every keystroke would write 200 rows for one sentence.
  */
 export function AttributesForm({
-  initial, initialBio,
+  initial, initialBio, initialInstagram,
 }: {
   initial: Record<string, string>
   initialBio: string | null
+  initialInstagram: string | null
 }) {
   const router = useRouter()
   const [values, setValues] = useState(initial)
   const [bio, setBio] = useState(initialBio ?? '')
+  const [insta, setInsta] = useState(initialInstagram ?? '')
+  const [instaMsg, setInstaMsg] = useState<string | null>(null)
   const [pending, start] = useTransition()
   const [savedKey, setSavedKey] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -58,6 +62,23 @@ export function AttributesForm({
       router.refresh()
     })
   }
+
+  const submitInstagram = () => {
+    setInstaMsg(null); setError(null)
+    start(async () => {
+      const res = await saveInstagram(insta)
+      if (!res.ok) { setError(res.error); return }
+      setInstaMsg(insta.trim() === '' ? 'Removed.' : 'Saved.')
+      router.refresh()
+    })
+  }
+
+  // ⚠️ SHOWN EVEN WHEN IT FAILS THE RULE, which is the opposite of what
+  // /model/[id] does — deliberately. The profile REFUSES to render a bad
+  // value; this screen has to show it, because a value she cannot see is one
+  // she cannot clear. An email address sat in this column for four months
+  // (item 102) and a web-only model had no way to remove it.
+  const storedIsBad = !!initialInstagram && !isValidInstagramHandle(initialInstagram)
 
   return (
     <div className="space-y-6">
@@ -93,6 +114,58 @@ export function AttributesForm({
           )}
           {bioMsg && <span className="text-sm text-muted">{bioMsg}</span>}
         </div>
+
+        <label htmlFor="instagram" className="mt-4 block text-sm font-bold text-warm-dark">
+          Instagram
+        </label>
+        <p className="mt-0.5 text-xs text-muted">
+          Optional. Just your username, or paste the link to your profile. Anyone who opens your
+          profile can see it, so don’t put an email address or a phone number here.
+        </p>
+        <div className="mt-1 flex flex-wrap items-center gap-2">
+          <span aria-hidden="true" className="text-sm text-muted">@</span>
+          <input
+            id="instagram"
+            value={insta}
+            onChange={e => setInsta(e.target.value)}
+            placeholder="your_username"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            maxLength={120}
+            className="min-h-11 w-56 rounded-md border border-hairline bg-white px-3 text-sm text-warm-dark placeholder:text-muted"
+          />
+          <button
+            onClick={submitInstagram}
+            disabled={pending || insta === (initialInstagram ?? '')}
+            className="inline-flex min-h-11 items-center rounded-[999px] bg-input-bg px-4 text-sm font-bold text-rose disabled:text-muted"
+          >
+            {pending ? 'Saving…' : 'Save'}
+          </button>
+          {initialInstagram && (
+            /* Clearing has its own control rather than "save an empty box",
+               which nobody finds. It is how the bad value already in the
+               column gets removed. */
+            <button
+              onClick={() => { setInsta(''); start(async () => {
+                const res = await saveInstagram('')
+                if (!res.ok) { setError(res.error); return }
+                setInstaMsg('Removed.'); router.refresh()
+              }) }}
+              disabled={pending}
+              className="min-h-11 px-2 text-sm font-bold text-muted hover:text-warm-dark hover:underline"
+            >
+              Remove
+            </button>
+          )}
+          {instaMsg && <span className="text-sm text-muted">{instaMsg}</span>}
+        </div>
+        {storedIsBad && (
+          <p role="alert" className="mt-2 max-w-md text-sm text-danger">
+            What’s saved here isn’t a username, so it isn’t being shown on your profile.
+            Replace it with your Instagram username, or remove it.
+          </p>
+        )}
       </div>
 
       <div>

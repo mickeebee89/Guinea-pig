@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { createSupabaseServerClient, requireUser } from '@/lib/supabase-server'
 import { ATTRIBUTE_DEFS, BIO_MAX, type AttributeKey } from '@/lib/queries/my-profile'
+import { parseInstagram } from '@/lib/instagram'
 
 /**
  * Everything a model can change about her own profile. Audit item 99.
@@ -102,7 +103,42 @@ export async function saveBio(bio: string): Promise<Result> {
   return { ok: true }
 }
 
-/* ── photos ─────────────────────────────────────────────────────────────── */
+/**
+ * Her Instagram handle. Audit item 102.
+ *
+ * ⚠️ VALIDATED HERE, NOT ONLY ON THE INPUT. A server action is callable
+ * directly, so an input-only check is a suggestion. This field had NO check
+ * anywhere — not either client, not the database — and an email address was
+ * found stored in it and rendered on a live profile.
+ *
+ * The rule and the parsing both live in lib/instagram.ts, because the RENDERER
+ * uses the same rule: validating the write protects only values written after
+ * today, and the column already holds whatever four months of unvalidated
+ * writes put there.
+ *
+ * Clearing is first-class — an empty box removes it. That is the whole reason
+ * this could not wait: a web-only model could neither add a handle nor get rid
+ * of one, and the one that was there was her email address.
+ */
+export async function saveInstagram(input: string): Promise<Result> {
+  const user = await requireUser()
+  const supabase = await createSupabaseServerClient()
+
+  const parsed = parseInstagram(input)
+  if (!parsed.ok) return { ok: false, error: parsed.error }
+
+  const { error } = await supabase
+    .from('users').update({ instagram_handle: parsed.handle }).eq('id', user.id)
+
+  if (error) {
+    console.error('[profile] instagram save failed', { code: error.code, message: error.message })
+    return { ok: false, error: 'That didn’t save. Nothing has changed.' }
+  }
+  revalidateBoth(user.id)
+  return { ok: true }
+}
+
+/* ── photos ─ */
 
 export async function savePhotoCaption(photoId: string, caption: string): Promise<Result> {
   const user = await requireUser()
