@@ -4,6 +4,7 @@ import { getDashboardUser } from '@/lib/queries/dashboard'
 import { isStylist as isStylistRole, isModel as isModelRole } from '@/lib/roles'
 import { getUnreadNotificationCount } from '@/lib/queries/notifications'
 import { AppNav } from '@/components/AppNav'
+import { SuspensionNotice, type ActiveSuspension } from '@/components/SuspensionNotice'
 
 /**
  * THE AUTH GATE for everything under (app).
@@ -49,17 +50,41 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // a link to a refusal.
   let isProvider = false
   let isModel = true
+  /**
+   * ⚠️ FAILS OPEN, DELIBERATELY. If this read fails the member sees the app,
+   * not a suspension notice — and the four RESTRICTIVE policies still refuse
+   * every write. Telling someone they are suspended because an RPC wobbled
+   * would be the worse error, and it is the same stance shop/actions.ts takes:
+   * "An RPC error is not treated as 'not suspended' OR as suspended... the
+   * database still decides."
+   */
+  let suspension: ActiveSuspension | null = null
   try {
     const supabase = await createSupabaseServerClient()
-    const [convs, me, notes] = await Promise.all([
+    const [convs, me, notes, susp] = await Promise.all([
       getConversations(supabase, user.id),
       getDashboardUser(supabase, user.id),
       getUnreadNotificationCount(supabase, user.id),
+      // Read here rather than in each page: a suspension is a property of the
+      // person, so it belongs where the auth gate is. Item 120.
+      supabase.rpc('my_suspension'),
     ])
     unread = convs.reduce((n, c) => n + c.unreadCount, 0)
     isProvider = isStylistRole(me.role)
     isModel = isModelRole(me.role)
     unreadNotifications = notes
+
+    const row = (susp.data as
+      { banned: boolean; suspended_until: string | null; message: string | null }[] | null)?.[0]
+    // my_suspension() returns only an ACTIVE one, so a row IS the suspension:
+    // there is no expiry check to get wrong here, and deliberately so.
+    if (row) {
+      suspension = {
+        banned: !!row.banned,
+        suspendedUntil: row.suspended_until ?? null,
+        message: row.message ?? null,
+      }
+    }
   } catch (e) {
     console.error('[app layout] unread count failed', e)
   }
@@ -72,7 +97,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         isProvider={isProvider}
         isModel={isModel}
       />
-      <main className="mx-auto max-w-4xl px-4 py-8 sm:px-6">{children}</main>
+      <main className="mx-auto max-w-4xl px-4 py-8 sm:px-6">
+        {/* Explains; never enforces. The nav stays so they are not trapped on a
+            dead page, and Settings stays reachable so they can delete their
+            account — see SuspensionNotice's header. */}
+        <SuspensionNotice suspension={suspension} isProvider={isProvider}>
+          {children}
+        </SuspensionNotice>
+      </main>
     </div>
   )
 }

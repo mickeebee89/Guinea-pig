@@ -6113,6 +6113,87 @@ But `revoke_verification` requires **ten** characters (0044). So a reason of
 is a decision about three live actions, not a detail to slip into a one-line
 migration — **recorded as 122** rather than absorbed.
 
+**120 + 124. A SUSPENDED MEMBER IS TOLD, AND A BANNED ONE CAN STILL LEAVE —
+BUILT 24 Sep 2026. site `next build` EXIT 0, mobile tsc EXIT 0. NOT
+BROWSER-VERIFIED — see the foot of this entry.**
+
+**── 120: THE WEB HAD NO GATE AT ALL ──**
+
+`my_suspension` was called in exactly one place, `shop/actions.ts:293`, for one
+action. Everywhere else a suspended member met RLS refusals with no
+explanation.
+
+The notice now sits in `app/(app)/layout.tsx`, which is already the auth gate
+and says why that works: *"Because this is a layout, a route is protected by
+living in the folder. There is no list to keep in sync and no per-page check to
+forget."* Structurally the same place mobile puts `SuspensionGate`.
+
+**⚠️ NOT IN `proxy.ts`, WHICH SEES EVERY PATH AND WOULD HAVE BEEN EASIER.**
+That file's own header: *"If this file ever starts making authorisation
+decisions, that property is gone."* Forgetting a path there costs a stale token
+today. It would have started costing an unexplained refusal.
+
+**── ⚠️ IT EXPLAINS. IT DOES NOT ENFORCE. ──**
+
+Enforcement is four RESTRICTIVE policies — no INSERT on `sessions`, `messages`
+or `reviews`, no UPDATE on `providers` — which apply to anyone holding the
+token, including someone calling PostgREST with no browser involved. The
+division is 0018's, for blocking.
+
+Written down in the component because **a gate that believed it was the control
+would be the more dangerous design**: it would invite someone to drop a policy
+on the grounds that the UI already covers it.
+
+It **fails open**. If the read fails the member sees the app, and the policies
+still refuse every write. Telling someone they are suspended because an RPC
+wobbled is the worse error, and it is `shop/actions.ts`'s stated stance.
+
+**── ⚠️ 124: MOBILE WAS BLOCKING ACCOUNT DELETION, AND NOTHING SAID SO ──**
+
+`SuspensionGate` wrapped the whole `(app)` stack and offered a banned member one
+button: **Sign out**. Deletion lives in Settings, so **a banned member could not
+delete their account at all** — an Apple 5.1.1(v) and Play requirement, and
+under UK GDPR a right that does not pause because somebody has been banned. A
+banned member is precisely the person most likely to want their data gone.
+
+**✅ AND THE DELETE PATH ITSELF WORKS FOR THEM — CHECKED, NOT ASSUMED**, which
+was the question worth asking: making a broken path visible would have been a
+worse fix than leaving it hidden. The `delete-account` edge function identifies
+the caller with their own token and then does every write with the **SERVICE
+ROLE**, which bypasses RLS, and `delete_account_data` is SECURITY DEFINER.
+Nothing on that path reads `suspensions`, and the four RESTRICTIVE policies
+cover sessions, messages, reviews and providers — not this.
+
+**So the UI was the only thing stopping it**, which is the worst kind of block:
+invisible, and nowhere near the rule it appeared to be enforcing.
+
+**What a banned member on mobile can reach after this:** the suspension screen,
+**Settings** (delete account, legal links, sign out) and nothing else. Both
+clients now keep the same one exception, by the same list, for the same
+recorded reason.
+
+**── WHAT THEY SEE ──**
+
+**Suspended:** the date, and what is actually blocked — apply, message, review
+— which matches the four policies rather than guessing. **Banned:** no date, no
+"until", and **no promise of a route back**, because *"you can appeal and we'll
+reconsider"* is a sentence this product cannot keep. Both then show the admin's
+**message** under *"What this means"* — never "Reason", and never the reason.
+
+A stylist is told her shop is hidden and her bookings cancelled. She will
+notice both anyway, and might otherwise go looking for a fault.
+
+On Settings the notice is a **banner above the page, not instead of it**.
+
+**── ⚠️ WHAT HAS NOT BEEN CHECKED ──**
+
+**No browser verification.** Seeing it requires a genuinely suspended account,
+which means an admin action against the live database, and the demo engine is
+not wired into the app so there is no offline way in. `next build` proves it
+compiles, not that it renders. **What would verify it:** apply 0061, suspend
+the model test account from the console, sign in as them on the web, and check
+that `/settings` still shows Delete account with the banner above it.
+
 **119. SUSPEND AND BAN SAY SO — BUILT 24 Sep 2026. MIGRATION 0061 NOT APPLIED.
 admin build EXIT 0, mobile tsc EXIT 0, site `next build` EXIT 0.**
 
@@ -12627,10 +12708,10 @@ platforms each failed it differently.
 | 118 | **The evidence field reaches members TWO ways.** `'warn'` publishes it in a notification (0045:308), and `suspend`/`ban` write it to `suspensions.reason`, which **`my_suspension()` returns to the member** — a SECURITY DEFINER function they may call, so it is not a client-side choice. ✅ **CLOSED 24 Sep — 0058 applied.** `suspensions.member_message` added, `my_suspension()` returns it instead of `reason`, and a fifth parameter added to all four functions by drop-and-recreate. A warning now requires a message | No, but a reason could name a reporter |
 | 121 | ✅ **CLOSED 24 Sep.** warn now requires a reason as well as a message | No |
 | 123 | ✅ **CLOSED 24 Sep.** Five hand-run `supabase/*.sql` files hold functions a migration has since replaced, including `delete_account_data` (0053) and `my_suspension` (0058, the item-118 leak). `my_suspension` corrected and made re-runnable; the rest marked; `check-handrun-drift.mjs` now fails on an undeclared overlap | Not by itself — but running one of those files is |
-| 124 | **A banned member cannot delete their account on mobile.** `SuspensionGate` wraps the whole `(app)` stack and offers only Sign out. In-app deletion is an Apple 5.1.1(v) and Play requirement, and the right does not pause because someone is banned | **Yes, for a store submission** |
+| 124 | ✅ **Built 24 Sep.** `SuspensionGate` now lets Settings through, and the delete path was checked to actually work for them — the edge function uses the service role and reads no suspension | **Yes, for a store submission** |
 | 122 | **Three actions accept a one-character reason.** warn, suspend and ban require only non-empty; `revoke_verification` requires ten. A reason of "x" is a record of nothing | No |
 | 119 | ✅ **Built 24 Sep — 0061 NOT APPLIED.** Both now notify and email, carrying the member's message and what happened to the shop. A ban's message is mandatory; a suspension's is not | No |
-| 120 | **The web has no suspension gate.** `my_suspension` is called once, for one action in `shop/actions.ts`. Mobile stops a suspended user at the door and explains; the web does not | No |
+| 120 | ✅ **Built 24 Sep, NOT browser-verified.** The notice sits in the `(app)` layout beside the auth gate, explains rather than enforces, fails open, and keeps Settings reachable | No |
 | ~~117~~ | ~~**A revoked stylist is told nothing.** Her verification is cleared, her shop hidden and her bookings cancelled, and no notification is written to her — while every model she was booked with gets a considered message~~ *(superseded by the row above, 24 Sep)* | — |
 | 74 | ✅ **CLOSED 23 Sep** — proven end to end, and the mobile switch now exists (item 88). Untested on device |
 | 75 | Drift check is new and unproven — its first real test is the next failed or skipped deploy | No |

@@ -6,15 +6,46 @@ import { Ionicons } from '@expo/vector-icons'
 import * as Haptics from 'expo-haptics'
 import { Colors, Fonts, Radius, Shadow } from '@/constants/Colors'
 import { useAuth } from '@/context/auth'
+import { usePathname, router } from 'expo-router'
 import { getMySuspension, Suspension } from '@/lib/suspension'
 
 // Wraps the authenticated app. A suspended or banned user is stopped at the door with
 // a clear explanation instead of being left to hit silent failures everywhere (the DB
 // policies block their actions regardless — this is the UX half of that enforcement).
+//
+// ── ⚠️ EXCEPT SETTINGS, AND THAT IS NOT A CONVENIENCE ─────────────────
+//
+// Until 24 Sep 2026 this wrapped EVERYTHING and offered a banned member one
+// button: Sign out. Account deletion lives in Settings, so a banned member
+// could not delete their account at all (audit item 124).
+//
+// In-app account deletion is an Apple 5.1.1(v) and Play requirement, not a
+// courtesy, and under UK GDPR the right to erasure does not pause because
+// somebody has been banned — a banned member is precisely the person most
+// likely to want their data gone.
+//
+// ✅ AND THE DELETE PATH ACTUALLY WORKS FOR THEM, checked rather than assumed:
+// the delete-account edge function identifies the caller with their own token
+// and then does every write with the SERVICE ROLE, which bypasses RLS, and
+// delete_account_data is SECURITY DEFINER. Nothing on that path reads
+// `suspensions`. The four RESTRICTIVE policies cover sessions, messages,
+// reviews and providers — not this. So the UI was the only thing stopping it,
+// which is the worst kind of block: invisible, and nowhere near the rule it
+// looked like it was enforcing.
+//
+// The notice still shows, as a screen above Settings rather than instead of it,
+// so nobody has to guess why they are there.
+
+/**
+ * Routes a suspended member keeps. Settings is here for the legal reason in the
+ * header above — it is not a list to extend for convenience.
+ */
+const STILL_REACHABLE = ['/settings']
 
 export default function SuspensionGate({ children }: { children: ReactNode }) {
   const { session } = useAuth()
   const userId = session?.user?.id ?? null
+  const pathname = usePathname()
   /**
    * ── "CHECKING" IS A COMPARISON, NOT A FLAG ───────────────────────
    *
@@ -49,6 +80,11 @@ export default function SuspensionGate({ children }: { children: ReactNode }) {
   }
 
   if (!suspension) return <>{children}</>
+
+  // Settings stays open so the account can still be deleted. Item 124.
+  if (STILL_REACHABLE.some(r => pathname === r || pathname.startsWith(r + '/'))) {
+    return <>{children}</>
+  }
 
   return <SuspendedScreen suspension={suspension} />
 }
@@ -104,6 +140,20 @@ function SuspendedScreen({ suspension }: { suspension: Suspension }) {
           If you think this is a mistake, email {SUPPORT_EMAIL} and we’ll take another look.
         </Text>
 
+        {/* ⚠️ THE ONLY WAY OUT OF THIS SCREEN THAT IS NOT "SIGN OUT". Deleting an
+            account must never be behind a gate — see the header. Haptics because
+            this is a new interaction in mobile/, matching the sign-out button
+            directly below it. */}
+        <TouchableOpacity
+          style={styles.settingsBtn}
+          onPress={async () => {
+            await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+            router.push('/(app)/settings')
+          }}
+        >
+          <Text style={styles.settingsBtnText}>Manage or delete your account</Text>
+        </TouchableOpacity>
+
         <TouchableOpacity style={styles.btn} onPress={handleSignOut} activeOpacity={0.85}>
           <Text style={styles.btnText}>Sign out</Text>
         </TouchableOpacity>
@@ -151,6 +201,22 @@ const styles = StyleSheet.create({
     lineHeight: 21,
     color: Colors.muted,
     textAlign: 'center',
+  },
+  settingsBtn: {
+    marginTop: 18,
+    paddingVertical: 12,
+    paddingHorizontal: 18,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    backgroundColor: Colors.inputBg,
+    alignSelf: 'stretch',
+    alignItems: 'center',
+  },
+  settingsBtnText: {
+    fontFamily: Fonts.bodyBold,
+    fontSize: 14,
+    color: Colors.roseDark,
   },
   messageBox: {
     width: '100%',
