@@ -274,6 +274,8 @@ export default function UsersPage() {
       p_action:        action,
       p_reason:        reason.trim() || null,
       p_duration_days: action === 'suspend' ? Number(duration) : null,
+      // 0058. Separate from p_reason, which the member never sees.
+      p_message:       message.trim() || undefined,
     })
 
     if (error) {
@@ -580,29 +582,50 @@ export default function UsersPage() {
               </div>
             )}
 
-            {modal.action === 'revoke_verification' && (
+            {/* ══ THE EVIDENCE BOX. Admins only, six years, never shown. ══════
+                Until 0058 this box WAS the member's explanation for warn,
+                suspend and ban — one field doing two jobs, and a reason may
+                name whoever reported them. Audit item 118. */}
+            {['warn','suspend','ban'].includes(modal.action) && (
               <div className="mb-4">
                 <label className="text-xs font-medium text-[#3D2E2E]/60 block mb-1">
-                  Message to the stylist — optional, and the only part she reads
+                  Reason — evidence for the record, never shown to them
                 </label>
-                <textarea value={message} onChange={e => setMessage(e.target.value)} rows={3}
-                  placeholder="e.g. The photo you sent didn’t match your profile picture."
+                <textarea value={reason} onChange={e => setReason(e.target.value)} rows={3}
+                  placeholder="e.g. third report this month; messaged two models after being asked to stop"
                   className="border border-black/10 rounded-lg px-3 py-2 text-sm w-full resize-none" />
                 <p className="mt-1 text-[11px] text-[#3D2E2E]/50">
-                  {/* The whole reason there are two boxes. */}
-                  ⚠️ <strong>Never name anyone here.</strong> This goes to her by notification and
-                  email. Leave it blank and she gets the facts and the support address, but nothing
-                  she can act on — and she can reapply immediately, so she may just send the same
-                  thing again.
+                  Goes to the audit log. Safe to name names here — it is the one place that is.
                 </p>
               </div>
             )}
 
-            {['warn','suspend','ban'].includes(modal.action) && (
+            {/* ══ THE MESSAGE BOX. The only part the member reads. ════════════ */}
+            {['revoke_verification','warn','suspend','ban'].includes(modal.action) && (
               <div className="mb-4">
-                <label className="text-xs font-medium text-[#3D2E2E]/60 block mb-1">Reason / note</label>
-                <textarea value={reason} onChange={e => setReason(e.target.value)} rows={3}
+                <label className="text-xs font-medium text-[#3D2E2E]/60 block mb-1">
+                  {modal.action === 'warn'
+                    ? `Message to them — required. This IS the warning. ${message.trim().length}/10`
+                    : modal.action === 'revoke_verification'
+                      ? 'Message to the stylist — optional, and the only part she reads'
+                      : 'Message to them — optional, and the only part they read'}
+                </label>
+                <textarea value={message} onChange={e => setMessage(e.target.value)} rows={3}
+                  placeholder={
+                    modal.action === 'revoke_verification'
+                      ? 'e.g. The photo you sent didn’t match your profile picture.'
+                      : 'e.g. Please keep messages to arranging the appointment.'
+                  }
                   className="border border-black/10 rounded-lg px-3 py-2 text-sm w-full resize-none" />
+                <p className="mt-1 text-[11px] text-[#3D2E2E]/50">
+                  {/* The whole reason there are two boxes. */}
+                  ⚠️ <strong>Never name anyone here.</strong>{' '}
+                  {modal.action === 'warn'
+                    ? 'A warning is nothing but this message. It is sent by notification and email, and without it they only learn they are in trouble.'
+                    : modal.action === 'revoke_verification'
+                      ? 'This goes to her by notification and email. Leave it blank and she gets the facts and the support address, but nothing she can act on — and she can reapply immediately, so she may just send the same thing again.'
+                      : 'They see the notice and the date either way. This is the only part that says why.'}
+                </p>
               </div>
             )}
 
@@ -613,9 +636,11 @@ export default function UsersPage() {
                 // The database enforces this too (0044:391). Disabling here
                 // means she is not told "at least 10 characters" AFTER writing
                 // a reason and pressing a destructive button.
-                disabled={modal.action === 'revoke_verification' && reason.trim().length < 10}
+                disabled={(modal.action === 'revoke_verification' && reason.trim().length < 10)
+                       || (modal.action === 'warn' && message.trim().length < 10)}
                 className="px-4 py-2 text-sm rounded-lg text-white font-medium disabled:bg-gray-300 disabled:text-gray-500"
-                style={modal.action === 'revoke_verification' && reason.trim().length < 10
+                style={(modal.action === 'revoke_verification' && reason.trim().length < 10)
+                    || (modal.action === 'warn' && message.trim().length < 10)
                   ? undefined
                   : { backgroundColor: '#8C4A58' }}
               >

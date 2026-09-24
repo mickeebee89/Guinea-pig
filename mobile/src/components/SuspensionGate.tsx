@@ -88,10 +88,15 @@ function SuspendedScreen({ suspension }: { suspension: Suspension }) {
               : "Your account is temporarily suspended. You won't be able to apply for treatments, send messages or leave reviews until it's lifted."}
         </Text>
 
-        {suspension.reason ? (
-          <View style={styles.reasonBox}>
-            <Text style={styles.reasonLabel}>Reason</Text>
-            <Text style={styles.reasonText}>{suspension.reason}</Text>
+        {/* ⚠️ THE ADMIN'S MESSAGE, NOT THEIR REASON (0058, audit item 118).
+            This box used to print the moderation evidence under a heading
+            saying "Reason", and that evidence may name whoever reported them.
+            The sentence above carries the facts and the date on its own, so
+            when there is no message there is simply no box. */}
+        {suspension.message ? (
+          <View style={styles.messageBox}>
+            <Text style={styles.messageLabel}>From the Cavy team</Text>
+            <Text style={styles.messageText}>{suspension.message}</Text>
           </View>
         ) : null}
 
@@ -147,21 +152,21 @@ const styles = StyleSheet.create({
     color: Colors.muted,
     textAlign: 'center',
   },
-  reasonBox: {
+  messageBox: {
     width: '100%',
     backgroundColor: Colors.cream,
     borderRadius: Radius.md,
     padding: 14,
     gap: 4,
   },
-  reasonLabel: {
+  messageLabel: {
     fontFamily: Fonts.bodyBold,
     fontSize: 11,
     color: Colors.muted,
     textTransform: 'uppercase',
     letterSpacing: 1,
   },
-  reasonText: {
+  messageText: {
     fontFamily: Fonts.body,
     fontSize: 14,
     lineHeight: 20,

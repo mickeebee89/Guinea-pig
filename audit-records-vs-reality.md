@@ -6047,6 +6047,132 @@ body (0044:472-478). Same field, same evidence, published to the subject with
 nothing between. It is the landmine 0057 exists to avoid, already armed, in the
 one action that does notify. Not fixed here; recorded.
 
+**✅ 0057 VERIFIED — 24 Sep 2026, Blocks A and B.**
+
+Block A: the notification reads **"Your ID check has been removed"**, says the
+shop is hidden, says her shop, treatments and times are all still there, and
+points at support. **`reason leaked into the body: false`** — with the word
+INTERNAL and a person's name deliberately in the reason. Block B, with no
+message, gives the same facts minus the message.
+
+**✅ AND THE MESSAGE LANDS — settled 24 Sep by a combined block.** One run,
+two calls, both rolled back: with a message `MARKER present: true`, and
+`reason leaked: false` on the same body. **So the earlier run passed two
+arguments, and nothing was wrong with 0057.**
+
+*Correction to what I wrote an hour earlier.* I read a body with no message in
+it and reported it as a discrepancy in the function. The composition is four
+lines long and unconditional, so the far likelier explanation was always the
+call, not the code — and the right move was still to prove it rather than
+record it as working, because the cost of being wrong was an untested
+member-facing message. Recorded because the block that settled it is worth
+reusing: **a verify block that runs each variant in its own savepoint and
+prints them side by side cannot be misread the way two separate pasted runs
+can.**
+
+**✅ AND `public.admins` HAS TWO ROWS: `ff06d568` and `8788ed3d`.**
+
+Confirmed from the database, 24 Sep. The second is **a model account with no
+first name, holding admin rights** — which Micky had not realised.
+
+This is audit items 34 and 35 arriving as a surprise a second time. CLAUDE.md
+has said since 10 Sep that the dedicated console admin *"has a `public.users`
+row with `role = 'model'`, and how it got one is not established"*, and that
+**"never rely on 'the console admin has no app account'"**. The record was
+right and was still news, which is what a record that is read but not believed
+looks like.
+
+**118. THE EVIDENCE FIELD REACHES MEMBERS TWO WAYS, AND ONE IS NOT A UI CHOICE
+— BUILT 24 Sep 2026. MIGRATION 0058 NOT APPLIED. admin build EXIT 0, mobile
+tsc CLEAN, site `next build` EXIT 0.**
+
+Recorded yesterday as *"'warn' publishes the admin's raw reason"*. Reading it
+properly for the fix found a second route, and it is the more serious one.
+
+**── ROUTE 1: `'warn'` ──** `_admin_apply_user_action` — **0045's body, not
+0044's**, which is the current one — puts `p_reason` straight into the member's
+notification (`0045:308-315`). Same field that becomes `moderation_actions.reason`.
+
+**── ⚠️ ROUTE 2: SUSPENSION, THROUGH A FUNCTION EVERY MEMBER MAY CALL ──**
+
+`suspend` and `ban` write `p_reason` into `suspensions.reason`
+(`0045:331-332`, `0045:340-341`). And **`my_suspension()` returns it**
+(schema snapshot:63-74) — a SECURITY DEFINER function, granted to members,
+returning `(banned, suspended_until, reason)` for the caller's own row.
+
+Mobile's `SuspensionGate` renders it **under a heading that says "Reason"**
+(`SuspensionGate.tsx:91-94`).
+
+**This is not a rendering decision that can be fixed in a client.** The field
+leaves the database through a function the member is entitled to call, so any
+client — or anyone with the anon key and a session — gets it. Hiding it in
+mobile would change nothing.
+
+**── ✅ AND THE RLS READING CAME BACK CLEAN ──**
+
+Checked before building, because if a member could read `suspensions` directly
+then moving the text to a new column fixes nothing. **RLS enabled, one policy,
+`susp_admin`, ALL/PERMISSIVE, qualified on `is_admin()`.** The table grant to
+`authenticated` exists but no policy grants a member any row, including their
+own, so RLS denies by default. **`my_suspension()` is the only route the reason
+has ever had to a member** — so closing it closes the whole route. Block C
+re-proves it from the member's own session after the change.
+
+**── WHAT IT TOOK ──**
+
+The same two-field shape as 0057, but the blast radius is different:
+
+* `suspensions` gains a member-facing column, and **`my_suspension()` stops
+  returning `reason`** — that is the fix, and everything else follows it;
+* `_admin_apply_user_action` needs a fifth parameter. **A defaulted one cannot
+  be added with `create or replace`** — the 0057 trap — so the four-argument
+  version must be dropped;
+* which means **all three callers must be rewritten**: `admin_act_on_user`,
+  `admin_act_on_report` and `admin_act_on_provider` (`0039:346`, `0039:421`,
+  `0039:497`). Their live bodies have to be read first — 0039 is not
+  necessarily what runs, exactly as 0044 was not for `_admin_apply_user_action`;
+* plus the console, and mobile's gate.
+
+So it is three moderation entry points, a SECURITY DEFINER function members
+call, a column, and member-facing copy — not the one-branch change 118 looked
+like yesterday. **Reported at this size before writing it**, and the five live
+bodies were read with `pg_get_functiondef` and carried verbatim, because
+rewriting admin functions from files rather than from the database is the
+mistake that cost 0053. It mattered: the live `_admin_apply_user_action` is
+0045's, two revisions on from the 0039 file.
+
+**── ⚠️ A WARNING NOW REQUIRES A MESSAGE ──**
+
+Ten characters, enforced in the function and mirrored by a disabled Confirm.
+A warning is the one action whose entire effect is the notification, so one
+without a message told someone their account was in trouble and gave them no
+idea what to stop doing. It sent **"You have received an official warning."**
+and nothing else.
+
+**── AND THE CONSOLE SAID THE QUIET PART OUT LOUD ──**
+
+`reports/page.tsx:449` labelled the reason box **"Reason / note (shown to the
+user)"**. It was accurate. The conflation was not an oversight that crept in;
+it was written down, in the UI, as the intended behaviour — which is why a
+feature-level check would never have found it. All three consoles now label
+that box as evidence and carry a second box beneath it.
+
+**── 121. AND ONE HOLE LEFT OPEN ON PURPOSE ──**
+
+`'warn'` still does not require a **reason**. Suspend and ban do; warn never
+has, and `admin_audit_log.admin_note` is nullable — so after 0058 a warning can
+carry an explanation for the member and **no evidence for the record**. Real,
+and deliberately not fixed inside a drop-and-recreate of four moderation
+functions. Recorded as 121.
+
+**── ANYTHING ELSE THAT PUBLISHES IT? ONE NEAR-MISS, AND IT IS FINE ──**
+
+`/verify` shows a rejected member *"The reviewer said: ‘…’"* from
+`verification_requests.notes`. **That is a different field**, written by the
+reviewer as a message to the member and relied on by item 82 — "the reviewer's
+note is the only thing that makes a rejection fixable". It is already the
+to-the-member field, which is exactly what routes 1 and 2 are missing.
+
 **75. A CHECK COULD STOP THE WEBSITE UPDATING, AND NOTHING NOTICED IT HAD —
 CHANGED 22 Sep 2026. `npm run verify` EXIT 0.**
 
@@ -12197,7 +12323,8 @@ platforms each failed it differently.
 | 109 | **Mobile still drops cancelled bookings from the list** — the other half of 87. Needs a fourth state array, and the neutral-wording rule must travel with it | No while mobile is unreleased |
 | 14 | ✅ **Built 24 Sep, not deployed.** Users page, beside Verify, only for a verified account. The confirmation is the COUNT of bookings it would cancel, read when the modal opens | No |
 | 117 | ✅ **0057 APPLIED 24 Sep 07:53, types regenerated.** She is told, by notification and email, with a separate optional message field. The admin's REASON is never shown: it may name the person who reported her | No |
-| 118 | **`'warn'` publishes the admin's raw reason to the member** (0044:472) — the same evidence field, with nothing between it and the subject. The landmine 0057 was built to avoid, already armed | No, but one warning could name a reporter |
+| 118 | **The evidence field reaches members TWO ways.** `'warn'` publishes it in a notification (0045:308), and `suspend`/`ban` write it to `suspensions.reason`, which **`my_suspension()` returns to the member** — a SECURITY DEFINER function they may call, so it is not a client-side choice. ✅ **Built 24 Sep — 0058 NOT APPLIED.** `suspensions.member_message` added, `my_suspension()` returns it instead of `reason`, and a fifth parameter added to all four functions by drop-and-recreate. A warning now requires a message | No, but a reason could name a reporter |
+| 121 | **A warning still needs no REASON.** Suspend and ban require one; warn never has, and `admin_audit_log.admin_note` is nullable — so a warning can be issued with an explanation for the member and no evidence for the record | No |
 | 119 | **Suspend and ban notify nobody.** Only `'warn'` does. Mobile's `SuspensionGate` explains it at the door; the web has no gate, so a suspended member there meets refusals with no explanation | No |
 | 120 | **The web has no suspension gate.** `my_suspension` is called once, for one action in `shop/actions.ts`. Mobile stops a suspended user at the door and explains; the web does not | No |
 | ~~117~~ | ~~**A revoked stylist is told nothing.** Her verification is cleared, her shop hidden and her bookings cancelled, and no notification is written to her — while every model she was booked with gets a considered message~~ *(superseded by the row above, 24 Sep)* | — |

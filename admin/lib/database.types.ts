@@ -2334,6 +2334,7 @@ export type Database = {
         Args: {
           p_action: string
           p_duration_days?: number
+          p_message?: string
           p_provider_id: string
           p_reason?: string
         }
@@ -2343,6 +2344,7 @@ export type Database = {
         Args: {
           p_action: string
           p_duration_days?: number
+          p_message?: string
           p_reason?: string
           p_report_id: string
         }
@@ -2352,6 +2354,7 @@ export type Database = {
         Args: {
           p_action: string
           p_duration_days?: number
+          p_message?: string
           p_reason?: string
           p_user_id: string
         }
@@ -2449,7 +2452,7 @@ export type Database = {
         Args: never
         Returns: {
           banned: boolean
-          reason: string
+          message: string
           suspended_until: string
         }[]
       }

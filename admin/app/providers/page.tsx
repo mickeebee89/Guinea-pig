@@ -25,6 +25,8 @@ export default function ProvidersPage() {
   const [loadError, setLoadError]   = useState<string | null>(null)
   const [modal, setModal]           = useState<{ provider: Provider; action: string } | null>(null)
   const [reason, setReason]         = useState('')
+  // 0058. The member-facing half; `reason` is evidence and stays admin-only.
+  const [message, setMessage]       = useState('')
   const [duration, setDuration]     = useState('7')
 
   const { loading, reload } = useLoader('', async stale => {
@@ -108,6 +110,7 @@ export default function ProvidersPage() {
       p_action:        action,
       p_reason:        reason.trim() || null,
       p_duration_days: action === 'suspend' ? Number(duration) : null,
+      p_message:       message.trim() || undefined,
     })
 
     if (error) {
@@ -142,6 +145,7 @@ export default function ProvidersPage() {
 
     setModal(null)
     setReason('')
+    setMessage('')
     reload()
   }
 
@@ -208,7 +212,7 @@ export default function ProvidersPage() {
                         { a: 'verify',           label: 'Verify',         color: 'bg-blue-100 text-blue-700' },
                         { a: 'remove_portfolio', label: 'Remove Images',  color: 'bg-gray-100 text-gray-600' },
                       ].map(({ a, label, color }) => (
-                        <button key={a} onClick={() => { setModal({ provider: p, action: a }); setReason('') }}
+                        <button key={a} onClick={() => { setModal({ provider: p, action: a }); setReason(''); setMessage('') }}
                           className={`text-xs px-2 py-1 rounded-md font-medium ${color}`}>{label}</button>
                       ))}
                     </div>
@@ -247,11 +251,37 @@ export default function ProvidersPage() {
             )}
             {['suspend','ban','remove_portfolio'].includes(modal.action) && (
               <div className="mb-4">
-                <label className="text-xs font-medium text-[#3D2E2E]/60 block mb-1">Reason / note</label>
+                <label className="text-xs font-medium text-[#3D2E2E]/60 block mb-1">
+                  {modal.action === 'remove_portfolio'
+                    ? 'Reason / note'
+                    : 'Reason — evidence for the record, never shown to them'}
+                </label>
                 <textarea value={reason} onChange={e => setReason(e.target.value)} rows={3}
                   className="border border-black/10 rounded-lg px-3 py-2 text-sm w-full resize-none" />
               </div>
             )}
+
+            {/* ══ THE MESSAGE BOX — the only part the member reads (0058, item 118).
+                The box above is evidence and may name whoever reported them. */}
+            {['warn','suspend','ban'].includes(modal.action) && (
+              <div className="mb-4">
+                <label className="text-xs font-medium text-[#3D2E2E]/60 block mb-1">
+                  {modal.action === 'warn'
+                    ? `Message to them — required. This IS the warning. ${message.trim().length}/10`
+                    : 'Message to them — optional, and the only part they read'}
+                </label>
+                <textarea value={message} onChange={e => setMessage(e.target.value)} rows={3}
+                  placeholder="e.g. Please keep messages to arranging the appointment."
+                  className="border border-black/10 rounded-lg px-3 py-2 text-sm w-full resize-none" />
+                <p className="mt-1 text-[11px] text-[#3D2E2E]/50">
+                  ⚠️ <strong>Never name anyone here.</strong>{' '}
+                  {modal.action === 'warn'
+                    ? 'A warning is nothing but this message. It is sent by notification and email, and without it they only learn they are in trouble.'
+                    : 'They see the notice and the date either way. This is the only part that says why.'}
+                </p>
+              </div>
+            )}
+
             <div className="flex gap-3 justify-end">
               <button onClick={() => setModal(null)} className="px-4 py-2 text-sm rounded-lg bg-gray-100 text-gray-600">Cancel</button>
               <button onClick={doAction} className="px-4 py-2 text-sm rounded-lg text-white font-medium" style={{ backgroundColor: '#8C4A58' }}>
