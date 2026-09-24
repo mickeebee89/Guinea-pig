@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { getSupabaseBrowser } from '@/lib/supabase-browser'
+import { downscaleToFile } from '@/lib/downscale'
 
 export interface PortfolioRow {
   id: string
@@ -12,13 +13,13 @@ export interface PortfolioRow {
 }
 
 /**
- * 10MB. It was 50 — Supabase's default object cap — which existed to let a
- * video through. A photo does not need it, and nothing here downscales before
- * upload, so the cap is the only thing between a 40MB camera file and every
- * model who loads this stylist's profile.
+ * 10MB, applied to the RESIZED file. It was 50 — Supabase's default object cap
+ * — which existed to let a video through (item 111).
  *
- * (Portfolio uploads do NOT use lib/downscale.ts, which the selfie and the
- * application photos both do. That is worth fixing and is not this change.)
+ * Since item 112 the upload goes through lib/downscale.ts first, so this is no
+ * longer the only thing between a 40MB camera file and every model who loads
+ * this profile. It is now a backstop for the one case downscaling cannot help:
+ * an image the browser could not decode, which comes back unchanged.
  */
 const MAX_BYTES = 10 * 1024 * 1024
 
@@ -83,17 +84,41 @@ export function PortfolioManager({
       setError('That needs to be a photo.')
       return
     }
-    if (file.size > MAX_BYTES) {
-      setError(`That photo is ${(file.size / 1024 / 1024).toFixed(0)}MB. The limit is 10MB — try a smaller one.`)
-      return
-    }
-
     setBusy(true)
     try {
+      // ══ RESIZED BEFORE IT IS SENT. Audit item 112. ═══════════════════
+      //
+      // This was the ONE upload surface that skipped lib/downscale.ts. The
+      // ID-check selfie used it; the application photos used it after item 86
+      // made it shared. Portfolio images did not — and they are the ones a
+      // model loads MOST of, because a profile shows a whole gallery where an
+      // application shows a handful to one person.
+      //
+      // ⚠️ THE SIZE CHECK MOVED BELOW THIS, AND THAT IS THE POINT.
+      // Checking the original meant a 12MB photo straight off a phone was
+      // REFUSED, when downscaling it to ~300KB was always possible. The cap is
+      // there to stop something unservable reaching the bucket, so it belongs
+      // on what is actually going to the bucket.
+      //
+      // downscaleToFile never throws: if the browser cannot decode the image
+      // the ORIGINAL comes back, and the cap below then refuses it — which is
+      // the right answer for a file we cannot shrink and should not serve.
+      const small = await downscaleToFile(file, 'portfolio.jpg')
+
+      if (small.size > MAX_BYTES) {
+        setError(
+          `That photo is ${(small.size / 1024 / 1024).toFixed(0)}MB even after resizing. ` +
+          `The limit is 10MB — try a different one.`,
+        )
+        return
+      }
       // Keyed by USER id, matching mobile (portfolio.tsx:213). That path is
       // what makes account deletion sweep these files: the delete-account
       // function clears `${userId}/` in this bucket.
-      const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg'
+      // From the file actually being sent, not the one she picked: a resized
+      // image is a JPEG whatever the original was, and a .heic extension on a
+      // JPEG is how a browser ends up refusing to render it later.
+      const ext = small.type === 'image/jpeg' ? 'jpg' : (file.name.split('.').pop()?.toLowerCase() || 'jpg')
       /* Inside an upload handler, not a render body. A unique filename per
          upload is the point, and the rule does not track that this runs from
          an event. */
@@ -102,7 +127,7 @@ export function PortfolioManager({
 
       const { data: up, error: upErr } = await supabase.storage
         .from('portfolio-photos')
-        .upload(path, file, { contentType: file.type })
+        .upload(path, small, { contentType: small.type })
       if (upErr) throw upErr
 
       const { data: urlData } = supabase.storage.from('portfolio-photos').getPublicUrl(up.path)

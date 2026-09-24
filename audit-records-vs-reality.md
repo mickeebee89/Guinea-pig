@@ -5645,6 +5645,55 @@ why not say it" is a reasonable-sounding change.
 It is a screen that does not exist. **Item 113, recorded above this one at its
 own weight**, because it is a missing journey rather than a missing filter.
 
+**✅ ITEM 11 ANSWERED, AND ITEM 93 CLOSED — 24 Sep 2026. VERIFIED from the
+listing-bar query.**
+
+**All six treatment categories show exactly one stylist, and it is the same
+stylist: Micky's own shop.** The bio was keyboard-mash test text (item 93) and
+is now real copy.
+
+So for as long as indexing has been on, **the six public treatment pages have
+been indexing one stylist whose bio was gibberish** — the combination I flagged
+as the plausible worst case, confirmed. The 40-character bar counts characters,
+and mash has plenty, so nothing in the product could have caught it: the bar it
+passed was a length bar, and what it needed was a reader.
+
+**Item 93 is closed** by the bio being rewritten. Worth keeping the shape of it:
+a content bar that measures length cannot tell content from noise, and the only
+check that would have caught this is somebody reading the page.
+
+**112. THE ONE UPLOAD THAT SKIPPED THE RESIZE — FIXED 24 Sep 2026.
+`npm run verify` EXIT 0.**
+
+`lib/downscale.ts` exists because "a modern phone photo is 3–5MB, most of it
+detail nobody needs, and the upload happens on whatever signal a salon has."
+The selfie used it. The application photos used it after item 86 made it
+shared. **Portfolio images did not** — and they are the ones a model loads most
+of, because a profile shows a whole gallery where an application shows a
+handful to one person.
+
+**── THE CAP MOVED, AND THAT IS THE REAL CHANGE ──**
+
+It was one import and one line, as recorded — but putting the resize in first
+made the existing size check wrong where it stood.
+
+The 10MB cap was being applied to **what she picked**. A 12MB photo straight
+off a phone was therefore **refused**, when downscaling it to a few hundred
+kilobytes was always possible. The cap exists to stop something unservable
+reaching the bucket, so it belongs on **what is actually going to the bucket**.
+
+Now: resize, then check. A camera photo that would have been refused now
+uploads, and the cap still catches the one case downscaling cannot help — an
+image the browser cannot decode, which `downscaleToFile` returns unchanged.
+
+**── AND THE EXTENSION FOLLOWS THE FILE, NOT THE PICKER ──**
+
+The stored path took its extension from `file.name`. A resized image is a JPEG
+whatever the original was, so an iPhone HEIC was being stored as `.heic` with
+JPEG bytes inside it — which is how a browser ends up refusing to render a
+photo that uploaded perfectly well. The extension now comes from the file being
+sent.
+
 **75. A CHECK COULD STOP THE WEBSITE UPDATING, AND NOTHING NOTICED IT HAD —
 CHANGED 22 Sep 2026. `npm run verify` EXIT 0.**
 
@@ -11815,7 +11864,7 @@ platforms each failed it differently.
 | 104 | **A member cannot change her own first name, on either client.** Set at signup, rendered on every profile, booking, review and chat, editable nowhere. A typo is permanent | No, but it is unfixable by anyone |
 | **113** | ★ **A MODEL ON MOBILE HAS NO BOOKINGS LIST AT ALL** — not a missing filter, a missing screen. `/(app)/sessions` is stylist-only; her dashboard is three capped queries (5, 10, all-completed) with no cancelled booking anywhere. **A whole journey missing on one client**, the same shape as items 49 and 99. **Not on this list — see HANDOVER.md → "Before the app is submitted"** | No while mobile is unreleased |
 | 109 | ✅ **Stylist half fixed 24 Sep, not tested on device.** Cancelled bookings show on mobile with the same three sentences as the web. The model's half IS item 113 | No |
-| 112 | **Portfolio uploads skip `lib/downscale.ts`** while the selfie and application photos both use it — so the images a model loads most of are the only ones not resized. One import and one line | No |
+| 112 | ✅ **Fixed 24 Sep, not deployed.** Portfolio uploads resize before sending, and the cap moved to AFTER the resize — it was refusing 12MB camera photos that shrink to a few hundred KB | No |
 | 111 | ✅ **VERIFIED AND CLEARED 24 Sep.** The one video row was approved by a reviewer who could not watch it — the hypothesis and the only instance agree. Row and file removed | It could be uploaded from one place and MODERATED from none — the admin queue showed it with no controls. ⚠️ Existing rows need deleting by SQL, and the files by hand: a row delete does not touch storage | No |
 | 105 | ✅ **Removed from every surface 24 Sep, not deployed.** ⚠️ `public-web-views.sql` needs `drop view if exists public.public_stylists;` BEFORE re-running — `create or replace` cannot drop a column. Column drop is a later migration | No |
 | 101 | ✅ **ID check gated on having a profile picture — built, not deployed.** Privacy §7 is true as written, with no copy change. A stylist sets hers on `/shop`, a model on `/profile` | No |
@@ -11824,7 +11873,7 @@ platforms each failed it differently.
 | 98 | Verification queue now shows the profile picture beside the selfie — built, **not deployed**. Privacy §7's comparison was previously impossible in the console. **Open: the copy is still false for a member with no profile picture** | No, but Privacy §7 describes it |
 | 97 | **`sessions.price_pence` is read by nothing in either client.** 0052 snapshots it so an edited slot cannot rewrite what was agreed; both clients show the SLOT's price today instead. They agree until someone edits a slot after an application | No, but it is a money display |
 | 95 | **Mobile's favourite heart fails silently** — no error handling on insert or delete, so a filled heart can sit over a row that does not exist. It also never says that saving subscribes her to notifications | No, but it tells her something untrue |
-| 93 | **A published shop's bio is keyboard-mash test text.** Live, on the only published shop, and it clears `public_stylists`' 40-character bar because that bar counts characters | No, but a model would see it |
+| 93 | ✅ **CLOSED 24 Sep** — rewritten as real copy. It had been indexed: all six treatment pages showed this one stylist. A 40-character bar counts characters, so nothing could have caught it but a reader. ~~**A published shop's bio is keyboard-mash test text.** Live, on the only published shop, and it clears `public_stylists`' 40-character bar because that bar counts characters~~ | No |
 | 91 | Types stamp names the newest migration FILE, not the newest applied — so it can read one ahead of the database. Claim corrected in both scripts; closing it properly needs a required `--applied=` argument, **your call** | No |
 | 90 | ✅ **CLOSED 23 Sep** — 0054 and 0055 applied, both roles set a postcode live, `users` and `providers` agreed to six decimal places, and the contradictory dashboard sentences are gone | No |
 | 89 | **Mobile builds its consent record client-side and calls the same function.** The web now rebuilds it server-side (84c); mobile has no server to do that in, so the fix is inside `create_session_with_consent` — a migration, and it would make the web's rebuild redundant. Two clients currently write records of different strength into the same six-year table | No |
