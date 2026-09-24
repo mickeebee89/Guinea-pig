@@ -10,6 +10,11 @@ export function demoRpc(name: string, args: Row, store: DemoStore, user: DemoUse
     case 'my_suspension':
       return []
 
+    // Every demo stylist has a real bio, so nothing is held back. Returning
+    // null here is the "nothing wrong" answer, not a stub that skips the check.
+    case 'bio_publish_problem':
+      return null
+
     case 'cancel_booking': {
       const s = store.tables.sessions.find(r => r.id === args.p_session_id)
       if (!s) throw new Error('cancel_booking: booking not found')

@@ -88,13 +88,48 @@ interface StatusPost {
   hoursLeft: number
 }
 
-type Kind = 'images' | 'text' | 'status'
+type Kind = 'images' | 'text' | 'status' | 'avatars'
 
 const KINDS: { key: Kind; label: string }[] = [
-  { key: 'images', label: 'Images' },
-  { key: 'status', label: 'Status posts' },
-  { key: 'text',   label: 'Flagged text' },
+  { key: 'images',  label: 'Images' },
+  { key: 'status',  label: 'Status posts' },
+  { key: 'text',    label: 'Flagged text' },
+  { key: 'avatars', label: 'Profile pictures' },
 ]
+
+/**
+ * ⚠️ THIS ONE IS NOT A QUEUE IN THE SAME SENSE, AND THE WORDING SAYS SO.
+ *
+ * Every other section here holds something BACK until a decision. A profile
+ * picture is already live — it cannot be held, because since item 101 an
+ * avatar is a precondition for the ID check, so gating it would stop people
+ * getting verified at all. There is no classifier that could screen an image
+ * the way the word list screens text.
+ *
+ * So this is a list of what nobody has looked at yet, oldest first, with how
+ * long it has been sitting there. The number is the point: a blind spot that
+ * ages visibly is the difference between three days and three weeks.
+ */
+interface UnseenAvatar {
+  id: string
+  first_name: string | null
+  email: string | null
+  role: string | null
+  profile_pic_url: string
+  profile_pic_updated_at: string | null
+}
+
+/** "4 days" / "6 hours" / "just now" — the bit that stops this drifting. */
+function waitedFor(since: string | null): { text: string; days: number } {
+  if (!since) return { text: 'unknown', days: 0 }
+  const ms = Date.now() - new Date(since).getTime()
+  if (isNaN(ms)) return { text: 'unknown', days: 0 }
+  const hours = Math.floor(ms / 3_600_000)
+  const days  = Math.floor(hours / 24)
+  if (hours < 1) return { text: 'just now', days: 0 }
+  if (hours < 24) return { text: `${hours} hour${hours === 1 ? '' : 's'}`, days: 0 }
+  return { text: `${days} day${days === 1 ? '' : 's'}`, days }
+}
 
 export default function ModerationPage() {
   const [imageReview, setImageReview]   = useState(false)
@@ -116,6 +151,10 @@ export default function ModerationPage() {
    */
   const [hidden, setHidden]             = useState<Set<Kind>>(new Set())
   const [posts, setPosts]               = useState<StatusPost[]>([])
+  const [avatars, setAvatars]           = useState<UnseenAvatar[]>([])
+  // Same lesson as the other two: an empty list and a failed query must not
+  // look the same on a page whose whole job is to say what is outstanding.
+  const [avatarsError, setAvatarsError] = useState<string | null>(null)
   // Same lesson as the text tab: without these, "still loading" and "the query
   // failed" both render as an empty queue, which is the one state a moderation
   // queue must never fake.
@@ -144,6 +183,33 @@ export default function ModerationPage() {
     if (stale()) return
     setItems((data as unknown as PortfolioItem[]) ?? [])
   })
+
+  const { loading: avatarsLoading, reload: reloadAvatars } = useLoader('', async stale => {
+    setAvatarsError(null)
+    const { data, error } = await supabase
+      .from('users')
+      .select('id, first_name, email, role, profile_pic_url, profile_pic_updated_at')
+      .not('profile_pic_url', 'is', null)
+      .is('profile_pic_reviewed_at', null)
+      // Oldest first. The one at the top is the one that has been waiting
+      // longest, which is the only order this list should ever be in.
+      .order('profile_pic_updated_at', { ascending: true, nullsFirst: true })
+      .limit(200)
+    if (stale()) return
+    if (error) { setAvatarsError(error.message); return }
+    setAvatars((data as unknown as UnseenAvatar[]) ?? [])
+  })
+
+  async function markAvatarSeen(user: UnseenAvatar) {
+    const { error } = await supabase.rpc('admin_mark_profile_pic_seen', { p_user_id: user.id })
+    if (error) {
+      alert(`Couldn't mark that as seen.\n\n${humanError(error.message)}\n\nNothing has changed.`)
+      return
+    }
+    // Drop it locally rather than refetching: the row is gone from this query's
+    // criteria and a reload would flash the whole list.
+    setAvatars(prev => prev.filter(a => a.id !== user.id))
+  }
 
   const { loading: flaggedLoading, reload: reloadFlagged } = useLoader('', async stale => {
     setFlaggedError(null)
@@ -470,9 +536,10 @@ export default function ModerationPage() {
 
   const counts: Record<Kind, number> = {
     images: items.length, text: flagged.length, status: posts.length,
+    avatars: avatars.length,
   }
-  const anyLoading   = loading || flaggedLoading || postsLoading
-  const totalWaiting = counts.images + counts.text + counts.status
+  const anyLoading   = loading || flaggedLoading || postsLoading || avatarsLoading
+  const totalWaiting = counts.images + counts.text + counts.status + counts.avatars
   const hiddenCount  = [...hidden].reduce((n, k) => n + counts[k], 0)
   const show = (k: Kind) => !hidden.has(k)
   const toggle = (k: Kind) => setHidden(prev => {
@@ -677,6 +744,77 @@ export default function ModerationPage() {
               </div>
             </div>
           ))}
+          </div>
+        </section>
+      )}
+
+      {show('avatars') && (
+        <section className="mb-8">
+          <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-[#3D2E2E]/50">
+            Profile pictures ({avatars.length})
+            {avatars.length > 0 && avatars[0].profile_pic_updated_at && (
+              // The oldest one, in the heading, so the cost of not looking is
+              // visible without scrolling.
+              <span className="ml-2 font-medium normal-case tracking-normal text-[#3D2E2E]/40">
+                oldest waiting {waitedFor(avatars[0].profile_pic_updated_at).text}
+              </span>
+            )}
+          </h2>
+          <p className="mb-3 text-xs text-[#3D2E2E]/50">
+            These are <strong>already live</strong>. Nothing is held back — an avatar is
+            needed for the ID check, so holding it would stop people getting verified.
+            This is what nobody has looked at yet, oldest first.
+          </p>
+          <div className="space-y-2">
+          {avatarsLoading ? (
+            <div className="text-[#3D2E2E]/40 text-sm">Loading…</div>
+          ) : avatarsError ? (
+            <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-700">
+              <p className="font-medium mb-1">Couldn’t load profile pictures</p>
+              <p className="mb-3 text-red-600">{avatarsError}</p>
+              <button onClick={reloadAvatars} className="px-3 py-1.5 rounded-lg bg-red-600 text-white text-xs font-medium">Retry</button>
+            </div>
+          ) : avatars.length === 0 ? (
+            <div className="text-[#3D2E2E]/40 text-sm">
+              Every profile picture has been looked at.
+            </div>
+          ) : avatars.map(a => {
+            const waited = waitedFor(a.profile_pic_updated_at)
+            return (
+              <div key={a.id} className="flex items-center gap-3 bg-white rounded-xl border border-black/5 shadow-sm p-3">
+                {/* eslint-disable-next-line @next/next/no-img-element -- Supabase
+                    storage hosts these and next/image would need every bucket
+                    host in next.config; the portfolio grid above does the same. */}
+                <img src={a.profile_pic_url} alt="" className="w-14 h-14 rounded-full object-cover bg-gray-100" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-[#3D2E2E] truncate">
+                    {a.first_name || 'No first name'}
+                    <span className="ml-2 text-xs font-normal text-[#3D2E2E]/40">{a.role}</span>
+                  </p>
+                  <p className="text-xs text-[#3D2E2E]/40 truncate">
+                    {a.email ?? 'no email'} · id {a.id.slice(0, 8)}
+                  </p>
+                </div>
+                <span className={`text-xs px-2 py-1 rounded-full font-medium whitespace-nowrap ${
+                  // Three days is where "I'll get to it" turns into a backlog.
+                  waited.days >= 7 ? 'bg-red-100 text-red-700'
+                  : waited.days >= 3 ? 'bg-amber-100 text-amber-800'
+                  : 'bg-gray-100 text-gray-600'
+                }`}>
+                  waiting {waited.text}
+                </span>
+                <a href={a.profile_pic_url} target="_blank" rel="noreferrer"
+                  className="text-xs px-3 py-1.5 rounded-lg bg-gray-100 text-gray-600 font-medium whitespace-nowrap">
+                  Full size
+                </a>
+                <button onClick={() => markAvatarSeen(a)}
+                  className="text-xs px-3 py-1.5 rounded-lg text-white font-medium whitespace-nowrap"
+                  style={{ backgroundColor: '#8C4A58' }}>
+                  Looked at it
+                </button>
+              </div>
+            )
+          })}
           </div>
         </section>
       )}

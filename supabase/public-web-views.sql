@@ -179,7 +179,15 @@ where p.is_published is true
   -- the thin/doorway pattern that earns a site-wide manual action. A shopfront
   -- reaches the open web only once it is actually a shopfront.
   and coalesce(btrim(p.name), '') <> ''
-  and length(btrim(coalesce(p.bio, ''))) >= 40
+  -- ⚠️ WAS `length(btrim(coalesce(p.bio,''))) >= 40` UNTIL 0060 (items 93, 115).
+  -- Keyboard mash cleared that, because mash is long, and a published shop with
+  -- a gibberish bio sat on all six indexable treatment pages. The 40 characters
+  -- are KEPT INSIDE this function and the word tests are additive.
+  --
+  -- It returns the STYLIST'S OWN SENTENCE rather than a boolean, and the
+  -- dashboard's websiteBlockers calls the same function — so the view and the
+  -- page that explains the view cannot drift apart.
+  and public.bio_publish_problem(p.bio) is null
   and cardinality(cats.categories) >= 1
 
   -- Seed data is still live (launch blocker #75). Seeded accounts use the

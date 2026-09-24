@@ -1942,6 +1942,9 @@ export type Database = {
           longitude: number | null
           notification_preferences: Json | null
           postcode: string | null
+          profile_pic_reviewed_at: string | null
+          profile_pic_reviewed_by: string | null
+          profile_pic_updated_at: string | null
           profile_pic_url: string | null
           provider_fee_waived: boolean
           region: string
@@ -1968,6 +1971,9 @@ export type Database = {
           longitude?: number | null
           notification_preferences?: Json | null
           postcode?: string | null
+          profile_pic_reviewed_at?: string | null
+          profile_pic_reviewed_by?: string | null
+          profile_pic_updated_at?: string | null
           profile_pic_url?: string | null
           provider_fee_waived?: boolean
           region: string
@@ -1994,6 +2000,9 @@ export type Database = {
           longitude?: number | null
           notification_preferences?: Json | null
           postcode?: string | null
+          profile_pic_reviewed_at?: string | null
+          profile_pic_reviewed_by?: string | null
+          profile_pic_updated_at?: string | null
           profile_pic_url?: string | null
           provider_fee_waived?: boolean
           region?: string
@@ -2363,6 +2372,18 @@ export type Database = {
           p_user_id: string
         }
         Returns: Json
+      }
+      admin_mark_profile_pic_seen: {
+        Args: { p_user_id: string }
+        Returns: Json
+      }
+      banned_word_hit: {
+        Args: { p_text: string }
+        Returns: string
+      }
+      bio_publish_problem: {
+        Args: { p_bio: string }
+        Returns: string
       }
       admin_decide_status_post: {
         Args: { p_decision: string; p_note?: string; p_post_id: string }

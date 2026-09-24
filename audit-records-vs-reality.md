@@ -6113,6 +6113,103 @@ But `revoke_verification` requires **ten** characters (0044). So a reason of
 is a decision about three live actions, not a detail to slip into a one-line
 migration — **recorded as 122** rather than absorbed.
 
+**100 + 115. SOMETHING LOOKS AT WHAT GETS PUBLISHED — BUILT 24 Sep 2026.
+MIGRATION 0060 NOT APPLIED, VIEW FILE NOT RE-RUN. site verify EXIT 0 but for
+the types stamp, `next build` EXIT 0, admin build EXIT 0.**
+
+Taken as one piece because they are one problem: nothing looks at what a
+stylist publishes before the public does.
+
+**── ⚠️ TWO OF MY OWN PREMISES WERE WRONG, AND BOTH MADE THIS SMALLER ──**
+
+**1. Failing the bio bar strands nobody, and she is already told.**
+`shop.ts:113` keeps `publishBlockers` and `websiteBlockers` apart on purpose:
+*"Merging the two would tell a live, bookable stylist they are blocked when
+they are only invisible to Google."* And `browse.ts:110` uses a deliberately
+NARROWER bar for signed-in members, because the 40-character rule exists for
+crawlers and *"there is no crawler behind the auth gate."* So 115 was never a
+stranding problem. Only the TEST was wrong.
+
+**2. The portfolio is already moderated, fail-closed, and I had it in the
+plan as work.** `portfolio_items` has `moderation_status`,
+`public_stylist_portfolio` filters `= 'approved'`, `/stylist/[id]` filters the
+same way and shows pending items **to the owner only** (`stylist.ts:75`), and
+the console has had a queue for them all along. **Item 100 was always about the
+profile picture alone.** I widened it to "photos" in my own plan and then
+planned a build for a thing that exists.
+
+*Both found by reading the code for the build, not by reading the record. The
+record said "a profile picture is not moderated" and was exactly right; my
+summary of it was not.*
+
+**── AND THE ANSWER TO "ONE ADMIN, NO QUEUE" WAS ALREADY IN THE REPO ──**
+
+0032, August: *"Manual-only review would mean an ordinary post approved twelve
+hours late is worthless, so the feature would be pointless rather than merely
+slow. The screen promotes clean posts immediately and queues only what it
+flags."* Same machinery, two more surfaces. **No new queue was invented.**
+
+**── 115: THE BAR NOW TESTS WHAT MASH FAILS ──**
+
+`bio_publish_problem()` keeps the 40 characters — length was never wrong, only
+insufficient — and adds: six words, five of them distinct, no single run over
+25 characters, and the banned-word screen. Mash fails on shape; `"asd asd asd
+asd asd asd"` fails on distinctness.
+
+**It returns her sentence, not a boolean.** The view filters on it AND
+`websiteBlockers` prints it, so the listing and the page explaining the listing
+cannot drift — which is the failure this session has already found in the types
+stamp, the cancel copy and the avatar write. The 40 is gone from `shop.ts`
+entirely: a number there is a number that can disagree with the view.
+
+**It never names the matched word.** Telling somebody which word to change is
+how a filter teaches evasion.
+
+**── THE BANNED-WORD MATCH HAD TWO COPIES AND WAS ABOUT TO HAVE THREE ──**
+
+0032 put it in the trigger and in the console, and said which was
+authoritative. Writing a third copy for bios is how the semantics drift apart,
+so `banned_word_hit()` was extracted and **`screen_status_post()` rewritten to
+call it**. A word that flags a status post now flags a bio by construction
+rather than by care. Three states kept, including the one that matters:
+**NULL means CANNOT SCREEN and is not clean** — every caller holds.
+
+**── 100: THE AVATAR RECORDS, AND DELIBERATELY DOES NOT GATE ──**
+
+A word screen has no opinion about an image and there is no classifier in this
+stack, so the only available gate is a human one — and since item 101 an avatar
+is a **precondition for the ID check**, so holding it would stop someone
+getting verified at all. That is a wider harm than the one it prevents.
+
+So `profile_pic_updated_at` / `profile_pic_reviewed_at`, a BEFORE trigger, and
+a console list. **This does not close the gap. It makes the gap bounded,
+visible and ageing**, which is the honest description and the reason it was
+offered as the weaker of two options.
+
+The console section is in the existing Moderation Queue, as a fourth type
+alongside Images, Status posts and Flagged text. Oldest first, **how long each
+has been waiting on every row**, the oldest one repeated in the heading so the
+cost of not looking is visible without scrolling, and the chip turns amber at
+three days and red at seven. Its own copy says the pictures are *already live*,
+because a section in a queue that holds nothing back must not read as if it
+does. The button says **"Looked at it"**, not "Approve" — nothing is gated on
+it, and the way to reject a picture is to remove it.
+
+`admin_mark_profile_pic_seen` writes an audit row **carrying the URL**, because
+the URL is what was actually judged and the picture can change a minute later.
+
+**── ⚠️ 115 IS NOT CLOSED BY THE MIGRATION ──**
+
+`public-web-views.sql` is not a migration and nothing applies it. Until it is
+**re-run by hand**, `public_stylists` still uses the bare 40-character bar,
+however green the rest is — the same manual step as item 105.
+
+**── ONE THING THE VERIFY BLOCK IS FOR, AND IT IS NOT THE OBVIOUS ONE ──**
+
+Block A checks that a real, plainly written bio returns NULL. **A bar that is
+too tight excludes real stylists, which is a worse failure than the one this
+fixes**, so that assertion matters more than the mash ones.
+
 **✅ 0058 VERIFIED — 24 Sep 2026, Blocks A, B and C.**
 
 **A.** A messageless warning is **refused** — *"a warning needs a message of at
@@ -12404,13 +12501,13 @@ platforms each failed it differently.
 | 109 | ✅ **Stylist half fixed 24 Sep, not tested on device.** Cancelled bookings show on mobile with the same three sentences as the web. The model's half IS item 113 | No |
 | 116 | ✅ **The web checked for two roles and there are three — fixed 24 Sep, not deployed.** A `'both'` account saw no stylist nav links. Latent: no such accounts exist. `lib/roles.ts` names the question. **Open:** `ensureProfile.ts` would create no provider row for a 'both' signup, unreachable today | No |
 | 114 | ✅ **Treatment pages self-noindex below 3 stylists — built 24 Sep, not deployed.** The page and the sitemap share the constant AND the count. Replaces a judgement that had to be remembered | No |
-| 115 | **The 40-character bio bar is a length test, and mash cleared it (item 93).** What would replace it needs a human look, and the only existing per-stylist human touchpoint is the verification decision — which does not currently show the shop. **Reported, not built** | No, but it gates the public site |
+| 115 | ✅ **Built 24 Sep — 0060 NOT APPLIED, VIEW NOT RE-RUN.** `bio_publish_problem()` keeps the 40 characters and adds six words, five distinct, no run over 25, plus the banned-word screen. Returns the stylist's own sentence, shared by the view and `websiteBlockers` | No |
 | 112 | ✅ **Fixed 24 Sep, not deployed.** Portfolio uploads resize before sending, and the cap moved to AFTER the resize — it was refusing 12MB camera photos that shrink to a few hundred KB | No |
 | 111 | ✅ **VERIFIED AND CLEARED 24 Sep.** The one video row was approved by a reviewer who could not watch it — the hypothesis and the only instance agree. Row and file removed | It could be uploaded from one place and MODERATED from none — the admin queue showed it with no controls. ⚠️ Existing rows need deleting by SQL, and the files by hand: a row delete does not touch storage | No |
 | 105 | ✅ **Removed from every surface 24 Sep, not deployed.** ⚠️ `public-web-views.sql` needs `drop view if exists public.public_stylists;` BEFORE re-running — `create or replace` cannot drop a column. Column drop is a later migration | No |
 | 101 | ✅ **ID check gated on having a profile picture — built, not deployed.** Privacy §7 is true as written, with no copy change. A stylist sets hers on `/shop`, a model on `/profile` | No |
 | 99 | ✅ **VERIFIED LIVE 23 Sep.** A model's own profile on the web — built, **not deployed**. Avatar, bio, the nine attributes, photo management, Profile in the nav, and a link to what stylists see | No |
-| 100 | **A profile picture is not moderated, on either client.** Live the moment it is uploaded; report/block and the ID-check comparison are the only controls, both after the fact. Not introduced by 99 — written down by it | No |
+| 100 | ✅ **Built 24 Sep — 0060 NOT APPLIED.** The avatar records rather than gates: gating it would strand people out of the ID check (item 101), and no classifier can screen an image. The console lists what nobody has looked at, oldest first, with how long it has waited | No |
 | 98 | Verification queue now shows the profile picture beside the selfie — built, **not deployed**. Privacy §7's comparison was previously impossible in the console. **Open: the copy is still false for a member with no profile picture** | No, but Privacy §7 describes it |
 | 97 | **`sessions.price_pence` is read by nothing in either client.** 0052 snapshots it so an edited slot cannot rewrite what was agreed; both clients show the SLOT's price today instead. They agree until someone edits a slot after an application | No, but it is a money display |
 | 95 | **Mobile's favourite heart fails silently** — no error handling on insert or delete, so a filled heart can sit over a row that does not exist. It also never says that saving subscribes her to notifications | No, but it tells her something untrue |

@@ -48,7 +48,18 @@ export type { IdCheckState } from './idCheck'
  * `public-web-views.sql` is the authority. This copy exists only so the panel
  * can say "yours is 13" instead of making someone guess.
  */
-export const BIO_MIN_CHARS = 40
+/**
+ * ⚠️ THE BIO BAR IS NOT IN THIS FILE ANY MORE.
+ *
+ * `BIO_MIN_CHARS = 40` lived here and in public_stylists until 0060, and
+ * keyboard mash cleared both on six indexable treatment pages (items 93, 115).
+ * The rule is now `bio_publish_problem()` in the database, which keeps the 40
+ * characters and adds what mash actually fails. This file ASKS that function
+ * (see the rpc in the Promise.all below) rather than holding a second copy of
+ * the rule, because two copies of one rule drifting apart is this repo's most
+ * repeated bug. Do not reintroduce the constant — a number here is a number
+ * that can disagree with the view.
+ */
 
 /**
  * The key two category names are the SAME category by.
@@ -184,10 +195,16 @@ export async function getStylistSetup(
   }
   if (!prov) return empty
 
-  const [treatRes, userRes, payRes, reqRes] = await Promise.all([
+  const [treatRes, userRes, payRes, reqRes, bioRes] = await Promise.all([
     // Rows, not a head count: publishing needs a treatment WITH a category
     // (provider_shop_is_publishable, 0016 / item 52), so both counts matter.
     supabase.from('provider_treatments').select('category').eq('provider_id', prov.id),
+    // ⚠️ THE SAME FUNCTION public_stylists FILTERS ON. Not a copy of its rule:
+    // it returns the sentence she reads, so the view and the page explaining
+    // the view cannot disagree about why she is not listed. '' rather than null
+    // because a non-defaulted SQL argument types as required and non-nullable,
+    // and '' is the same case to the function.
+    supabase.rpc('bio_publish_problem', { p_bio: prov.bio ?? '' }),
     supabase.from('users')
       .select('is_verified, is_founding_provider, provider_fee_waived, profile_pic_url')
       .eq('id', userId).maybeSingle(),
@@ -210,7 +227,6 @@ export async function getStylistSetup(
   const treatRows = (treatRes.data ?? []) as { category: string | null }[]
   const treatmentCount = treatRows.length
   const categorisedCount = treatRows.filter(r => r.category !== null).length
-  const bioLength = (prov.bio ?? '').trim().length
 
   // Going live: a name and a categorised treatment. Nothing else, matching
   // 0016. (Until 22 Sep this counted any treatment row, so one with a null
@@ -223,13 +239,13 @@ export async function getStylistSetup(
   // live — telling someone about the public website while their shop still has
   // no name is answering a question they have not reached yet.
   const websiteBlockers: string[] = []
-  if (publishBlockers.length === 0 && bioLength < BIO_MIN_CHARS) {
-    // The number both ways round, so "add a bit more" is actionable.
-    websiteBlockers.push(
-      bioLength === 0
-        ? `a few lines about you — at least ${BIO_MIN_CHARS} characters`
-        : `a bit more in your bio — ${BIO_MIN_CHARS} characters at least, yours is ${bioLength}`,
-    )
+  // The database's own sentence, not a second opinion about it. On an error it
+  // stays silent rather than guessing: telling a stylist she is missing from
+  // cavybeauty.com when we could not check is worse than saying nothing, and
+  // the view is what actually decides.
+  const bioProblem = bioRes.error ? null : (bioRes.data as string | null)
+  if (publishBlockers.length === 0 && bioProblem) {
+    websiteBlockers.push(bioProblem)
   }
 
   // One definition of this rule, shared with the model-facing path — see
