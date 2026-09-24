@@ -59,6 +59,33 @@ export interface SessionRow {
    * first — and the order silently changed meaning between her two screens.
    */
   createdAt: string
+  /**
+   * Who cancelled it, from the viewer's side. Audit item 87.
+   *
+   * ⚠️ `null` IS NOT "UNKNOWN". It means THE PLATFORM cancelled, and it is
+   * recorded that way on purpose in three different places:
+   *
+   *   * a suspension or a deleted stylist (`_withdraw_stylist`, 0044:330 —
+   *     "cancelled_by stays NULL, as in a block cascade: the platform
+   *     cancelled, not a person");
+   *   * a block cascade (0029:280 — "recording the blocker here would put
+   *     'who blocked whom' in the record").
+   *
+   * So the neutral wording is not only for a withdrawn stylist. One of the
+   * cases it covers would disclose a member's safety decision if it named an
+   * actor, which is why this must never fall back to "cancelled by them".
+   */
+  cancelledBy: 'you' | 'them' | 'platform' | null
+  /** ISO. Null unless cancelled. */
+  cancelledAt: string | null
+  /**
+   * What they said, if anything. Only ever present when a PERSON cancelled.
+   *
+   * Not a new disclosure: `cancel_booking` already passes this into the
+   * notification the other party receives (0030:54), so it has always been
+   * shown to them — just only once, in a notice they can delete.
+   */
+  cancellationReason: string | null
   treatmentName: string | null
   treatmentCategory: string | null
   otherPartyName: string
@@ -87,9 +114,13 @@ export async function getSessions(
 
   const { data: raw, error } = await supabase
     .from('sessions')
-    .select('id, provider_id, model_user_id, date, start_time, end_time, treatment_id, note, photo_urls, created_at, status')
+    .select('id, provider_id, model_user_id, date, start_time, end_time, treatment_id, note, photo_urls, created_at, status, cancelled_by, cancelled_at, cancellation_reason')
     .or(orClause)
-    .in('status', ['pending', 'accepted', 'completed'])
+    // ⚠️ 'cancelled' JOINED THIS LIST ON 24 Sep 2026 (item 87). Before that a
+    // cancelled booking simply disappeared from both clients, and the only
+    // trace was a notification — which is deletable (0008), so a member could
+    // be left with no record that a booking had ever existed.
+    .in('status', ['pending', 'accepted', 'completed', 'cancelled'])
     .order('date', { ascending: false })
   if (error) throw error
 
@@ -98,6 +129,8 @@ export async function getSessions(
     date: string; start_time: string | null; end_time: string | null
     treatment_id: string | null; note: string | null; status: string
     photo_urls: string[] | null; created_at: string
+    cancelled_by: string | null; cancelled_at: string | null
+    cancellation_reason: string | null
   }[]
   if (rows.length === 0) return []
 
@@ -169,6 +202,19 @@ export async function getSessions(
           .map(p => signedByPath.get(toObjectPath(p)) ?? p)
           .filter(Boolean),
         createdAt: r.created_at,
+        // Resolved against the viewer here rather than in the page, so no
+        // renderer has to hold a user id or decide what null means.
+        cancelledBy: r.status !== 'cancelled'
+          ? null
+          : r.cancelled_by === null
+            ? 'platform'
+            : r.cancelled_by === userId
+              ? 'you'
+              : 'them',
+        cancelledAt: r.cancelled_at,
+        // Withheld unless a PERSON cancelled. A platform cancellation has no
+        // reason recorded, and inventing one would be the opposite of neutral.
+        cancellationReason: r.cancelled_by === null ? null : r.cancellation_reason,
         treatmentName: treat?.name ?? null,
         treatmentCategory: treat?.category ?? null,
         otherPartyName: isModel ? (prov?.name ?? 'Stylist') : displayName(model),

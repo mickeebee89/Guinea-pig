@@ -5213,6 +5213,101 @@ contradiction points at the CHECK.
 is the only code in a migration that gets no rehearsal, and it is the code that
 decides whether anything else runs at all.
 
+**✅ ITEM 104 VERIFIED LIVE — 24 Sep 2026.** Settings → Your name saves with
+the preview line, shows "Saved." and the cooldown note, and a second attempt
+immediately after is refused with *"You changed your name on 24 Sep 2026. You
+can change it again after 24 Oct 2026."* — the trigger's own message, passed
+through rather than replaced.
+
+**87. A CANCELLED BOOKING VANISHED FROM BOTH CLIENTS — FIXED ON THE WEB
+24 Sep 2026. `npm run verify` EXIT 0. NOT DEPLOYED.**
+
+**Plainly:** after a cancellation the booking was simply gone from the list.
+The only trace was a notification, and notifications are deletable (0008), so a
+member could be left with **no record that a booking had ever existed**.
+
+Both clients listed `pending, accepted, completed` only. The web now lists
+`cancelled` too, under **Past**.
+
+**── THE DECISION, AND WHY NOT GREYED IN UPCOMING ──**
+
+Micky, 24 Sep: under Past, marked cancelled, with who cancelled it and the
+reason if one was given. Not greyed in the upcoming list.
+
+Right, and worth saying why: **a booking cancelled for next Tuesday is not
+upcoming** — nothing is going to happen on Tuesday. Keeping it in a list whose
+whole job is "what is still to come" would make that list lie, which is the
+same fault the existing Past grouping already fixes for an accepted booking
+whose date has passed. So cancelled goes to Past **whatever its date**.
+
+The month calendar is unaffected: it already filters to accepted and pending,
+so a cancelled booking never marked a day and still does not.
+
+**── DO BOTH PARTIES SEE THE SAME THING? ──**
+
+**The same fact, framed from the reader.** "You cancelled this booking" /
+"Priya cancelled this booking." Not two different accounts of what happened —
+one sentence, with the actor resolved against whoever is looking.
+
+**For a platform cancellation, literally identical on both sides**, because
+there is no actor to frame.
+
+**── ⚠️ A STYLIST CANCELLING versus THE PLATFORM WITHDRAWING HER ──**
+
+This is the part that had to be got right, and the database already had it
+right — the signal exists because someone decided it should.
+
+| `sessions.cancelled_by` | Means | She sees |
+|---|---|---|
+| a user id | a person cancelled | "Priya cancelled this booking." + the reason, if given |
+| **NULL** | **the platform cancelled** | "This booking was cancelled." No actor. No reason. |
+
+`_withdraw_stylist` leaves `cancelled_by` NULL, with the reason recorded in
+0044:330: *"cancelled_by stays NULL, as in a block cascade: the platform
+cancelled, not a person."*
+
+**⚠️ AND THE NEUTRAL CASE IS NOT ONLY ABOUT A WITHDRAWN STYLIST.** The same
+NULL covers a **block cascade**, and 0029:280 says why: *"recording the blocker
+here would put 'who blocked whom' in the record."* So if this ever degraded to
+"cancelled by them" for a null actor, **a block cascade would tell one member
+that the other had blocked them** — disclosing a safety decision the product
+deliberately never reveals.
+
+Neutral is not vagueness here. It is the requirement, and it is load-bearing
+for a case beyond the one that prompted it. The renderer has no fallback: the
+three states are exhaustive and 'platform' is one of them, not the absence of
+the other two.
+
+**── THE REASON IS NOT A NEW DISCLOSURE ──**
+
+Checked before showing it. `cancel_booking` already passes the reason into the
+cancellation notice the other party receives (0030:54), so it has always
+reached them — just once, in a notice they can delete. Putting it on the
+booking is the same sentence somewhere that does not disappear. It is quoted,
+because they are their words, and it is withheld entirely when `cancelled_by`
+is NULL, since no reason is recorded for a platform cancellation and inventing
+one would be the opposite of neutral.
+
+**── NOTHING IS OFFERED ON A CANCELLED ROW ──**
+
+Checked rather than assumed: `SessionActions` gates Cancel on
+`(pending || accepted) && !isPast`, accept/decline on `pending`, complete on
+`accepted`; "Leave a review" is gated on `completed`. A cancelled booking
+therefore renders with no controls at all, which is correct — it is a record,
+not a thing to act on.
+
+**── ⚠️ MOBILE NEEDS THE SAME AND IS NOT CHANGED HERE — ITEM 109 ──**
+
+`sessions.tsx:125` still lists `pending, accepted, completed`, so on the app a
+cancelled booking still disappears and a member can still end up with no record
+of it. **This is the half of item 87 that is still open.**
+
+Not done here because the scope was the web and mobile is unreleased, the same
+reasoning as items 103 and 95. It is a bigger change there than on the web: the
+app splits the list into three state arrays rather than filtering one, so
+cancelled needs a fourth — and the neutral-wording rule above has to travel
+with it, or the app will name an actor the web deliberately does not.
+
 **75. A CHECK COULD STOP THE WEBSITE UPDATING, AND NOTHING NOTICED IT HAD —
 CHANGED 22 Sep 2026. `npm run verify` EXIT 0.**
 
@@ -11358,7 +11453,8 @@ platforms each failed it differently.
 |---|---|---|
 | 12 | Stylist banners cannot be set — read in four places, written nowhere | No |
 | 13 | ✅ **CLOSED 23 Sep** — stale on both halves: both clients cancel, and 0029/0030 rewrote the wording. Was the last launch blocker | No |
-| 87 | A cancelled booking vanishes from both clients — lists show pending/accepted/completed only, and notifications are deletable, so a member can be left no record | No |
+| 87 | ✅ **Fixed on the web 24 Sep, not deployed.** Cancelled shows under Past with who cancelled and why; a platform cancellation stays neutral, which also protects a block cascade from naming the blocker | No |
+| 109 | **Mobile still drops cancelled bookings from the list** — the other half of 87. Needs a fourth state array, and the neutral-wording rule must travel with it | No while mobile is unreleased |
 | 14 | Admin revoke UI — `0027` ships the mechanism, nothing calls it | No, but revocation is SQL-only until then |
 | 74 | ✅ **CLOSED 23 Sep** — proven end to end, and the mobile switch now exists (item 88). Untested on device |
 | 75 | Drift check is new and unproven — its first real test is the next failed or skipped deploy | No |

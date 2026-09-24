@@ -60,6 +60,48 @@ function Group({
                   {s.startTime && ` · ${s.startTime.slice(0, 5)}`}
                   {s.treatmentName && ` · ${s.treatmentName}`}
                 </p>
+                {/* ══ WHAT HAPPENED TO IT. Audit item 87. ══════════════════
+                    Before this, a cancelled booking vanished from the list
+                    entirely and the only trace was a notification — deletable
+                    (0008) — so a member could be left with no record that a
+                    booking had ever existed.
+
+                    ⚠️ THE THREE CASES ARE NOT THREE WORDINGS. `cancelledBy` is
+                    'platform' for a withdrawn stylist AND for a block cascade,
+                    because both record `cancelled_by` as NULL deliberately. If
+                    that ever became "cancelled by them", a block cascade would
+                    tell one member that the other had blocked them — which is
+                    the disclosure 0029:280 exists to prevent. Neutral is not
+                    vagueness here; it is the requirement. */}
+                {s.status === 'cancelled' && (
+                  <div className="mt-2 rounded-md bg-input-bg px-3 py-2 text-sm">
+                    <p className="font-bold text-warm-dark">
+                      {s.cancelledBy === 'you' && 'You cancelled this booking.'}
+                      {s.cancelledBy === 'them' && `${s.otherPartyName} cancelled this booking.`}
+                      {/* No actor, no reason, no hint of either. The same
+                          sentence whichever platform reason it was, and the
+                          same sentence both parties see. */}
+                      {s.cancelledBy === 'platform' && 'This booking was cancelled.'}
+                    </p>
+                    {s.cancellationReason && (
+                      <p className="mt-1 text-warm-dark/80">
+                        {/* Already sent to the other party in the cancellation
+                            notice (0030), so this is not a new disclosure —
+                            it is the same sentence somewhere it does not get
+                            deleted. Quoted, because they are their words. */}
+                        “{s.cancellationReason}”
+                      </p>
+                    )}
+                    {s.cancelledAt && (
+                      <p className="mt-1 text-xs text-muted">
+                        {new Date(s.cancelledAt).toLocaleDateString('en-GB', {
+                          day: 'numeric', month: 'short', year: 'numeric',
+                        })}
+                      </p>
+                    )}
+                  </div>
+                )}
+
                 {s.note && <p className="mt-2 text-sm text-warm-dark/80">{s.note}</p>}
 
                 {/* What she attached to the application. Until 23 Sep the web
@@ -194,11 +236,19 @@ export default async function SessionsPage() {
                   about what is still to come. The stylist's "Mark complete"
                   button follows it down here, which is where they will be
                   looking for it. */}
+              {/* ⚠️ CANCELLED GOES HERE WHATEVER ITS DATE (item 87). Decision:
+                  Micky, 24 Sep. A booking cancelled for next Tuesday is not
+                  upcoming — nothing is going to happen on Tuesday — so greying
+                  it in the Upcoming list would keep it in a list whose whole
+                  job is "what is still to come". It belongs with the things
+                  that are over. */}
               <Group
                 title="Past"
                 collapsible
                 rows={rows.filter(r =>
-                  r.status === 'completed' || (r.status === 'accepted' && r.date < today))}
+                  r.status === 'completed'
+                  || r.status === 'cancelled'
+                  || (r.status === 'accepted' && r.date < today))}
               />
             </>
           )}
