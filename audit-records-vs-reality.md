@@ -5110,6 +5110,36 @@ I stopped at the first one that explained it. The thing that finally settled it
 was checking the DEPLOYED commit before reasoning about the code, which took
 one command and should have come first both times.
 
+**✅ ITEMS 102, 106 AND 107 VERIFIED LIVE — 24 Sep 2026**, after a hard
+reload. An email is refused with the rule shown **directly under the field**, a
+real handle saves with "Saved.", and Remove shows "Removed."
+
+**── THE LESSON, WHICH IS ABOUT HOW I DIAGNOSED IT, NOT WHAT I BUILT ──**
+
+Three fixes to one field. Each was correct. None was sufficient.
+
+* **102** — nothing validated it, so an email was stored and published.
+* **106** — the refusal rendered at the bottom of the form, far from the box.
+* **107** — the refusal was never produced at all, because a throw had nowhere
+  to go.
+
+**Every time, the symptom was the same sentence — "it does nothing" — and every
+time I stopped at the first cause that explained it.** Having found a real bug,
+I treated it as *the* bug. Each fix was shipped with a confident description of
+what had been wrong, and twice that description was incomplete.
+
+What broke the pattern was one command: **checking the deployed commit before
+reasoning about the code.** On the third report I ran `/api/version` first,
+found the fix already live, and that single fact eliminated the explanation I
+was about to give and forced me to look for a mechanism I had not considered.
+Had I run it on the second report I would have found 107 then.
+
+**The rule: when a symptom is reported on something just changed, establish
+WHICH VERSION is running before reasoning about the source.** It is the same
+failure as reading a repo file instead of the live database (0009, 0053) —
+reasoning about an artefact that is not the one in play — and it now has three
+instances across two days.
+
 **75. A CHECK COULD STOP THE WEBSITE UPDATING, AND NOTHING NOTICED IT HAD —
 CHANGED 22 Sep 2026. `npm run verify` EXIT 0.**
 
@@ -11269,6 +11299,7 @@ platforms each failed it differently.
 | 92 | ✅ **CLOSED 23 Sep** — verified both ways: chips filter with a postcode, and go inert with the list intact without one | No |
 | 94 | ✅ **CLOSED 23 Sep** — verified live both ways. The unique index exists, so duplicates were never possible and the heart's missing check is the defect | No |
 | 96 | ✅ **CLOSED 23 Sep** — all four verified on screen: the photo on the booking card, and the badge, reviews, photos and bio on her profile | No |
+| 104 | **Editing your own name — built, 0056 NOT APPLIED, not deployed.** The site does not build until it is, by design | No |
 | 107 | ✅ **Six client components could not report a thrown server action** — no `catch` anywhere, so a rejection rendered nothing and the control looked dead. One `attempt()` helper now, which rethrows Next's redirect | No |
 | 106 | ✅ **Per-field feedback on `/profile`** — one shared error rendered below all nine attributes made a refused Instagram handle invisible, so the field looked dead. Same shape still in `PhotoManager`, named not fixed | No |
 | 102 | ✅ **Instagram handle validated and editable on the web — built, not deployed.** An email address was stored in it and shown on a live profile. The rule runs on write AND on render, so values already stored are not displayed | No, but it published a member's email |

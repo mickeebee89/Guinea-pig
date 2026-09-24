@@ -31,7 +31,13 @@ export function PhotoManager({
   const router = useRouter()
   const [pending, start] = useTransition()
   const [uploading, setUploading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  /**
+   * ⚠️ TAGGED WITH WHERE IT HAPPENED (item 106). One error line at the top of
+   * the section meant a delete that failed at the bottom of a long grid
+   * reported itself above the fold, out of sight. `where` is 'top' for the
+   * upload and group controls, or a photo id for anything done to one photo.
+   */
+  const [error, setError] = useState<{ where: string; text: string } | null>(null)
   const [newCategory, setNewCategory] = useState('')
   const [editing, setEditing] = useState<string | null>(null)
   const [captionDraft, setCaptionDraft] = useState('')
@@ -48,7 +54,7 @@ export function PhotoManager({
         const fd = new FormData()
         fd.append('photo', small)
         const res = await attempt(() => uploadApplicationPhoto(fd), 'photo:upload')
-        if (!res.ok) { setError(res.error ?? 'That didn’t upload.'); break }
+        if (!res.ok) { setError({ where: 'top', text: res.error ?? 'That didn’t upload.' }); break }
       }
       router.refresh()
     } finally {
@@ -56,14 +62,16 @@ export function PhotoManager({
     }
   }
 
-  const run = (fn: () => Promise<{ ok: boolean; error?: string }>) => {
+  const run = (where: string, fn: () => Promise<{ ok: boolean; error?: string }>) => {
     setError(null)
     start(async () => {
       const res = await attempt(fn, 'photo:action')
-      if (!res.ok) { setError(res.error ?? 'That didn’t work.'); return }
+      if (!res.ok) { setError({ where, text: res.error ?? 'That didn’t work.' }); return }
       router.refresh()
     })
   }
+
+  const errorFor = (where: string) => (error?.where === where ? error.text : null)
 
   return (
     <div>
@@ -106,7 +114,7 @@ export function PhotoManager({
           />
         </div>
         <button
-          onClick={() => run(async () => {
+          onClick={() => run('top', async () => {
             const res = await addPhotoCategory(newCategory)
             if (res.ok) setNewCategory('')
             return res
@@ -118,7 +126,9 @@ export function PhotoManager({
         </button>
       </div>
 
-      {error && <p role="alert" className="mt-3 text-sm text-danger">{error}</p>}
+      {errorFor('top') && (
+        <p role="alert" className="mt-3 text-sm text-danger">{errorFor('top')}</p>
+      )}
 
       {photos.length === 0 ? (
         <p className="mt-4 rounded-lg border border-hairline bg-input-bg px-4 py-3 text-sm text-muted">
@@ -147,7 +157,7 @@ export function PhotoManager({
                       className="min-h-11 flex-1 rounded-md border border-hairline px-2 text-sm"
                     />
                     <button
-                      onClick={() => run(async () => {
+                      onClick={() => run(p.id, async () => {
                         const res = await savePhotoCaption(p.id, captionDraft)
                         if (res.ok) setEditing(null)
                         return res
@@ -172,7 +182,7 @@ export function PhotoManager({
                   <select
                     id={`cat-${p.id}`}
                     value={p.categoryId ?? ''}
-                    onChange={e => run(() => setPhotoCategory(p.id, e.target.value))}
+                    onChange={e => run(p.id, () => setPhotoCategory(p.id, e.target.value))}
                     disabled={pending}
                     className="min-h-11 rounded-md border border-hairline bg-white px-2 text-sm text-warm-dark"
                   >
@@ -181,13 +191,20 @@ export function PhotoManager({
                   </select>
 
                   <button
-                    onClick={() => run(() => deletePhoto(p.id))}
+                    onClick={() => run(p.id, () => deletePhoto(p.id))}
                     disabled={pending}
                     className="ml-auto min-h-11 px-2 text-sm font-bold text-muted hover:text-danger hover:underline"
                   >
                     Delete
                   </button>
                 </div>
+
+                {/* Under the photo it belongs to. A failure on the sixth photo
+                    reporting itself at the top of the section is the shape
+                    item 106 was about. */}
+                {errorFor(p.id) && (
+                  <p role="alert" className="text-sm text-danger">{errorFor(p.id)}</p>
+                )}
               </div>
             </li>
           ))}

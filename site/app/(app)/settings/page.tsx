@@ -8,6 +8,7 @@ import { MembershipSection, type MembershipView } from './MembershipSection'
 import { EmailNotificationsSection } from './EmailNotificationsSection'
 import { DeleteAccountSection } from './DeleteAccountSection'
 import { PostcodeField } from '@/components/PostcodeField'
+import { NameSection } from './NameSection'
 
 export const metadata = { title: 'Settings' }
 
@@ -70,7 +71,17 @@ export default async function SettingsPage() {
   // control from someone who is being billed. "Cancel any time" has to be true
   // for whoever is actually paying.
   const { data: me } = await supabase
-    .from('users').select('role, notification_preferences, postcode').eq('id', user.id).maybeSingle()
+    .from('users')
+    .select('role, notification_preferences, postcode, first_name, last_initial')
+    .eq('id', user.id).maybeSingle()
+
+  // The last change drives the cooldown note. Her own rows only — RLS on
+  // name_changes permits exactly that (0056).
+  const { data: lastChange } = await supabase
+    .from('name_changes').select('changed_at')
+    .eq('user_id', user.id)
+    .order('changed_at', { ascending: false })
+    .limit(1).maybeSingle()
   const role = (me as { role?: string } | null)?.role
   const postcode = (me as { postcode?: string | null } | null)?.postcode ?? null
   // Default ON: null, a missing key, or anything but an explicit false (item 74).
@@ -141,6 +152,18 @@ export default async function SettingsPage() {
           <MembershipSection view={membership} />
         </section>
       )}
+
+      {/* Account-level, so it comes first and shows for both roles. A
+          stylist's /shop name is her SHOP's name, which can be a salon; this
+          is the one that appears on her reviews, bookings and messages. */}
+      <section className="mb-8">
+        <h2 className="mb-2 font-display text-lg text-warm-dark">Your name</h2>
+        <NameSection
+          firstName={(me as { first_name?: string } | null)?.first_name ?? ''}
+          lastInitial={(me as { last_initial?: string | null } | null)?.last_initial ?? null}
+          changedAt={(lastChange as { changed_at: string } | null)?.changed_at ?? null}
+        />
+      </section>
 
       {/* ⚠️ SHOWN TO BOTH ROLES, AND IT IS THE ONLY COPY FOR A MODEL.
           A model has no profile page on this website at all, so there is
