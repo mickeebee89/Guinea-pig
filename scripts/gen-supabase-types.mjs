@@ -51,30 +51,87 @@ const DESTINATIONS = [
 ]
 
 /**
- * The newest migration FILE ON DISK. Audit item 91, 23 Sep 2026.
+ * ── THE STAMP IS NOW A CLAIM ABOUT THE DATABASE. Audit item 91, closed 25 Sep
+ * 2026. ────────────────────────────────────────────────────────────────────
  *
- * ⚠️ THIS IS NOT THE NEWEST APPLIED MIGRATION, AND THE STAMP IS NAMED AFTER
- * IT ANYWAY. Micky caught the gap the first time it mattered: 0054 was
+ * It used to be the newest migration FILE ON DISK, and it was named after the
+ * database anyway. Micky caught the gap the first time it mattered: 0054 was
  * applied, 0055 was written and pending, and the types — correctly generated
  * from a database at 0054 — came out stamped 0055.
  *
- * The types themselves were right. The STAMP was a claim about a folder,
- * printed in a form that reads as a claim about the database.
+ * The types were right. The STAMP was a claim about a folder, printed in a
+ * form that reads as a claim about the database, and it could read AHEAD of
+ * the thing it described. A freshness check built on it inherited that: it
+ * spent most of 24–25 Sep saying "these types describe an older schema" about
+ * types that described the live schema exactly.
  *
- * It stays file-based because nothing here can do better: this script has the
- * Supabase CLI's login and a project ref, not a database connection, so it
- * cannot read schema_migrations. Inventing a number would be worse than a
- * documented approximation. See item 91 for what closing it properly costs.
+ * ⚠️ SO THE NUMBER IS NO LONGER DERIVED. IT IS SUPPLIED, AND REQUIRED:
+ *
+ *     node scripts/gen-supabase-types.mjs --applied 0062
+ *
+ * This script has the Supabase CLI's login and a project ref, not a database
+ * connection, so it cannot read public.schema_migrations itself. The choice
+ * was between a guess that looks like a fact and a fact somebody has to state.
+ * A required argument is the honest one: it cannot be silently wrong in the
+ * direction that matters, because nothing fills it in for you.
+ *
+ * It is validated against the folder — a version with no migration file is
+ * refused, and so is one NEWER than any file, since neither can be true.
+ * A version OLDER than the newest file is normal and expected: it means
+ * migrations are written and pending, which is the state this repo is in for
+ * most of any working session.
  */
-function newestMigration() {
-  const versions = readdirSync('supabase/migrations')
+function migrationVersionsOnDisk() {
+  return readdirSync('supabase/migrations')
     .map(f => /^(\d{4})_/.exec(f)?.[1])
     .filter(Boolean)
     .sort()
-  return versions[versions.length - 1] ?? '0000'
 }
 
-const stamp = newestMigration()
+function requiredAppliedVersion(versions) {
+  const argv = process.argv.slice(2)
+  const i = argv.findIndex(a => a === '--applied' || a.startsWith('--applied='))
+  const raw = i < 0 ? null
+    : argv[i].includes('=') ? argv[i].split('=')[1]
+    : argv[i + 1]
+
+  const newestFile = versions[versions.length - 1] ?? '0000'
+
+  if (!raw) {
+    console.error('\nThis needs to know what the DATABASE is at, and it cannot ask.\n')
+    console.error('  node scripts/gen-supabase-types.mjs --applied <version>\n')
+    console.error('Get the version from the database itself:\n')
+    console.error('  select version from public.schema_migrations order by version desc limit 1;\n')
+    console.error(`The newest migration FILE here is ${newestFile}. That is NOT the answer unless`)
+    console.error('it has actually been applied — which is the whole reason this is an argument')
+    console.error('and not something the script works out. Audit item 91.\n')
+    process.exit(1)
+  }
+
+  if (!/^\d{4}$/.test(raw)) {
+    console.error(`\n"${raw}" is not a four-digit migration version.\n`)
+    process.exit(1)
+  }
+  if (!versions.includes(raw)) {
+    console.error(`\nThere is no migration ${raw} in supabase/migrations.`)
+    console.error('A version the repo has never heard of cannot be what the database is at.\n')
+    process.exit(1)
+  }
+  if (raw > newestFile) {
+    console.error(`\n${raw} is newer than every migration file here (${newestFile}).\n`)
+    process.exit(1)
+  }
+  return { applied: raw, newestFile }
+}
+
+const versions = migrationVersionsOnDisk()
+const { applied: stamp, newestFile } = requiredAppliedVersion(versions)
+
+if (stamp < newestFile) {
+  const pending = versions.filter(v => v > stamp)
+  console.log(`\nNote: ${pending.length} migration(s) written but not applied: ${pending.join(', ')}.`)
+  console.log('The types will describe the database WITHOUT them, which is correct.')
+}
 
 console.log(`\nGenerating types for ${PROJECT_REF}…`)
 console.log('If this asks you to log in: npx supabase login\n')
@@ -114,6 +171,13 @@ const header = `// GENERATED FILE — DO NOT EDIT BY HAND.
 //
 // Written by scripts/gen-supabase-types.mjs from the live database.
 // TYPES_STAMP: ${stamp}
+// TYPES_FILES_AT_GEN: ${newestFile}
+//
+// TYPES_STAMP is the migration the DATABASE was at when these were generated,
+// stated by whoever ran it (--applied). TYPES_FILES_AT_GEN is the newest
+// migration file that existed at the same moment. When they differ, migrations
+// were written and pending — which is normal, and is why the first number is
+// not derived from the second. Audit item 91.
 //
 // Regenerate whenever a migration is applied:
 //   node scripts/gen-supabase-types.mjs
@@ -129,4 +193,4 @@ for (const dest of DESTINATIONS) {
   console.log(`  wrote ${dest}`)
 }
 
-console.log(`\nStamped against migration ${stamp}. ${DESTINATIONS.length} copies written.\n`)
+console.log(`\nStamped: database at ${stamp}, newest file ${newestFile}. ${DESTINATIONS.length} copies written.\n`)

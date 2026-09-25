@@ -6138,6 +6138,84 @@ Types regenerated and stamped 0061; the only addition beyond the stamp is
 `_withdrawn_sentence`, which no client calls and which is revoked from every
 client role. site verify EXIT 0, mobile tsc EXIT 0, admin build EXIT 0.
 
+**91. THE TYPES STAMP IS NOW A CLAIM ABOUT THE DATABASE — CLOSED 25 Sep 2026.
+site verify EXIT 0.**
+
+**Plainly:** the number that says which schema the types describe was read off
+a folder, and it could be ahead of the database it claimed to describe.
+
+**── WHY IT MATTERED MORE THAN IT LOOKED ──**
+
+It was the check that **could lie, and did, all session.** Every time a
+migration was written and not yet applied, `npm run verify` failed with *"these
+types describe an older schema"* about types that described the live schema
+exactly. That happened on 0056, 0058, 0059, 0060, 0061 and 0062 — six times in
+two days.
+
+A check that cries wolf is not a neutral cost. It is the one people learn to
+run with `|| true`, and this repo already records three checks that quietly did
+nothing.
+
+**── THE NUMBER IS SUPPLIED NOW, NOT DERIVED ──**
+
+```
+node scripts/gen-supabase-types.mjs --applied 0062
+```
+
+Required, and validated against the folder: a version with **no migration
+file** is refused, and so is one **newer than any file**, since neither can be
+true. A version OLDER than the newest file is normal — it means migrations are
+written and pending, which is this repo's usual state mid-session.
+
+The script has the Supabase CLI's login and a project ref, **not** a database
+connection, so it cannot read `public.schema_migrations` itself. The choice was
+between a guess that looks like a fact and a fact somebody has to state.
+**A required argument cannot be silently wrong in the direction that matters,
+because nothing fills it in for you.** The refusal prints the SQL to get the
+answer from.
+
+Both numbers are now written into the header — `TYPES_STAMP` (the database)
+and `TYPES_FILES_AT_GEN` (the newest file at that moment) — so the two can be
+told apart by anyone reading the file.
+
+**── AND THE CHECK STOPPED ASSERTING WHAT IT CANNOT KNOW ──**
+
+It still fails when a newer migration file exists, because that is the safe
+direction. What changed is that it no longer claims to know which of two things
+is happening, and says both:
+
+* *"⚠️ 0063 was written AFTER these types were generated. If it has been
+  applied, they are stale."* — when `TYPES_FILES_AT_GEN` proves the file
+  appeared later;
+* *"If 0063 has been applied, these are stale. If it is still pending,
+  regenerate after applying it."* — otherwise.
+
+**✅ PROVEN TO REFUSE**, not assumed: no argument → exit 1 with the SQL to run;
+`--applied 0099` → exit 1, *"there is no migration 0099"*. Both exit before the
+script ever contacts Supabase, so neither test wrote anything.
+
+**── ⚠️ NINE DEPLOY BLOCKS TOLD YOU TO RUN A COMMAND THAT NOW REFUSES ──**
+
+0054–0062 each say *"node scripts/gen-supabase-types.mjs"* in their DEPLOY
+steps, and `site/README.md` does too. All updated to carry `--applied` with
+that migration's own version, which is what the database is at once it has been
+applied.
+
+**✅ And no checksum moved.** The edits are below `-- MIGRATION FOOTER`, so they
+are outside the hashed region — but that was **verified rather than assumed**,
+by recomputing **every** migration's checksum in the ledger afterwards, not
+just the nine edited: **0 mismatches across the whole ledger.** That is a check
+nobody had run before, and it now says the ledger is internally consistent as
+of 25 Sep.
+
+**── WHAT IS STILL NOT PROVEN ──**
+
+That the types match the live database. The stamp is a **stated** version, not
+a measured one — somebody can still type the wrong number, and nothing here
+would know. What has been removed is the failure mode where the tool itself
+supplied a number that was wrong by construction. **The honest check remains
+`pg_get_functiondef`, which CI's publishable keys cannot reach (item 38).**
+
 **123c. THE FOUR STALE COPIES BROUGHT FORWARD — CLOSED 25 Sep 2026. site
 verify EXIT 0.**
 
@@ -6154,6 +6232,25 @@ which is the whole point, since reconstructing from the file is the fault.
 Markers rewritten from *"⚠️ THIS COPY IS SUPERSEDED"* to **"✅ BROUGHT
 FORWARD"**, each saying where the body came from and that a future change must
 go through a migration and then be brought forward again.
+
+**── ⚠️ AND THE WORST OF THE FOUR WAS NOT THE ONE WE EXPECTED ──**
+
+`delete_account_data` was flagged as the dangerous one, because reverting it
+breaks a legal obligation and an Apple 5.1.1(v) requirement. **`nearby_models`
+was worse**, and neither of us had it ranked.
+
+Reverting account deletion is a compliance failure with no immediate victim:
+the function still exists in a previous form, deletion still broadly works, and
+the gap is discovered by an auditor or a store reviewer.
+
+**Reverting `nearby_models` removes `not public.is_blocked_pair(...)`** — and
+the next stylist to open the dashboard is shown a model who blocked her, or is
+shown to one who blocked him. That is a **safety control failing silently, with
+a named person on the other end of it**, and nothing would raise an error.
+
+Recorded at that weight deliberately: the ranking was done by thinking about
+which revert breaks a rule, when the question that mattered was **which revert
+reaches a member.**
 
 **── ⚠️ THE nearby_models FILES WERE WORSE THAN "BEHIND" ──**
 
@@ -13035,7 +13132,7 @@ platforms each failed it differently.
 | 97 | ✅ **CLOSED 25 Sep, verified live.** The item was wrong — no booking surface showed a price at all, so this was a missing feature rather than a wrong number. The web now shows "£45 shown when booked" from the booking's own snapshot; mobile is gated behind item 113. The item was wrong: no booking surface shows a price at all, so this is a missing feature rather than a wrong number. Terms §8's claim is true — the record IS kept — but 0052's stated purpose, "so both of you can point at the same number", is unmet until both parties can see it | No, but it is a money display |
 | 95 | **Mobile's favourite heart fails silently** — no error handling on insert or delete, so a filled heart can sit over a row that does not exist. It also never says that saving subscribes her to notifications | No, but it tells her something untrue |
 | 93 | ✅ **CLOSED 24 Sep** — rewritten as real copy. It had been indexed: all six treatment pages showed this one stylist. A 40-character bar counts characters, so nothing could have caught it but a reader. ~~**A published shop's bio is keyboard-mash test text.** Live, on the only published shop, and it clears `public_stylists`' 40-character bar because that bar counts characters~~ | No |
-| 91 | Types stamp names the newest migration FILE, not the newest applied — so it can read one ahead of the database. Claim corrected in both scripts; closing it properly needs a required `--applied=` argument, **your call** | No |
+| 91 | ✅ **CLOSED 25 Sep.** The stamp is supplied with `--applied` and validated, so it can no longer read ahead of the database. The check now names which of two states it is in instead of asserting the wrong one. Nine DEPLOY blocks updated; every checksum in the ledger re-verified, 0 mismatches | No |
 | 90 | ✅ **CLOSED 23 Sep** — 0054 and 0055 applied, both roles set a postcode live, `users` and `providers` agreed to six decimal places, and the contradictory dashboard sentences are gone | No |
 | 89 | **Mobile builds its consent record client-side and calls the same function.** The web now rebuilds it server-side (84c); mobile has no server to do that in, so the fix is inside `create_session_with_consent` — a migration, and it would make the web's rebuild redundant. Two clients currently write records of different strength into the same six-year table | No |
 | 85 | ✅ **CLOSED 23 Sep** — a real account deleted itself on the web, no half-deleted state. Untested: the Stripe customer fallback, the orphan surface, a failed auth delete | No |

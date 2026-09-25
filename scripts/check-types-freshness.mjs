@@ -20,9 +20,11 @@
  * 0009 is the standing example of exactly that gap (item 83). This narrows the
  * window; it does not close it.
  *
- * ⚠️ AND THE OTHER HALF, SEEN LIVE 23 Sep 2026 (item 91). The stamp is the
- * newest migration FILE, so regenerating while a migration is written but not
- * yet applied produces a stamp NEWER than the database. That happened between
+ * ⚠️ THE OTHER HALF, SEEN LIVE 23 Sep 2026 (item 91) AND CLOSED 25 Sep. The
+ * stamp USED TO BE the newest migration FILE, so regenerating while a
+ * migration was written but not yet applied produced a stamp NEWER than the
+ * database. It is now supplied with --applied and validated, so it can no
+ * longer read ahead of the thing it describes. That happened between
  * 0054 and 0055 and this check passed, as it is built to — the types were
  * correct, the stamp over-claimed by one.
  *
@@ -71,9 +73,20 @@ for (const path of TYPES) {
     continue
   }
   if (stamp < newest) {
+    // ⚠️ SAY WHICH OF TWO THINGS THIS IS, because they are not the same and
+    // the old message asserted the wrong one. Until 25 Sep this read "These
+    // types describe an older schema", which was false every time a migration
+    // was merely written and pending — most of 24–25 Sep. A check that cries
+    // wolf is one people learn to run with `|| true`.
+    const filesAtGen = /TYPES_FILES_AT_GEN:\s*(\d{4})/.exec(readFileSync(at(path), 'utf8'))?.[1]
+    const appearedSince = filesAtGen && newest > filesAtGen
     console.error(
-      `${path}: generated against migration ${stamp}, but ${newest} exists. ` +
-      `These types describe an older schema.`,
+      `${path}: generated when the database was at ${stamp}; migration ${newest} exists on disk.\n` +
+      (appearedSince
+        ? `  ⚠️ ${newest} was written AFTER these types were generated. If it has been applied, ` +
+          `they are stale.`
+        : `  If ${newest} has been applied, these are stale. If it is still pending, regenerate ` +
+          `after applying it.`),
     )
     failed = true
   }
@@ -98,5 +111,6 @@ if (failed) {
   process.exit(1)
 }
 
-console.log(`types check — generated against migration ${newest}, which is the newest on disk ` +
-  `(does NOT prove they match the live database, and never checks RLS)`)
+console.log(`types check — generated when the database was at ${newest}, matching the newest ` +
+  `migration on disk (a stated version, not a proof: it never contacts the database ` +
+  `and never checks RLS)`)

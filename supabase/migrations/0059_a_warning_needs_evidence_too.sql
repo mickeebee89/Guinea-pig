@@ -253,7 +253,7 @@ commit;
 --
 --   1. Preflight above.
 --   2. Apply this migration.
---   3. node scripts/gen-supabase-types.mjs — nothing should change, since no
+--   3. node scripts/gen-supabase-types.mjs --applied 0059 — nothing should change, since no
 --      signature moves. Run it anyway so the stamp matches, or the freshness
 --      check fails the build.
 --   4. Build and deploy the admin console.

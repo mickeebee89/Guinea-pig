@@ -649,7 +649,7 @@ commit;
 --
 --   1. Preflight above.
 --   2. Apply this migration.
---   3. node scripts/gen-supabase-types.mjs
+--   3. node scripts/gen-supabase-types.mjs --applied 0058
 --   4. Build and deploy the admin console (message box on warn/suspend/ban).
 --   5. Blocks A, B and C below.
 --   6. Mobile build when convenient — see the note above.

@@ -450,7 +450,7 @@ commit;
 --   1. Preflight above.
 --   2. Apply this migration.
 --   3. RE-RUN supabase/public-web-views.sql BY HAND. ← the step that closes 115
---   4. node scripts/gen-supabase-types.mjs
+--   4. node scripts/gen-supabase-types.mjs --applied 0060
 --   5. Deploy site and admin.
 --   6. Blocks A, B and C below.
 -- ===========================================================================

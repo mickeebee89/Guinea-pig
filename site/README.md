@@ -99,7 +99,7 @@ real application shipped calling a parameter the function does not have.
 **Regenerate whenever a migration is applied:**
 
 ```bash
-node scripts/gen-supabase-types.mjs
+node scripts/gen-supabase-types.mjs --applied <version>
 ```
 
 Switching it on produced five errors. Two were real: a consent could be

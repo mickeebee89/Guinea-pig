@@ -319,7 +319,7 @@ commit;
 --
 --   1. Preflight above.
 --   2. Apply this migration.
---   3. node scripts/gen-supabase-types.mjs
+--   3. node scripts/gen-supabase-types.mjs --applied 0062
 --   4. Deploy admin.
 --   5. Block A below.
 -- ===========================================================================

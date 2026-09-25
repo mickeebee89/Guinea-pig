@@ -244,7 +244,7 @@ notify pgrst, 'reload schema';
 --
 --   1. Preflight above.
 --   2. Apply this migration.
---   3. node scripts/gen-supabase-types.mjs
+--   3. node scripts/gen-supabase-types.mjs --applied 0057
 --   4. Build and deploy the admin console.
 --   5. Blocks A and B below.
 -- ===========================================================================

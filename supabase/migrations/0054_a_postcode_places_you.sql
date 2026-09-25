@@ -260,7 +260,7 @@ notify pgrst, 'reload schema';
 -- new column or the new function exist.
 --
 --   1. Apply this migration.
---   2. node scripts/gen-supabase-types.mjs
+--   2. node scripts/gen-supabase-types.mjs --applied 0054
 --      site/ is type-checked now, and the postcode action calls
 --      set_my_postcode — which is not in the types until this runs, so
 --      `npm run build` fails until it does. That is the right order, not a

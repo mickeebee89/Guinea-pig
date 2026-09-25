@@ -326,7 +326,7 @@ notify pgrst, 'reload schema';
 --   0. The PREFLIGHT block above. It takes ten seconds and it is the step that
 --      would have caught the to_regproc mistake without applying anything.
 --   1. Apply this migration.
---   2. node scripts/gen-supabase-types.mjs
+--   2. node scripts/gen-supabase-types.mjs --applied 0056
 --   3. ⚠⚠ WIRE "Your name" BACK INTO SETTINGS. It is built and deliberately
 --      NOT wired: settings/page.tsx reads `name_changes` for the cooldown
 --      note, and that table is not in the generated types until step 1 has

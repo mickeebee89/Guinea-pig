@@ -112,10 +112,10 @@ notify pgrst, 'reload schema';
 --
 --   Last step of the 0054 pair. Order, in full:
 --     1. Apply 0054.
---     2. node scripts/gen-supabase-types.mjs
+--     2. node scripts/gen-supabase-types.mjs --applied 0055
 --     3. npm run verify --prefix site, push, WAIT FOR VERCEL.
 --     4. Apply this.
---     5. node scripts/gen-supabase-types.mjs again — the dropped columns are
+--     5. node scripts/gen-supabase-types.mjs --applied 0055 again — the dropped columns are
 --        still in the types until it runs. Nothing reads them, so this is
 --        tidiness rather than a fix, but a types file that describes a column
 --        the database does not have is the exact thing item 84 exists to stop.

@@ -403,7 +403,7 @@ commit;
 --
 --   1. Preflight above.
 --   2. Apply this migration.
---   3. node scripts/gen-supabase-types.mjs
+--   3. node scripts/gen-supabase-types.mjs --applied 0061
 --   4. Deploy admin (message now required for ban) and the clients.
 --   5. Blocks A and B below.
 -- ===========================================================================
