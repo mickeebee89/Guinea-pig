@@ -6138,9 +6138,50 @@ Types regenerated and stamped 0061; the only addition beyond the stamp is
 `_withdrawn_sentence`, which no client calls and which is revoked from every
 client role. site verify EXIT 0, mobile tsc EXIT 0, admin build EXIT 0.
 
-**12. THE BANNER NOBODY COULD SET — READERS REMOVED 25 Sep 2026. MIGRATION
-0063 WRITTEN, NOT APPLIED. site verify EXIT 0 before 0063 existed; mobile tsc
-EXIT 0.**
+**✅ 0063 APPLIED — 25 Sep 2026. ITEM 12 CLOSED. THE LIVE-WEB LIST IS CLEAR.**
+
+Preflight both true, the view rebuilt without `banner_url`, types regenerated
+with `--applied 0063`. site verify EXIT 0.
+
+**── AND THE TYPES DIFF CONFIRMED THE VIEW, WITHOUT ANYONE HAVING TO SAY SO ──**
+
+Regenerating removed `banner_url` in **four** places: three on `providers`
+(Row, Insert, Update) and **one on `public_stylists`**. That fourth one is the
+evidence that the hand-run step actually happened — the view is generated from
+the live database, so if it had still been selecting the column, the type would
+still be there.
+
+A pleasant accident rather than a designed check, and worth noticing: **the
+types file is a readable description of the live schema, so its diff is a
+cheap witness to any hand-run step that changes shape.** Nothing else in this
+repo reports on `public-web-views.sql` at all, which is the gap item 123 is
+about.
+
+**── ✅ AND THE 91 STAMP IS NOW A REAL SENTENCE ──**
+
+```
+// TYPES_STAMP: 0063
+// TYPES_FILES_AT_GEN: 0063
+```
+
+First generation under the new rule. Both numbers stated, both true, and the
+header explains what each means to whoever opens the file next.
+
+**── WHERE THIS LEAVES THINGS, 25 Sep ──**
+
+**The live web has nothing left on the worst-first list.** Over two days it
+went: the whole moderation family rebuilt (0057–0062), the evidence field
+stopped reaching members, suspension and ban started telling people, the web
+got a gate, a bio bar that mash could clear got replaced, a booking learned to
+show its price, and two dead columns went.
+
+What remains is **mobile, behind a store submission** — 113 (a model has no
+bookings list at all), then 103, 95, 109, 89 — and the four hand-run bodies,
+which are current **as of one reading on 25 Sep** and will go stale again the
+next time a migration touches them. That is the standing condition, not a task.
+
+**12. THE BANNER NOBODY COULD SET — CLOSED 25 Sep 2026. 0063 applied, view
+rebuilt by hand, types regenerated.**
 
 `providers.banner_url` was read in **five** places and written by **none**.
 There has never been a control on either client to set one, so in the whole
@@ -13185,7 +13226,7 @@ platforms each failed it differently.
 
 | | Item | Blocking launch? |
 |---|---|---|
-| 12 | ✅ **Readers removed 25 Sep; 0063 written, NOT applied.** Read in five places, written by none — the column was never once populated. Removed rather than built, because an unmoderated image on an indexable page owes the treatment items 100 and 115 just built, for a feature nobody asked for. **Rebuildable with moderation from the start if a stylist asks.** ⚠️ Needs the view dropped and re-run by hand first | No |
+| 12 | ✅ **CLOSED 25 Sep.** Read in five places, written by none — the column was never once populated. Removed rather than built, because an unmoderated image on an indexable page owes the treatment items 100 and 115 just built, for a feature nobody asked for. **Rebuildable with moderation from the start if a stylist asks.** ⚠️ Needs the view dropped and re-run by hand first | No |
 | 13 | ✅ **CLOSED 23 Sep** — stale on both halves: both clients cancel, and 0029/0030 rewrote the wording. Was the last launch blocker | No |
 | 110 | ✅ **Cancel confirmation said "their calendar" of the party who has none** — right for a model, wrong for a stylist. Fixed on BOTH clients; the replacement is also more accurate, since nothing ever removed the slot from a calendar | No |
 | 87 | ✅ **VERIFIED LIVE (web) 24 Sep.** Cancelled shows under Past with who cancelled and why; a platform cancellation stays neutral, which also protects a block cascade from naming the blocker | No |

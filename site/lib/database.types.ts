@@ -1,7 +1,14 @@
 // GENERATED FILE — DO NOT EDIT BY HAND.
 //
 // Written by scripts/gen-supabase-types.mjs from the live database.
-// TYPES_STAMP: 0062
+// TYPES_STAMP: 0063
+// TYPES_FILES_AT_GEN: 0063
+//
+// TYPES_STAMP is the migration the DATABASE was at when these were generated,
+// stated by whoever ran it (--applied). TYPES_FILES_AT_GEN is the newest
+// migration file that existed at the same moment. When they differ, migrations
+// were written and pending — which is normal, and is why the first number is
+// not derived from the second. Audit item 91.
 //
 // Regenerate whenever a migration is applied:
 //   node scripts/gen-supabase-types.mjs
@@ -1114,7 +1121,6 @@ export type Database = {
       }
       providers: {
         Row: {
-          banner_url: string | null
           bio: string | null
           first_published_at: string | null
           id: string
@@ -1136,7 +1142,6 @@ export type Database = {
           user_id: string
         }
         Insert: {
-          banner_url?: string | null
           bio?: string | null
           first_published_at?: string | null
           id?: string
@@ -1158,7 +1163,6 @@ export type Database = {
           user_id: string
         }
         Update: {
-          banner_url?: string | null
           bio?: string | null
           first_published_at?: string | null
           id?: string
@@ -2309,7 +2313,6 @@ export type Database = {
       }
       public_stylists: {
         Row: {
-          banner_url: string | null
           bio: string | null
           categories: string[] | null
           category_slugs: string[] | null
