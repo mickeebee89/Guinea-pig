@@ -1,4 +1,5 @@
 import { createSupabaseServerClient, requireUser } from '@/lib/supabase-server'
+import { formatPrice } from '@/lib/price'
 import { getSessions, type SessionRow } from '@/lib/queries/sessions'
 import Link from 'next/link'
 import { StatusPill, EmptyState, LoadError, Avatar } from '@/components/ui'
@@ -59,6 +60,25 @@ function Group({
                   })}
                   {s.startTime && ` · ${s.startTime.slice(0, 5)}`}
                   {s.treatmentName && ` · ${s.treatmentName}`}
+                  {/* ══ THE PRICE THAT WAS SHOWN. Audit item 97. ════════════
+                      0052 has recorded this since 23 Sep and nothing read it, so
+                      Terms §8's record was kept and neither party could see it.
+                      Its purpose, in 0052's own words, is "so both of you can
+                      point at the same number" — which needs both of them to be
+                      able to see it, and this is where they can.
+
+                      ⚠️ "shown when booked", NOT a bare figure. Terms §8 is
+                      careful that a price is "an indication... not an offer from
+                      Cavy, and the final amount is whatever the two of you agree
+                      in the chat". A bare £45 on a booking reads as what is owed,
+                      which is the one thing it is not.
+
+                      ⚠️ AND NOTHING AT ALL WHEN IT IS NULL — bookings from before
+                      0052, and slots the stylist never priced. "Price not set"
+                      would read as a fault on her part when it is simply a slot
+                      that never had one. Both roles see the same string, because
+                      being the same figure is the entire point. */}
+                  {formatPrice(s.pricePence) && ` · ${formatPrice(s.pricePence)} shown when booked`}
                 </p>
                 {/* ══ WHAT HAPPENED TO IT. Audit item 87. ══════════════════
                     Before this, a cancelled booking vanished from the list

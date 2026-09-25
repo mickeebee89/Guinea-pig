@@ -88,6 +88,22 @@ export interface SessionRow {
   cancellationReason: string | null
   treatmentName: string | null
   treatmentCategory: string | null
+  /**
+   * ⚠️ THE BOOKING'S OWN SNAPSHOT, NEVER THE SLOT'S CURRENT PRICE.
+   *
+   * 0052 takes it with a BEFORE INSERT trigger for exactly this reason: a
+   * stylist can edit `availability.price_pence` afterwards, and reading that
+   * here would let an edit rewrite what was agreed for a treatment that has
+   * already happened.
+   *
+   * Written since 0052 and read by nothing until 25 Sep (audit item 97), which
+   * meant Terms §8's record was kept and neither party could see it — and
+   * pointing at the same number is the only mechanism either of them has, since
+   * Cavy takes no payment and runs no disputes.
+   *
+   * null for bookings made before 0052, and for slots the stylist never priced.
+   */
+  pricePence: number | null
   otherPartyName: string
   otherPartyPic: string | null
   /**
@@ -114,7 +130,7 @@ export async function getSessions(
 
   const { data: raw, error } = await supabase
     .from('sessions')
-    .select('id, provider_id, model_user_id, date, start_time, end_time, treatment_id, note, photo_urls, created_at, status, cancelled_by, cancelled_at, cancellation_reason')
+    .select('id, provider_id, model_user_id, date, start_time, end_time, treatment_id, note, photo_urls, created_at, status, cancelled_by, cancelled_at, cancellation_reason, price_pence')
     .or(orClause)
     // ⚠️ 'cancelled' JOINED THIS LIST ON 24 Sep 2026 (item 87). Before that a
     // cancelled booking simply disappeared from both clients, and the only
@@ -131,6 +147,7 @@ export async function getSessions(
     photo_urls: string[] | null; created_at: string
     cancelled_by: string | null; cancelled_at: string | null
     cancellation_reason: string | null
+    price_pence: number | null
   }[]
   if (rows.length === 0) return []
 
@@ -217,6 +234,7 @@ export async function getSessions(
         cancellationReason: r.cancelled_by === null ? null : r.cancellation_reason,
         treatmentName: treat?.name ?? null,
         treatmentCategory: treat?.category ?? null,
+        pricePence: r.price_pence ?? null,
         otherPartyName: isModel ? (prov?.name ?? 'Stylist') : displayName(model),
         otherPartyPic: isModel ? (prov?.profile_pic_url ?? null) : (model?.profile_pic_url ?? null),
         // ── WHY THIS WAS `null`, AND WHY IT NO LONGER IS ────────────────

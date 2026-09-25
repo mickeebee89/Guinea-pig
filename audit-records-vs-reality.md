@@ -6138,8 +6138,126 @@ Types regenerated and stamped 0061; the only addition beyond the stamp is
 `_withdrawn_sentence`, which no client calls and which is revoked from every
 client role. site verify EXIT 0, mobile tsc EXIT 0, admin build EXIT 0.
 
-**122. A ONE-CHARACTER REASON IS NOT A RECORD — BUILT 25 Sep 2026. MIGRATION
-0062 NOT APPLIED. admin build EXIT 0.**
+**✅ 0062 VERIFIED — 25 Sep 2026, Block A. ITEM 122 CLOSED.**
+
+`warn`, `suspend` and `ban` **all** refuse `"x"` with the same sentence naming
+the action, and a real reason is accepted. The second half is the one that
+mattered: a bar that refuses genuine input is worse than the fault it fixes.
+
+One sentence for all three is the point of the change — they were three copies
+of one rule, and three copies is how `"x"` came to pass three actions and fail
+the fourth.
+
+**97. A BOOKING NOW SHOWS THE PRICE IT WAS BOOKED AT — BUILT 25 Sep 2026.
+site verify EXIT 0. NOT BROWSER-VERIFIED.**
+
+`sessions.price_pence` has been written by 0052's trigger since 23 Sep and read
+by **nothing**. Terms §8's claim — *"We keep a record of the price that was
+shown when a booking was made"* — was true and doing no work, because 0052's
+stated purpose is *"so both of you can point at the same number"* and neither
+party could see it. In a product that takes no payment and runs no disputes,
+that is the only mechanism either of them has.
+
+**── WHAT IT RENDERS ──**
+
+One more segment on the meta line that already reads *"Tue 7 Oct · 14:00 ·
+Balayage"*: **"· £45 shown when booked"**.
+
+**Not a bare figure.** Terms §8 is careful that a price is *"an indication… not
+an offer from Cavy, and the final amount is whatever the two of you agree in
+the chat"*, so a bare £45 on a booking would read as what is owed — the one
+thing it is not.
+
+**Nothing at all when it is null**, which covers bookings made before 0052 and
+slots the stylist never priced. Not *"price not set"*, which would read as a
+fault on her part when the slot simply never had one.
+
+**Both roles see the same string**, because being the same figure is the whole
+point.
+
+**── ⚠️ IT READS THE SNAPSHOT, NEVER THE SLOT ──**
+
+`sessions.price_pence`, not `availability.price_pence`. The slot's price is the
+stylist's CURRENT asking figure and she can edit it; reading that here would
+let an edit rewrite what was agreed for a treatment that has already happened,
+which is the exact thing 0052 exists to prevent. Written into the type so the
+next person cannot quietly swap it for the nearer field.
+
+**── WHAT IS NOT DONE ──**
+
+**Mobile still shows no price on a booking.** Its sessions screen is
+stylist-only and a model has no bookings list at all (item 113), so this
+belongs with that work rather than in front of it.
+
+**Not browser-verified**: seeing it needs a signed-in account with a booking
+made against a priced slot. `npm run verify` exit 0 proves it compiles and
+lints, not that it renders. The check is one line — open `/bookings` on an
+account with a priced booking and look at the meta line.
+
+**⚠️ 97 WAS WRONG AS WRITTEN — CORRECTED 25 Sep 2026. NOT YET BUILT.**
+
+**What it said:** *"`sessions.price_pence` is read by nothing in either client.
+0052 snapshots it so an edited slot cannot rewrite what was agreed; **both
+clients show the SLOT's price today instead**. They agree until a stylist edits
+a price, and then the wrong number is the one on screen."*
+
+**What is true:** the first half. The second half is wrong, and it is the half
+that decided what the fix was.
+
+**No booking surface shows a price at all.** A price renders in exactly two
+places — the stylist's availability editor, and the apply wizard **before** you
+apply. Once a booking exists, neither `sessions.price_pence` nor
+`availability.price_pence` is read by anything on either client.
+
+So there is no wrong number on screen. There is **no number**. That makes 97 a
+**missing feature, not a bug**, and it makes the "they agree until a stylist
+edits a price" scenario — the whole argument for urgency — impossible as
+described, because nothing is being compared.
+
+**── HOW THE WRONG VERSION GOT WRITTEN ──**
+
+From reading that both clients select `price_pence` from `availability` and
+concluding they showed it on bookings. They select it for the apply flow. The
+step not taken was asking **where a booking renders a price**, which is the
+question the item was actually about. Same shape as the `providers.level`
+correction on 24 Sep: a field was traced to a query and the query was assumed
+to be a screen.
+
+**── ⚠️ AND TERMS §8 IS TRUE BUT NOT YET DOING ITS JOB ──**
+
+Published: *"We keep a record of the price that was shown when a booking was
+made."* **That is true** — 0052's BEFORE INSERT trigger writes it for every
+caller, including old app builds. The claim is about KEEPING a record, and the
+record is kept.
+
+But 0052's own comment says why it exists: *"so both of you can point at the
+same number."* **Neither party can see it.** A record only an admin can pull
+out of the database is not something two members can point at in a
+disagreement, and this is a product that deliberately takes no payment and runs
+no disputes — so pointing at the same number is the only mechanism either of
+them has.
+
+Recorded as a purpose unmet rather than a claim broken, because the difference
+matters: **nothing published needs changing, and something built does.**
+
+**── DECIDED, 25 Sep ──**
+
+* **"£45 shown when booked"** on the existing meta line in the bookings list,
+  the one already reading *"Tue 7 Oct · 14:00 · Balayage"*. Long enough to be
+  honest, short enough for the line. Terms are careful that a shown price is
+  *"an indication… not an offer from Cavy, and the final amount is whatever the
+  two of you agree in the chat"*, so a bare "£45" on a booking would read as
+  what is owed.
+* **Both roles see the same figure**, because the entire point is that it is
+  the same figure.
+* **Nothing at all when `price_pence` is null** — bookings made before 0052,
+  and slots the stylist never priced. Not "price not set", which would read as
+  a fault on the stylist's part when it is simply a slot that never had one.
+
+*Built 25 Sep, after 0062 — see the entry above.*
+
+**122. A ONE-CHARACTER REASON IS NOT A RECORD — CLOSED 25 Sep 2026. 0062
+applied and verified.**
 
 `warn`, `suspend` and `ban` each carried their own `btrim(p_reason) = ''`
 check. `revoke_verification` has wanted **ten** characters since 0044, on the
@@ -12810,7 +12928,7 @@ platforms each failed it differently.
 | 121 | ✅ **CLOSED 24 Sep.** warn now requires a reason as well as a message | No |
 | 123 | ✅ **CLOSED 24 Sep.** Five hand-run `supabase/*.sql` files hold functions a migration has since replaced, including `delete_account_data` (0053) and `my_suspension` (0058, the item-118 leak). `my_suspension` corrected and made re-runnable; the rest marked; `check-handrun-drift.mjs` now fails on an undeclared overlap | Not by itself — but running one of those files is |
 | 124 | ✅ **CLOSED 25 Sep, verified live.** `SuspensionGate` now lets Settings through, and the delete path was checked to actually work for them — the edge function uses the service role and reads no suspension | **Yes, for a store submission** |
-| 122 | ✅ **Built 25 Sep — 0062 NOT APPLIED.** Ten characters for warn, suspend and ban, as one guard above the case rather than three raised numbers. Not retrospective | No |
+| 122 | ✅ **CLOSED 25 Sep.** Ten characters for warn, suspend and ban, as one guard above the case rather than three raised numbers. Not retrospective | No |
 | 119 | ✅ **CLOSED 25 Sep.** Both now notify and email, carrying the member's message and what happened to the shop. A ban's message is mandatory; a suspension's is not | No |
 | 120 | ✅ **CLOSED 25 Sep, verified live.** The notice sits in the `(app)` layout beside the auth gate, explains rather than enforces, fails open, and keeps Settings reachable | No |
 | ~~117~~ | ~~**A revoked stylist is told nothing.** Her verification is cleared, her shop hidden and her bookings cancelled, and no notification is written to her — while every model she was booked with gets a considered message~~ *(superseded by the row above, 24 Sep)* | — |
@@ -12845,7 +12963,7 @@ platforms each failed it differently.
 | 99 | ✅ **VERIFIED LIVE 23 Sep.** A model's own profile on the web — built, **not deployed**. Avatar, bio, the nine attributes, photo management, Profile in the nav, and a link to what stylists see | No |
 | 100 | ✅ **CLOSED 24 Sep.** The avatar records rather than gates: gating it would strand people out of the ID check (item 101), and no classifier can screen an image. The console lists what nobody has looked at, oldest first, with how long it has waited | No |
 | 98 | Verification queue now shows the profile picture beside the selfie — built, **not deployed**. Privacy §7's comparison was previously impossible in the console. **Open: the copy is still false for a member with no profile picture** | No, but Privacy §7 describes it |
-| 97 | **`sessions.price_pence` is read by nothing in either client.** 0052 snapshots it so an edited slot cannot rewrite what was agreed; both clients show the SLOT's price today instead. They agree until someone edits a slot after an application | No, but it is a money display |
+| 97 | ✅ **Built 25 Sep, not browser-verified.** The item was wrong — no booking surface showed a price at all, so this was a missing feature rather than a wrong number. The web now shows "£45 shown when booked" from the booking's own snapshot; mobile is gated behind item 113. The item was wrong: no booking surface shows a price at all, so this is a missing feature rather than a wrong number. Terms §8's claim is true — the record IS kept — but 0052's stated purpose, "so both of you can point at the same number", is unmet until both parties can see it | No, but it is a money display |
 | 95 | **Mobile's favourite heart fails silently** — no error handling on insert or delete, so a filled heart can sit over a row that does not exist. It also never says that saving subscribes her to notifications | No, but it tells her something untrue |
 | 93 | ✅ **CLOSED 24 Sep** — rewritten as real copy. It had been indexed: all six treatment pages showed this one stylist. A 40-character bar counts characters, so nothing could have caught it but a reader. ~~**A published shop's bio is keyboard-mash test text.** Live, on the only published shop, and it clears `public_stylists`' 40-character bar because that bar counts characters~~ | No |
 | 91 | Types stamp names the newest migration FILE, not the newest applied — so it can read one ahead of the database. Claim corrected in both scripts; closing it properly needs a required `--applied=` argument, **your call** | No |

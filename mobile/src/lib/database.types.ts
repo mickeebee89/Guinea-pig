@@ -1,7 +1,7 @@
 // GENERATED FILE — DO NOT EDIT BY HAND.
 //
 // Written by scripts/gen-supabase-types.mjs from the live database.
-// TYPES_STAMP: 0061
+// TYPES_STAMP: 0062
 //
 // Regenerate whenever a migration is applied:
 //   node scripts/gen-supabase-types.mjs
