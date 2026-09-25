@@ -6113,6 +6113,31 @@ But `revoke_verification` requires **ten** characters (0044). So a reason of
 is a decision about three live actions, not a detail to slip into a one-line
 migration — **recorded as 122** rather than absorbed.
 
+**✅ 0061 VERIFIED — 25 Sep 2026, Blocks A and B. ITEM 119 CLOSED.**
+
+**A.** Type `admin_suspension`, title *"Your account is suspended"*, and the
+body carries **the date and the member's message**. **reason leaked: false.**
+
+**And no shop sentence, because that account has no provider row.** That is
+`_withdrawn_sentence()` returning `''` on a zero count, which is the branch it
+exists for — so the one case the block happened to exercise is the one that
+would otherwise have produced a dangling paragraph about a shop the member has
+not got.
+
+**B.** A messageless ban is refused. The ban notice **has no "until" and offers
+no route back**, and **reason leaked: false**.
+
+**── ONE DETAIL WORTH KEEPING ──**
+
+The date read **2 October 2026**, which is seven days from the day it ran. So
+`make_interval(days => p_duration_days)` and `to_char` agree with each other
+and with the duration the console sent — the part of a suspension a member is
+most likely to check, and the part that would be hardest to notice was wrong.
+
+Types regenerated and stamped 0061; the only addition beyond the stamp is
+`_withdrawn_sentence`, which no client calls and which is revoked from every
+client role. site verify EXIT 0, mobile tsc EXIT 0, admin build EXIT 0.
+
 **120 + 124. A SUSPENDED MEMBER IS TOLD, AND A BANNED ONE CAN STILL LEAVE —
 BUILT 24 Sep 2026. site `next build` EXIT 0, mobile tsc EXIT 0. NOT
 BROWSER-VERIFIED — see the foot of this entry.**
@@ -6194,8 +6219,7 @@ compiles, not that it renders. **What would verify it:** apply 0061, suspend
 the model test account from the console, sign in as them on the web, and check
 that `/settings` still shows Delete account with the banner above it.
 
-**119. SUSPEND AND BAN SAY SO — BUILT 24 Sep 2026. MIGRATION 0061 NOT APPLIED.
-admin build EXIT 0, mobile tsc EXIT 0, site `next build` EXIT 0.**
+**119. SUSPEND AND BAN SAY SO — CLOSED 25 Sep 2026. 0061 applied and verified.**
 
 Of the eight admin actions only `'warn'` ever wrote a notification. Suspend and
 ban — which stop someone applying, messaging and reviewing, and for a stylist
@@ -12710,7 +12734,7 @@ platforms each failed it differently.
 | 123 | ✅ **CLOSED 24 Sep.** Five hand-run `supabase/*.sql` files hold functions a migration has since replaced, including `delete_account_data` (0053) and `my_suspension` (0058, the item-118 leak). `my_suspension` corrected and made re-runnable; the rest marked; `check-handrun-drift.mjs` now fails on an undeclared overlap | Not by itself — but running one of those files is |
 | 124 | ✅ **Built 24 Sep.** `SuspensionGate` now lets Settings through, and the delete path was checked to actually work for them — the edge function uses the service role and reads no suspension | **Yes, for a store submission** |
 | 122 | **Three actions accept a one-character reason.** warn, suspend and ban require only non-empty; `revoke_verification` requires ten. A reason of "x" is a record of nothing | No |
-| 119 | ✅ **Built 24 Sep — 0061 NOT APPLIED.** Both now notify and email, carrying the member's message and what happened to the shop. A ban's message is mandatory; a suspension's is not | No |
+| 119 | ✅ **CLOSED 25 Sep.** Both now notify and email, carrying the member's message and what happened to the shop. A ban's message is mandatory; a suspension's is not | No |
 | 120 | ✅ **Built 24 Sep, NOT browser-verified.** The notice sits in the `(app)` layout beside the auth gate, explains rather than enforces, fails open, and keeps Settings reachable | No |
 | ~~117~~ | ~~**A revoked stylist is told nothing.** Her verification is cleared, her shop hidden and her bookings cancelled, and no notification is written to her — while every model she was booked with gets a considered message~~ *(superseded by the row above, 24 Sep)* | — |
 | 74 | ✅ **CLOSED 23 Sep** — proven end to end, and the mobile switch now exists (item 88). Untested on device |

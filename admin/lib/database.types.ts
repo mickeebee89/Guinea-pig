@@ -1,7 +1,7 @@
 // GENERATED FILE — DO NOT EDIT BY HAND.
 //
 // Written by scripts/gen-supabase-types.mjs from the live database.
-// TYPES_STAMP: 0060
+// TYPES_STAMP: 0061
 //
 // Regenerate whenever a migration is applied:
 //   node scripts/gen-supabase-types.mjs
@@ -2343,6 +2343,7 @@ export type Database = {
       }
       _provider_shops_state: { Args: { p_user_id: string }; Returns: Json }
       _withdraw_stylist: { Args: { p_user_id: string }; Returns: Json }
+      _withdrawn_sentence: { Args: { p_withdrawn: Json }; Returns: string }
       admin_act_on_provider: {
         Args: {
           p_action: string
