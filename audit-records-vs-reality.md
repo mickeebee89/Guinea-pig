@@ -6138,6 +6138,20 @@ Types regenerated and stamped 0061; the only addition beyond the stamp is
 `_withdrawn_sentence`, which no client calls and which is revoked from every
 client role. site verify EXIT 0, mobile tsc EXIT 0, admin build EXIT 0.
 
+**123b. THE DRIFT CHECK NOW COVERS TRIGGERS AND POLICIES — 25 Sep 2026. site
+verify EXIT 0.**
+
+The check written for 123 looked at **functions only**, because a function was
+the fault that prompted it. A trigger and a policy drift exactly the same way,
+and the case was not hypothetical: **0061 had recreated the `notify_email`
+trigger hours earlier**, and `push-setup.sql` drops and recreates two triggers
+of its own.
+
+Scanned first: **zero** trigger or policy overlaps today. Which is the reason
+to widen it now rather than later — **the cheapest moment a check is ever
+widened is while it still passes.** Nothing to triage, no red build to work
+around, and the next one is caught instead of found.
+
 **✅ 0062 VERIFIED — 25 Sep 2026, Block A. ITEM 122 CLOSED.**
 
 `warn`, `suspend` and `ban` **all** refuse `"x"` with the same sentence naming
@@ -6148,8 +6162,12 @@ One sentence for all three is the point of the change — they were three copies
 of one rule, and three copies is how `"x"` came to pass three actions and fail
 the fourth.
 
-**97. A BOOKING NOW SHOWS THE PRICE IT WAS BOOKED AT — BUILT 25 Sep 2026.
-site verify EXIT 0. NOT BROWSER-VERIFIED.**
+**97. A BOOKING NOW SHOWS THE PRICE IT WAS BOOKED AT — CLOSED 25 Sep 2026,
+verified live.**
+
+**✅ Seen on a real booking:** *"Wed, 30 Sept 2026 · 09:00 · Nails · £10 shown
+when booked"* — the snapshot, on the meta line, reading as an indication
+rather than as a bill.
 
 `sessions.price_pence` has been written by 0052's trigger since 23 Sep and read
 by **nothing**. Terms §8's claim — *"We keep a record of the price that was
@@ -6189,10 +6207,7 @@ next person cannot quietly swap it for the nearer field.
 stylist-only and a model has no bookings list at all (item 113), so this
 belongs with that work rather than in front of it.
 
-**Not browser-verified**: seeing it needs a signed-in account with a booking
-made against a priced slot. `npm run verify` exit 0 proves it compiles and
-lints, not that it renders. The check is one line — open `/bookings` on an
-account with a priced booking and look at the meta line.
+*Verified live the same day — see the top of this entry.*
 
 **⚠️ 97 WAS WRONG AS WRITTEN — CORRECTED 25 Sep 2026. NOT YET BUILT.**
 
@@ -12963,7 +12978,7 @@ platforms each failed it differently.
 | 99 | ✅ **VERIFIED LIVE 23 Sep.** A model's own profile on the web — built, **not deployed**. Avatar, bio, the nine attributes, photo management, Profile in the nav, and a link to what stylists see | No |
 | 100 | ✅ **CLOSED 24 Sep.** The avatar records rather than gates: gating it would strand people out of the ID check (item 101), and no classifier can screen an image. The console lists what nobody has looked at, oldest first, with how long it has waited | No |
 | 98 | Verification queue now shows the profile picture beside the selfie — built, **not deployed**. Privacy §7's comparison was previously impossible in the console. **Open: the copy is still false for a member with no profile picture** | No, but Privacy §7 describes it |
-| 97 | ✅ **Built 25 Sep, not browser-verified.** The item was wrong — no booking surface showed a price at all, so this was a missing feature rather than a wrong number. The web now shows "£45 shown when booked" from the booking's own snapshot; mobile is gated behind item 113. The item was wrong: no booking surface shows a price at all, so this is a missing feature rather than a wrong number. Terms §8's claim is true — the record IS kept — but 0052's stated purpose, "so both of you can point at the same number", is unmet until both parties can see it | No, but it is a money display |
+| 97 | ✅ **CLOSED 25 Sep, verified live.** The item was wrong — no booking surface showed a price at all, so this was a missing feature rather than a wrong number. The web now shows "£45 shown when booked" from the booking's own snapshot; mobile is gated behind item 113. The item was wrong: no booking surface shows a price at all, so this is a missing feature rather than a wrong number. Terms §8's claim is true — the record IS kept — but 0052's stated purpose, "so both of you can point at the same number", is unmet until both parties can see it | No, but it is a money display |
 | 95 | **Mobile's favourite heart fails silently** — no error handling on insert or delete, so a filled heart can sit over a row that does not exist. It also never says that saving subscribes her to notifications | No, but it tells her something untrue |
 | 93 | ✅ **CLOSED 24 Sep** — rewritten as real copy. It had been indexed: all six treatment pages showed this one stylist. A 40-character bar counts characters, so nothing could have caught it but a reader. ~~**A published shop's bio is keyboard-mash test text.** Live, on the only published shop, and it clears `public_stylists`' 40-character bar because that bar counts characters~~ | No |
 | 91 | Types stamp names the newest migration FILE, not the newest applied — so it can read one ahead of the database. Claim corrected in both scripts; closing it properly needs a required `--applied=` argument, **your call** | No |
