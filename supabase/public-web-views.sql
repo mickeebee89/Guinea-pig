@@ -128,7 +128,6 @@ select
     '[^a-z0-9]+', '-', 'g'), '-'), '')                                  as location_slug,
 
   p.profile_pic_url,
-  p.banner_url,
   p.is_verified,
   -- `p.level` stood here until 24 Sep 2026 (item 105). It was published to
   -- anon even though no public page ever rendered it, and what it held was

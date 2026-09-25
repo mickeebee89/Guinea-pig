@@ -49,7 +49,6 @@ export interface PublicStylist {
   location: string | null
   location_slug: string | null
   profile_pic_url: string | null
-  banner_url: string | null
   is_verified: boolean
   level: string | null
   // status_text removed by 0034: public_stylists no longer exposes it, and

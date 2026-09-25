@@ -69,7 +69,6 @@ export interface StylistProfile {
   rating: number | null
   reviewCount: number
   avatarUrl: string | null
-  bannerUrl: string | null
   categories: string[]
   portfolio: { id: string; mediaUrl: string; mediaType: string | null }[]
   /** Own uploads still awaiting moderation. Only ever populated for the owner. */
@@ -106,7 +105,7 @@ export async function getStylistProfile(
     .from('providers')
     .select(
       'id, user_id, name, bio, location_text, location, is_verified, is_published, ' +
-      'rating, review_count, profile_pic_url, banner_url',
+      'rating, review_count, profile_pic_url',
     )
     .eq('id', providerId)
     .maybeSingle()
@@ -117,7 +116,7 @@ export async function getStylistProfile(
     bio: string | null; location_text: string | null; location: string | null
     is_verified: boolean | null; is_published: boolean | null
     rating: number | null; review_count: number | null
-    profile_pic_url: string | null; banner_url: string | null
+    profile_pic_url: string | null
   }
 
   const today = new Date().toISOString().slice(0, 10)
@@ -181,7 +180,6 @@ export async function getStylistProfile(
     rating: prov.rating,
     reviewCount: prov.review_count ?? 0,
     avatarUrl: prov.profile_pic_url,
-    bannerUrl: prov.banner_url,
     categories: [...new Set(
       ((treatRes.data ?? []) as { category: string | null }[])
         .map(t => t.category).filter(Boolean) as string[],

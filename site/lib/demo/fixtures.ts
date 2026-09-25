@@ -185,7 +185,7 @@ export function buildTables(images: DemoImages = NO_IMAGES): Tables {
       id: pid, user_id: s.userId, name: s.shop, bio: s.bio,
       location_text: s.area, location: s.area, region: s.region, level: s.level,
       is_verified: true, is_published: true, first_published_at: at(-30 + i),
-      rating: null, review_count: 0, profile_pic_url: avatar, banner_url: null,
+      rating: null, review_count: 0, profile_pic_url: avatar,
       shop_handle: s.key, latitude: s.lat, longitude: s.lng,
       created_at: at(-60 + i),
     })
@@ -354,7 +354,7 @@ export const VIEWS: Record<string, (t: Tables) => Row[]> = {
       id: p.id, slug: `${name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}-${short}`,
       short_id: short, name, bio, region: p.region, location: loc,
       location_slug: loc ? loc.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') : null,
-      profile_pic_url: p.profile_pic_url, banner_url: p.banner_url, is_verified: p.is_verified, level: p.level,
+      profile_pic_url: p.profile_pic_url, is_verified: p.is_verified, level: p.level,
       categories, category_slugs, rating: null, review_count: 0,
       has_open_slots: t.availability.some(a => a.provider_id === p.id && String(a.date) >= new Date().toISOString().slice(0, 10)),
     }]

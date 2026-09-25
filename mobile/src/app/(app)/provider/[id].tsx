@@ -52,7 +52,6 @@ type Provider = {
   rating: number | null
   review_count: number | null
   profile_pic_url: string | null
-  banner_url: string | null
   // status_text / status_expires_at were here. Migrations 0031-0034 moved
   // stylist updates to the status_posts table, and 0035 drops the columns.
   // Read separately below: the new source has moderation state, which the old
@@ -161,7 +160,7 @@ export default function ProviderShopScreen() {
       ] = await Promise.all([
         supabase
           .from('providers')
-          .select('id, name, location, bio, is_verified, rating, review_count, profile_pic_url, banner_url, user_id')
+          .select('id, name, location, bio, is_verified, rating, review_count, profile_pic_url, user_id')
           .eq('id', id)
           .single(),
         // APPROVED and unexpired only. A held post is invisible here even to a
@@ -370,31 +369,25 @@ export default function ProviderShopScreen() {
       >
         {/* ── Banner ── */}
         <View style={styles.bannerWrapper}>
-          {/* The stylist's own banner is the first thing a model sees — show it when
-             they have one, and fall back to Cavy branding only when they don't.
-             The logo FILE keeps its old name until the new artwork lands. */}
-          {provider.banner_url ? (
+          {/* ⚠️ THIS WAS A STYLIST'S OWN IMAGE, WITH CAVY BRANDING AS THE
+              FALLBACK. providers.banner_url was read here, on the web shop page
+              and in public_stylists, and written by NOTHING — there has never
+              been a control to set one, so the fallback was the only branch
+              that ever ran. Removed 25 Sep 2026, audit item 12.
+
+              The scrim went with it: it existed only to darken a photograph
+              behind the back and heart icons, and over soft pink it looked
+              like a bug.
+
+              The logo FILE keeps its old name until the new artwork lands. */}
+          <View style={styles.bannerBrand}>
             <Image
-              source={{ uri: provider.banner_url }}
-              style={styles.bannerImage}
-              resizeMode="cover"
+              source={require('../../../../assets/images/guinea-pig-logo.png')}
+              style={styles.bannerLogo}
+              resizeMode="contain"
             />
-          ) : (
-            <View style={styles.bannerBrand}>
-              <Image
-                source={require('../../../../assets/images/guinea-pig-logo.png')}
-                style={styles.bannerLogo}
-                resizeMode="contain"
-              />
-              <Text style={styles.bannerBrandText}>Cavy</Text>
-            </View>
-          )}
-          {/* A scrim, only over a photograph. The placeholder banner is soft
-              pink and a dark wash over it would look like a bug; a real
-              stylist's banner is an arbitrary photo and the back/heart icons
-              need something behind them. The pill brings its own opaque
-              background, so this is for the icons. */}
-          {provider.banner_url && <View style={styles.bannerScrim} pointerEvents="none" />}
+            <Text style={styles.bannerBrandText}>Cavy</Text>
+          </View>
 
           <View style={[styles.bannerControls, { paddingTop: insets.top + 10 }]}>
             <TouchableOpacity style={styles.bannerIconBtn} onPress={goBack} activeOpacity={0.85}>
@@ -771,7 +764,6 @@ const styles = StyleSheet.create({
   errorSub:   { fontSize: 14, color: Colors.muted },
 
   bannerWrapper: { height: BANNER_HEIGHT },
-  bannerImage: { width: '100%', height: BANNER_HEIGHT, backgroundColor: Colors.softPink },
   bannerBrand: {
     width: '100%',
     height: BANNER_HEIGHT,
@@ -798,13 +790,6 @@ const styles = StyleSheet.create({
   },
   bannerRightControls: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
-  },
-  // Two stacked bands rather than a gradient: expo-linear-gradient is not a
-  // dependency and is not worth adding for this. The lower band softens what
-  // would otherwise be a visible hard edge across the photo.
-  bannerScrim: {
-    position: 'absolute', top: 0, left: 0, right: 0, height: 96,
-    backgroundColor: 'rgba(0,0,0,0.18)',
   },
   bannerIconBtn: {
     width: 38, height: 38, borderRadius: 19,

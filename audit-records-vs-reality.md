@@ -6138,6 +6138,76 @@ Types regenerated and stamped 0061; the only addition beyond the stamp is
 `_withdrawn_sentence`, which no client calls and which is revoked from every
 client role. site verify EXIT 0, mobile tsc EXIT 0, admin build EXIT 0.
 
+**12. THE BANNER NOBODY COULD SET — READERS REMOVED 25 Sep 2026. MIGRATION
+0063 WRITTEN, NOT APPLIED. site verify EXIT 0 before 0063 existed; mobile tsc
+EXIT 0.**
+
+`providers.banner_url` was read in **five** places and written by **none**.
+There has never been a control on either client to set one, so in the whole
+life of the product the column has only ever been null — and mobile's branded
+placeholder was the only branch that ever ran.
+
+| reader | what it did |
+|---|---|
+| `site/app/(app)/stylist/[id]/page.tsx` | rendered an `<img>`, never once |
+| `site/lib/queries/stylist.ts` | selected and carried it |
+| `site/lib/supabase-public.ts` | typed it on the anon row |
+| `public_stylists` | **exposed it to the open web** |
+| `mobile/.../provider/[id].tsx` | image, or the Cavy placeholder |
+
+Same shape as `providers.level` (item 105): a field the app was designed
+around and then never given a way to fill.
+
+**── WHY REMOVED RATHER THAN BUILT ──**
+
+Building it was cheap on its own — `AvatarUpload` already exists and is already
+on the shop page, so a banner is the same shape with one more column.
+
+What made it expensive is what it would then owe: **a large image at the top of
+an indexable public page, moderated by nobody** — the exact surface items 100
+and 115 had just spent a migration bounding. Doing it properly meant a second
+migration and a second console queue, for a feature **no stylist has asked
+for**.
+
+Micky, 25 Sep: *"The case for keeping it was aesthetic, which is weaker than
+the case you made for cutting level."*
+
+**── ⚠️ THIS IS NOT A DECISION AGAINST BANNERS ──**
+
+Said plainly here and in 0063's header so it is not read that way later:
+**a banner can be rebuilt, with moderation designed in from the start, if a
+real stylist asks for one.** The work would be the column back, an upload
+beside `AvatarUpload` on the shop page, and the media-review treatment 0060
+gives the avatar. What was rejected was building it *first* and owing the
+moderation *after* — which is how the unmoderated-avatar gap happened in the
+first place.
+
+**── THE ORDER, AND THE STEP NOBODY WILL BE REMINDED OF ──**
+
+Readers first, column later, exactly as with `level`:
+
+1. Deploy site and mobile without the readers — **committed**.
+2. **`DROP VIEW public.public_stylists;` then re-run
+   `supabase/public-web-views.sql` by hand.** `create or replace view` cannot
+   drop a column, so the file alone will not do it. Same wall item 105 hit.
+3. Preflight, then apply 0063.
+4. `node scripts/gen-supabase-types.mjs --applied 0063`
+
+**0063 refuses to run until step 2 is done.** Its ASSERT checks `pg_depend`
+for any view still selecting the column and says what to do — because
+Postgres's own dependency error names the problem and not the remedy.
+
+Between steps 1 and 3 the column sits there unread, which is harmless. Nothing
+breaks if step 3 waits a week.
+
+**── AND TWO DEAD STYLES WENT WITH IT ──**
+
+`bannerImage` and `bannerScrim` in mobile. The scrim existed only to darken a
+photograph behind the back and heart icons; over soft pink it would have looked
+like a bug. A style with no user is the same class of thing as a column with no
+writer, and leaving them would have left the next person evidence of a feature
+that no longer exists.
+
 **── LESSON, 25 Sep 2026: I RANKED BY WHICH REVERT BREAKS A RULE, WHEN THE
 QUESTION WAS WHICH REVERT REACHES A MEMBER ──**
 
@@ -13115,7 +13185,7 @@ platforms each failed it differently.
 
 | | Item | Blocking launch? |
 |---|---|---|
-| 12 | Stylist banners cannot be set — read in four places, written nowhere | No |
+| 12 | ✅ **Readers removed 25 Sep; 0063 written, NOT applied.** Read in five places, written by none — the column was never once populated. Removed rather than built, because an unmoderated image on an indexable page owes the treatment items 100 and 115 just built, for a feature nobody asked for. **Rebuildable with moderation from the start if a stylist asks.** ⚠️ Needs the view dropped and re-run by hand first | No |
 | 13 | ✅ **CLOSED 23 Sep** — stale on both halves: both clients cancel, and 0029/0030 rewrote the wording. Was the last launch blocker | No |
 | 110 | ✅ **Cancel confirmation said "their calendar" of the party who has none** — right for a model, wrong for a stylist. Fixed on BOTH clients; the replacement is also more accurate, since nothing ever removed the slot from a calendar | No |
 | 87 | ✅ **VERIFIED LIVE (web) 24 Sep.** Cancelled shows under Past with who cancelled and why; a platform cancellation stays neutral, which also protects a block cascade from naming the blocker | No |

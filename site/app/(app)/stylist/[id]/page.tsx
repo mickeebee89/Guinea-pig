@@ -47,10 +47,6 @@ export default async function StylistPage({
       </Link>
 
       <header className="mt-4 overflow-hidden rounded-lg border border-hairline bg-white shadow-soft">
-        {p.bannerUrl && (
-          // eslint-disable-next-line @next/next/no-img-element -- Supabase Storage, unknown dimensions
-          <img src={p.bannerUrl} alt="" className="h-32 w-full object-cover sm:h-44" />
-        )}
         <div className="flex flex-wrap items-start gap-4 p-5">
           <Avatar src={p.avatarUrl} name={p.name} size={64} />
           <div className="min-w-0 flex-1">

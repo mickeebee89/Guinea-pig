@@ -108,7 +108,8 @@ const nextConfig: NextConfig = {
   },
 
   images: {
-    // Stylist avatars and banners live in the public `profile-pics` bucket.
+    // Stylist and member avatars live in the public `profile-pics` bucket.
+    // (Banners were removed on 25 Sep 2026 — audit item 12.)
     // Without this every image 400s at runtime with an error that reads like a
     // network failure rather than a config one.
     remotePatterns: [
