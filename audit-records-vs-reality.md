@@ -6138,6 +6138,38 @@ Types regenerated and stamped 0061; the only addition beyond the stamp is
 `_withdrawn_sentence`, which no client calls and which is revoked from every
 client role. site verify EXIT 0, mobile tsc EXIT 0, admin build EXIT 0.
 
+**── LESSON, 25 Sep 2026: I RANKED BY WHICH REVERT BREAKS A RULE, WHEN THE
+QUESTION WAS WHICH REVERT REACHES A MEMBER ──**
+
+Written as a lesson rather than left inside item 123, because the mistake is
+in how I ordered the work, not in the work.
+
+Five hand-run files held stale copies. I put `delete_account_data` first and
+said so in three places: account deletion is a legal obligation and an Apple
+5.1.1(v) requirement, so reverting it is the most expensive one on the list.
+That reasoning is sound and the conclusion was wrong.
+
+**Reverting account deletion has no immediate victim.** The function still
+exists in an earlier form, deletion broadly still works, and the gap is found
+later by an auditor or a store reviewer. It is expensive in consequences that
+arrive slowly, to the company.
+
+**Reverting `nearby_models` removes `not public.is_blocked_pair(...)`.** The
+next stylist to open the dashboard is shown a model who blocked her, or is
+shown to one who blocked him. No error is raised, nothing logs it, and the
+person it happens to is the one who took a safety decision and had it quietly
+undone. It is cheap in consequences to the company and severe to a member, and
+it happens the same afternoon.
+
+**The habit to change:** I sorted by *which rule does this break* — legal,
+store policy, published claim — because those are the categories this audit
+keeps finding, and they are easy to name. The question that actually orders
+work on a live product is **who does this reach, and how fast**. A compliance
+failure is a promise broken to a regulator. A blocking control silently
+removed is a promise broken to a person who is relying on it right now.
+
+Both matter. Only one of them has somebody on the other end of it today.
+
 **91. THE TYPES STAMP IS NOW A CLAIM ABOUT THE DATABASE — CLOSED 25 Sep 2026.
 site verify EXIT 0.**
 
