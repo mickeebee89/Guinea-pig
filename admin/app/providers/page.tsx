@@ -252,9 +252,11 @@ export default function ProvidersPage() {
             {['suspend','ban','remove_portfolio'].includes(modal.action) && (
               <div className="mb-4">
                 <label className="text-xs font-medium text-[#3D2E2E]/60 block mb-1">
+                  {/* remove_portfolio has no bar: it deletes rows and tells
+                      nobody, so its note is a note. 0062, item 122. */}
                   {modal.action === 'remove_portfolio'
                     ? 'Reason / note'
-                    : 'Reason — evidence for the record, never shown to them'}
+                    : `Reason — required, evidence for the record, never shown to them. ${reason.trim().length}/10`}
                 </label>
                 <textarea value={reason} onChange={e => setReason(e.target.value)} rows={3}
                   className="border border-black/10 rounded-lg px-3 py-2 text-sm w-full resize-none" />
@@ -292,9 +294,12 @@ export default function ProvidersPage() {
                 // 0061, item 119. The database refuses a messageless ban; this
                 // means she is told that before pressing a permanent button
                 // rather than after.
-                disabled={modal.action === 'ban' && message.trim().length < 10}
+                disabled={(modal.action === 'ban' && message.trim().length < 10)
+                  // 0062, item 122.
+                  || (['warn','suspend','ban'].includes(modal.action) && reason.trim().length < 10)}
                 className="px-4 py-2 text-sm rounded-lg text-white font-medium disabled:bg-gray-300 disabled:text-gray-500"
-                style={modal.action === 'ban' && message.trim().length < 10
+                style={(modal.action === 'ban' && message.trim().length < 10)
+                    || (['warn','suspend','ban'].includes(modal.action) && reason.trim().length < 10)
                   ? undefined : { backgroundColor: '#8C4A58' }}>
                 Confirm
               </button>

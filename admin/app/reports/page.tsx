@@ -449,9 +449,7 @@ export default function ReportsPage() {
               <label className="text-xs font-medium text-[#3D2E2E]/60 block mb-1">
                 {['dismiss', 'resolve'].includes(actionModal.action)
                   ? 'Why are you closing this? (recorded in the audit log)'
-                  : actionModal.action === 'warn'
-                    ? 'Reason — required, evidence for the record, never shown to them'
-                    : 'Reason — evidence for the record, never shown to them'}
+                  : `Reason — required, evidence for the record, never shown to them. ${reason.trim().length}/10`}
               </label>
               <textarea value={reason} onChange={e => setReason(e.target.value)} rows={3}
                 placeholder={
@@ -492,14 +490,15 @@ export default function ReportsPage() {
               <button onClick={doAction}
                 // Matches 0058's warn branch, so she is not refused AFTER pressing it.
                 // 0058's message and 0059's reason. A warning needs both.
-                disabled={(actionModal.action === 'warn'
-                    && (message.trim().length < 10 || !reason.trim()))
+                disabled={(actionModal.action === 'warn' && message.trim().length < 10)
                   // 0061, item 119. A ban's message is mandatory.
-                  || (actionModal.action === 'ban' && message.trim().length < 10)}
+                  || (actionModal.action === 'ban' && message.trim().length < 10)
+                  // 0062, item 122. Ten characters of evidence for all three.
+                  || (['warn','suspend','ban'].includes(actionModal.action) && reason.trim().length < 10)}
                 className="px-4 py-2 text-sm rounded-lg text-white font-medium disabled:bg-gray-300 disabled:text-gray-500"
-                style={(actionModal.action === 'warn'
-                      && (message.trim().length < 10 || !reason.trim()))
+                style={(actionModal.action === 'warn' && message.trim().length < 10)
                     || (actionModal.action === 'ban' && message.trim().length < 10)
+                    || (['warn','suspend','ban'].includes(actionModal.action) && reason.trim().length < 10)
                   ? undefined : { backgroundColor: '#8C4A58' }}>
                 Confirm
               </button>

@@ -6138,9 +6138,82 @@ Types regenerated and stamped 0061; the only addition beyond the stamp is
 `_withdrawn_sentence`, which no client calls and which is revoked from every
 client role. site verify EXIT 0, mobile tsc EXIT 0, admin build EXIT 0.
 
+**122. A ONE-CHARACTER REASON IS NOT A RECORD — BUILT 25 Sep 2026. MIGRATION
+0062 NOT APPLIED. admin build EXIT 0.**
+
+`warn`, `suspend` and `ban` each carried their own `btrim(p_reason) = ''`
+check. `revoke_verification` has wanted **ten** characters since 0044, on the
+argument that it removes someone's ability to trade and *"an admin decided to"*
+is not a record.
+
+So **"x" passed three actions and failed the fourth**. Suspending or banning
+somebody is not a smaller act than un-verifying them — a ban is the heaviest
+thing in the product — and a one-character reason is a six-year retention
+obligation recording nothing.
+
+**── ONE CHECK, NOT THREE RAISED NUMBERS ──**
+
+The three were copies of one rule, and copies of one rule drifting apart is
+exactly how "x" came to pass three of them. Raising three numbers would have
+fixed today's symptom and left the shape that produced it, so the guard moves
+**above the `case`**, where the action is already known.
+
+**`revoke_verification` keeps its own.** It is a different function with a
+different signature called from a different console path, and folding it in
+would mean routing a revocation through `_admin_apply_user_action` for no
+reason but tidiness. Its bar is already ten; this brings the others up to it
+rather than moving it.
+
+**── ⚠️ NOTHING IS RETROSPECTIVE ──**
+
+Suspensions and audit rows already carrying a one-character reason keep it.
+There is no migration that can put evidence into a row nobody wrote it for, and
+pretending otherwise would be worse than the gap.
+
+**── THE ASSERT CHECKS THE CHECKS ARE THERE BEFORE REMOVING THEM ──**
+
+It refuses unless all three per-action strings are still in the live body —
+because a migration whose job is to DELETE three things should not run happily
+against a body that has none of them. Block A's last assertion is that a real,
+properly written reason is still **accepted**: a bar that refuses genuine input
+is worse than the fault it fixes, which is what 0060's Block A ended on too.
+
+**✅ 120 AND 124 VERIFIED LIVE — 25 Sep 2026, on a really suspended account.**
+
+The model test account suspended for 7 days from the console, then signed into
+on the web as her. The gate showed the title, **2 October 2026**, what she
+can't do, **the admin's message**, the support address and a link to settings.
+**Following that link, Delete account was still there** — which is the whole of
+item 124 and the one thing a build could never prove.
+
+The console's two boxes read as intended: **reason as evidence, message as the
+only part she reads.** Reinstating removed the row and she is back to normal.
+
+**── ✅ AND THE EMAIL ARRIVED. THAT IS NOW PROVEN, NOT INFERRED ──**
+
+Every migration since 0047 has said some version of *"the type is on the
+emailed list, so it reaches them"*, and every verify block since has ended with
+*"what this does not prove: that the email arrives"* — because the blocks roll
+back, so the trigger's `pg_net` call never commits. 0057's header said to watch
+`email_sends` after the first genuine one; this was it.
+
+**So `admin_suspension` in 0047's WHEN clause is now confirmed end to end**,
+and the same is true by construction for the other seven types on that list
+— they share the trigger and the function, and only the WHEN clause differed.
+
+**── DECIDED, NOT A GAP: REINSTATEMENT STAYS SILENT ──**
+
+Micky, 25 Sep. A suspension carries **an end date the member already has**, so
+the ordinary case needs no announcement — they were told when it started and
+told when it ends in the same sentence. An admin lifting one **early** can send
+a message if it matters.
+
+Recorded here so it is not re-found as an omission. Every other branch of
+`_admin_apply_user_action` now notifies, so `'reinstate'` standing alone looks
+exactly like the oversight 119 was — and it is not one.
+
 **120 + 124. A SUSPENDED MEMBER IS TOLD, AND A BANNED ONE CAN STILL LEAVE —
-BUILT 24 Sep 2026. site `next build` EXIT 0, mobile tsc EXIT 0. NOT
-BROWSER-VERIFIED — see the foot of this entry.**
+CLOSED 25 Sep 2026, verified live on a suspended account.**
 
 **── 120: THE WEB HAD NO GATE AT ALL ──**
 
@@ -6210,7 +6283,11 @@ notice both anyway, and might otherwise go looking for a fault.
 
 On Settings the notice is a **banner above the page, not instead of it**.
 
-**── ⚠️ WHAT HAS NOT BEEN CHECKED ──**
+**── ✅ WHAT WAS CHECKED, AND WHY IT HAD TO BE ──**
+
+`next build` proves it compiles, not that it renders, and the demo engine is
+not wired into the app — so there was no way to see any of this without a
+genuinely suspended account. It was verified that way on 25 Sep (above).
 
 **No browser verification.** Seeing it requires a genuinely suspended account,
 which means an admin action against the live database, and the demo engine is
@@ -12732,10 +12809,10 @@ platforms each failed it differently.
 | 118 | **The evidence field reaches members TWO ways.** `'warn'` publishes it in a notification (0045:308), and `suspend`/`ban` write it to `suspensions.reason`, which **`my_suspension()` returns to the member** — a SECURITY DEFINER function they may call, so it is not a client-side choice. ✅ **CLOSED 24 Sep — 0058 applied.** `suspensions.member_message` added, `my_suspension()` returns it instead of `reason`, and a fifth parameter added to all four functions by drop-and-recreate. A warning now requires a message | No, but a reason could name a reporter |
 | 121 | ✅ **CLOSED 24 Sep.** warn now requires a reason as well as a message | No |
 | 123 | ✅ **CLOSED 24 Sep.** Five hand-run `supabase/*.sql` files hold functions a migration has since replaced, including `delete_account_data` (0053) and `my_suspension` (0058, the item-118 leak). `my_suspension` corrected and made re-runnable; the rest marked; `check-handrun-drift.mjs` now fails on an undeclared overlap | Not by itself — but running one of those files is |
-| 124 | ✅ **Built 24 Sep.** `SuspensionGate` now lets Settings through, and the delete path was checked to actually work for them — the edge function uses the service role and reads no suspension | **Yes, for a store submission** |
-| 122 | **Three actions accept a one-character reason.** warn, suspend and ban require only non-empty; `revoke_verification` requires ten. A reason of "x" is a record of nothing | No |
+| 124 | ✅ **CLOSED 25 Sep, verified live.** `SuspensionGate` now lets Settings through, and the delete path was checked to actually work for them — the edge function uses the service role and reads no suspension | **Yes, for a store submission** |
+| 122 | ✅ **Built 25 Sep — 0062 NOT APPLIED.** Ten characters for warn, suspend and ban, as one guard above the case rather than three raised numbers. Not retrospective | No |
 | 119 | ✅ **CLOSED 25 Sep.** Both now notify and email, carrying the member's message and what happened to the shop. A ban's message is mandatory; a suspension's is not | No |
-| 120 | ✅ **Built 24 Sep, NOT browser-verified.** The notice sits in the `(app)` layout beside the auth gate, explains rather than enforces, fails open, and keeps Settings reachable | No |
+| 120 | ✅ **CLOSED 25 Sep, verified live.** The notice sits in the `(app)` layout beside the auth gate, explains rather than enforces, fails open, and keeps Settings reachable | No |
 | ~~117~~ | ~~**A revoked stylist is told nothing.** Her verification is cleared, her shop hidden and her bookings cancelled, and no notification is written to her — while every model she was booked with gets a considered message~~ *(superseded by the row above, 24 Sep)* | — |
 | 74 | ✅ **CLOSED 23 Sep** — proven end to end, and the mobile switch now exists (item 88). Untested on device |
 | 75 | Drift check is new and unproven — its first real test is the next failed or skipped deploy | No |

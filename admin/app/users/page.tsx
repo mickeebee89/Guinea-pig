@@ -589,9 +589,9 @@ export default function UsersPage() {
             {['warn','suspend','ban'].includes(modal.action) && (
               <div className="mb-4">
                 <label className="text-xs font-medium text-[#3D2E2E]/60 block mb-1">
-                  {modal.action === 'warn'
-                    ? 'Reason — required, evidence for the record, never shown to them'
-                    : 'Reason — evidence for the record, never shown to them'}
+                  {/* 0062, item 122. Ten characters for all three, matching
+                      revoke_verification. "x" used to pass here and fail there. */}
+                  {`Reason — required, evidence for the record, never shown to them. ${reason.trim().length}/10`}
                 </label>
                 <textarea value={reason} onChange={e => setReason(e.target.value)} rows={3}
                   placeholder="e.g. third report this month; messaged two models after being asked to stop"
@@ -647,13 +647,17 @@ export default function UsersPage() {
                        // 0059, item 121. A warning needs BOTH: the message
                        // because it IS the warning, the reason because an
                        // action with no evidence is not a record.
-                       || (modal.action === 'warn' && reason.trim().length === 0)
+                       // 0062, item 122. Ten characters for warn, suspend and
+                       // ban alike: a one-character reason is a six-year
+                       // retention obligation recording nothing.
+                       || (['warn','suspend','ban'].includes(modal.action) && reason.trim().length < 10)
                        // 0061, item 119. A ban is permanent and its notification
                        // is the last thing this product ever sends them.
                        || (modal.action === 'ban' && message.trim().length < 10)}
                 className="px-4 py-2 text-sm rounded-lg text-white font-medium disabled:bg-gray-300 disabled:text-gray-500"
                 style={(modal.action === 'revoke_verification' && reason.trim().length < 10)
-                    || (modal.action === 'warn' && (message.trim().length < 10 || !reason.trim()))
+                    || (modal.action === 'warn' && message.trim().length < 10)
+                    || (['warn','suspend','ban'].includes(modal.action) && reason.trim().length < 10)
                     || (modal.action === 'ban' && message.trim().length < 10)
                   ? undefined
                   : { backgroundColor: '#8C4A58' }}
