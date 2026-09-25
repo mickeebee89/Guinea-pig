@@ -209,46 +209,39 @@ end $$;
 --    is referenced in older scripts.
 -- ---------------------------------------------------------------------------
 
--- MIGRATION-OWNS: guard_session_consents 0010 — ⚠️ THIS COPY IS SUPERSEDED.
+-- MIGRATION-OWNS: guard_session_consents 0010 — ✅ BROUGHT FORWARD 25 Sep 2026.
 --
--- Migration 0010 replaced this function. This is a hand-run file, so nothing
--- applies it and nothing has kept it in step. RE-RUNNING THIS FILE WOULD
--- REVERT 0010 TO THE VERSION BELOW.
+-- The body below was read from `pg_get_functiondef` on 25 Sep 2026, not
+-- written from this file's own history. Migration 0010 owns this function;
+-- this copy exists so the rest of the file can still be re-run, and it is
+-- only safe to re-run because the two now agree.
 --
--- Read pg_get_functiondef first and bring this copy forward before running
--- any of it. Found by scripts/check-handrun-drift.mjs, audit item 123.
-create or replace function public.guard_session_consents()
-returns trigger language plpgsql
-set search_path to 'public' as $$
+-- ⚠️ IF YOU CHANGE THIS FUNCTION, CHANGE IT IN A MIGRATION AND THEN BRING
+-- THIS COPY FORWARD AGAIN. scripts/check-handrun-drift.mjs will keep
+-- telling you the overlap exists; it cannot tell you the copy is current.
+-- Audit item 123.
+CREATE OR REPLACE FUNCTION public.guard_session_consents()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO 'public'
+AS $function$
 begin
-  if tg_op = 'DELETE' then
-    -- Deletable only once the retention period has run.
-    if old.agreed_at > now() - interval '6 years' then
-      raise exception
-        'session_consents is append-only until its 6-year retention expires (agreed_at %)', old.agreed_at
-        using errcode = '42501';
-    end if;
-    return old;
+  if tg_op = 'UPDATE' then
+    -- There is no longer any legitimate edit. The single exception that used to
+    -- live here — nulling ip_address and device_info for the 12-month scrub —
+    -- went with the columns in migration 0010.
+    raise exception 'session_consents is immutable'
+      using errcode = '42501';
   end if;
 
-  -- The only permitted UPDATE is the 12-month scrub of the act-of-consent
-  -- fields. Everything else about the record stays exactly as written.
-  if old.agreed_at > now() - interval '12 months' then
-    raise exception 'session_consents is immutable (ip/device scrub allowed from 12 months)'
+  -- DELETE, permitted only once retention has run. Unchanged.
+  if old.agreed_at > now() - interval '6 years' then
+    raise exception
+      'session_consents is append-only until its 6-year retention expires (agreed_at %)', old.agreed_at
       using errcode = '42501';
   end if;
-  if new.ip_address is not null or new.device_info is not null then
-    raise exception 'the only permitted update is nulling ip_address and device_info'
-      using errcode = '42501';
-  end if;
-  if (to_jsonb(new) - 'ip_address' - 'device_info')
-     is distinct from
-     (to_jsonb(old) - 'ip_address' - 'device_info') then
-    raise exception 'the only permitted update is nulling ip_address and device_info'
-      using errcode = '42501';
-  end if;
-  return new;
-end $$;
+  return old;
+end $function$;
 
 create or replace function public.guard_moderation_actions()
 returns trigger language plpgsql
@@ -301,24 +294,37 @@ create trigger trg_lock_moderation
 --    Deliberately does NOT touch session_consents or moderation_actions. Those
 --    survive by design, are now self-contained, and are purged by retention.
 -- ---------------------------------------------------------------------------
--- MIGRATION-OWNS: delete_account_data 0053 — ⚠️ THIS COPY IS SUPERSEDED.
+-- MIGRATION-OWNS: delete_account_data 0053 — ✅ BROUGHT FORWARD 25 Sep 2026.
 --
--- Migration 0053 replaced this function. This is a hand-run file, so nothing
--- applies it and nothing has kept it in step. RE-RUNNING THIS FILE WOULD
--- REVERT 0053 TO THE VERSION BELOW.
+-- The body below was read from `pg_get_functiondef` on 25 Sep 2026, not
+-- written from this file's own history. Migration 0053 owns this function;
+-- this copy exists so the rest of the file can still be re-run, and it is
+-- only safe to re-run because the two now agree.
 --
--- Account deletion is a legal obligation and a store requirement, so a silent revert here is the most expensive one in this list.
+-- ⚠️ IF YOU CHANGE THIS FUNCTION, CHANGE IT IN A MIGRATION AND THEN BRING
+-- THIS COPY FORWARD AGAIN. scripts/check-handrun-drift.mjs will keep
+-- telling you the overlap exists; it cannot tell you the copy is current.
+-- Audit item 123.
 --
--- Read pg_get_functiondef first and bring this copy forward before running
--- any of it. Found by scripts/check-handrun-drift.mjs, audit item 123.
-create or replace function public.delete_account_data(p_user uuid)
-returns jsonb language plpgsql security definer
-set search_path to 'public' as $$
+-- ⚠️ AND THIS IS THE MOST DANGEROUS FILE OF THE FOUR, FOR A SECOND REASON.
+-- Further up it DISABLES and re-enables the append-only lock triggers on
+-- session_consents and moderation_actions in order to backfill them. So a
+-- blind re-run would not only have reverted account deletion — a legal
+-- obligation and an Apple 5.1.1(v) requirement — it would toggle the locks
+-- on two moderation-evidence tables while doing it.
+CREATE OR REPLACE FUNCTION public.delete_account_data(p_user uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
 declare
-  v_provider_ids uuid[];
-  v_session_ids  uuid[];
-  v_report_ids   uuid[];
-  v_result       jsonb;
+  v_provider_ids     uuid[];
+  v_session_ids      uuid[];
+  v_reports_retained int;
+  v_pre_notices      uuid[];   -- 0053
+  v_withdrawn        jsonb;    -- 0053
+  v_result           jsonb;
 begin
   if p_user is null then
     raise exception 'delete_account_data requires a user id';
@@ -333,23 +339,39 @@ begin
       or model_id = p_user
       or provider_id = any(v_provider_ids);
 
-  select coalesce(array_agg(distinct id), '{}') into v_report_ids
+  select count(*) into v_reports_retained
     from public.reports
-   where reporter_id = p_user
-      or reported_id = p_user
-      or session_id = any(v_session_ids);
+   where reporter_id = p_user or reported_id = p_user;
 
-  -- Preserve the audit trail; drop only the pointers into deleted rows.
+  -- 0053: tell this stylist's models before anything is destroyed.
+  --
+  -- Only when they ARE a stylist: for a model this is a no-op, because
+  -- _withdraw_stylist keys on providers.user_id. The notices it writes are for
+  -- OTHER people and must outlive this transaction's deletes.
+  if cardinality(v_provider_ids) > 0 then
+    select coalesce(array_agg(id), '{}') into v_pre_notices
+      from public.notifications where session_id = any(v_session_ids);
+
+    v_withdrawn := public._withdraw_stylist(p_user);
+
+    -- De-reference the notices just created. The notifications delete below
+    -- matches on session_id and runs BEFORE the sessions delete, so without
+    -- this the model's notice is removed by our own statement — and the email
+    -- has already been sent by then (0047 sends on the INSERT). The body still
+    -- names the date, the time and the treatment (0030); only the link to a
+    -- booking that is about to stop existing is dropped.
+    update public.notifications
+       set session_id = null
+     where session_id = any(v_session_ids)
+       and user_id <> p_user
+       and id <> all(v_pre_notices);
+  end if;
+
   update public.admin_audit_log set target_user_id     = null where target_user_id     = p_user;
   update public.admin_audit_log set target_provider_id = null where target_provider_id = any(v_provider_ids);
   update public.admin_audit_log set target_session_id  = null where target_session_id  = any(v_session_ids);
   update public.verification_requests set reviewed_by  = null where reviewed_by        = p_user;
 
-  -- reports.reviewed_by is NO ACTION -> auth.users and blocks the auth delete
-  -- where this user reviewed someone else's report as an admin.
-  -- (moderation_actions.related_report_id also pointed at reports we delete
-  -- below; that FK is severed in section 1, since the row is immutable and the
-  -- pointer could not be nulled.)
   update public.reports set reviewed_by = null where reviewed_by = p_user;
 
   delete from public.reviews       where reviewer_id = p_user
@@ -357,21 +379,18 @@ begin
                                       or session_id  = any(v_session_ids);
   delete from public.messages      where sender_id  = p_user or session_id = any(v_session_ids);
   delete from public.notifications where user_id    = p_user or session_id = any(v_session_ids);
-  delete from public.reports       where id = any(v_report_ids);
   delete from public.sessions      where id = any(v_session_ids);
   delete from public.providers     where user_id = p_user;
 
-  -- public.users has NO FK to auth.users, so the auth delete does not cascade
-  -- it. Deleting it here fires its own CASCADE children (blocks, favourites,
-  -- model_attributes, model_photos, subscriptions, verification_*, ...).
   delete from public.users where id = p_user;
 
   v_result := jsonb_build_object(
-    'providers', cardinality(v_provider_ids),
-    'sessions',  cardinality(v_session_ids),
-    'reports',   cardinality(v_report_ids));
+    'providers',        cardinality(v_provider_ids),
+    'sessions',         cardinality(v_session_ids),
+    'reports_retained', v_reports_retained,
+    'withdrawn',        coalesce(v_withdrawn, 'null'::jsonb));   -- 0053
   return v_result;
-end $$;
+end $function$;
 
 revoke all on function public.delete_account_data(uuid) from public, anon, authenticated;
 -- service_role only: the edge function verifies the caller's JWT and passes

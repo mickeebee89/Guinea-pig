@@ -63,18 +63,23 @@ create trigger notify_push after insert on public.notifications
   for each row execute function public.tg_notify_push();
 
 -- 4) Trigger: new chat message -> push the OTHER party (no notifications row) -
--- MIGRATION-OWNS: tg_message_push 0047 — ⚠️ THIS COPY IS SUPERSEDED.
+-- MIGRATION-OWNS: tg_message_push 0047 — ✅ BROUGHT FORWARD 25 Sep 2026.
 --
--- Migration 0047 replaced this function. This is a hand-run file, so nothing
--- applies it and nothing has kept it in step. RE-RUNNING THIS FILE WOULD
--- REVERT 0047 TO THE VERSION BELOW.
+-- The body below was read from `pg_get_functiondef` on 25 Sep 2026, not
+-- written from this file's own history. Migration 0047 owns this function;
+-- this copy exists so the rest of the file can still be re-run, and it is
+-- only safe to re-run because the two now agree.
 --
--- Re-running this would undo the emailing 0047 added.
---
--- Read pg_get_functiondef first and bring this copy forward before running
--- any of it. Found by scripts/check-handrun-drift.mjs, audit item 123.
-create or replace function public.tg_message_push()
-returns trigger language plpgsql security definer set search_path = public as $$
+-- ⚠️ IF YOU CHANGE THIS FUNCTION, CHANGE IT IN A MIGRATION AND THEN BRING
+-- THIS COPY FORWARD AGAIN. scripts/check-handrun-drift.mjs will keep
+-- telling you the overlap exists; it cannot tell you the copy is current.
+-- Audit item 123.
+CREATE OR REPLACE FUNCTION public.tg_message_push()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
 declare
   v_model         uuid;
   v_provider_user uuid;
@@ -106,10 +111,23 @@ begin
                  'user_id', v_recipient,
                  'title',   coalesce(nullif(trim(v_sender_name), ''), 'New message'),
                  'body',    new.body,
-                 'data',    jsonb_build_object('type', 'new_message', 'session_id', new.session_id))
-  );
+                 'data',    jsonb_build_object('type', 'new_message', 'session_id', new.session_id)));
+
+  -- 0047: the same recipient, by email. Throttled in the function.
+  perform net.http_post(
+    url     := 'https://ptluekkhiopowuyvkgnd.supabase.co/functions/v1/send-email',
+    headers := jsonb_build_object(
+                 'Content-Type', 'application/json',
+                 'x-email-secret', coalesce((select decrypted_secret from vault.decrypted_secrets
+                                              where name = 'email_hook_secret'), '')),
+    body    := jsonb_build_object(
+                 'kind',        'chat',
+                 'user_id',     v_recipient,
+                 'session_id',  new.session_id,
+                 'sender_name', coalesce(nullif(trim(v_sender_name), ''), 'Someone')));
+
   return new;
-end $$;
+end $function$;
 
 drop trigger if exists message_push on public.messages;
 create trigger message_push after insert on public.messages

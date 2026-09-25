@@ -6138,6 +6138,60 @@ Types regenerated and stamped 0061; the only addition beyond the stamp is
 `_withdrawn_sentence`, which no client calls and which is revoked from every
 client role. site verify EXIT 0, mobile tsc EXIT 0, admin build EXIT 0.
 
+**123c. THE FOUR STALE COPIES BROUGHT FORWARD — CLOSED 25 Sep 2026. site
+verify EXIT 0.**
+
+All four read from `pg_get_functiondef`, not reconstructed from the files —
+which is the whole point, since reconstructing from the file is the fault.
+
+| file | function | owner |
+|---|---|---|
+| `account-deletion-fix.sql` | `delete_account_data` | 0053 |
+| `account-deletion-fix.sql` | `guard_session_consents` | 0010 |
+| `nearby-models-any.sql` | `nearby_models` | 0018 |
+| `push-setup.sql` | `tg_message_push` | 0047 |
+
+Markers rewritten from *"⚠️ THIS COPY IS SUPERSEDED"* to **"✅ BROUGHT
+FORWARD"**, each saying where the body came from and that a future change must
+go through a migration and then be brought forward again.
+
+**── ⚠️ THE nearby_models FILES WERE WORSE THAN "BEHIND" ──**
+
+Two hand-run files defined one function. `nearby-models-attributes.sql`
+(21 Jul) required `u.latitude is not null and u.longitude is not null`;
+`nearby-models-any.sql` was written later to remove exactly that, because a
+model who never granted location was **invisible at every radius**. Then 0018
+added `not public.is_blocked_pair(...)` on top.
+
+So running the older file would have done two things: made every model without
+coordinates disappear again, **and removed the blocked-pair exclusion —
+surfacing people a member had blocked.** A safety control, undone by a file
+somebody ran to fix filter chips.
+
+**So only one of them keeps a body.** `nearby-models-attributes.sql` now
+contains **no SQL at all** — it keeps its two still-true explanations (why the
+LEFT JOIN, why a return-type change must drop first) and points at the live
+file. Two files holding one function's name is the trap itself even while they
+agree, and **a file that cannot run cannot be run by mistake.** The drift check
+no longer sees it, because it creates nothing: six declared overlaps became
+five, by removing a file rather than by declaring it.
+
+**── AND `account-deletion-fix.sql` HAD A SECOND HAZARD ──**
+
+It also **disables and re-enables the append-only lock triggers** on
+`session_consents` and `moderation_actions` in order to backfill them. So a
+blind re-run would not only have reverted account deletion — a legal
+obligation and an Apple 5.1.1(v) requirement — it would toggle the locks on
+two moderation-evidence tables on the way past. Its marker now says so.
+
+**── ⚠️ WHAT THIS STILL DOES NOT PROVE ──**
+
+That the copies are right. They were transcribed from a paste of
+`pg_get_functiondef` on 25 Sep and are correct as of that reading; nothing in
+the repo can confirm it, and the next migration to touch any of these four puts
+them out of date again. **The marker records a decision. Only the database
+knows.**
+
 **123b. THE DRIFT CHECK NOW COVERS TRIGGERS AND POLICIES — 25 Sep 2026. site
 verify EXIT 0.**
 

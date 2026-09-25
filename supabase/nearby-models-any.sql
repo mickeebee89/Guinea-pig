@@ -35,19 +35,18 @@
 
 drop function if exists public.nearby_models(double precision, double precision, double precision);
 
--- MIGRATION-OWNS: nearby_models 0018 — ⚠️ THIS COPY IS SUPERSEDED.
+-- MIGRATION-OWNS: nearby_models 0018 — ✅ BROUGHT FORWARD 25 Sep 2026.
 --
--- Migration 0018 replaced this function. This is a hand-run file, so nothing
--- applies it and nothing has kept it in step. RE-RUNNING THIS FILE WOULD
--- REVERT 0018 TO THE VERSION BELOW.
+-- The body below was read from `pg_get_functiondef` on 25 Sep 2026, not
+-- written from this file's own history. Migration 0018 owns this function;
+-- this copy exists so the rest of the file can still be re-run, and it is
+-- only safe to re-run because the two now agree.
 --
--- Read pg_get_functiondef first and bring this copy forward before running
--- any of it. Found by scripts/check-handrun-drift.mjs, audit item 123.
-CREATE FUNCTION public.nearby_models(
-  p_lat       double precision DEFAULT NULL::double precision,
-  p_lng       double precision DEFAULT NULL::double precision,
-  p_radius_mi double precision DEFAULT NULL::double precision
-)
+-- ⚠️ IF YOU CHANGE THIS FUNCTION, CHANGE IT IN A MIGRATION AND THEN BRING
+-- THIS COPY FORWARD AGAIN. scripts/check-handrun-drift.mjs will keep
+-- telling you the overlap exists; it cannot tell you the copy is current.
+-- Audit item 123.
+CREATE OR REPLACE FUNCTION public.nearby_models(p_lat double precision DEFAULT NULL::double precision, p_lng double precision DEFAULT NULL::double precision, p_radius_mi double precision DEFAULT NULL::double precision)
  RETURNS TABLE(id uuid, first_name text, last_initial text, profile_pic_url text, is_verified boolean, distance_mi double precision, hair_colour text, hair_type text, hair_length text, skin_tone text)
  LANGUAGE sql
  STABLE SECURITY DEFINER
@@ -65,9 +64,6 @@ AS $function$
         or u.latitude is null or u.longitude is null
       then null::double precision
       else 3959 * acos(
-        -- Clamp BOTH ends: acos() errors outside [-1, 1], and floating-point
-        -- drift can push near-antipodal pairs past -1. The old version clamped
-        -- only the upper bound.
         greatest(-1.0, least(1.0,
           cos(radians(p_lat)) * cos(radians(u.latitude)) *
           cos(radians(u.longitude) - radians(p_lng)) +
@@ -78,10 +74,11 @@ AS $function$
   ) dist
   where u.role = 'model'
     and (
-      p_radius_mi is null            -- "Any" → everyone, coordinates or not
+      p_radius_mi is null
       or (dist.d is not null and dist.d <= p_radius_mi)
     )
-  -- Nearest first when we know; unplaceable models last rather than dropped.
+    -- NEW: never surface someone either party has blocked.
+    and not public.is_blocked_pair(auth.uid(), u.id)
   order by dist.d asc nulls last, u.created_at desc nulls last, u.id
   limit 200;
 $function$;
