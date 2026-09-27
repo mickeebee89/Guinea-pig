@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { downscaleToFile } from '@/lib/downscale'
+import { downscaleToFile, UNREADABLE_IMAGE_MESSAGE } from '@/lib/downscale'
 import { uploadApplicationPhoto } from '../stylist/[id]/apply/actions'
 import { savePhotoCaption, setPhotoCategory, deletePhoto, addPhotoCategory } from './actions'
 import type { MyPhoto } from '@/lib/queries/my-profile'
@@ -50,7 +50,16 @@ export function PhotoManager({
       for (const file of Array.from(files)) {
         // The shared 1080px/0.85 resize. A phone photo is 3–5MB and the upload
         // happens on whatever signal she has.
-        const small = await downscaleToFile(file, 'photo.jpg')
+        // Refuse the one photo rather than the whole batch: picking six and
+        // losing all of them because one was a HEIC would be its own fault.
+        // Item 125.
+        let small: File
+        try {
+          small = await downscaleToFile(file, 'photo.jpg')
+        } catch {
+          setError({ where: 'top', text: UNREADABLE_IMAGE_MESSAGE })
+          continue
+        }
         const fd = new FormData()
         fd.append('photo', small)
         const res = await attempt(() => uploadApplicationPhoto(fd), 'photo:upload')
@@ -85,7 +94,7 @@ export function PhotoManager({
           {uploading ? 'Uploading…' : 'Add photos'}
           <input
             type="file"
-            accept="image/*"
+            accept="image/jpeg,image/png,image/webp"
             multiple
             disabled={uploading}
             onChange={e => onPick(e.target.files)}

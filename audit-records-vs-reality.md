@@ -6138,6 +6138,130 @@ Types regenerated and stamped 0061; the only addition beyond the stamp is
 `_withdrawn_sentence`, which no client calls and which is revoked from every
 client role. site verify EXIT 0, mobile tsc EXIT 0, admin build EXIT 0.
 
+**125. A PHOTO THE BROWSER CANNOT READ WAS UPLOADED ANYWAY — BUILT 27 Sep
+2026. site verify EXIT 0. THE MECHANISM IS VERIFIED; HEIC ITSELF IS NOT.**
+
+**Plainly:** if a browser could not open your photo, the site uploaded it
+regardless, said it had worked, and it then appeared nowhere. On the ID check
+that meant an admin opening a blank image against a £14.99 already paid.
+
+**── ✅ VERIFIED IN THE BROWSER PANE, NOT INFERRED ──**
+
+`site/lib/downscale.ts`'s exact body, run against a file typed `image/jpeg`
+whose bytes are not an image:
+
+```
+1. downscale() throws on undecodable input   YES — InvalidStateError:
+                                             The source image could not be decoded.
+2. downscaleToFile() returns the ORIGINAL    true
+   returned name / type / bytes              IMG_4821.jpg / image/jpeg / 1344
+3. that file renders in an <img>             false
+4. control, a real PNG through downscale()   image/jpeg / 762 bytes
+   control renders in an <img>               true
+```
+
+**⚠️ AND THE FIRST RUN OF THAT TEST WAS WRONG, WHICH IS WHY THE CONTROL WAS
+THERE.** Using `blob:` URLs, the real PNG ALSO reported `false` — the dev
+server's CSP blocks `blob:` in `img-src`, so every file looked unrenderable and
+the "proof" would have been an artefact of the harness. Switching to `data:`
+URLs separated them. **A test with no control would have produced the right
+conclusion for the wrong reason, and I would not have known.**
+
+**── ⚠️ WHAT IS STILL NOT CONFIRMED ──**
+
+**That HEIC specifically is in the undecodable set.** Micky has no iPhone to
+hand, and it cannot be settled without one: a synthetic HEIC would throw
+because it is malformed, not because it is HEIC, which is a false positive
+dressed as proof. "Chromium ships no HEIC decoder" is asserted from knowledge,
+not tested here.
+
+**It does not change the fix**, because the defect is the class — *anything*
+the browser cannot decode was uploaded anyway — and HEIC is only its likeliest
+member. TIFF and a part-transferred JPEG are others. **Left open deliberately
+rather than closed as proven.** To settle it: an iPhone on Settings → Camera →
+Formats → High Efficiency, one photo **AirDropped** to a computer (email and
+most messengers transcode to JPEG en route and would mask it), uploaded at
+`/profile` in desktop Chrome.
+
+**── ⚠️ THE CORRECTION: THIS WAS ANTICIPATED FOUR TIMES ──**
+
+My parity report called it a gap nobody had noticed. **Wrong, and the truth is
+worse.** Every one of the four paths already caught the decode failure and sent
+the file anyway, on purpose, with a written argument:
+
+| where | the argument |
+|---|---|
+| `SelfieCapture:68` | *"the action caps the size, so the worst case is a clear message rather than a silent failure **on a phone whose photos this browser cannot decode**"* |
+| `PortfolioManager:103` | *"the ORIGINAL comes back, and the cap below then refuses it"* |
+| `ApplyWizard:137` | *"a large upload is worse and a refused one loses the application"* |
+| `AvatarUpload:56` | a `console.warn`, and nothing said to anyone |
+
+**Three of those four rest on a size cap. HEIC is engineered to be small.**
+The caps are 3MB on the selfie, 8MB on an application photo, 10MB on a
+portfolio image; a phone HEIC is 1–3MB. **The format most likely to trigger
+the fallback is the one built to pass every backstop the fallback relies on.**
+The selfie comment promises *"a clear message"* — nothing downstream inspects
+decodability, so no message existed.
+
+**── LESSON: A COMMENT NAMING A CASE IS NOT A CHECK CATCHING IT ──**
+
+`SelfieCapture:68` names this exact scenario — *"a phone whose photos this
+browser cannot decode"* — in the file where it goes wrong. Somebody thought it
+through, wrote it down, and reasoned about the consequence. The reasoning was
+wrong in one link, and because it was written as prose rather than as an
+assertion, nothing ever tested the link.
+
+This audit has been treating comments as evidence all week — quoting them to
+establish what code does, which is fair — but they are evidence of **intent**,
+never of **behaviour**. A comment that names a hazard reads like a hazard
+handled. Here it read that way for weeks while the hazard was live, and it was
+more convincing than silence would have been, because silence invites a check.
+
+**── THE FIX: REFUSE, AND STOP ACCEPTING WHAT WE WILL REFUSE ──**
+
+`downscale()` already answers *"can this browser render it?"* for free. That
+answer was being discarded; it is now passed on. `downscaleToFile` throws
+`UnreadableImageError` instead of returning the original, and all five
+surfaces catch it.
+
+**One message, in one place**, naming the remedy rather than the fault:
+*"We can't read that photo — phone photos are often saved as HEIC, which
+browsers can't open. Save or export it as JPEG and try again."*
+
+**On the selfie it says more**, because that is where refusing could frighten
+somebody: *"Your payment is safe and you can try as many times as you need."*
+Refusing strands nobody — the fee is taken at the pay step and a failed upload
+consumes nothing — but being told "no" just after paying is exactly when a
+person assumes the money has gone.
+
+Per-surface care: **PhotoManager refuses the one photo and keeps going**, since
+picking six and losing all of them to one bad file is its own fault.
+**ApplyWizard refuses the photo, not the application** — photos are optional
+there, which is what the old comment got backwards.
+
+**`accept="image/*"` → `accept="image/jpeg,image/png,image/webp"` on all
+five**, because offering a file you will then reject is its own fault.
+⚠️ `accept` is a hint, not a guarantee — pickers can be overridden — so the
+decode check is what actually holds. INFERRED and worth knowing: iOS Safari
+transcodes HEIC→JPEG when the accept list excludes it, so this may remove the
+problem at source on the platform that creates HEIC.
+
+**Server guards left broad on purpose.** `file.type.startsWith('image/')` stays,
+because after this the client only sends files that DECODED — and a file that
+decoded renders, whatever its type. Narrowing them would reject the legitimate
+case where `downscaleToFile` keeps a small PNG because re-encoding made it
+bigger.
+
+**── CORRECTION: DEMO MODE IS WIRED IN AFTER ALL ──**
+
+On 25 Sep I recorded that *"the demo engine is not wired into the app so there
+is no offline way in"*, as the reason 120 and 124 could not be browser-checked.
+`.claude/launch.json` has a **`site-demo`** configuration with `DEMO_MODE=1`
+and stub Supabase env. I grepped for a code-level flag and concluded it did not
+exist; it is wired through the environment. The conclusion about 120/124 still
+holds — demo `my_suspension` returns `[]`, so a suspension cannot be staged
+there — but the reason I gave was wrong.
+
 **✅ 0063 APPLIED — 25 Sep 2026. ITEM 12 CLOSED. THE LIVE-WEB LIST IS CLEAR.**
 
 Preflight both true, the view rebuilt without `banner_url`, types regenerated
@@ -13237,6 +13361,7 @@ platforms each failed it differently.
 | 121 | ✅ **CLOSED 24 Sep.** warn now requires a reason as well as a message | No |
 | 123 | ✅ **CLOSED 24 Sep.** Five hand-run `supabase/*.sql` files hold functions a migration has since replaced, including `delete_account_data` (0053) and `my_suspension` (0058, the item-118 leak). `my_suspension` corrected and made re-runnable; the rest marked; `check-handrun-drift.mjs` now fails on an undeclared overlap | Not by itself — but running one of those files is |
 | 124 | ✅ **CLOSED 25 Sep, verified live.** `SuspensionGate` now lets Settings through, and the delete path was checked to actually work for them — the edge function uses the service role and reads no suspension | **Yes, for a store submission** |
+| 125 | ✅ **Built 27 Sep.** Any photo the browser could not decode was uploaded anyway and rendered nowhere — on the ID check, a blank image against a paid £14.99. Mechanism VERIFIED in the browser pane; **HEIC itself still unconfirmed, no iPhone to hand** | Was live-web |
 | 122 | ✅ **CLOSED 25 Sep.** Ten characters for warn, suspend and ban, as one guard above the case rather than three raised numbers. Not retrospective | No |
 | 119 | ✅ **CLOSED 25 Sep.** Both now notify and email, carrying the member's message and what happened to the shop. A ban's message is mandatory; a suspension's is not | No |
 | 120 | ✅ **CLOSED 25 Sep, verified live.** The notice sits in the `(app)` layout beside the auth gate, explains rather than enforces, fails open, and keeps Settings reachable | No |

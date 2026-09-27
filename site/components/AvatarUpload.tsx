@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { downscale } from '@/lib/downscale'
+import { downscale, UNREADABLE_IMAGE_MESSAGE } from '@/lib/downscale'
 import { uploadAvatar } from '@/lib/queries/avatar-action'
 import { Avatar } from '@/components/ui'
 import { attempt } from '@/lib/attempt'
@@ -48,12 +48,17 @@ export function AvatarUpload({
     setError(null)
     setBusy(true)
     try {
-      let toSend: File = file
+      // ⚠️ REFUSE RATHER THAN SEND SOMETHING THAT RENDERS NOWHERE. This used
+      // to fall back to the original with a console.warn, so a HEIC uploaded,
+      // the UI said it worked, and the avatar was blank everywhere after.
+      // Item 125.
+      let toSend: File
       try {
         const blob = await downscale(file)
         toSend = new File([blob], 'avatar.jpg', { type: 'image/jpeg' })
-      } catch (e) {
-        console.warn('[avatar] falling back to the original file', e)
+      } catch {
+        setError(UNREADABLE_IMAGE_MESSAGE)
+        return
       }
 
       const fd = new FormData()
@@ -76,7 +81,7 @@ export function AvatarUpload({
           {busy ? 'Uploading…' : url ? 'Change photo' : 'Add a photo'}
           <input
             type="file"
-            accept="image/*"
+            accept="image/jpeg,image/png,image/webp"
             disabled={busy}
             onChange={e => onPick(e.target.files?.[0])}
             className="sr-only"

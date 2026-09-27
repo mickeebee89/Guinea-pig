@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { getSupabaseBrowser } from '@/lib/supabase-browser'
-import { downscaleToFile } from '@/lib/downscale'
+import { downscaleToFile, UnreadableImageError, UNREADABLE_IMAGE_MESSAGE } from '@/lib/downscale'
 
 export interface PortfolioRow {
   id: string
@@ -100,10 +100,18 @@ export function PortfolioManager({
       // there to stop something unservable reaching the bucket, so it belongs
       // on what is actually going to the bucket.
       //
-      // downscaleToFile never throws: if the browser cannot decode the image
-      // the ORIGINAL comes back, and the cap below then refuses it — which is
-      // the right answer for a file we cannot shrink and should not serve.
-      const small = await downscaleToFile(file, 'portfolio.jpg')
+      // ⚠️ THE CAP WAS NEVER GOING TO CATCH THIS. The comment here used to
+      // say an undecodable file "comes back and the cap below then refuses
+      // it" — but a phone HEIC is 1–3MB and the cap is 10MB, so it sailed
+      // through and was served to nobody. downscaleToFile now throws instead,
+      // and the cap goes back to being about size. Item 125.
+      let small: File
+      try {
+        small = await downscaleToFile(file, 'portfolio.jpg')
+      } catch (e) {
+        setError(e instanceof UnreadableImageError ? e.message : UNREADABLE_IMAGE_MESSAGE)
+        return
+      }
 
       if (small.size > MAX_BYTES) {
         setError(
@@ -182,7 +190,7 @@ export function PortfolioManager({
         <input
           id="media"
           type="file"
-          accept="image/*"
+          accept="image/jpeg,image/png,image/webp"
           disabled={busy}
           onChange={e => { const f = e.target.files?.[0]; if (f) upload(f); e.target.value = '' }}
           className="mt-3 block w-full text-sm text-muted file:mr-3 file:min-h-11 file:rounded-[999px] file:border-0 file:bg-rose file:px-5 file:text-sm file:font-bold file:text-white"

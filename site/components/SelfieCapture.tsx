@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { submitSelfie } from '@/app/(app)/verify/actions'
-import { downscale } from '@/lib/downscale'
+import { downscale, UNREADABLE_IMAGE_MESSAGE } from '@/lib/downscale'
 
 /**
  * Take the ID-check photo and send it.
@@ -63,15 +63,27 @@ export function SelfieCapture({ retake = false }: { retake?: boolean }) {
         return URL.createObjectURL(resized)
       })
     } catch (err) {
-      console.error('[verify] resize failed', err)
-      // Sending the original is better than refusing outright — the action
-      // caps the size, so the worst case is a clear message rather than a
-      // silent failure on a phone whose photos this browser cannot decode.
-      setBlob(file)
+      console.error('[verify] the browser could not decode this file', err)
+      // ⚠️ THIS USED TO SEND THE ORIGINAL, and the comment justifying it said
+      // "the action caps the size, so the worst case is a clear message".
+      // There was no message: nothing downstream checks whether an image can
+      // be decoded, and the 3MB cap is one a HEIC passes easily because HEIC
+      // exists to be small. What actually happened was a blank image in the
+      // admin queue, against a £14.99 already paid. Item 125.
+      //
+      // Refusing here strands nobody: the fee is taken at the pay step and a
+      // failed upload consumes nothing, so she can try again as often as she
+      // likes — which the message says out loud, because being told "no" after
+      // paying is exactly when someone assumes they have lost the money.
+      setBlob(null)
       setPreview(prev => {
         if (prev) URL.revokeObjectURL(prev)
-        return URL.createObjectURL(file)
+        return null
       })
+      setError(
+        UNREADABLE_IMAGE_MESSAGE +
+        ' Your payment is safe and you can try as many times as you need.',
+      )
     }
   }
 
@@ -104,7 +116,7 @@ export function SelfieCapture({ retake = false }: { retake?: boolean }) {
     <div>
       <input
         type="file"
-        accept="image/*"
+        accept="image/jpeg,image/png,image/webp"
         capture="user"
         onChange={choose}
         className="sr-only"

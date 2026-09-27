@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { ConsentGate } from '@/components/ConsentGate'
 import { formatPrice } from '@/lib/price'
-import { downscaleToFile } from '@/lib/downscale'
+import { downscaleToFile, UNREADABLE_IMAGE_MESSAGE } from '@/lib/downscale'
 import type { AcceptedTicks } from '@/lib/queries/consent'
 import type { ApplyContext, ApplyPhoto } from '@/lib/queries/apply'
 import { submitApplication, uploadApplicationPhoto } from './actions'
@@ -134,11 +134,21 @@ export function ApplyWizard({ ctx }: { ctx: ApplyContext }) {
     setUploading(true)
     // Shrunk in the browser, like the ID-check selfie. Until 23 Sep a 5MB
     // phone photo went up whole, on whatever signal she had (item 86).
-    // downscaleToFile never throws: if the browser cannot decode the image the
-    // original is sent, because a large upload is worse and a refused one
-    // loses the application.
+    // ⚠️ "a refused one loses the application" was the argument for sending an
+    // undecodable file anyway. It does not: photos are optional here, and the
+    // application goes through without this one. What the old behaviour cost
+    // was a stylist opening an application whose photos were blank — and the
+    // photos are most of what she decides on (item 96). Item 125.
+    let small: File
+    try {
+      small = await downscaleToFile(file)
+    } catch {
+      setUploading(false)
+      setError(UNREADABLE_IMAGE_MESSAGE)
+      return
+    }
     const fd = new FormData()
-    fd.append('photo', await downscaleToFile(file))
+    fd.append('photo', small)
     const res = await uploadApplicationPhoto(fd)
     setUploading(false)
     if (!res.ok) { setError(res.error); return }
@@ -376,7 +386,7 @@ export function ApplyWizard({ ctx }: { ctx: ApplyContext }) {
             {uploading ? 'Uploading…' : 'Add a photo'}
             <input
               type="file"
-              accept="image/*"
+              accept="image/jpeg,image/png,image/webp"
               className="sr-only"
               disabled={uploading}
               onChange={e => {
