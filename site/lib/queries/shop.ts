@@ -199,12 +199,6 @@ export async function getStylistSetup(
     // Rows, not a head count: publishing needs a treatment WITH a category
     // (provider_shop_is_publishable, 0016 / item 52), so both counts matter.
     supabase.from('provider_treatments').select('category').eq('provider_id', prov.id),
-    // ⚠️ THE SAME FUNCTION public_stylists FILTERS ON. Not a copy of its rule:
-    // it returns the sentence she reads, so the view and the page explaining
-    // the view cannot disagree about why she is not listed. '' rather than null
-    // because a non-defaulted SQL argument types as required and non-nullable,
-    // and '' is the same case to the function.
-    supabase.rpc('bio_publish_problem', { p_bio: prov.bio ?? '' }),
     supabase.from('users')
       .select('is_verified, is_founding_provider, provider_fee_waived, profile_pic_url')
       .eq('id', userId).maybeSingle(),
@@ -215,6 +209,16 @@ export async function getStylistSetup(
     supabase.from('verification_requests')
       .select('status, notes, created_at').eq('user_id', userId)
       .order('created_at', { ascending: false }).limit(1).maybeSingle(),
+    // ⚠️ LAST, BECAUSE THE DESTRUCTURING ABOVE NAMES IT LAST. It sat second
+    // from 25 Sep to 29 Sep and every binding after treatRes was therefore off
+    // by one — see the header note on bioProblem below. Audit item 128.
+    //
+    // The same function public_stylists filters on, not a copy of its rule: it
+    // returns the sentence she reads, so the view and the page explaining the
+    // view cannot disagree. '' rather than null because a non-defaulted SQL
+    // argument types as required and non-nullable, and '' is the same case to
+    // the function.
+    supabase.rpc('bio_publish_problem', { p_bio: prov.bio ?? '' }),
   ])
 
   const u = (userRes.data ?? {}) as {
@@ -243,7 +247,13 @@ export async function getStylistSetup(
   // stays silent rather than guessing: telling a stylist she is missing from
   // cavybeauty.com when we could not check is worse than saying nothing, and
   // the view is what actually decides.
-  const bioProblem = bioRes.error ? null : (bioRes.data as string | null)
+  // ⚠️ THE CAST BELOW IS WHAT HID ITEM 128. With the rpc misplaced, bioRes
+  // held the verification_requests row, and `as string | null` silenced the
+  // exact type error that would have said so. It is still needed — a PostgREST
+  // scalar rpc is loosely typed — so the guard is the ORDER, which now matches
+  // the destructuring, and the runtime check on the next line.
+  const bioRaw = bioRes.error ? null : bioRes.data
+  const bioProblem = typeof bioRaw === 'string' && bioRaw.trim() !== '' ? bioRaw : null
   if (publishBlockers.length === 0 && bioProblem) {
     websiteBlockers.push(bioProblem)
   }

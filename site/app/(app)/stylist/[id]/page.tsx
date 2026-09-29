@@ -49,7 +49,22 @@ export default async function StylistPage({
       <header className="mt-4 overflow-hidden rounded-lg border border-hairline bg-white shadow-soft">
         <div className="flex flex-wrap items-start gap-4 p-5">
           <Avatar src={p.avatarUrl} name={p.name} size={64} />
-          <div className="min-w-0 flex-1">
+          {/* ⚠️ min-w-[12rem], NOT min-w-0. Audit item 127.
+
+              This row wraps, and the actions beside it want ~354px: the Safety
+              button plus the "we'll tell you when they post new times" caption,
+              which is max-w-[16rem] inside FavouriteButton. With min-w-0 this
+              column would shrink to whatever was left rather than forcing the
+              wrap — measured at 75px between 520 and 620, which put "Amelia
+              Rowe Hair" on three lines and DREW THE CAPTION ACROSS IT.
+              Collision measured at 540 and 580; a Surface Duo is 540 and an
+              iPad in split view lands in the same band.
+
+              A floor of 12rem is one line of a typical shop name, so the row
+              now wraps while the name would still be squeezed, and the actions
+              drop to their own line — which is what it already did below 520
+              and looked right. */}
+          <div className="min-w-[12rem] flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="font-display text-2xl text-warm-dark">{p.name}</h1>
               {p.isVerified && (

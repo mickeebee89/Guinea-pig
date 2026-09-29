@@ -6138,8 +6138,118 @@ Types regenerated and stamped 0061; the only addition beyond the stamp is
 `_withdrawn_sentence`, which no client calls and which is revoked from every
 client role. site verify EXIT 0, mobile tsc EXIT 0, admin build EXIT 0.
 
-**127. THE STYLIST PROFILE HEADER OVERLAPS ITSELF AT ~540px — FOUND 29 Sep
-2026 IN A PROMO SCREENSHOT. NOT FIXED.**
+**⚠️ 128. I SHIPPED A MISORDERED `Promise.all` ON 25 Sep AND IT BROKE FOUR
+THINGS ON THE STYLIST'S OWN SHOP PAGE — FIXED 29 Sep 2026. site verify EXIT 0.**
+
+**Plainly:** for four days a stylist's shop page told her she was not verified,
+showed no profile picture, got her ID-check state wrong, and printed
+**"you'd need [object Object]"** in the middle of a sentence.
+
+**── WHAT I DID ──**
+
+Item 97 added the `bio_publish_problem` call to `getStylistSetup`'s
+`Promise.all`. The destructuring names it **last**:
+
+```ts
+const [treatRes, userRes, payRes, reqRes, bioRes] = await Promise.all([...])
+```
+
+I inserted the call **second**. Every binding after `treatRes` was therefore
+off by one:
+
+| name | actually held |
+|---|---|
+| `userRes` | the rpc result |
+| `payRes` | the users row |
+| `reqRes` | the verification_payments row |
+| `bioRes` | the verification_requests row |
+
+So `u` spread a string into `{}` — `is_verified` and `profile_pic_url`
+undefined — `feeSettled` read a users row, `idCheck` read a payments row, and
+`websiteBlockers` got an object, which `join(' and ')` rendered as
+**[object Object]**.
+
+**── ⚠️ AND MY OWN CAST IS WHAT HID IT ──**
+
+```ts
+const bioProblem = bioRes.error ? null : (bioRes.data as string | null)
+```
+
+`Promise.all` gives TypeScript a **tuple**, so `bioRes` was correctly typed as
+the verification-requests result and `.data` as that row. Assigning it to
+`string | null` is exactly the error TypeScript existed to raise — and
+`as string | null` silenced it. **The cast I wrote to work around a loosely
+typed rpc silenced the check that would have caught the misorder.**
+
+`npm run verify` passed every time. It always would have.
+
+**── HOW IT WAS FOUND, WHICH IS THE POINT ──**
+
+Not by a check. By **looking at a screenshot** — `shop editor.png`, captured for
+an advert, with `[object Object]` in the copy. Four days after the deploy, on
+the thirteenth of fourteen frames I opened.
+
+Item 127's lesson was "eyes on every frame is the check". This is that lesson
+paying out: the one class of defect this codebase's checks cannot see is the
+one a person sees instantly.
+
+**── THE FIX ──**
+
+The call moves to **last**, matching the destructuring, with a comment saying
+why the position is load-bearing. And `bioProblem` now has a **runtime** guard
+rather than a cast:
+
+```ts
+const bioRaw = bioRes.error ? null : bioRes.data
+const bioProblem = typeof bioRaw === 'string' && bioRaw.trim() !== '' ? bioRaw : null
+```
+
+A `typeof` check costs nothing and cannot be silenced by a future reorder.
+Verified live: `[object Object]` gone, the Google panel correctly absent.
+
+**── ✅ AND THE FULL FRAME AUDIT, ALL FOURTEEN ──**
+
+Item 127 was found because I had viewed 3 of 14. This time every frame was
+opened:
+
+| frame | verdict |
+|---|---|
+| model message thread | ✅ the best in the set |
+| stylist message thread | ✅ |
+| stylist dashboard | ✅ |
+| model bookings | ✅ price renders: *"£12 shown when booked"* |
+| model dashboard | ✅ (Tia shows an initial; badge overlaps a chip) |
+| treatment page | ✅ (says *"2 stylists are offering hair"* — a count, weak for an advert) |
+| homepage | ✅ (the "or" divider is half-cut at the bottom edge) |
+| portfolio grid | ✅ |
+| model profile (as stylist) | ✅ after trimming the clipped Reviews heading |
+| **browse as model** | ❌ **MISLABELLED — it is the stylist profile, with 127's overlap.** The ad frame named `cavy-model-browse` contained it |
+| **shop editor** | ❌ **[object Object]** — item 128 |
+| **stylist profile** | ❌ 127's overlap |
+| stylist bookings | ⚠️ an empty September calendar fills two-thirds of the frame; the booking card is cut at the edge |
+| availability | ⚠️ **empty calendar and "No slots on this day yet"** — it advertises an empty diary. Every demo slot is in October; the calendar opens on the current month |
+
+**Three frames need recapturing** after the two fixes, and two more are weak
+rather than wrong.
+
+**127. THE STYLIST PROFILE HEADER OVERLAPS ITSELF AT ~540px — FIXED 29 Sep
+2026.**
+
+**✅ BAND MEASURED, THEN FIXED.** Collision at **540 and 580**; the name column
+crushed to **75px and three lines from about 520 to 620**; clean at 500 and
+below, and at 720 and above. Real devices sit in it: a **Surface Duo is 540**,
+an **iPad in Split View** lands between 507 and 639, and unfolded foldables are
+in the same band — as is any desktop window dragged narrow.
+
+**The cause:** the actions beside the name want ~354px (the Safety button plus
+FavouriteButton's `max-w-[16rem]` caption), and the name column was `min-w-0`,
+so it shrank to whatever was left instead of forcing the row to wrap.
+
+**The fix is one class:** `min-w-0` → `min-w-[12rem]` — a floor of one line of a
+typical shop name. The row now wraps while the name would still be squeezed,
+and the actions drop to their own line, which is what it already did below 520
+and looked right. **Re-measured at 390, 500, 540, 580, 620, 680 and 760: one
+line, 190px, no collision at every one.**
 
 **Plainly:** on a tablet-ish width, the shop name and the "we'll tell you when
 they post new times" line are printed on top of each other.
@@ -6158,6 +6268,24 @@ badge measured 48px in both, so the scale could not be the difference.
 
 Not present at 390 (the layout stacks). So it is a mid-width bug, somewhere
 between 390 and the `sm` breakpoint at 640.
+
+**── LESSON: I VIEWED 3 OF 14 FRAMES AND REPORTED AS THOUGH I HAD CHECKED
+ALL OF THEM ──**
+
+Stated plainly because it is the whole of the mistake. I captured fourteen
+promo frames, opened **three** — bookings, the stylist dashboard, the portfolio
+— answered "anything that looked wrong in a frame" from those three, and never
+said the answer covered a fifth of the set.
+
+**On a screenshot set, eyes on every frame IS the check.** There is no
+compiler, no type error, no failing test. A frame that renders wrongly renders
+silently and looks exactly like a frame that renders correctly, until somebody
+looks at it. Sampling is a reasonable way to check code; it is not a way to
+check pictures, because with pictures the looking is not a proxy for the work
+— it is the work.
+
+The cost was not hypothetical: the unviewed frame went into a set for paid
+advertising, and an ad-framed version was built from it.
 
 **── ⚠️ AND I HAD ALREADY SHIPPED A SCREENSHOT OF IT ──**
 
@@ -13464,7 +13592,8 @@ platforms each failed it differently.
 | 121 | ✅ **CLOSED 24 Sep.** warn now requires a reason as well as a message | No |
 | 123 | ✅ **CLOSED 24 Sep.** Five hand-run `supabase/*.sql` files hold functions a migration has since replaced, including `delete_account_data` (0053) and `my_suspension` (0058, the item-118 leak). `my_suspension` corrected and made re-runnable; the rest marked; `check-handrun-drift.mjs` now fails on an undeclared overlap | Not by itself — but running one of those files is |
 | 124 | ✅ **CLOSED 25 Sep, verified live.** `SuspensionGate` now lets Settings through, and the delete path was checked to actually work for them — the edge function uses the service role and reads no suspension | **Yes, for a store submission** |
-| 127 | ⚠️ **Live web, not fixed.** `/stylist/[id]` header overlaps itself at ~540px: Saved/Safety move beside the name, the name wraps to three lines and the "posts new times" line is drawn across it. Not present at 390. Width band unmeasured | No, but it is on a public page |
+| 128 | ✅ **CLOSED 29 Sep.** A misordered `Promise.all` I shipped on 25 Sep left every binding after the first off by one: the stylist's shop page showed her as unverified, with no photo, the wrong ID-check state and "[object Object]" in the copy. My own `as string | null` cast silenced the type error that would have caught it. Found by looking at a screenshot, not by a check | Was live-web |
+| 127 | ✅ **CLOSED 29 Sep.** `/stylist/[id]` header overlaps itself at ~540px: Saved/Safety move beside the name, the name wraps to three lines and the "posts new times" line is drawn across it. Not present at 390. Width band unmeasured | No, but it is on a public page |
 | 126 | ⚠️ **Noted, not fixed.** For a stylist, Settings is fully off-screen in the phone nav at 360, 390 and 430. Discoverability only — the strip scrolls, a half-visible pill cues it, and the suspension notice links to /settings directly. The nav's two-row phone layout is DESIGNED, not a bug; I reported it as one and disproved myself by measuring | No |
 | 125 | ✅ **Built 27 Sep.** Any photo the browser could not decode was uploaded anyway and rendered nowhere — on the ID check, a blank image against a paid £14.99. Mechanism VERIFIED in the browser pane; **HEIC itself still unconfirmed, no iPhone to hand** | Was live-web |
 | 122 | ✅ **CLOSED 25 Sep.** Ten characters for warn, suspend and ban, as one guard above the case rather than three raised numbers. Not retrospective | No |
