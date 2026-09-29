@@ -20,8 +20,23 @@
  * Dates are relative to the day the dev server starts, so availability is
  * always upcoming and "completed" bookings are always in the past.
  *
- * No price appears anywhere, because no screen on the site shows one:
- * provider_treatments has no price the site writes or reads.
+ * ⚠️ PRICES. This file used to say "no price appears anywhere, because no
+ * screen on the site shows one: provider_treatments has no price the site
+ * writes or reads". That stopped being true and nobody noticed:
+ *
+ *   * 0050 gave a SLOT a price, and the apply flow shows it before you apply;
+ *   * item 97 (25 Sep 2026) put the booking's own snapshot on the bookings
+ *     list — "£45 shown when booked".
+ *
+ * So demo screenshots of bookings and availability were quietly understating
+ * the product: they showed screens the real site puts a price on, with no
+ * price. The comment was accurate when written and became a claim about the
+ * present — the same failure item 125 recorded.
+ *
+ * The figures below are deliberately LOW. The premise is a treatment at a
+ * fraction of the salon price from somebody building a portfolio, and a demo
+ * that implies salon rates would misrepresent the product in the other
+ * direction.
  */
 import type { Row, Tables } from './engine'
 
@@ -35,6 +50,21 @@ const uid = (n: number) => `d0000000-0000-4000-8000-${String(n).padStart(12, '0'
 // ── The two accounts you can be "signed in" as ─────────────────────────────
 export const DEMO_MODEL_ID = uid(1)
 export const DEMO_STYLIST_ID = uid(2)
+
+/**
+ * What a practice model pays, in pence, by treatment. Low on purpose — see the
+ * header. A stylist sets this per SLOT (0050), so these are her asking price
+ * and not a Cavy tariff; Terms §8 is careful about that distinction and the
+ * screenshots must not blur it.
+ */
+const PRICE_PENCE: Record<string, number> = {
+  Hair: 1500,
+  Makeup: 1200,
+  Lashes: 1000,
+  Nails: 1000,
+  Brows: 800,
+  'Spray tan': 800,
+}
 
 // ── Treatments. Names match lib/site.ts TREATMENTS and treatment_categories. ─
 const CATEGORIES = [
@@ -206,6 +236,9 @@ export function buildTables(images: DemoImages = NO_IMAGES): Tables {
           id: uid(1000 + slotN++), provider_id: pid, date: d(day + (i % 2)),
           start_time: start, end_time: end,
           active_treatments: s.treatments.map(c => treatmentIdOf.get(`${s.key}:${c}`)),
+          // Her first treatment's price. A slot carries one figure however many
+          // treatments it offers, which is how 0050 shaped it.
+          price_pence: PRICE_PENCE[s.treatments[0]] ?? null,
           is_taken: false, created_at: at(-10),
         })
       }
@@ -223,7 +256,8 @@ export function buildTables(images: DemoImages = NO_IMAGES): Tables {
     let slot = availability.find(a => a.provider_id === pid && a.date === date && a.start_time === o.start)
     if (!slot) {
       slot = { id: uid(1000 + slotN++), provider_id: pid, date, start_time: o.start, end_time: o.end,
-        active_treatments: [treatmentIdOf.get(`${o.stylist}:${o.category}`)], is_taken: false, created_at: at(-20) }
+        active_treatments: [treatmentIdOf.get(`${o.stylist}:${o.category}`)],
+        price_pence: PRICE_PENCE[o.category] ?? null, is_taken: false, created_at: at(-20) }
       availability.push(slot)
     }
     slot.is_taken = o.status !== 'cancelled' && o.status !== 'declined'
@@ -234,6 +268,12 @@ export function buildTables(images: DemoImages = NO_IMAGES): Tables {
       date, start_time: o.start, end_time: o.end,
       scheduled_at: `${date}T${o.start}`, duration_minutes: 120, location_type: 'provider',
       note: o.note ?? null, status: o.status, created_at: at(-o.createdDaysAgo, '18:30'),
+      // ⚠️ THE BOOKING'S OWN COPY, taken from the slot — not a second figure.
+      // 0052 snapshots it with a trigger precisely so that editing the slot
+      // afterwards cannot rewrite what was agreed, and item 97 renders THIS
+      // one. Reading the slot here instead would make the demo disagree with
+      // the product it is advertising.
+      price_pence: slot.price_pence ?? null,
       cancelled_by: null, cancelled_at: null, cancellation_reason: null,
     })
     return id

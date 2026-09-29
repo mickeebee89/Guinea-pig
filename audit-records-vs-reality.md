@@ -6138,6 +6138,66 @@ Types regenerated and stamped 0061; the only addition beyond the stamp is
 `_withdrawn_sentence`, which no client calls and which is revoked from every
 client role. site verify EXIT 0, mobile tsc EXIT 0, admin build EXIT 0.
 
+**126. I REPORTED A NAV BUG, MEASURED IT, AND DISPROVED MYSELF — 29 Sep 2026.
+NOTHING CHANGED, DELIBERATELY.**
+
+While setting up promo screenshots I reported the member-area nav wrapping to
+two rows and clipping at 390px as *"a live layout bug on phone width that every
+real visitor sees"*. Micky asked for it fixed before any capture.
+
+**It is not a bug.** `AppNav.tsx:11-19` sets out the design: below `sm` the nav
+is deliberately two rows — identity and sign-out on top, links below in a strip
+that **scrolls sideways rather than wrapping** — because six links wrapping made
+three ragged lines on a 375px screen. Line 103: *"-mx-4 + px-4 lets the strip
+bleed to the screen edges, so a half-visible pill signals there is more to
+scroll to."* **The clipping I reported is that cue working.**
+
+**── MEASURED, NOT ASSUMED ──**
+
+Both roles, three widths, on the live demo — `scrollWidth` against `clientWidth`
+and every pill's edge against the strip's:
+
+| role | width | overflow | half-visible cue | fully off-screen |
+|---|---|---|---|---|
+| stylist | 360 | 214px | Messages | Settings |
+| stylist | 390 | 184px | Messages | Settings |
+| stylist | 430 | 144px | Messages | Settings |
+| model | 360 | 112px | Messages | Settings |
+| model | 390 | 82px | Settings (partly) | — |
+| model | 430 | 42px | Settings (partly) | — |
+
+**A pill straddles the right edge at every width, in both roles.** There is
+never a clean cut that would read as "that is all there is", and the strip
+scrolls, so nothing is unreachable.
+
+**── ⚠️ NOTED, NOT FIXED: A STYLIST NEVER SEES Settings ON A PHONE ──**
+
+Recorded so it is not re-found as a bug. For a stylist, **Settings is fully
+off-screen at 360, 390 AND 430** — including a Pro Max. It never gets the
+half-visible treatment; Messages always does.
+
+It matters slightly more than it looks, because **Settings is where account
+deletion lives** (Apple 5.1.1(v)) and where the suspension notice points
+people. **It is a discoverability cost, not a dead end:** the strip scrolls,
+the cue is present, and `SuspensionNotice` links to `/settings` directly rather
+than relying on the nav.
+
+**Left alone on purpose.** The option, if it is ever wanted, is a gear icon in
+the top row beside the bell — the move the notification pill already made for
+the same reason (`AppNav.tsx:24-34`). That is a live-product change to be
+chosen deliberately, not slipped in off a mistaken bug report.
+
+**── THE LESSON, AND IT IS THE SAME ONE AS 125 IN REVERSE ──**
+
+125 was a comment that named a hazard and read as if it handled it. **This is a
+comment that named a DESIGN and I read as if it were an accident** — I saw the
+symptom in a screenshot, called it a bug, and had Micky's agreement to "fix" it
+before I had read the file or measured anything.
+
+The fix cost nothing because measuring came first. Had I gone straight to the
+CSS on his instruction, I would have removed a considered affordance and called
+it a repair. **A screenshot is a symptom, not a diagnosis.**
+
 **125. A PHOTO THE BROWSER CANNOT READ WAS UPLOADED ANYWAY — BUILT 27 Sep
 2026. site verify EXIT 0. THE MECHANISM IS VERIFIED; HEIC ITSELF IS NOT.**
 
@@ -13361,6 +13421,7 @@ platforms each failed it differently.
 | 121 | ✅ **CLOSED 24 Sep.** warn now requires a reason as well as a message | No |
 | 123 | ✅ **CLOSED 24 Sep.** Five hand-run `supabase/*.sql` files hold functions a migration has since replaced, including `delete_account_data` (0053) and `my_suspension` (0058, the item-118 leak). `my_suspension` corrected and made re-runnable; the rest marked; `check-handrun-drift.mjs` now fails on an undeclared overlap | Not by itself — but running one of those files is |
 | 124 | ✅ **CLOSED 25 Sep, verified live.** `SuspensionGate` now lets Settings through, and the delete path was checked to actually work for them — the edge function uses the service role and reads no suspension | **Yes, for a store submission** |
+| 126 | ⚠️ **Noted, not fixed.** For a stylist, Settings is fully off-screen in the phone nav at 360, 390 and 430. Discoverability only — the strip scrolls, a half-visible pill cues it, and the suspension notice links to /settings directly. The nav's two-row phone layout is DESIGNED, not a bug; I reported it as one and disproved myself by measuring | No |
 | 125 | ✅ **Built 27 Sep.** Any photo the browser could not decode was uploaded anyway and rendered nowhere — on the ID check, a blank image against a paid £14.99. Mechanism VERIFIED in the browser pane; **HEIC itself still unconfirmed, no iPhone to hand** | Was live-web |
 | 122 | ✅ **CLOSED 25 Sep.** Ten characters for warn, suspend and ban, as one guard above the case rather than three raised numbers. Not retrospective | No |
 | 119 | ✅ **CLOSED 25 Sep.** Both now notify and email, carrying the member's message and what happened to the shop. A ban's message is mandatory; a suspension's is not | No |

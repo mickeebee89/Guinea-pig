@@ -65,3 +65,9 @@ scripts/private/
 # Demo mode: Micky's own licensed images for screenshots (audit item 69). Never commit.
 site/public/demo-images/
 site/.next-demo/
+
+# Promo screenshots — AI faces, large binaries, regenerable from demo mode.
+promo/
+
+# Playwright MCP run artefacts (page snapshots, console logs).
+.playwright-mcp/
