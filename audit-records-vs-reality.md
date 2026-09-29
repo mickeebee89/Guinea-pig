@@ -6138,6 +6138,49 @@ Types regenerated and stamped 0061; the only addition beyond the stamp is
 `_withdrawn_sentence`, which no client calls and which is revoked from every
 client role. site verify EXIT 0, mobile tsc EXIT 0, admin build EXIT 0.
 
+**127. THE STYLIST PROFILE HEADER OVERLAPS ITSELF AT ~540px — FOUND 29 Sep
+2026 IN A PROMO SCREENSHOT. NOT FIXED.**
+
+**Plainly:** on a tablet-ish width, the shop name and the "we'll tell you when
+they post new times" line are printed on top of each other.
+
+On `/stylist/[id]` at 540 CSS px the header card puts **Saved** and **Safety**
+to the right of the name, which squeezes the name column until *"Amelia Rowe
+Hair"* wraps to three lines — and the notification line is drawn across it.
+"Tunbridge Wells, Kent" wraps to three lines under it.
+
+**── IT IS THE PRODUCT, NOT THE CAPTURE ──**
+
+Found when Micky's 540×788 capture showed it and I assumed his capture was at
+the wrong width. **My own 540-wide capture from 27 Sep has the identical
+overlap** — which settled it in one look, and which I only checked because the
+badge measured 48px in both, so the scale could not be the difference.
+
+Not present at 390 (the layout stacks). So it is a mid-width bug, somewhere
+between 390 and the `sm` breakpoint at 640.
+
+**── ⚠️ AND I HAD ALREADY SHIPPED A SCREENSHOT OF IT ──**
+
+`promo/2026-09-29/cavy-model-stylist-profile-540w.png` was in the set I handed
+over on 27 Sep, and the ad-framed version was built from it. **I never opened
+it.** I viewed 3 of 14 frames — bookings, the stylist dashboard and the
+portfolio — reported "anything that looked wrong in a frame", and did not say
+that the answer covered a fifth of them.
+
+That is the finding-is-only-as-wide-as-the-check rule again, on the one task
+where looking at the output IS the work. A screenshot set is not code: there is
+no compiler, and the only check is a person's eyes on every frame.
+
+**── WHAT IS NOT KNOWN ──**
+
+The exact width band, and whether any real device sits in it. 540 is not a
+common phone width — it is a foldable, a small tablet, or a browser window
+someone has dragged narrow. **Worth measuring before deciding how much it
+matters**, which is one pass with the same method item 126 used.
+
+The promo set excludes the frame; the portfolio and the other twelve are
+unaffected.
+
 **126. I REPORTED A NAV BUG, MEASURED IT, AND DISPROVED MYSELF — 29 Sep 2026.
 NOTHING CHANGED, DELIBERATELY.**
 
@@ -13421,6 +13464,7 @@ platforms each failed it differently.
 | 121 | ✅ **CLOSED 24 Sep.** warn now requires a reason as well as a message | No |
 | 123 | ✅ **CLOSED 24 Sep.** Five hand-run `supabase/*.sql` files hold functions a migration has since replaced, including `delete_account_data` (0053) and `my_suspension` (0058, the item-118 leak). `my_suspension` corrected and made re-runnable; the rest marked; `check-handrun-drift.mjs` now fails on an undeclared overlap | Not by itself — but running one of those files is |
 | 124 | ✅ **CLOSED 25 Sep, verified live.** `SuspensionGate` now lets Settings through, and the delete path was checked to actually work for them — the edge function uses the service role and reads no suspension | **Yes, for a store submission** |
+| 127 | ⚠️ **Live web, not fixed.** `/stylist/[id]` header overlaps itself at ~540px: Saved/Safety move beside the name, the name wraps to three lines and the "posts new times" line is drawn across it. Not present at 390. Width band unmeasured | No, but it is on a public page |
 | 126 | ⚠️ **Noted, not fixed.** For a stylist, Settings is fully off-screen in the phone nav at 360, 390 and 430. Discoverability only — the strip scrolls, a half-visible pill cues it, and the suspension notice links to /settings directly. The nav's two-row phone layout is DESIGNED, not a bug; I reported it as one and disproved myself by measuring | No |
 | 125 | ✅ **Built 27 Sep.** Any photo the browser could not decode was uploaded anyway and rendered nowhere — on the ID check, a blank image against a paid £14.99. Mechanism VERIFIED in the browser pane; **HEIC itself still unconfirmed, no iPhone to hand** | Was live-web |
 | 122 | ✅ **CLOSED 25 Sep.** Ten characters for warn, suspend and ban, as one guard above the case rather than three raised numbers. Not retrospective | No |
