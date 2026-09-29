@@ -101,9 +101,19 @@ async function glide(page, heading, { overshoot = 0, ms = 700 } = {}) {
   }, { heading, overshoot, ms })
 }
 
-/** Hide the scrollbar, as the stills do. */
-const hideBars = page => page.addStyleTag({
-  content: 'html{scrollbar-width:none !important}html::-webkit-scrollbar,body::-webkit-scrollbar{display:none !important;width:0 !important}',
+/**
+ * Hide the scrollbar, as the stills do — and Next's dev indicator.
+ *
+ * ⚠️ THE DEV BADGE WAS IN THE FIRST CUT: a red "1 Issue" pill, bottom-left,
+ * through the whole model video. It is `<nextjs-portal>`, only ever present in
+ * `next dev`, and it is suppressed here rather than in next.config so the
+ * suppression belongs to the RECORDING and not to the product's dev setup —
+ * an error indicator you have quietly turned off is worse than one you can see.
+ */
+const hideChrome = page => page.addStyleTag({
+  content: 'html{scrollbar-width:none !important}'
+    + 'html::-webkit-scrollbar,body::-webkit-scrollbar{display:none !important;width:0 !important}'
+    + 'nextjs-portal{display:none !important}',
 }).catch(() => {})
 
 // ── The two walkthroughs ───────────────────────────────────────────────────
@@ -111,7 +121,7 @@ const CUTS = {
   /** A model: choice -> this person -> their work -> apply. ~21s */
   model: async page => {
     await page.goto(`${BASE}/demo?as=model&to=%2Fbrowse`, { waitUntil: 'domcontentloaded' })
-    await hideBars(page)
+    await hideChrome(page)
     await dwell(page, 1900, 2200)                       // never click on load
 
     // ⚠️ Makeup, not Hair, and the card is taken from the list rather than
@@ -120,12 +130,17 @@ const CUTS = {
     // on the page would have been a journey the demo cannot actually make.
     await tap(page, page.getByRole('link', { name: 'Makeup', exact: true }), 'Makeup filter')
     await page.waitForLoadState('domcontentloaded')
-    await hideBars(page)
+    await hideChrome(page)
     await dwell(page, 1500, 1800)
 
-    await tap(page, page.locator('a[href^="/stylist/"]').first(), 'first stylist card')
+    // ⚠️ BY NAME, NOT .first(). The first card is Ellie Harper, who has no
+    // photo and renders as an initial; I reported this path as "Nadia" while
+    // it was clicking Ellie. Naming her makes the recording match the script,
+    // and fails loudly if she ever drops out of the list.
+    await tap(page, page.locator('a[href^="/stylist/"]')
+      .filter({ hasText: 'Nadia Ahmed' }), 'Nadia Ahmed card')
     await page.waitForLoadState('domcontentloaded')
-    await hideBars(page)
+    await hideChrome(page)
     await dwell(page, 1100, 1400)
 
     await glide(page, 'Work', { overshoot: 90, ms: 800 })   // the deliberate one
@@ -136,25 +151,25 @@ const CUTS = {
 
     await tap(page, page.getByRole('link', { name: /Apply for a session/i }), 'Apply')
     await page.waitForLoadState('domcontentloaded')
-    await hideBars(page)
+    await hideChrome(page)
     await dwell(page, 2600, 3000)
   },
 
   /** A stylist: the work -> applications arrive -> accept -> talk. ~20s */
   stylist: async page => {
     await page.goto(`${BASE}/demo?as=stylist&to=%2Favailability`, { waitUntil: 'domcontentloaded' })
-    await hideBars(page)
+    await hideChrome(page)
     await dwell(page, 1200, 1500)
     await glide(page, null, { ms: 700 })          // down to the slot editor
     await dwell(page, 2000, 2400)                        // a slot, with its price
 
     await page.goto(`${BASE}/dashboard`, { waitUntil: 'domcontentloaded' })
-    await hideBars(page)
+    await hideChrome(page)
     await dwell(page, 2100, 2500)                        // two applications waiting
 
     await tap(page, page.getByText(/Accept or decline on the bookings page/i), 'to bookings')
     await page.waitForLoadState('domcontentloaded')
-    await hideBars(page)
+    await hideChrome(page)
     await glide(page, 'Awaiting', { ms: 600 })
     await dwell(page, 1300, 1600)
 
@@ -163,7 +178,7 @@ const CUTS = {
 
     await page.goto(`${BASE}/messages/d0000000-0000-4000-8000-000000003004`,
       { waitUntil: 'domcontentloaded' })
-    await hideBars(page)
+    await hideChrome(page)
     await dwell(page, 2800, 3200)
   },
 }

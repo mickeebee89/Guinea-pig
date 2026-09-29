@@ -376,6 +376,82 @@ export function buildTables(images: DemoImages = NO_IMAGES): Tables {
     settings: [],
     founding_providers: [],
     reports: [],
+    // ⚠️ THE APPLY WIZARD FAILS CLOSED WITHOUT THIS, and demo mode had no
+    // consent_documents at all — so the last frame of a recorded walkthrough
+    // was "Applications are paused". A model tapping Apply and being told she
+    // cannot is the worst possible final frame for an advert, and it was live
+    // in the first cut on 29 Sep.
+    //
+    // Version 3 EXACTLY as migration 0051 inserts it — title, body and every
+    // acknowledgement lifted from that file, not retyped. The demo must show
+    // the terms the product actually asks people to agree to; inventing
+    // plausible ones would be the one thing this file must never do.
+    //
+    // content_hash is a stand-in: in the database a trigger computes it from
+    // title || body || acknowledgements, and nothing here recomputes it.
+    consent_documents: [{
+      id: uid(8300),
+      version: 3,
+      title: "Before you apply",
+      body: "Cavy connects you with people who are practising their skills. Providers on this platform are learners and may not be professionally qualified. Treatments carry normal risks, including reactions, irritation or unsatisfactory results. Cavy is a platform that introduces members to each other and does not provide treatments itself.",
+      content_hash: 'demo-not-a-real-hash',
+      is_active: true,
+      created_at: at(-60),
+      acknowledgements:       [
+      {
+            "key": "unqualified",
+            "requires_tick": true,
+            "text": "I understand the provider is practising and may not be qualified"
+      },
+      {
+            "key": "voluntary_risk",
+            "requires_tick": true,
+            "text": "I am booking voluntarily and accept the normal risks of a practice treatment"
+      },
+      {
+            "key": "age_and_health",
+            "requires_tick": true,
+            "text": "I am 18 or over and have no condition that makes this treatment unsafe for me"
+      },
+      {
+            "key": "patch_test",
+            "requires_tick": true,
+            "text": "I understand some treatments need an allergy patch test at least 48 hours beforehand, and I will not go ahead without one if my stylist says it's needed"
+      },
+      {
+            "key": "attendance",
+            "requires_tick": true,
+            "text": "I will attend, or cancel at least 24 hours in advance"
+      },
+      {
+            "key": "community_standards",
+            "requires_tick": true,
+            "text": "I will treat providers with respect and follow the community guidelines"
+      },
+      {
+            "key": "photo_sharing",
+            "requires_tick": false,
+            "icon": "images-outline",
+            "title": "Photo sharing",
+            "body": "Any photos you attach will be shared with the provider to help them prepare your treatment."
+      },
+      {
+            "key": "treatment_photos",
+            "requires_tick": false,
+            "icon": "camera-outline",
+            "title": "Photos of your treatment",
+            "body": "Most stylists are building a portfolio, so expect to be asked for before-and-after photos — that is usually why a treatment is free or discounted. They should ask you first, and you can say no."
+      },
+      {
+            "key": "profile_visibility",
+            "requires_tick": false,
+            "icon": "person-outline",
+            "title": "Profile visibility",
+            "body": "Your name and profile picture will be visible to the provider when you apply."
+      }
+],
+    }],
+    session_consents: [],
     push_tokens: [],
   }
 }
