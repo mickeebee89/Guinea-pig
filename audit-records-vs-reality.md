@@ -13664,6 +13664,90 @@ platforms each failed it differently.
 
 ---
 
+## 131. I REVOKED A FUNCTION THE PUBLIC VIEW DEPENDS ON, AND EVERY CHECK PASSED
+### Live on cavybeauty.com from 0060 to 0064 (30 Sep 2026)
+
+**In plain English:** all six treatment landing pages told visitors "No one is
+offering hair on Cavy yet" while a stylist who qualified sat in the database —
+Micky's own shop. The public site had one thing to list and listed nothing.
+
+**The mechanism.** `public_stylists` filters with
+`public.bio_publish_problem(p.bio) is null`. Migration 0060 ended with
+`revoke all on function public.bio_publish_problem(text) from public, anon`.
+The website reads that view with the **anon** key. The predicate is evaluated
+per row, so the privilege check aborts the whole statement:
+
+    permission denied for function bio_publish_problem
+
+Not fewer rows — no rows, and an error. Both halves were mine, in the same
+migration file.
+
+**Why the view's own defence did not cover it.** The header of
+`supabase/public-web-views.sql` explains at length that these views are
+`security_invoker = false`, so they read their TABLES as the view owner and anon
+needs no privileges on `providers` or `users`. That is correct, and it is about
+tables. **EXECUTE on a function called in the view body is still checked against
+the caller.** A view can be readable and unusable at the same time, and nothing
+about the view says so. The note that exists to stop somebody "fixing"
+security_invoker is the same note that makes the view look fully covered.
+
+**Why nothing caught it.**
+
+| | Would it have caught this? |
+|---|---|
+| `npm run verify` / `npm run checks` | **No** — exit 0 every time, including the run that printed the error |
+| `next build` | **No** — it succeeded; the failure is caught and degraded |
+| `check-handrun-drift.mjs` | **No** — it compares definitions, not privileges |
+| Typed Supabase clients | **No** — the call is inside SQL, not TypeScript |
+| Opening the page | **No** — the empty state is a correct-looking 200 |
+
+`safeList()` in `site/lib/stylists.ts` catches the error, logs a warning and
+returns `[]`. **Its own comment, written at item 18, says exactly this would
+happen:** "a missing view, an RLS refusal, a REVOKED GRANT and a genuinely empty
+table all end here and all produce the same thing". It names the case, in
+capitals, and the case then arrived and was invisible. *A comment naming a case
+is not a check catching it* — the same lesson as item 125, and its second
+instance in a week.
+
+**How it was actually found.** A build log, during unrelated work, on a video
+task. `npm run verify` printed the permission error eighteen times on its way to
+exit 0. Nobody was looking for it and nothing was asking.
+
+**What was fixed (0064).** A boolean wrapper, `bio_is_publishable(text)`,
+SECURITY DEFINER so the inner call runs as its owner, granted to `anon`. The
+view filters on the wrapper. `bio_publish_problem` stays `authenticated`-only,
+because its return value names WHICH rule failed — including "a banned word
+matched" — and the anon key is in every page's JavaScript. The boolean leaks
+nothing the view does not already leak: appearing in a public list **is** the
+boolean.
+
+**Scope of the check, stated exactly.** With comments stripped, the only
+non-builtin function any public view calls is `bio_publish_problem`. The other
+name in the file, `has_open_availability`, appears in a comment explaining why
+the view uses a plain `EXISTS` instead. So: **one function, now fixed, and no
+second instance of this exact fault.**
+
+**But the guard has a hole the width of every public view.** `PATTERNS` in
+`check-handrun-drift.mjs` matches `function`, `trigger` and `policy`. It does
+not match `view`. Migration `0034` does `create view public.public_stylists`,
+and `supabase/public-web-views.sql` creates it too — a hand-run/migration
+overlap of exactly the kind the check was written for, invisible because views
+were never added to the list. Same shape as the three already tabled above: *a
+check correct for the cases present when it was written*, and I wrote this one
+nine days ago.
+
+**The two things worth carrying forward.**
+
+1. **A privilege change is a deployment.** `revoke` has the blast radius of a
+   code change and none of the review. Before revoking EXECUTE, ask which views,
+   policies and triggers call it — `pg_get_viewdef` and a grep of `supabase/`
+   answer it in a minute, and 0060 asked neither.
+2. **A degrading catch needs a signal that reaches somebody.** Degrading rather
+   than throwing is right and stays. But the only trace was a `console.warn` in
+   a build log, and a warning nobody reads is not a signal.
+
+---
+
 ## What is open
 
 | | Item | Blocking launch? |
@@ -13681,6 +13765,7 @@ platforms each failed it differently.
 | 124 | ✅ **CLOSED 25 Sep, verified live.** `SuspensionGate` now lets Settings through, and the delete path was checked to actually work for them — the edge function uses the service role and reads no suspension | **Yes, for a store submission** |
 | 128 | ✅ **CLOSED 29 Sep.** A misordered `Promise.all` I shipped on 25 Sep left every binding after the first off by one: the stylist's shop page showed her as unverified, with no photo, the wrong ID-check state and "[object Object]" in the copy. My own `as string | null` cast silenced the type error that would have caught it. Found by looking at a screenshot, not by a check | Was live-web |
 | 130 | ✅ **CLOSED 30 Sep.** "Any distance" dropped its own parameter and fell back to the 20-mile default, so the chip linked to the view it was meant to escape and never showed as selected — while the copy above it said to use it. 5 stylists became 7 | Was live-web |
+| 131 | ✅ **Fixed 30 Sep, 0064 written.** My own 0060 revoked `bio_publish_problem` from `anon`, and `public_stylists` filters on it — so all six treatment pages showed an empty state while one stylist qualified. `npm run verify` passed throughout; found in a build log during unrelated work. ⚠️ Needs the view file re-run by hand after the migration | Was live-web |
 | 127 | ✅ **CLOSED 29 Sep.** `/stylist/[id]` header overlaps itself at ~540px: Saved/Safety move beside the name, the name wraps to three lines and the "posts new times" line is drawn across it. Not present at 390. Width band unmeasured | No, but it is on a public page |
 | 126 | ⚠️ **Noted, not fixed.** For a stylist, Settings is fully off-screen in the phone nav at 360, 390 and 430. Discoverability only — the strip scrolls, a half-visible pill cues it, and the suspension notice links to /settings directly. The nav's two-row phone layout is DESIGNED, not a bug; I reported it as one and disproved myself by measuring | No |
 | 125 | ✅ **Built 27 Sep.** Any photo the browser could not decode was uploaded anyway and rendered nowhere — on the ID check, a blank image against a paid £14.99. Mechanism VERIFIED in the browser pane; **HEIC itself still unconfirmed, no iPhone to hand** | Was live-web |

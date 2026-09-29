@@ -183,10 +183,21 @@ where p.is_published is true
   -- a gibberish bio sat on all six indexable treatment pages. The 40 characters
   -- are KEPT INSIDE this function and the word tests are additive.
   --
-  -- It returns the STYLIST'S OWN SENTENCE rather than a boolean, and the
-  -- dashboard's websiteBlockers calls the same function — so the view and the
-  -- page that explains the view cannot drift apart.
-  and public.bio_publish_problem(p.bio) is null
+  -- ⚠️ bio_is_publishable, NOT bio_publish_problem. 0060 revoked the latter
+  -- from anon because its return value names WHICH rule failed — and this view
+  -- is read with the anon key, so from 0060 until 0064 every public read of it
+  -- died on "permission denied for function bio_publish_problem" and all six
+  -- treatment pages showed an empty state while a stylist qualified.
+  --
+  -- security_invoker = false (see the header) covers the TABLES this view
+  -- reads. It does not cover EXECUTE on a function called in the body, which is
+  -- still checked against the caller. 0064's wrapper is SECURITY DEFINER, so
+  -- the inner call runs as its owner and anon never needs the sentence.
+  --
+  -- The sentence form is still what the dashboard's websiteBlockers reads, and
+  -- the wrapper is `bio_publish_problem(x) is null` and nothing else — so the
+  -- view and the page that explains the view cannot drift apart.
+  and public.bio_is_publishable(p.bio)
   and cardinality(cats.categories) >= 1
 
   -- Seed data is still live (launch blocker #75). Seeded accounts use the
