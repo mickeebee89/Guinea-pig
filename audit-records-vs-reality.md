@@ -6138,6 +6138,50 @@ Types regenerated and stamped 0061; the only addition beyond the stamp is
 `_withdrawn_sentence`, which no client calls and which is revoked from every
 client role. site verify EXIT 0, mobile tsc EXIT 0, admin build EXIT 0.
 
+**130. "ANY DISTANCE" GAVE YOU TWENTY MILES — FIXED 30 Sep 2026. site verify
+EXIT 0. THE FOURTH SHAPE, FOUND BY FOLLOWING THE PRODUCT'S OWN INSTRUCTION.**
+
+**Plainly:** the button that says "Any distance" quietly kept the twenty-mile
+limit, so the stylists it promised to reveal stayed hidden.
+
+`browse/page.tsx:168` built the chip as:
+
+```tsx
+href={qs({ within: r.key === 'any' ? undefined : r.key })}
+```
+
+Dropping the parameter for "any" — and `radiusFromParam(undefined)` returns
+`DEFAULT_RADIUS`, which is **20 miles**. So the chip linked to the view it was
+supposed to escape, and `aria-current` never matched either, because the
+resolved key was `'20'` and the chip's was `'any'`. **It could not even show
+itself as selected.**
+
+Measured on the demo before the fix: `/browse` → **5** stylists,
+`/browse?within=any` → **7**. Two were unreachable by clicking.
+
+**── ⚠️ AND THE COPY DIRECTLY ABOVE IT SAID TO USE IT ──**
+
+> *"2 stylists haven't told us where they are, so they're not shown at this
+> distance. **Choose Any distance to include them.**"*
+
+So this is the fourth of the four shapes this audit keeps hunting — **an empty
+state instructing an action the client cannot perform** — and the first one
+found by simply doing what the screen said. A member with no coordinates was
+invisible to anyone who followed the instruction, which is the whole population
+the sentence exists for.
+
+**The fix is one expression:** always pass `r.key`. `'any'` is truthy, so `qs`
+keeps it, `radiusFromParam('any')` resolves to `miles: null`, and the filter is
+skipped.
+
+**── HOW IT WAS FOUND ──**
+
+Not by a check, and not by reading the file. By trying to script a video that
+clicked through to a stylist, discovering she was not in the list, and
+following the page's own advice to bring her back — which did nothing. Three
+of the four shapes have now been found this way: by using the product rather
+than by reading it.
+
 **⚠️ 128. I SHIPPED A MISORDERED `Promise.all` ON 25 Sep AND IT BROKE FOUR
 THINGS ON THE STYLIST'S OWN SHOP PAGE — FIXED 29 Sep 2026. site verify EXIT 0.**
 
@@ -13636,6 +13680,7 @@ platforms each failed it differently.
 | 123 | ✅ **CLOSED 24 Sep.** Five hand-run `supabase/*.sql` files hold functions a migration has since replaced, including `delete_account_data` (0053) and `my_suspension` (0058, the item-118 leak). `my_suspension` corrected and made re-runnable; the rest marked; `check-handrun-drift.mjs` now fails on an undeclared overlap | Not by itself — but running one of those files is |
 | 124 | ✅ **CLOSED 25 Sep, verified live.** `SuspensionGate` now lets Settings through, and the delete path was checked to actually work for them — the edge function uses the service role and reads no suspension | **Yes, for a store submission** |
 | 128 | ✅ **CLOSED 29 Sep.** A misordered `Promise.all` I shipped on 25 Sep left every binding after the first off by one: the stylist's shop page showed her as unverified, with no photo, the wrong ID-check state and "[object Object]" in the copy. My own `as string | null` cast silenced the type error that would have caught it. Found by looking at a screenshot, not by a check | Was live-web |
+| 130 | ✅ **CLOSED 30 Sep.** "Any distance" dropped its own parameter and fell back to the 20-mile default, so the chip linked to the view it was meant to escape and never showed as selected — while the copy above it said to use it. 5 stylists became 7 | Was live-web |
 | 127 | ✅ **CLOSED 29 Sep.** `/stylist/[id]` header overlaps itself at ~540px: Saved/Safety move beside the name, the name wraps to three lines and the "posts new times" line is drawn across it. Not present at 390. Width band unmeasured | No, but it is on a public page |
 | 126 | ⚠️ **Noted, not fixed.** For a stylist, Settings is fully off-screen in the phone nav at 360, 390 and 430. Discoverability only — the strip scrolls, a half-visible pill cues it, and the suspension notice links to /settings directly. The nav's two-row phone layout is DESIGNED, not a bug; I reported it as one and disproved myself by measuring | No |
 | 125 | ✅ **Built 27 Sep.** Any photo the browser could not decode was uploaded anyway and rendered nowhere — on the ID check, a blank image against a paid £14.99. Mechanism VERIFIED in the browser pane; **HEIC itself still unconfirmed, no iPhone to hand** | Was live-web |

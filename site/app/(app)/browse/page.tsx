@@ -161,11 +161,19 @@ export default async function BrowsePage({
       {result && (
         <nav aria-label="Distance" className="mb-4">
           <ul className="flex flex-wrap items-center gap-1.5">
+            {/* ⚠️ WITHIN IS ALWAYS r.key, INCLUDING 'any'. Audit item 130.
+
+                This built the "Any distance" link with the parameter DROPPED,
+                and radiusFromParam(undefined) returns DEFAULT_RADIUS — twenty
+                miles. So the chip named "Any distance" linked to the
+                twenty-mile view, never showed as selected, and the sentence
+                printed directly above it, "Choose Any distance to include
+                them", named an action that could not be taken. */}
             {RADII.map(r => (
               <li key={r.key}>
                 {result.viewerHasLocation ? (
                   <Link
-                    href={qs({ within: r.key === 'any' ? undefined : r.key })}
+                    href={qs({ within: r.key })}
                     aria-current={r.key === radius.key ? 'page' : undefined}
                     className={`inline-flex min-h-11 items-center rounded-[999px] px-3 text-sm font-bold ${
                       r.key === radius.key ? 'bg-rose text-white' : 'bg-input-bg text-muted hover:bg-soft-pink'
