@@ -6207,6 +6207,49 @@ const bioProblem = typeof bioRaw === 'string' && bioRaw.trim() !== '' ? bioRaw :
 A `typeof` check costs nothing and cannot be silenced by a future reorder.
 Verified live: `[object Object]` gone, the Google panel correctly absent.
 
+**── ✅ ARE OTHER CASTS HIDING THE SAME THING? ONE PASS SAYS NO ──**
+
+Asked straight after the fix, and worth answering with evidence rather than a
+shrug.
+
+**The cast is not the hazard on its own.** `site/` has about **fifty**
+`.data as T` casts, and they are the normal idiom: PostgREST rows come back
+loosely typed, so something has to name the shape. Removing them is neither
+possible nor useful.
+
+**The hazard is the intersection:** a destructured `Promise.all` — where a
+name's meaning comes only from its POSITION — with a cast sitting on one of
+its results. There are **25** such destructurings in `site/`.
+
+**I first tried to detect it mechanically and the detector was wrong.** It
+split array elements on commas, and comments containing commas split with them,
+so it reported "count mismatches" in files that were fine. Discarded rather
+than reported — a heuristic that cries wolf on a codebase this commented is
+worse than reading the code.
+
+**So the eight blocks with four or more elements were read directly**, plus the
+rest at a glance:
+
+| site | bindings | verdict |
+|---|---|---|
+| `apply.ts:84` | 8 | ✅ aligned |
+| `dashboard.ts:293` | 6 | ✅ |
+| `stylist.ts:125` | 6 | ✅ |
+| `conversations.ts:82` | 5 | ✅ |
+| `sessions.ts:160` | 5 | ✅ |
+| `dashboard.ts:163`, `:196`, `:468` | 4 | ✅ |
+| `layout.tsx:64` | 4 | ✅ |
+| **`shop.ts:198`** | 5 | ❌ **the only one, now fixed** |
+
+**So: one instance, not a class.** The pass cost twenty minutes and the answer
+is worth having, because "there are probably more" would have sat in the record
+for ever otherwise.
+
+**The rule worth keeping, which is cheaper than another audit:** when adding a
+call to an existing `Promise.all`, **append it and add its binding last**.
+Inserting in the middle is the move that breaks every name after it, and
+nothing in the toolchain will say so.
+
 **── ✅ AND THE FULL FRAME AUDIT, ALL FOURTEEN ──**
 
 Item 127 was found because I had viewed 3 of 14. This time every frame was
@@ -6227,7 +6270,7 @@ opened:
 | **shop editor** | ❌ **[object Object]** — item 128 |
 | **stylist profile** | ❌ 127's overlap |
 | stylist bookings | ⚠️ an empty September calendar fills two-thirds of the frame; the booking card is cut at the edge |
-| availability | ⚠️ **empty calendar and "No slots on this day yet"** — it advertises an empty diary. Every demo slot is in October; the calendar opens on the current month |
+| availability | ⚠️ **empty calendar and "No slots on this day yet"** — it advertised an empty diary. Every demo slot was two or more days out, so on the 29th the current month was bare. **Fixed 29 Sep**: offsets 0 and 1 added, so the current month always has something whatever the date |
 
 **Three frames need recapturing** after the two fixes, and two more are weak
 rather than wrong.

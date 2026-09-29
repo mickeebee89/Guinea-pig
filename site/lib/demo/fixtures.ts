@@ -230,7 +230,17 @@ export function buildTables(images: DemoImages = NO_IMAGES): Tables {
       provider_treatments.push({ id, provider_id: pid, name: cat, category: cat, created_at: at(-50) })
     }
     // Upcoming slots: a morning and an afternoon on a handful of days.
-    for (const day of [2, 4, 6, 9, 11, 13, 16, 18, 20]) {
+    //
+    // ⚠️ 0 AND 1 ARE HERE FOR A REASON. Both calendars open on the CURRENT
+    // month, and every offset used to be 2 or more — so on the 29th of a month
+    // the availability and bookings screens opened on a completely empty grid
+    // under the words "Pale pink has slots", with "No slots on this day yet."
+    // beneath it. True of the data, and a terrible thing to photograph for an
+    // advert: it reads as a product nobody uses.
+    //
+    // An offset of 0 is today, so the current month always has something in it
+    // whatever the date. Found by looking at the captured frames, 29 Sep 2026.
+    for (const day of [0, 1, 2, 4, 6, 9, 11, 13, 16, 18, 20]) {
       for (const [start, end] of [['10:00:00', '12:00:00'], ['14:00:00', '16:00:00']]) {
         availability.push({
           id: uid(1000 + slotN++), provider_id: pid, date: d(day + (i % 2)),
