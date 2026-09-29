@@ -314,6 +314,15 @@ export function buildTables(images: DemoImages = NO_IMAGES): Tables {
   say(ameliaSession, amelia, 'Hi Amara! Could you pop in for a quick patch test at least 48 hours before? Any day this week after 4pm works.', 160)
   say(ameliaSession, DEMO_MODEL_ID, 'Thursday at 5 would be perfect.', 150)
   say(ameliaSession, amelia, 'Lovely, Thursday at 5 it is. Come with dry, unwashed hair on the day and we’ll look at shades together first.', 40, false)
+  // ⚠️ HER LINE, LAST. The thread used to end on the stylist's message,
+  // so a walkthrough that finished here ended on somebody else talking.
+  // One line, and the last thing on screen is the model agreeing.
+  // ⚠️ MINUTES, AND FEWER THAN THE LINE ABOVE (40). Written as 60 * 20 first
+  //    time, which is twenty HOURS, so the thread sorted her sign-off to the
+  //    TOP and the screen still ended on the stylist talking — the exact
+  //    fault this line was added to fix, and invisible unless you read the
+  //    rendered order rather than the code.
+  say(ameliaSession, DEMO_MODEL_ID, 'Great, see you then!', 25)
 
   // ── The stylist's bookings (signed in as Priya). The first is uid(3004),
   //    the stylist's thread on /demo. ──────────────────────────────────────
