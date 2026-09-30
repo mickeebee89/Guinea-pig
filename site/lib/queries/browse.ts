@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { getBlockedIds } from '@/lib/blocks'
 import { categoryKey } from '@/lib/queries/shop'
 import { withinRadius, withoutCoords, type Placed } from '@/lib/distance'
+import { withoutStartedSlots } from '@/lib/slots'
 
 /**
  * Browse published stylists.
@@ -141,7 +142,9 @@ export async function getBrowseStylists(
   const [treatRes, availRes] = await Promise.all([
     supabase.from('provider_treatments').select('provider_id, category').in('provider_id', ids),
     supabase.from('availability')
-      .select('provider_id, is_taken').in('provider_id', ids)
+      // date and start_time so a stylist whose only remaining slot was this
+      // morning stops reading as "Slots open". Item 133.
+      .select('provider_id, date, start_time, is_taken').in('provider_id', ids)
       .gte('date', today).lte('date', in60),
   ])
 
@@ -153,8 +156,12 @@ export async function getBrowseStylists(
   }
 
   const openSlots = new Set(
-    ((availRes.data ?? []) as { provider_id: string; is_taken: boolean | null }[])
-      .filter(a => !a.is_taken).map(a => a.provider_id),
+    withoutStartedSlots(
+      (availRes.data ?? []) as {
+        provider_id: string; date: string; start_time: string; is_taken: boolean | null
+      }[],
+      a => ({ date: a.date, startTime: a.start_time }),
+    ).filter(a => !a.is_taken).map(a => a.provider_id),
   )
 
   const shaped = visible

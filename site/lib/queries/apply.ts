@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { withoutStartedSlots } from '@/lib/slots'
 import { getGateState } from '@/lib/verification'
 import { getIdCheck, type IdCheck } from '@/lib/queries/idCheck'
 import { loadActiveConsentDocument, type ConsentDocument } from '@/lib/queries/consent'
@@ -156,7 +157,13 @@ export async function getApplyContext(
     verified: gate.verified,
     hasProfilePic: !!(meRes.data as { profile_pic_url: string | null } | null)?.profile_pic_url,
     idCheck,
-    slots: rawSlots.map(s => ({
+    // ⚠️ STARTED SLOTS DROPPED HERE, not in the query: Postgrest cannot
+    // compare date + start_time against now(), so `.gte('date', today)` above
+    // is as far as SQL gets and the rest is done in one shared helper. Item
+    // 133 — a 9am slot was applied for at 16:37 the same day.
+    slots: withoutStartedSlots(rawSlots, s => ({
+      date: s.date, startTime: s.start_time,
+    })).map(s => ({
       id: s.id,
       date: s.date,
       startTime: hhmm(s.start_time),

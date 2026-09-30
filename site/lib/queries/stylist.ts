@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { withoutStartedSlots } from '@/lib/slots'
 import { getBlockedIds } from '@/lib/blocks'
 // ⚠️ `providers.level` IS GONE FROM EVERY SURFACE — item 105, 24 Sep 2026.
 //
@@ -139,7 +140,9 @@ export async function getStylistProfile(
       .limit(20),
     getBlockedIds(supabase, viewerId).catch(() => new Set<string>()),
     supabase.from('availability')
-      .select('date, is_taken').eq('provider_id', providerId)
+      // start_time is selected ONLY so the shared helper can drop slots that
+      // have already begun; the calendar itself renders dates. Item 133.
+      .select('date, start_time, is_taken').eq('provider_id', providerId)
       .gte('date', today).lte('date', in60),
     // maybeSingle rather than a count: nothing here proves the table has a
     // unique index on the pair, and a count would turn a duplicate row into a
@@ -209,9 +212,15 @@ export async function getStylistProfile(
     })),
     isBlocked: !!(prov.user_id && blocked.has(prov.user_id)),
     isFavourite: !!favRes.data,
+    // A day stops being pale pink once its last slot has begun, rather than
+    // at midnight. Item 133.
     openDates: [...new Set(
-      ((availRes.data ?? []) as { date: string; is_taken: boolean | null }[])
-        .filter(a => !a.is_taken).map(a => a.date),
+      withoutStartedSlots(
+        (availRes.data ?? []) as {
+          date: string; start_time: string; is_taken: boolean | null
+        }[],
+        a => ({ date: a.date, startTime: a.start_time }),
+      ).filter(a => !a.is_taken).map(a => a.date),
     )].sort(),
   }
 }

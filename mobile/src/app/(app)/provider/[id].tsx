@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { withoutStartedSlots } from '../../../lib/slots'
 import {
   View,
   Text,
@@ -222,7 +223,12 @@ export default function ProviderShopScreen() {
         }))
         setPortfolio(normPort as PortfolioItem[])
       }
-      if (avData) setAvailability(avData as AvailabilitySlot[])
+      // A day stops showing as available once its last slot has begun.
+      // Item 133. hasOpenSlots below comes from has_open_availability(),
+      // which is date-granular in the DATABASE and is fixed there.
+      if (avData) setAvailability(withoutStartedSlots(
+        avData as AvailabilitySlot[], s => ({ date: s.date, startTime: s.start_time }),
+      ))
       setHasOpenSlots(openData === true)
 
       // Fetch reviews using the provider's auth user_id as reviewee_id

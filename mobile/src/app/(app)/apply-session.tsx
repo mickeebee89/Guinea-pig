@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
+import { withoutStartedSlots } from '../../lib/slots'
 import {
   View,
   Text,
@@ -262,7 +263,12 @@ export default function ApplySessionScreen() {
           setLoading(false)
           return
         }
-        if (availData) setAvailRows((availData as any[]).map(r => ({
+        // Slots that have already begun are dropped here: `.gte('date', …)`
+        // above is date-granular, so a 9am slot stayed bookable all day.
+        // Item 133, same helper as the website's.
+        if (availData) setAvailRows(withoutStartedSlots(
+          availData as any[], r => ({ date: r.date, startTime: r.start_time }),
+        ).map(r => ({
           id:           r.id,
           date:         r.date,
           start_time:   r.start_time,
