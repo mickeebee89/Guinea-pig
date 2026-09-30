@@ -13766,16 +13766,40 @@ immediately: `public_stylists` is created by both `0034` and the hand-run file.
 That drift had been invisible for the nine days the check existed — including
 through this entire item, which was a fault in that very view.
 
-Triaging it needed a **second marker direction**, and this is the part worth
-keeping. The check only had `-- MIGRATION-OWNS:`, which asserts the migration is
-current and the hand-run file is a stale copy. Here the truth is the reverse:
-`public-web-views.sql` is the living definition, `0063` refuses to run until it
-has been re-run by hand, and `0064` depends on it. Marking it MIGRATION-OWNS
-0034 would have told the next person that a migration from August is
-authoritative — and following that would restore `banner_url` and the predicate
-anon cannot execute. **That is item 131, reinstated, by following a marker.** So
-`-- FILE-OWNS:` now exists alongside it. *A marker pointing the wrong way is
-worse than no marker.*
+#### ⚠️ THE CHECK'S OWN REMEDY WOULD HAVE REINSTATED THIS BUG
+
+This is the finding worth carrying, above the fix itself.
+
+`check-handrun-drift.mjs` does not just detect an overlap — it **prints the
+remedy**, by name, ready to paste:
+
+    -- MIGRATION-OWNS: public_stylists 0034
+
+That instruction is wrong here, and following it is not a no-op. `MIGRATION-OWNS`
+asserts *the migration is current and this file is a stale copy*, so the next
+person to meet it does the diligent thing: opens `0034`, sees the hand-run file
+disagrees, and brings the file back in line with the migration. Doing that would
+have:
+
+* **restored `providers.banner_url`** to the view's select list — the column
+  `0063` dropped, so the view would then select a column that does not exist and
+  every public read would error; and
+* **restored `public.bio_publish_problem(p.bio) is null`** as the predicate —
+  the exact call `anon` may not execute.
+
+**Item 131, reinstated, by a careful person following the tool built in response
+to item 131.** The check was written on 24 Sep to stop hand-run files silently
+undoing migrations. It had one direction in its vocabulary, and the first case
+it ever found in a view was the other direction.
+
+That is a sharper version of the pattern already tabled above. A check correct
+for the cases present when it was written is one thing; **a check that is
+confidently wrong, and hands you the instruction, is another.** The tell is the
+same — a vocabulary fixed by hand at the moment of writing — but the cost is
+higher, because a silent gap waits and a wrong instruction gets obeyed.
+
+`-- FILE-OWNS:` now exists alongside it, and the message prints both directions
+and makes you choose. *A marker pointing the wrong way is worse than no marker.*
 
 **`check-anon-view-grants.mjs`, wired into `site`'s `checks`.** For every view
 granted SELECT to anon, it reads each `public.<fn>(` in the body and walks the
@@ -13792,6 +13816,53 @@ one to a regex, and to a reader in a hurry.*
 
 Both state the same honest limit as their neighbours: they read the repo, not
 the database. A grant made by hand in the SQL editor is invisible to them.
+
+### And the build no longer ships pages it could not read
+
+`npm run verify` exited 0 while printing `permission denied` eighteen times. The
+fix is not to grep the build log — that matches a SENTENCE rather than a
+CONDITION, and would become another hand-maintained list of message shapes. It
+is `site/lib/query-failure.ts`:
+
+> **Degrade at runtime. Fail at build.**
+
+The reason to swallow a failed query is to protect a live visitor. During a
+build there is no visitor: the failure is not absorbed, it is **baked into
+static HTML** that asserts nobody is offering hair on Cavy.
+
+**Every error, not a classified subset.** The narrower option — fail only on
+`permission denied` and `does not exist`, keep degrading on network trouble —
+was rejected for being a hand-written list of cases, which is the shape that has
+now bitten twice on this page alone. The cost was accepted knowingly: a
+transient blip during a build now fails the deploy, and a build with no database
+credentials no longer succeeds. Both are safe — the previous deploy stays live,
+and it is one retry.
+
+**One helper, three call sites.** `safeList`, `countByCategory` and
+`FeaturedStylists` now all call it. The last of those held its own inline copy
+of the pattern, beside a long comment in `lib/stylists.ts` describing the same
+risk: *two copies of a rule is two places to fix and one place to forget*. It
+also means the homepage's featured strip was empty for the same four days, which
+the original write-up of this item missed.
+
+Each `catch` that exists to absorb network errors now rethrows `BuildQueryError`
+specifically — otherwise the deliberate build failure would be caught by the
+very handler it was written to escape, one level up.
+
+**Proven, 30 Sep 2026.** Reverting the repo's view predicate cannot demonstrate
+this, because the build reads the LIVE database and the view there is fixed. So
+the genuine error was reproduced instead: a build-time query made to call the
+function `anon` is still revoked from. The build stopped:
+
+    Error [BuildQueryError]: [stylistsByCategory:makeup] query failed during the
+    build: permission denied for function bio_publish_problem
+    Export encountered an error on /(public)/[treatment]/page: /makeup-models,
+    exiting the build.
+
+Non-zero exit, no static pages written. Restored, the build passes and logs
+**zero** degraded queries — where the same command printed eighteen permission
+errors before 0064. The build's own reads are now the end-to-end proof that the
+live fix works.
 
 ---
 

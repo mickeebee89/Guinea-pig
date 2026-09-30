@@ -1,4 +1,5 @@
 import { supabase, type PublicStylist } from './supabase-public'
+import { BuildQueryError, onQueryFailure } from './query-failure'
 
 const CARD_COLUMNS =
   'id, slug, name, location, categories, rating, review_count, is_verified, profile_pic_url'
@@ -34,12 +35,22 @@ async function safeList(
       //
       // If you are adding a signal, add it here rather than at the call sites:
       // this is the one place that knows the difference.
-      console.warn(`[${label}] query failed, returning none:`, error.message)
+      //
+      // ⚠️ THAT SIGNAL NOW EXISTS, and it is onQueryFailure: this still returns
+      // an empty list at RUNTIME, and throws during a BUILD rather than let
+      // `next build` bake the empty state into static HTML. Item 131 is the
+      // REVOKED GRANT named four paragraphs up, arriving.
+      onQueryFailure(label, error.message)
       return []
     }
     return (data ?? []) as PublicStylist[]
   } catch (err) {
-    console.warn(`[${label}] unreachable, returning none:`, err)
+    // ⚠️ RETHROW OURS. This catch exists to absorb NETWORK failures, and a
+    // BuildQueryError thrown four lines up would land here and be turned back
+    // into an empty list — a deliberate build failure quietly becoming the very
+    // bug it was written to stop.
+    if (err instanceof BuildQueryError) throw err
+    onQueryFailure(label, String(err))
     return []
   }
 }
@@ -67,12 +78,13 @@ export async function countByCategory(dbSlug: string): Promise<number> {
       .select('id', { count: 'exact', head: true })
       .contains('category_slugs', [dbSlug])
     if (error) {
-      console.warn(`[countByCategory:${dbSlug}] failed:`, error.message)
+      onQueryFailure(`countByCategory:${dbSlug}`, error.message)
       return 0
     }
     return count ?? 0
   } catch (err) {
-    console.warn(`[countByCategory:${dbSlug}] unreachable:`, err)
+    if (err instanceof BuildQueryError) throw err
+    onQueryFailure(`countByCategory:${dbSlug}`, String(err))
     return 0
   }
 }

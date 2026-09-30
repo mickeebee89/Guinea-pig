@@ -1,5 +1,6 @@
 import Image from 'next/image'
 import { supabase, type PublicStylist } from '@/lib/supabase-public'
+import { BuildQueryError, onQueryFailure } from '@/lib/query-failure'
 
 /**
  * Renders nothing at all when there is nothing to show.
@@ -14,6 +15,14 @@ import { supabase, type PublicStylist } from '@/lib/supabase-public'
  * Deliberately NOT the `if (data)` pattern this codebase got bitten by before
  * (see scripts/check-queries.mjs): the error is logged, so a broken query is
  * visible in the server log instead of silently rendering as "no stylists".
+ *
+ * ⚠️ "VISIBLE IN THE SERVER LOG" WAS NOT ENOUGH. This component used to hold
+ * its OWN copy of that rule, beside lib/stylists.ts's `safeList`, which held a
+ * longer comment describing the same risk. Two copies of a rule is two places
+ * to fix and one place to forget — and when item 131 revoked a grant the whole
+ * public view depended on, the homepage's strip went silently empty alongside
+ * the six treatment pages. Both now call the one helper, which throws during a
+ * build rather than prerender a homepage claiming nobody has joined.
  */
 export async function FeaturedStylists() {
   let stylists: PublicStylist[] = []
@@ -26,12 +35,14 @@ export async function FeaturedStylists() {
       .limit(6)
 
     if (error) {
-      console.warn('[FeaturedStylists] query failed, rendering nothing:', error.message)
+      onQueryFailure('FeaturedStylists', error.message)
       return null
     }
     stylists = (data ?? []) as PublicStylist[]
   } catch (err) {
-    console.warn('[FeaturedStylists] unreachable, rendering nothing:', err)
+    // Ours goes up; a network failure still renders nothing. See safeList.
+    if (err instanceof BuildQueryError) throw err
+    onQueryFailure('FeaturedStylists', String(err))
     return null
   }
 
