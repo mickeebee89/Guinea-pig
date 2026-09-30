@@ -13866,6 +13866,87 @@ live fix works.
 
 ---
 
+## 132. I SHIPPED A 404 ON THE APPLY ROUTE, AND EVERY GATE PASSED
+### Live 10:51 to 14:33, 30 Sep 2026
+
+**In plain English:** for three hours and forty-two minutes, a model who tapped
+Apply on any stylist's shop got the 404 page. The application flow — the thing
+the product is for — was gone from the website.
+
+**The change.** A comment explaining the new note placeholder, placed among the
+`<textarea>`'s JSX **attributes**:
+
+    <textarea
+      className="…"
+      /* ⚠️ NEUTRAL ON PURPOSE … */
+      placeholder="What you're hoping for…"
+    />
+
+That is not valid JSX. `/* … */` between attributes is not a comment there; a
+JSX comment is `{/* … */}` and belongs outside the attribute list.
+
+**What it did NOT do, which is the whole problem.**
+
+| Gate | Result |
+|---|---|
+| `tsc --noEmit` | **passed** |
+| `eslint . --max-warnings=0` | **passed** |
+| `npm run checks` | **passed** |
+| `next build` | **passed, exit 0** — verified afterwards by restoring the broken file and building it |
+| Opening the page | never done |
+
+Because the build succeeds, **Vercel deployed it**. A build that failed would
+have been safe: the previous deploy stays live. This one shipped.
+
+**How it was actually found.** `mustTap` threw on a date button that was not
+there — a guard added two days earlier to stop a recording silently skipping
+beats, for a completely different reason. Nothing that exists to protect the
+product noticed. A promo-video script did.
+
+**And it is the second time in the same file, in the same session.** "JSX
+comment cannot sit among attributes" was recorded earlier the same day, after
+the identical mistake in `ApplyWizard.tsx` produced TS1005. That time the
+compiler caught it, so it cost a minute. This time it did not, so it cost three
+and a half hours of the product's main flow.
+
+That is the sharpest instance yet of a pattern already in this file: **a rule I
+wrote and then walked past.** The difference between the two occurrences is not
+diligence — it is that the first one happened to be in a position the parser
+rejected. Relying on that is not a control.
+
+**What would have caught it: asking whether a page RENDERS.**
+
+`check-route-coverage.mjs` cannot. It is static by design — it reads the
+filesystem and `proxy.ts` and asserts every `(app)` route has a matcher entry.
+It never runs the app, so it cannot know a route resolves to a 404. Its own
+header says what it does not do; this belongs on that list.
+
+What is needed is a smoke check that boots the app and asks for each route:
+
+  * the route list comes from the SAME filesystem walk `check-route-coverage`
+    already does, so it cannot go stale as pages are added;
+  * `DEMO_MODE=1` gives an authenticated session with no credentials
+    (`/demo?as=model&to=<route>`), which is why this is cheap here and would not
+    be in most codebases;
+  * assert a 200 AND that the body is not the 404 page — this route returned
+    **200 with the not-found body**, so status alone would have passed;
+  * dynamic segments need an id: the demo fixtures have stable uids for exactly
+    this.
+
+It belongs in `verify` (which already runs the build) rather than `checks`,
+because it needs a running server. Playwright, the demo server config and a
+route-warming loop already exist in `scripts/promo-record.js` — the pieces are
+all here.
+
+**The rule worth carrying.** *A compiler that catches a mistake once is not a
+control against that mistake.* Three of this file's most expensive items —
+128's silencing cast, 131's degraded query, and this — passed every automated
+gate and were found by a human looking at output. The gates check that the code
+is well-formed and that files exist. Nothing yet checks that a page is there
+when you ask for it.
+
+---
+
 ## What is open
 
 | | Item | Blocking launch? |
@@ -13884,6 +13965,7 @@ live fix works.
 | 128 | ✅ **CLOSED 29 Sep.** A misordered `Promise.all` I shipped on 25 Sep left every binding after the first off by one: the stylist's shop page showed her as unverified, with no photo, the wrong ID-check state and "[object Object]" in the copy. My own `as string | null` cast silenced the type error that would have caught it. Found by looking at a screenshot, not by a check | Was live-web |
 | 130 | ✅ **CLOSED 30 Sep.** "Any distance" dropped its own parameter and fell back to the 20-mile default, so the chip linked to the view it was meant to escape and never showed as selected — while the copy above it said to use it. 5 stylists became 7 | Was live-web |
 | 131 | ✅ **CLOSED AND VERIFIED LIVE 30 Sep.** My own 0060 revoked `bio_publish_problem` from `anon`, and `public_stylists` filters on it — so all six treatment pages showed an empty state while Micky's shop qualified. 0064 applied, view file re-run, types at 0064: the anon read returns **1** where it raised `permission denied` five minutes earlier. `npm run verify` passed throughout the four days it was live | Was live-web |
+| 132 | ⚠️ **FIXED, AND IT REACHED PRODUCTION.** A JSX comment among the `<textarea>`'s attributes made `/stylist/[id]/apply` serve the 404 page — the application flow, live from 10:51 to 14:33 on 30 Sep. tsc, eslint, checks AND `next build` all passed, so Vercel deployed it. Caught by a promo-recorder guard added for something else. Same mistake, same file, already recorded earlier the same day | Was live-web |
 | 127 | ✅ **CLOSED 29 Sep.** `/stylist/[id]` header overlaps itself at ~540px: Saved/Safety move beside the name, the name wraps to three lines and the "posts new times" line is drawn across it. Not present at 390. Width band unmeasured | No, but it is on a public page |
 | 126 | ⚠️ **Noted, not fixed.** For a stylist, Settings is fully off-screen in the phone nav at 360, 390 and 430. Discoverability only — the strip scrolls, a half-visible pill cues it, and the suspension notice links to /settings directly. The nav's two-row phone layout is DESIGNED, not a bug; I reported it as one and disproved myself by measuring | No |
 | 125 | ✅ **Built 27 Sep.** Any photo the browser could not decode was uploaded anyway and rendered nowhere — on the ID check, a blank image against a paid £14.99. Mechanism VERIFIED in the browser pane; **HEIC itself still unconfirmed, no iPhone to hand** | Was live-web |
