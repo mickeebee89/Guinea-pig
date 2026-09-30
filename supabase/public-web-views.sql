@@ -96,6 +96,14 @@ where tc.is_active is true;
 -- `level` from this view, and the anon reads degrade to an empty list rather
 -- than throwing (lib/stylists.ts), so the sub-second window while the view is
 -- absent costs nothing.
+-- FILE-OWNS: public_stylists 0034
+--
+-- THIS FILE IS THE LIVING DEFINITION, and the direction matters. 0034 created
+-- the view (drop + create, to remove status_text) and every change since has
+-- been made HERE and pasted in by hand: 0063 removed banner_url and refuses to
+-- run until this file has been re-run, and 0064 swapped the bio predicate to
+-- bio_is_publishable. Going back to 0034's text would restore banner_url and
+-- the predicate anon cannot execute -- which is item 131, reinstated.
 create or replace view public.public_stylists
 with (security_barrier = true) as
 select

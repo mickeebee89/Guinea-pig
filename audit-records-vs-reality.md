@@ -13746,6 +13746,53 @@ nine days ago.
    than throwing is right and stays. But the only trace was a `console.warn` in
    a build log, and a warning nobody reads is not a signal.
 
+### Verified and closed, 30 Sep 2026
+
+0064 applied, `supabase/public-web-views.sql` re-run by hand, types regenerated
+at 0064. The verify block, run as the role that was failing:
+
+    begin; set local role anon;
+      select count(*) from public.public_stylists;
+    rollback;
+
+returns **1**, where five minutes earlier it raised `permission denied for
+function bio_publish_problem`. Not inferred from the repo — read from the
+database, as the failing role, before and after.
+
+### Two checks, both proven to fail before being kept
+
+**`view` added to `check-handrun-drift.mjs`.** It flagged one overlap
+immediately: `public_stylists` is created by both `0034` and the hand-run file.
+That drift had been invisible for the nine days the check existed — including
+through this entire item, which was a fault in that very view.
+
+Triaging it needed a **second marker direction**, and this is the part worth
+keeping. The check only had `-- MIGRATION-OWNS:`, which asserts the migration is
+current and the hand-run file is a stale copy. Here the truth is the reverse:
+`public-web-views.sql` is the living definition, `0063` refuses to run until it
+has been re-run by hand, and `0064` depends on it. Marking it MIGRATION-OWNS
+0034 would have told the next person that a migration from August is
+authoritative — and following that would restore `banner_url` and the predicate
+anon cannot execute. **That is item 131, reinstated, by following a marker.** So
+`-- FILE-OWNS:` now exists alongside it. *A marker pointing the wrong way is
+worse than no marker.*
+
+**`check-anon-view-grants.mjs`, wired into `site`'s `checks`.** For every view
+granted SELECT to anon, it reads each `public.<fn>(` in the body and walks the
+migrations in order to decide whether anon can still execute it. Proven both
+ways before being kept: reverting the predicate to `bio_publish_problem` makes
+it exit 1 naming the view, the function and the consequence; restoring
+`bio_is_publishable` makes it pass. It checks 2 anon-readable views.
+
+It strips SQL comments first, and not out of fussiness: `has_open_availability`
+appears in this file only inside a comment explaining why the view uses a plain
+`EXISTS` instead, and a first pass of this analysis **by hand** reported it as a
+second instance of the bug. *A commented-out name looks exactly like a called
+one to a regex, and to a reader in a hurry.*
+
+Both state the same honest limit as their neighbours: they read the repo, not
+the database. A grant made by hand in the SQL editor is invisible to them.
+
 ---
 
 ## What is open
@@ -13765,7 +13812,7 @@ nine days ago.
 | 124 | ✅ **CLOSED 25 Sep, verified live.** `SuspensionGate` now lets Settings through, and the delete path was checked to actually work for them — the edge function uses the service role and reads no suspension | **Yes, for a store submission** |
 | 128 | ✅ **CLOSED 29 Sep.** A misordered `Promise.all` I shipped on 25 Sep left every binding after the first off by one: the stylist's shop page showed her as unverified, with no photo, the wrong ID-check state and "[object Object]" in the copy. My own `as string | null` cast silenced the type error that would have caught it. Found by looking at a screenshot, not by a check | Was live-web |
 | 130 | ✅ **CLOSED 30 Sep.** "Any distance" dropped its own parameter and fell back to the 20-mile default, so the chip linked to the view it was meant to escape and never showed as selected — while the copy above it said to use it. 5 stylists became 7 | Was live-web |
-| 131 | ✅ **Fixed 30 Sep, 0064 written.** My own 0060 revoked `bio_publish_problem` from `anon`, and `public_stylists` filters on it — so all six treatment pages showed an empty state while one stylist qualified. `npm run verify` passed throughout; found in a build log during unrelated work. ⚠️ Needs the view file re-run by hand after the migration | Was live-web |
+| 131 | ✅ **CLOSED AND VERIFIED LIVE 30 Sep.** My own 0060 revoked `bio_publish_problem` from `anon`, and `public_stylists` filters on it — so all six treatment pages showed an empty state while Micky's shop qualified. 0064 applied, view file re-run, types at 0064: the anon read returns **1** where it raised `permission denied` five minutes earlier. `npm run verify` passed throughout the four days it was live | Was live-web |
 | 127 | ✅ **CLOSED 29 Sep.** `/stylist/[id]` header overlaps itself at ~540px: Saved/Safety move beside the name, the name wraps to three lines and the "posts new times" line is drawn across it. Not present at 390. Width band unmeasured | No, but it is on a public page |
 | 126 | ⚠️ **Noted, not fixed.** For a stylist, Settings is fully off-screen in the phone nav at 360, 390 and 430. Discoverability only — the strip scrolls, a half-visible pill cues it, and the suspension notice links to /settings directly. The nav's two-row phone layout is DESIGNED, not a bug; I reported it as one and disproved myself by measuring | No |
 | 125 | ✅ **Built 27 Sep.** Any photo the browser could not decode was uploaded anyway and rendered nowhere — on the ID check, a blank image against a paid £14.99. Mechanism VERIFIED in the browser pane; **HEIC itself still unconfirmed, no iPhone to hand** | Was live-web |

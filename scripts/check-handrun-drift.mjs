@@ -26,7 +26,20 @@
  * which one is current, and the decision has to be written down where the next
  * person will meet it:
  *
- *   -- MIGRATION-OWNS: <name> <migration>
+ *   -- MIGRATION-OWNS: <name> <migration>   the migration is current; this
+ *                                           file holds an older copy
+ *   -- FILE-OWNS: <name> <migration>         THIS FILE is current; the
+ *                                           migration created it once and
+ *                                           has since been superseded
+ *
+ * ⚠️ BOTH DIRECTIONS EXIST AND THEY ARE NOT INTERCHANGEABLE. Added 30 Sep
+ * 2026 with `view`, because the first view overlap was the second kind:
+ * public-web-views.sql is the LIVING definition of public_stylists. 0063
+ * refuses to run until that file has been re-run by hand, and 0064 depends on
+ * it too. Marking it MIGRATION-OWNS 0034 would tell the next person that a
+ * migration from August is authoritative, and following that would restore
+ * banner_url and the pre-0060 bio predicate. A marker pointing the wrong way
+ * is worse than no marker.
  *
  * ⚠️ WHAT A PASS DOES NOT MEAN. It does not mean the copy is up to date — a
  * marker is a claim by whoever wrote it, not a comparison. The only real check
@@ -60,6 +73,12 @@ const PATTERNS = [
   ['function', /create\s+(?:or\s+replace\s+)?function\s+(?:public\.)?([a-z0-9_]+)\s*\(/gi],
   ['trigger',  /create\s+trigger\s+([a-z0-9_]+)/gi],
   ['policy',   /create\s+policy\s+"?([a-z0-9_ ]+?)"?\s+on\s/gi],
+  // ⚠️ ADDED 30 Sep 2026, AND IT WAS NOT FREE. Unlike the trigger and policy
+  // widening above, this one had overlaps waiting for it: the public website's
+  // views are created BOTH by public-web-views.sql and by the migrations that
+  // introduced them. That drift was invisible for nine days, through the whole
+  // of item 131 — a fault in one of these very views.
+  ['view',     /create\s+(?:or\s+replace\s+)?view\s+(?:public\.)?([a-z0-9_]+)/gi],
 ]
 
 /** Every object a file creates, as name -> kind. */
@@ -87,7 +106,7 @@ let marked = 0
 for (const f of readdirSync(SQL_DIR).filter(f => f.endsWith('.sql') && !IGNORE.test(f)).sort()) {
   const src = readFileSync(join(SQL_DIR, f), 'utf8')
   const markers = new Set(
-    [...src.matchAll(/--\s*MIGRATION-OWNS:\s*([a-z0-9_]+)/gi)].map(m => m[1].toLowerCase()),
+    [...src.matchAll(/--\s*(?:MIGRATION-OWNS|FILE-OWNS):\s*([a-z0-9_]+)/gi)].map(m => m[1].toLowerCase()),
   )
 
   for (const [name, kind] of [...objectsIn(src)].sort()) {
@@ -95,11 +114,19 @@ for (const f of readdirSync(SQL_DIR).filter(f => f.endsWith('.sql') && !IGNORE.t
     if (markers.has(name)) { marked++; continue }
     unmarked++
     const fn = name
+    // pg_get_viewdef for a view, pg_get_functiondef for the rest: naming the
+    // wrong one sends somebody to a query that returns nothing for their object.
+    const liveDef = kind === 'view' ? 'pg_get_viewdef' : 'pg_get_functiondef'
     console.error(
       `${basename(f)}: defines the ${kind} ${name}, which migration ${ownedBy.get(name).join(' and ')} also defines.\n` +
       `  Re-running this file would overwrite the migration's version with this one.\n` +
-      `  Check it against pg_get_functiondef, bring it forward if it is behind, then record the\n` +
-      `  decision above the function as:  -- MIGRATION-OWNS: ${fn} ${ownedBy.get(fn).at(-1)}`,
+      `  Check it against ${liveDef}, decide WHICH DIRECTION is current, and record it
+` +
+      `  above the ${kind} as ONE of:
+` +
+      `    -- MIGRATION-OWNS: ${fn} ${ownedBy.get(fn).at(-1)}   (the migration is current)
+` +
+      `    -- FILE-OWNS: ${fn} ${ownedBy.get(fn).at(-1)}        (this file is current)`,
     )
   }
 }
@@ -113,7 +140,7 @@ if (unmarked > 0) {
 }
 
 console.log(
-  `hand-run drift — ${marked} declared overlap(s) (functions, triggers, policies) ` +
+  `hand-run drift — ${marked} declared overlap(s) (functions, triggers, policies, views) ` +
   `between supabase/*.sql and migrations ` +
   `(a marker records a decision; it does NOT prove the copy is current)`,
 )
