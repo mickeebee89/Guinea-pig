@@ -240,10 +240,22 @@ export function buildTables(images: DemoImages = NO_IMAGES): Tables {
     //
     // An offset of 0 is today, so the current month always has something in it
     // whatever the date. Found by looking at the captured frames, 29 Sep 2026.
+    //
+    // ⚠️ AND THAT GUARANTEE WAS HALF FALSE UNTIL 30 Sep 2026. `+ (i % 2)`
+    // staggers the stylists so they are not all free on identical days, but it
+    // also pushed every ODD-INDEXED stylist's earliest slot to offset 1 — so on
+    // the LAST DAY OF A MONTH their earliest slot is in the next month, and the
+    // current month is empty after all. Recorded on the 30th, Amelia Rowe's
+    // shop opened on a completely blank September grid, in the middle of the
+    // model advert, under "Days with slots open".
+    //
+    // Today is now exempt from the stagger: everybody has offset 0, and the
+    // stagger still applies to every later day. Found the same way as the first
+    // half — by looking at a frame.
     for (const day of [0, 1, 2, 4, 6, 9, 11, 13, 16, 18, 20]) {
       for (const [start, end] of [['10:00:00', '12:00:00'], ['14:00:00', '16:00:00']]) {
         availability.push({
-          id: uid(1000 + slotN++), provider_id: pid, date: d(day + (i % 2)),
+          id: uid(1000 + slotN++), provider_id: pid, date: d(day === 0 ? 0 : day + (i % 2)),
           start_time: start, end_time: end,
           active_treatments: s.treatments.map(c => treatmentIdOf.get(`${s.key}:${c}`)),
           // Her first treatment's price. A slot carries one figure however many
@@ -300,7 +312,13 @@ export function buildTables(images: DemoImages = NO_IMAGES): Tables {
   // ── The model's bookings (signed in as Amara). Order fixes the ids: the
   //    first is uid(3000), the model's thread on /demo. ────────────────────
   const ameliaSession = book({ stylist: 'amelia', model: DEMO_MODEL_ID, category: 'Hair', day: 6, start: '10:00:00', end: '12:00:00',
-    status: 'accepted', note: 'Mid-length, dark brown, never coloured. Happy to go a couple of shades lighter.', createdDaysAgo: 4 })
+    // ⚠️ WRITTEN AROUND HER ACTUAL HAIR. This said "Mid-length, dark brown" of
+    // a model photographed in waist-length black box braids. It stays a COLOUR
+    // booking on purpose: the thread below turns on a patch test and choosing
+    // shades, so making it a cut would have left the conversation describing an
+    // appointment that was no longer happening.
+    status: 'accepted', note: 'My braids come out the week before, so this would be on my natural hair — '
+      + 'never coloured, and I’d like to go a couple of shades lighter.', createdDaysAgo: 4 })
   book({ stylist: 'nadia', model: DEMO_MODEL_ID, category: 'Makeup', day: 9, start: '14:00:00', end: '16:00:00',
     status: 'pending', note: 'Soft glam for a wedding the following weekend, if that works as practice.', createdDaysAgo: 1 })
   book({ stylist: 'tia', model: DEMO_MODEL_ID, category: 'Spray tan', day: 12, start: '10:00:00', end: '12:00:00',
@@ -329,7 +347,9 @@ export function buildTables(images: DemoImages = NO_IMAGES): Tables {
   const sophieSession = book({ stylist: 'priya', model: SOPHIE, category: 'Lashes', day: 4, start: '10:00:00', end: '12:00:00',
     status: 'accepted', note: 'First time having lashes done — I’d like something natural.', createdDaysAgo: 5 })
   book({ stylist: 'priya', model: LEAH, category: 'Brows', day: 9, start: '14:00:00', end: '16:00:00',
-    status: 'pending', note: 'Quite sparse brows, interested in lamination.', createdDaysAgo: 0 })
+    // Her brows are full and dark in all three photos, not sparse. Lamination
+    // is for setting an unruly brow, so this is both truer and a better example.
+    status: 'pending', note: 'Full brows that go everywhere — keen to try lamination.', createdDaysAgo: 0 })
   book({ stylist: 'priya', model: JESS, category: 'Lashes', day: 11, start: '10:00:00', end: '12:00:00',
     status: 'pending', createdDaysAgo: 1 })
   book({ stylist: 'priya', model: JESS, category: 'Brows', day: -8, start: '10:00:00', end: '12:00:00',
@@ -380,9 +400,22 @@ export function buildTables(images: DemoImages = NO_IMAGES): Tables {
     // somebody saw three photos and no information. That is not what the
     // product does, it is what the demo had, and a walkthrough of a stylist
     // weighing up an applicant would have shown the wrong thing.
-    model_attributes: [{ user_id: DEMO_MODEL_ID, hair_colour: 'Dark brown', hair_type: 'Wavy', hair_length: 'Medium',
+    // ⚠️ THESE MUST AGREE WITH THE PHOTOS, and for months they did not: Amara
+    // was 'Wavy' / 'Medium' / 'Dark brown' while every one of her three photos
+    // shows waist-length black box braids. A stylist filters on exactly these
+    // fields, so the demo was advertising a filter returning the wrong person.
+    //
+    // hair_type is the NATURAL texture in the product's vocabulary
+    // (Straight/Wavy/Curly/Coily — mobile/src/app/(app)/model-profile.tsx);
+    // braids are a style worn over it, which is why this says Coily and the
+    // braids are described in the bio, where a real model would put them.
+    //
+    // nail_condition was 'Good', which is not one of the nine options the
+    // product offers. Same class: a value no real row could hold.
+    model_attributes: [{ user_id: DEMO_MODEL_ID, hair_colour: 'Black', hair_type: 'Coily', hair_length: 'Very Long',
       hair_condition: 'Healthy', skin_tone: 'Deep', skin_type: 'Combination', eye_colour: 'Brown', eye_shape: 'Almond',
-      nail_condition: 'Good', bio: 'Happy to try new looks, and I like to talk the plan through first.' },
+      nail_condition: 'Healthy', bio: 'In knotless box braids at the moment, down to my waist. Happy to try new '
+        + 'looks, and I like to talk the plan through first.' },
     // Leah, who applies to Priya for brow lamination. Written to AGREE WITH
     // HER APPLICATION NOTE ("Quite sparse brows, interested in lamination")
     // rather than to fill fields — a profile that contradicts the booking it
@@ -391,11 +424,16 @@ export function buildTables(images: DemoImages = NO_IMAGES): Tables {
     //
     // Sensitive skin is deliberate: it is the fact that makes the patch test
     // in the consent step mean something when the two are seen together.
-    { user_id: LEAH, hair_colour: 'Light brown', hair_type: 'Straight', hair_length: 'Long',
-      skin_tone: 'Fair', skin_type: 'Sensitive', eye_colour: 'Blue', eye_shape: 'Round',
-      bio: 'Fine, sparse brows that have never been tinted or laminated — happy to be '
-        + 'somebody’s first attempt. My skin reacts to most things, so I will always want '
-        + 'the patch test, and I can come back a second time if it needs it.' }],
+    // ⚠️ CORRECTED 30 Sep, THE SAME DAY I WROTE IT. I gave her 'Straight' hair,
+    // 'Blue' eyes and "fine, sparse brows" without opening her photographs. All
+    // three are wrong: long WAVY highlighted hair, GREEN eyes, and notably FULL
+    // dark brows. Lamination suits full unruly brows at least as well, so the
+    // honest version needed no invention, only looking first.
+    { user_id: LEAH, hair_colour: 'Light Brown', hair_type: 'Wavy', hair_length: 'Long',
+      skin_tone: 'Fair', skin_type: 'Sensitive', eye_colour: 'Green', eye_shape: 'Round',
+      bio: 'Full brows that have never been tinted or laminated and never sit the same way '
+        + 'twice — happy to be somebody’s first attempt. My skin reacts to most things, so '
+        + 'I will always want the patch test, and I can come back a second time if it needs it.' }],
     model_photos,
     model_photo_categories: [],
     subscriptions: [{ user_id: DEMO_MODEL_ID, status: 'active', current_period_start: at(-10),

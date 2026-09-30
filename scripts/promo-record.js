@@ -47,7 +47,24 @@ const LEAH_SESSION = 'd0000000-0000-4000-8000-000000003005'
 // Varied, never a metronome. A uniform beat is what makes scripted footage
 // read as scripted, more than the speed does.
 const rnd = (a, b) => a + Math.random() * (b - a)
-const dwell = (page, a, b = a) => page.waitForTimeout(Math.round(rnd(a, b)))
+
+/**
+ * ⚠️ PACING IS SCALED HERE, NOT AT SIXTY CALL SITES.
+ *
+ * The first cuts were too fast to follow: a viewer could not finish reading a
+ * screen before it scrolled, and the scrolls themselves moved faster than the
+ * eye tracks. Raised 30 Sep 2026 on Micky's note — "following it matters more
+ * than the length".
+ *
+ * The RELATIVE rhythm is the part worth keeping (a long hold on the work, a
+ * short beat before a tap), so both cuts keep their own numbers and these two
+ * multipliers stretch them together. Change these, not the beats.
+ */
+const DWELL_SCALE = 1.5
+const SCROLL_SCALE = 2.0
+
+const dwell = (page, a, b = a) =>
+  page.waitForTimeout(Math.round(rnd(a, b) * DWELL_SCALE))
 
 /** Look, then tap: a beat with the target on screen before the click. */
 async function tap(page, locator, label) {
@@ -83,6 +100,7 @@ async function mustTap(page, locator, label) {
  * single biggest tell that nobody is holding the phone.
  */
 async function glide(page, heading, { overshoot = 0, ms = 700 } = {}) {
+  ms = Math.round(ms * SCROLL_SCALE)
   await page.evaluate(async ({ heading, overshoot, ms }) => {
     // By heading TEXT, because a nth-of-type selector silently lands on the
     // wrong section the moment a page gains one. null = the bottom of the
@@ -111,11 +129,12 @@ async function glide(page, heading, { overshoot = 0, ms = 700 } = {}) {
     await run(to + overshoot, ms)
     if (overshoot) {
       await new Promise(r => setTimeout(r, 180))
+      const settle = Math.round(260 * (ms / 700))
       const back = window.scrollY
       const t0 = performance.now()
       await new Promise(res => {
         const step = now => {
-          const k = Math.min(1, (now - t0) / 260)
+          const k = Math.min(1, (now - t0) / settle)
           window.scrollTo(0, back + (to - back) * ease(k))
           k < 1 ? requestAnimationFrame(step) : res()
         }
@@ -292,7 +311,12 @@ const CUTS = {
     // recording, not to the product.
     const note = page.locator('textarea').first()
     await note.evaluate(el => { el.spellcheck = false })
-    await note.pressSequentially('Never been coloured, happy to go lighter.', { delay: 38 })
+    // ⚠️ HER HAIR IS IN WAIST-LENGTH BOX BRAIDS in all three of her photos, and
+    // this used to read "Never been coloured, happy to go lighter" over the top
+    // of them. The words and the pictures have to be about the same person.
+    await note.pressSequentially(
+      'Braids come out the week before, so this would be on my natural hair.',
+      { delay: 38 })
     await dwell(page, 900, 1200)
     // "Skip" until there is something to keep; "Next" after. Both, in order.
     // ⚠️ NOT AN EXACT MATCH. Step 5's button reads "Next with 1 photo" once a
