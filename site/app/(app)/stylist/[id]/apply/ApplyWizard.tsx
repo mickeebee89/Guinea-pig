@@ -358,22 +358,29 @@ export function ApplyWizard({ ctx }: { ctx: ApplyContext }) {
           <label htmlFor="apply-note" className="text-sm text-muted">
             Anything {ctx.provider.name} should know? Optional.
           </label>
+          {/* ⚠️ NEUTRAL ON PURPOSE, AND NOT KEYED TO THE TREATMENT.
+              The placeholder read "Hair past my shoulders, never been
+              coloured…" until 30 Sep 2026, which assumed two things: a hair
+              TYPE - a model in braids or locs was shown a description of
+              somebody else - and that the booking was a HAIR booking at all.
+              This step is the same for all six categories, so it was wrong
+              for five of them whoever was reading it.
+
+              Six placeholders keyed off the chosen treatment was considered
+              and rejected: that is the same trap six times, with six strings
+              to keep honest. One line that cannot be wrong about anybody.
+
+              ⚠️ AND IT LIVES HERE, NOT AMONG THE ATTRIBUTES. Written there
+              first, which is not valid JSX: the route stopped resolving and
+              served the 404 page instead. tsc and eslint both passed. The
+              same mistake, in the same file, was already recorded earlier in
+              the same session. */}
           <textarea
             id="apply-note"
             value={note}
             onChange={e => changeNote(e.target.value)}
             rows={4}
             className="mt-2 w-full rounded-md border border-hairline p-3 text-sm"
-            /* ⚠️ NEUTRAL ON PURPOSE, AND NOT KEYED TO THE TREATMENT.
-               This read "Hair past my shoulders, never been coloured…" until
-               30 Sep 2026, which assumed two things: a hair TYPE — a model in
-               braids or locs was shown a description of somebody else — and
-               that the booking was a HAIR booking at all. This step is the
-               same for all six categories, so it was wrong for five of them
-               whoever was reading it.
-               Six placeholders keyed off the chosen treatment was considered
-               and rejected: that is the same trap six times, with six strings
-               to keep honest. One line that cannot be wrong about anybody. */
             placeholder="What you’re hoping for, and anything you’d rather avoid…"
           />
           <p className="mt-1 text-xs text-muted">{note.length}/{NOTE_MAX}</p>

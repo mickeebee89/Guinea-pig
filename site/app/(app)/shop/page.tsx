@@ -85,7 +85,7 @@ export default async function ShopPage() {
             Models see this on your shop and in search results.
           </p>
           <div className="mt-4">
-            <AvatarUpload initialUrl={setup.profilePicUrl} name={shop.name || 'You'} />
+            <AvatarUpload initialUrl={setup.profilePicUrl} name={shop.name || 'You'} audience="stylist" />
           </div>
         </section>
 

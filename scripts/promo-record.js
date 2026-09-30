@@ -49,6 +49,22 @@ const LEAH_SESSION = 'd0000000-0000-4000-8000-000000003005'
 const rnd = (a, b) => a + Math.random() * (b - a)
 
 /**
+ * BEAT MARKERS, so the timings handed to whoever writes the voiceover are
+ * MEASURED rather than estimated from extracted frames.
+ *
+ * Every dwell is randomised inside a range, so no two runs have the same
+ * shape and a table written once goes stale on the next recording. These are
+ * stamped during the run that produced the file.
+ *
+ * t = 0 is the moment the cut starts, which is a few tens of milliseconds
+ * after Playwright begins recording the page — so treat them as +/- half a
+ * second, which is well inside what a spoken line needs.
+ */
+let marks = []
+let markT0 = 0
+const mark = label => marks.push({ label, at: Date.now() - markT0 })
+
+/**
  * ⚠️ PACING IS SCALED HERE, NOT AT SIXTY CALL SITES.
  *
  * The first cuts were too fast to follow: a viewer could not finish reading a
@@ -235,20 +251,26 @@ async function warm(browser) {
  * wrong with FeaturedStylists and safeList in the site itself.
  */
 async function homepage(page) {
+  mark('1a homepage: the lockup and the tagline')
   await page.goto(`${BASE}/`, { waitUntil: 'domcontentloaded' })
   await hideChrome(page)
   await dwell(page, 2400, 2800)                   // the lockup and the tagline
 
+  mark('1b homepage: the stylist side')
   await glide(page, 'I’m a stylist', { ms: 600 })
   await dwell(page, 1800, 2100)                   // "You need people to practise on."
+  mark('1c homepage: the model side')
   await glide(page, 'I’m a model', { ms: 550 })
   await dwell(page, 1800, 2100)                   // "You want the treatment."
 
+  mark('1d homepage: how it works')
   await glide(page, 'How it works', { ms: 600 })
   await dwell(page, 1600, 1900)
+  mark('1e homepage: turn up and glow')
   await glide(page, 'Turn up and glow', { ms: 600 })
   await dwell(page, 1800, 2100)                   // the third step, read in place
 
+  mark('1f homepage: stylists already on Cavy')
   await glide(page, 'Stylists already on Cavy', { ms: 600 })
   await dwell(page, 2000, 2300)                   // real shops, not an empty state
 }
@@ -282,6 +304,7 @@ const CUTS = {
     await homepage(page)
 
     // ── 2. Her dashboard. ─────────────────────────────────────────────────
+    mark('2 her dashboard')
     await page.goto(`${BASE}/demo?as=model&to=%2Fdashboard`, { waitUntil: 'domcontentloaded' })
     await hideChrome(page)
     await dwell(page, 1300, 1600)
@@ -291,16 +314,19 @@ const CUTS = {
     await dwell(page, 600, 750)
 
     // ── 3. Browse, narrowed with the filters. ─────────────────────────────
+    mark('3 browse, all stylists')
     await mustTap(page, page.getByRole('link', { name: 'Browse', exact: true }).first(), 'Browse')
     await page.waitForLoadState('domcontentloaded')
     await hideChrome(page)
     await dwell(page, 1700, 2000)
 
+    mark('3b browse, filtered to Hair')
     await mustTap(page, page.getByRole('link', { name: 'Hair', exact: true }), 'Hair filter')
     await page.waitForLoadState('domcontentloaded')
     await hideChrome(page)
     await dwell(page, 1300, 1500)                       // one result, no photo
 
+    mark('3c browse, Any distance - Amelia appears')
     await mustTap(page, page.getByRole('link', { name: 'Any distance', exact: true }), 'Any distance')
     await page.waitForLoadState('domcontentloaded')
     await hideChrome(page)
@@ -309,6 +335,7 @@ const CUTS = {
     // ── 4. Her shop. BY NAME, never .first(): the first card is Ellie
     //      Harper, and I once described this path as Nadia while it was
     //      clicking Ellie. Naming her fails loudly if she drops out. ───────
+    mark('4 her shop: bio and treatments')
     await mustTap(page, page.locator('a[href^="/stylist/"]')
       .filter({ hasText: 'Amelia Rowe Hair' }), 'Amelia Rowe Hair card')
     await page.waitForLoadState('domcontentloaded')
@@ -320,12 +347,15 @@ const CUTS = {
     //      back up lands on Availability, where Apply is. ─────────────────
     await glide(page, 'Treatments', { ms: 700 })
     await dwell(page, 1000, 1300)
+    mark('5 her shop: work photos')
     await glide(page, 'Work', { overshoot: 90, ms: 900 })   // the deliberate one
     await dwell(page, 2200, 2500)                            // hold on her work
+    mark('5b her shop: availability')
     await glide(page, 'Availability', { ms: 750 })
     await dwell(page, 1700, 2000)                            // the calendar
 
     // ── 6. Apply. ─────────────────────────────────────────────────────────
+    mark('6 apply')
     await mustTap(page, page.getByRole('link', { name: /Apply for a session/i }), 'Apply')
     await page.waitForLoadState('domcontentloaded')
     await hideChrome(page)
@@ -337,13 +367,17 @@ const CUTS = {
     // booked that very slot.
     const pick = () => page.locator('ul button:not([disabled])').first()
 
+    mark('7a step 1 of 7: choose a date')
     await dwell(page, 1700, 2000)                            // STEP 1 date
     await mustTap(page, pick(), 'date')
+    mark('7b step 2 of 7: pick a time, with the price')
     await dwell(page, 1600, 1900)                            // STEP 2 time + price
     await mustTap(page, pick(), 'time')
+    mark('7c step 3 of 7: select a treatment')
     await dwell(page, 1500, 1800)                            // STEP 3 treatment
     await mustTap(page, pick(), 'treatment')
 
+    mark('7d step 4 of 7: add a note')
     await dwell(page, 1200, 1400)                            // STEP 4 note
     // ⚠️ SPELLCHECK OFF, FOR THE RECORDING ONLY. Chrome's dictionary is US, so
     // it red-underlined "coloured" — a wobbly red line under the correct
@@ -367,11 +401,13 @@ const CUTS = {
     // wizard. A missing click does not fail a recording — it shortens it.
     await mustTap(page, page.getByRole('button', { name: /^(Next|Skip)/ }), 'past the note')
 
+    mark('7e step 5 of 7: share photos')
     await dwell(page, 1700, 2000)                            // STEP 5 photos
     await mustTap(page, page.locator('button:has(img)').first(), 'a photo of her own')
     await dwell(page, 850, 1050)
     await mustTap(page, page.getByRole('button', { name: /^(Next|Skip)/ }), 'past the photos')
 
+    mark('7f step 6 of 7: the six consent ticks')
     await dwell(page, 1900, 2200)                            // STEP 6 consent
     const boxes = page.locator('input[type=checkbox]')
     const n = await boxes.count()
@@ -382,17 +418,21 @@ const CUTS = {
     await dwell(page, 700, 900)
     await mustTap(page, page.getByRole('button', { name: /Agree and continue/i }), 'Agree and continue')
 
+    mark('7g step 7 of 7: review and send')
     await dwell(page, 2100, 2400)                            // STEP 7 review
     await mustTap(page, page.getByRole('button', { name: /Send my application/i }), 'Send')
+    mark('7h application sent')
     await dwell(page, 2400, 2700)                            // "Application sent"
 
     // ── 8. The thread, accepted, ending on her line. ──────────────────────
+    mark('8 the chat, accepted')
     await page.goto(`${BASE}/messages/d0000000-0000-4000-8000-000000003000`,
       { waitUntil: 'domcontentloaded' })
     await hideChrome(page)
     await dwell(page, 3200, 3500)
 
     // ── 9. The closing frame. ─────────────────────────────────────────────
+    mark('9 closing frame')
     await splash(page, 'model', 3000)
   },
 
@@ -426,6 +466,7 @@ const CUTS = {
     await homepage(page)
 
     // ── 2. Her dashboard. ─────────────────────────────────────────────────
+    mark('2 her dashboard')
     await page.goto(`${BASE}/demo?as=stylist&to=%2Fdashboard`, { waitUntil: 'domcontentloaded' })
     await hideChrome(page)
     await dwell(page, 1800, 2100)                       // "Good morning, Priya"
@@ -435,21 +476,26 @@ const CUTS = {
     await dwell(page, 600, 800)
 
     // ── 3. Her shop, and what she can change about it. ────────────────────
+    mark('3 her shop, top')
     await mustTap(page, page.getByRole('link', { name: 'Shop', exact: true }).first(), 'Shop')
     await page.waitForLoadState('domcontentloaded')
     await hideChrome(page)
     await dwell(page, 1500, 1800)
+    mark('3b her shop: photo, name, area, postcode')
     await glide(page, 'Your photo', { ms: 750 })
     await dwell(page, 1400, 1700)
+    mark('3c her shop: bio and the treatments she offers')
     await glide(page, 'What you offer', { overshoot: 70, ms: 850 })
     await dwell(page, 1900, 2200)                       // the treatment chips
 
     // ── 4. Availability: add a slot, save it, and GO BACK IN TO SEE IT. ───
+    mark('4 availability, today')
     await mustTap(page, page.getByRole('link', { name: 'Availability', exact: true }).first(), 'Availability')
     await page.waitForLoadState('domcontentloaded')
     await hideChrome(page)
     await dwell(page, 1600, 1900)                       // today, with its slots
 
+    mark('4b adding a slot: times, price, treatment')
     await mustTap(page, page.getByRole('button', { name: /^Add a slot$/ }), 'Add a slot')
     await dwell(page, 900, 1100)
     const times = page.locator('input[type=time]')
@@ -492,10 +538,12 @@ const CUTS = {
     // ⚠️ AND SCROLL TO THEM. The day editor sits BELOW the month grid, so
     // re-opening the day lands on the calendar and the payoff is off-screen.
     // The first cut did exactly that: it saved a slot and then showed a grid.
+    mark('4c saved - three slots where there were two')
     await glide(page, 'Wednesday', { ms: 800 })
     await dwell(page, 2600, 3000)                       // 10:00, 14:00 and 16:00
 
     // ── 5. The application waiting. ───────────────────────────────────────
+    mark('5 the application waiting')
     await mustTap(page, page.getByRole('link', { name: 'Bookings', exact: true }).first(), 'Bookings')
     await page.waitForLoadState('domcontentloaded')
     await hideChrome(page)
@@ -507,31 +555,37 @@ const CUTS = {
 
     // ── 6. Who she is. BY HER LINK, not .first(): there are three applicants
     //      and the one being accepted must be the one being read. ──────────
+    mark('6 the applicant: her bio and details')
     await mustTap(page, page.locator(`a[href="/model/${LEAH}"]`).first(), 'Leah profile')
     await page.waitForLoadState('domcontentloaded')
     await hideChrome(page)
     await dwell(page, 2200, 2500)                       // her bio
+    mark('6b the applicant: her photos')
     await glide(page, 'Photos', { overshoot: 70, ms: 800 })
     await dwell(page, 2000, 2300)
     await glide(page, 0, { ms: 800 })
     await dwell(page, 900, 1100)
 
     // ── 7. Back, and accept. ──────────────────────────────────────────────
+    mark('7 back to the application')
     await page.goBack({ waitUntil: 'domcontentloaded' })
     await hideChrome(page)
     await dwell(page, 700, 900)
     await glide(page, 'Awaiting', { ms: 700 })
     await dwell(page, 1100, 1400)
+    mark('7b accepted - she moves to Confirmed')
     await mustTap(page, page.getByRole('button', { name: /^Accept$/ }).first(), 'Accept')
     await dwell(page, 2600, 3000)                       // she moves to Confirmed
 
     // ── 8. The thread acceptance just unlocked. ───────────────────────────
+    mark('8 the chat the acceptance unlocked')
     await page.goto(`${BASE}/messages/${LEAH_SESSION}`, { waitUntil: 'domcontentloaded' })
     await hideChrome(page)
     await dwell(page, 1800, 2100)                       // empty, and now writable
     const composer = page.locator('textarea, input[placeholder*="essage" i]').first()
     await composer.click()
     await dwell(page, 400, 600)
+    mark('8b she types the first message')
     await composer.pressSequentially(
       'Hi Leah! Lovely to have you. Could you come in for a patch test 48 hours before?',
       { delay: 34 })
@@ -540,6 +594,7 @@ const CUTS = {
     await dwell(page, 2600, 3000)                       // her message, sent
 
     // ── 9. The closing frame, the stylist's one. ──────────────────────────
+    mark('9 closing frame')
     await splash(page, 'stylist', 3000)
   },
 }
@@ -571,6 +626,8 @@ const CUTS = {
       recordVideo: { dir: OUT, size: { width: 540, height: 788 } },
     })
     const page = await context.newPage()
+    marks = []
+    markT0 = Date.now()
     await CUTS[name](page)
     const video = page.video()
     await context.close()                                // finalises the file
@@ -581,6 +638,21 @@ const CUTS = {
     console.log('  ' + path.basename(dst)
       + '  ' + ((Date.now() - t0) / 1000).toFixed(1) + 's'
       + '  ' + (fs.statSync(dst).size / 1048576).toFixed(2) + ' MB')
+
+    // The beat sheet, measured during the run that just wrote the file.
+    const clock = ms => Math.floor(ms / 60000) + ':'
+      + String(Math.floor((ms % 60000) / 1000)).padStart(2, '0')
+    const total = Date.now() - markT0
+    console.log('\n  ' + name + ' beat sheet')
+    marks.forEach((m, i) => {
+      const end = i + 1 < marks.length ? marks[i + 1].at : total
+      console.log('    ' + clock(m.at) + ' - ' + clock(end) + '  ' + m.label)
+    })
+    fs.writeFileSync(path.join(OUT, `beats-${name}.txt`),
+      marks.map((m, i) => {
+        const end = i + 1 < marks.length ? marks[i + 1].at : total
+        return clock(m.at) + '\t' + clock(end) + '\t' + m.label
+      }).join('\n') + '\n')
   }
 
   await browser.close()

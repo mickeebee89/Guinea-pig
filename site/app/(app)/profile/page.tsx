@@ -74,7 +74,7 @@ export default async function ProfilePage() {
       <div className="space-y-8">
         <section className="rounded-lg border border-hairline bg-white p-5 shadow-soft">
           <h2 className="mb-4 font-display text-xl text-warm-dark">Your photo</h2>
-          <AvatarUpload initialUrl={profile.avatarUrl} name={profile.name} />
+          <AvatarUpload initialUrl={profile.avatarUrl} name={profile.name} audience="model" />
         </section>
 
         <section className="rounded-lg border border-hairline bg-white p-5 shadow-soft">

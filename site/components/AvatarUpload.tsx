@@ -31,11 +31,27 @@ import { attempt } from '@/lib/attempt'
  * genuinely cannot decode the image — a refused upload would be worse, and the
  * server caps size and type either way.
  */
+/**
+ * ⚠️ WHO SEES THE PHOTO DEPENDS ON WHOSE PAGE THIS IS, and the sentence below
+ * used to be hardcoded for the model side. On /shop a STYLIST was told
+ * "Stylists see it on your profile" about her own photograph — backwards, on a
+ * page she uses, directly under a heading that correctly says models see it.
+ *
+ * One component, two audiences, one sentence written for one of them. Found in
+ * a frame of the stylist walkthrough, 30 Sep 2026.
+ */
+const SEEN_BY = {
+  model: 'Stylists see it on your profile',
+  stylist: 'Models see it on your shop and in search results',
+} as const
+
 export function AvatarUpload({
-  initialUrl, name,
+  initialUrl, name, audience,
 }: {
   initialUrl: string | null
   name: string
+  /** Whose page this is — NOT who is being described. See SEEN_BY above. */
+  audience: keyof typeof SEEN_BY
 }) {
   const router = useRouter()
   const [url, setUrl] = useState(initialUrl)
@@ -93,7 +109,7 @@ export function AvatarUpload({
             requirement rather than advice — and a stylist deciding whether to
             take a stranger is looking at it too. */}
         <p className="mt-2 max-w-sm text-xs text-muted">
-          Use a clear photo of your face. Stylists see it on your profile, and it’s what your ID
+          Use a clear photo of your face. {SEEN_BY[audience]}, and it’s what your ID
           check photo is compared against.
         </p>
         {error && <p role="alert" className="mt-1 text-sm text-danger">{error}</p>}
