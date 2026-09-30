@@ -106,10 +106,22 @@ async function glide(page, heading, { overshoot = 0, ms = 700 } = {}) {
     // wrong section the moment a page gains one. null = the bottom of the
     // page; a NUMBER is an absolute offset, which is how a cut scrolls back
     // to the top (0) — "down and back up" needs both ends.
+    // ⚠️ NOT ONLY HEADINGS. The homepage's two role cards are labelled with a
+    // <span>, so a heading-only search could not stop on the single most
+    // important thing on the page. Apostrophes are normalised because the copy
+    // uses the typographic one and nobody types that in a script.
+    const norm = t => t.trim().toLowerCase().replace(/’/g, "'")
     const el = typeof heading === 'string'
-      ? [...document.querySelectorAll('h1,h2,h3')]
-          .find(e => e.textContent.trim().toLowerCase().startsWith(heading.toLowerCase()))
+      ? [...document.querySelectorAll('h1,h2,h3,span,p,a')]
+          .find(e => norm(e.textContent).startsWith(norm(heading)))
       : null
+    // ⚠️ A STRING THAT MATCHES NOTHING USED TO SCROLL TO THE BOTTOM. null means
+    // "the bottom" and an unmatched string fell into the same branch, so a typo
+    // or a reworded heading produced a plausible-looking scroll to the wrong
+    // place and no error at all. It is thrown now, and the run stops.
+    if (typeof heading === 'string' && !el) {
+      throw new Error('glide target not found on the page: ' + heading)
+    }
     const to = typeof heading === 'number'
       ? heading
       : el
@@ -206,6 +218,41 @@ async function warm(browser) {
   await page.close()
 }
 
+/**
+ * BEAT 1, SHARED BY BOTH CUTS. The homepage, read in stops.
+ *
+ * ⚠️ IT USED TO BE ONE CONTINUOUS SCROLL from top to bottom, which meant the
+ * first thing a viewer ever saw was also the least readable beat in either
+ * video: the page moved past faster than anyone could read a line of it.
+ * Raised by Micky, 30 Sep 2026.
+ *
+ * So it stops. Each stop scrolls to one section and holds long enough to read
+ * it — the hero, the two sides of the swap, how it works, and the fact that
+ * there are real stylists on it. Nothing here scrolls past anything.
+ *
+ * ONE COPY, CALLED BY BOTH CUTS, deliberately. The same beat written out twice
+ * is two places to fix and one place to forget, which is exactly what went
+ * wrong with FeaturedStylists and safeList in the site itself.
+ */
+async function homepage(page) {
+  await page.goto(`${BASE}/`, { waitUntil: 'domcontentloaded' })
+  await hideChrome(page)
+  await dwell(page, 2400, 2800)                   // the lockup and the tagline
+
+  await glide(page, 'I’m a stylist', { ms: 600 })
+  await dwell(page, 1800, 2100)                   // "You need people to practise on."
+  await glide(page, 'I’m a model', { ms: 550 })
+  await dwell(page, 1800, 2100)                   // "You want the treatment."
+
+  await glide(page, 'How it works', { ms: 600 })
+  await dwell(page, 1600, 1900)
+  await glide(page, 'Turn up and glow', { ms: 600 })
+  await dwell(page, 1800, 2100)                   // the third step, read in place
+
+  await glide(page, 'Stylists already on Cavy', { ms: 600 })
+  await dwell(page, 2000, 2300)                   // real shops, not an empty state
+}
+
 // ── The two walkthroughs ───────────────────────────────────────────────────
 const CUTS = {
   /**
@@ -232,13 +279,7 @@ const CUTS = {
    */
   model: async page => {
     // ── 1. Homepage, signed out: what a stranger actually lands on. ────────
-    await page.goto(`${BASE}/`, { waitUntil: 'domcontentloaded' })
-    await hideChrome(page)
-    await dwell(page, 1700, 2000)                       // never click on load
-    await glide(page, null, { ms: 1100 })
-    await dwell(page, 900, 1100)
-    await glide(page, 0, { ms: 850 })
-    await dwell(page, 500, 650)
+    await homepage(page)
 
     // ── 2. Her dashboard. ─────────────────────────────────────────────────
     await page.goto(`${BASE}/demo?as=model&to=%2Fdashboard`, { waitUntil: 'domcontentloaded' })
@@ -382,13 +423,7 @@ const CUTS = {
    */
   stylist: async page => {
     // ── 1. Homepage, signed out. ──────────────────────────────────────────
-    await page.goto(`${BASE}/`, { waitUntil: 'domcontentloaded' })
-    await hideChrome(page)
-    await dwell(page, 1700, 2000)
-    await glide(page, null, { ms: 1100 })
-    await dwell(page, 900, 1100)
-    await glide(page, 0, { ms: 850 })
-    await dwell(page, 500, 650)
+    await homepage(page)
 
     // ── 2. Her dashboard. ─────────────────────────────────────────────────
     await page.goto(`${BASE}/demo?as=stylist&to=%2Fdashboard`, { waitUntil: 'domcontentloaded' })

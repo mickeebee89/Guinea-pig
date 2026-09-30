@@ -364,7 +364,17 @@ export function ApplyWizard({ ctx }: { ctx: ApplyContext }) {
             onChange={e => changeNote(e.target.value)}
             rows={4}
             className="mt-2 w-full rounded-md border border-hairline p-3 text-sm"
-            placeholder="Hair past my shoulders, never been coloured…"
+            /* ⚠️ NEUTRAL ON PURPOSE, AND NOT KEYED TO THE TREATMENT.
+               This read "Hair past my shoulders, never been coloured…" until
+               30 Sep 2026, which assumed two things: a hair TYPE — a model in
+               braids or locs was shown a description of somebody else — and
+               that the booking was a HAIR booking at all. This step is the
+               same for all six categories, so it was wrong for five of them
+               whoever was reading it.
+               Six placeholders keyed off the chosen treatment was considered
+               and rejected: that is the same trap six times, with six strings
+               to keep honest. One line that cannot be wrong about anybody. */
+            placeholder="What you’re hoping for, and anything you’d rather avoid…"
           />
           <p className="mt-1 text-xs text-muted">{note.length}/{NOTE_MAX}</p>
           <button
