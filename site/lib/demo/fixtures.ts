@@ -370,9 +370,32 @@ export function buildTables(images: DemoImages = NO_IMAGES): Tables {
     favourites: [{ id: uid(8000), user_id: DEMO_MODEL_ID, provider_id: provId('amelia'), created_at: at(-5) }],
     blocks: [],
     portfolio_items,
+    // ⚠️ THE BIO AND THE DETAILS CARD BOTH COME FROM HERE. queries/model.ts
+    // reads `bio` off this row, and renders "Details" from the non-empty
+    // fields only — so a model with no row shows a name, a Verified badge and
+    // photos, and nothing else.
+    //
+    // Only Amara had one until 30 Sep, which made every APPLICANT'S profile
+    // 899px tall against a 788px viewport: a stylist deciding whether to take
+    // somebody saw three photos and no information. That is not what the
+    // product does, it is what the demo had, and a walkthrough of a stylist
+    // weighing up an applicant would have shown the wrong thing.
     model_attributes: [{ user_id: DEMO_MODEL_ID, hair_colour: 'Dark brown', hair_type: 'Wavy', hair_length: 'Medium',
       hair_condition: 'Healthy', skin_tone: 'Deep', skin_type: 'Combination', eye_colour: 'Brown', eye_shape: 'Almond',
-      nail_condition: 'Good', bio: 'Happy to try new looks, and I like to talk the plan through first.' }],
+      nail_condition: 'Good', bio: 'Happy to try new looks, and I like to talk the plan through first.' },
+    // Leah, who applies to Priya for brow lamination. Written to AGREE WITH
+    // HER APPLICATION NOTE ("Quite sparse brows, interested in lamination")
+    // rather than to fill fields — a profile that contradicts the booking it
+    // is attached to is worse than a thin one. There is no brow field, so the
+    // brow detail is in the bio, which is where a real model would put it.
+    //
+    // Sensitive skin is deliberate: it is the fact that makes the patch test
+    // in the consent step mean something when the two are seen together.
+    { user_id: LEAH, hair_colour: 'Light brown', hair_type: 'Straight', hair_length: 'Long',
+      skin_tone: 'Fair', skin_type: 'Sensitive', eye_colour: 'Blue', eye_shape: 'Round',
+      bio: 'Fine, sparse brows that have never been tinted or laminated — happy to be '
+        + 'somebody’s first attempt. My skin reacts to most things, so I will always want '
+        + 'the patch test, and I can come back a second time if it needs it.' }],
     model_photos,
     model_photo_categories: [],
     subscriptions: [{ user_id: DEMO_MODEL_ID, status: 'active', current_period_start: at(-10),

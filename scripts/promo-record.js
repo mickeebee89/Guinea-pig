@@ -38,6 +38,10 @@ const path = require('path')
 const BASE = process.env.DEMO_BASE || 'http://localhost:3001'
 const OUT = path.resolve('promo/video')
 const AMELIA = 'd0000000-0000-4000-8000-000000000101'
+const LEAH = 'd0000000-0000-4000-8000-000000000022'
+// Priya's sessions are uid(3004..3007) in fixture order; 3005 is Leah's
+// pending brow application - the one the dashboard notification names.
+const LEAH_SESSION = 'd0000000-0000-4000-8000-000000003005'
 
 // ── Pacing ─────────────────────────────────────────────────────────────────
 // Varied, never a metronome. A uniform beat is what makes scripted footage
@@ -327,31 +331,157 @@ const CUTS = {
     await splash(page, 'model', 3000)
   },
 
-  /** A stylist: the work -> applications arrive -> accept -> talk. ~20s */
+  /**
+   * A STYLIST, END TO END. The nine beats Micky set on 30 Sep 2026:
+   *   1 homepage            6 the applicant's profile
+   *   2 stylist dashboard   7 back, and accept
+   *   3 edit shop           8 the thread that acceptance just unlocked
+   *   4 add a slot, saved   9 the closing frame
+   *   5 the application
+   *
+   * Signed in as Priya Shah Lash & Brow. The applicant is LEAH B. throughout,
+   * because she is the one the dashboard notification names, so beats 5, 6, 7
+   * and 8 are one person without contrivance.
+   *
+   * ⚠️ BEAT 8 IS ONE-SIDED, AND THAT IS THE HONEST VERSION. There is no
+   * conversation to show: the product DISABLES the composer until a booking is
+   * confirmed ("You'll be able to message once this booking is confirmed"), so
+   * a pre-acceptance exchange cannot exist, and the thread opens empty the
+   * moment Priya accepts. Writing messages into it would depict a chat the
+   * product refuses to allow. So she types the first one, live, and the beat
+   * shows the real behaviour instead: the chat unlocks BECAUSE she accepted.
+   *
+   * ⚠️ RESTART THE DEMO SERVER BEFORE EVERY RUN. This cut mutates the store
+   * twice — it inserts an availability slot and it accepts an application. A
+   * second run on a warm server found Leah already accepted and quietly
+   * accepted Jess instead, recording a different video that looked fine.
+   */
   stylist: async page => {
-    await page.goto(`${BASE}/demo?as=stylist&to=%2Favailability`, { waitUntil: 'domcontentloaded' })
+    // ── 1. Homepage, signed out. ──────────────────────────────────────────
+    await page.goto(`${BASE}/`, { waitUntil: 'domcontentloaded' })
     await hideChrome(page)
-    await dwell(page, 1200, 1500)
-    await glide(page, null, { ms: 700 })          // down to the slot editor
-    await dwell(page, 2000, 2400)                        // a slot, with its price
+    await dwell(page, 1700, 2000)
+    await glide(page, null, { ms: 1100 })
+    await dwell(page, 900, 1100)
+    await glide(page, 0, { ms: 850 })
+    await dwell(page, 500, 650)
 
-    await page.goto(`${BASE}/dashboard`, { waitUntil: 'domcontentloaded' })
+    // ── 2. Her dashboard. ─────────────────────────────────────────────────
+    await page.goto(`${BASE}/demo?as=stylist&to=%2Fdashboard`, { waitUntil: 'domcontentloaded' })
     await hideChrome(page)
-    await dwell(page, 2100, 2500)                        // two applications waiting
+    await dwell(page, 1800, 2100)                       // "Good morning, Priya"
+    await glide(page, null, { ms: 1300 })
+    await dwell(page, 1600, 1900)
+    await glide(page, 0, { ms: 950 })
+    await dwell(page, 600, 800)
 
-    await tap(page, page.getByText(/Accept or decline on the bookings page/i), 'to bookings')
+    // ── 3. Her shop, and what she can change about it. ────────────────────
+    await mustTap(page, page.getByRole('link', { name: 'Shop', exact: true }).first(), 'Shop')
     await page.waitForLoadState('domcontentloaded')
     await hideChrome(page)
-    await glide(page, 'Awaiting', { ms: 600 })
-    await dwell(page, 1300, 1600)
+    await dwell(page, 1500, 1800)
+    await glide(page, 'Your photo', { ms: 750 })
+    await dwell(page, 1400, 1700)
+    await glide(page, 'What you offer', { overshoot: 70, ms: 850 })
+    await dwell(page, 1900, 2200)                       // the treatment chips
 
-    await tap(page, page.getByRole('button', { name: /^Accept$/ }), 'Accept')
-    await dwell(page, 2300, 2700)                        // the chip flips to Confirmed
-
-    await page.goto(`${BASE}/messages/d0000000-0000-4000-8000-000000003004`,
-      { waitUntil: 'domcontentloaded' })
+    // ── 4. Availability: add a slot, save it, and GO BACK IN TO SEE IT. ───
+    await mustTap(page, page.getByRole('link', { name: 'Availability', exact: true }).first(), 'Availability')
+    await page.waitForLoadState('domcontentloaded')
     await hideChrome(page)
-    await dwell(page, 2800, 3200)
+    await dwell(page, 1600, 1900)                       // today, with its slots
+
+    await mustTap(page, page.getByRole('button', { name: /^Add a slot$/ }), 'Add a slot')
+    await dwell(page, 900, 1100)
+    const times = page.locator('input[type=time]')
+    const n = await times.count()
+    await times.nth(n - 2).fill('16:00')
+    await dwell(page, 450, 600)
+    await times.nth(n - 1).fill('18:00')
+    await dwell(page, 700, 900)
+    await mustTap(page, page.getByRole('button', { name: /^(Lashes|Brows)$/ }).last(), 'a treatment')
+    await dwell(page, 700, 900)
+    await mustTap(page, page.getByRole('button', { name: /^Save this day$/ }), 'Save this day')
+    await page.waitForLoadState('domcontentloaded')
+    await hideChrome(page)
+    await dwell(page, 1500, 1800)
+
+    // ⚠️ THE SCROLL IS WHAT THE BEAT NEEDS, not the click.
+    //
+    // I first reported this as "saving returns to the month calendar with no
+    // confirmation banner". Both halves were wrong, and looking at the frames
+    // is what corrected them: saving RELOADS the page, which resets scroll to
+    // the top, and the day editor is still open below the month grid — with a
+    // rose "Saved." under the button. I had only read the first 260 characters
+    // of the page text, which stops above it.
+    //
+    // So the first cut showed a grid after saving because the payoff was below
+    // the fold, not because the product hid it. The click re-opens the same day
+    // deterministically; the glide is what puts three slots and "Saved." on
+    // screen, which is where "until it's saved" actually lands.
+    // ⚠️ BY TODAY'S DATE, NOT .first(). Every calendar cell is a link of this
+    // shape, and the FIRST one in the DOM is the 1st of the month — an empty
+    // day. The same .first() mistake put Ellie Harper in a shot I described as
+    // Nadia; a locator that happens to be right today is not right.
+    const d = new Date()
+    const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+      + `-${String(d.getDate()).padStart(2, '0')}`
+    await mustTap(page, page.locator(`a[href*="date=${iso}"]`).first(), 'back into the day')
+    await page.waitForLoadState('domcontentloaded')
+    await hideChrome(page)
+    await dwell(page, 800, 1000)
+    // ⚠️ AND SCROLL TO THEM. The day editor sits BELOW the month grid, so
+    // re-opening the day lands on the calendar and the payoff is off-screen.
+    // The first cut did exactly that: it saved a slot and then showed a grid.
+    await glide(page, 'Wednesday', { ms: 800 })
+    await dwell(page, 2600, 3000)                       // 10:00, 14:00 and 16:00
+
+    // ── 5. The application waiting. ───────────────────────────────────────
+    await mustTap(page, page.getByRole('link', { name: 'Bookings', exact: true }).first(), 'Bookings')
+    await page.waitForLoadState('domcontentloaded')
+    await hideChrome(page)
+    await dwell(page, 1100, 1300)
+    // The bookings page opens on its own month grid too, with the applicant
+    // half-cut at the bottom edge. Beat 5 is the APPLICATION, so go to it.
+    await glide(page, 'Awaiting', { ms: 750 })
+    await dwell(page, 2200, 2600)                       // Leah B., with Accept
+
+    // ── 6. Who she is. BY HER LINK, not .first(): there are three applicants
+    //      and the one being accepted must be the one being read. ──────────
+    await mustTap(page, page.locator(`a[href="/model/${LEAH}"]`).first(), 'Leah profile')
+    await page.waitForLoadState('domcontentloaded')
+    await hideChrome(page)
+    await dwell(page, 2200, 2500)                       // her bio
+    await glide(page, 'Photos', { overshoot: 70, ms: 800 })
+    await dwell(page, 2000, 2300)
+    await glide(page, 0, { ms: 800 })
+    await dwell(page, 900, 1100)
+
+    // ── 7. Back, and accept. ──────────────────────────────────────────────
+    await page.goBack({ waitUntil: 'domcontentloaded' })
+    await hideChrome(page)
+    await dwell(page, 700, 900)
+    await glide(page, 'Awaiting', { ms: 700 })
+    await dwell(page, 1100, 1400)
+    await mustTap(page, page.getByRole('button', { name: /^Accept$/ }).first(), 'Accept')
+    await dwell(page, 2600, 3000)                       // she moves to Confirmed
+
+    // ── 8. The thread acceptance just unlocked. ───────────────────────────
+    await page.goto(`${BASE}/messages/${LEAH_SESSION}`, { waitUntil: 'domcontentloaded' })
+    await hideChrome(page)
+    await dwell(page, 1800, 2100)                       // empty, and now writable
+    const composer = page.locator('textarea, input[placeholder*="essage" i]').first()
+    await composer.click()
+    await dwell(page, 400, 600)
+    await composer.pressSequentially(
+      'Hi Leah! Lovely to have you. Could you come in for a patch test 48 hours before?',
+      { delay: 34 })
+    await dwell(page, 800, 1000)
+    await mustTap(page, page.getByRole('button', { name: /^Send$/ }), 'Send')
+    await dwell(page, 2600, 3000)                       // her message, sent
+
+    // ── 9. The closing frame, the stylist's one. ──────────────────────────
+    await splash(page, 'stylist', 3000)
   },
 }
 
