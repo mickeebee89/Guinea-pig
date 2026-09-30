@@ -266,75 +266,91 @@ commit;
 --   `YES`, say so — that safety net is missing and is worth adding separately.
 -- ===========================================================================
 --
--- ── VERIFY — both halves, as a member, rolled back ──────────────────────
+-- ── VERIFY — both halves, as a member, in ONE rolled-back block ─────────
 --
---   Uses the model test account from CLAUDE.md (subscribed + verified, so it
---   clears session_apply_gate). Everything is rolled back.
+--   ⚠️ CORRECTED 1 Oct 2026, AFTER THE FIRST VERSION WOULD NOT RUN. It had
+--   three faults, all found by Micky pasting it: `availability` has no
+--   created_at column to order by, and `sessions` requires treatment_id and
+--   location_type, which the inserts did not supply. A verify block that has
+--   to be repaired before it runs is not a verify block — it is a draft, and
+--   the next person meets the draft rather than the check.
+--
+--   It is now ONE paste, with each half in its own savepoint, for the reason
+--   recorded at 0057: two blocks pasted separately can be misread as each
+--   other. The slots are created as the migration runner (so availability RLS
+--   is not in the way) and only the SESSION inserts run as the member.
+--
+--   Uses the model test account from CLAUDE.md — subscribed and verified, so
+--   it clears session_apply_gate. Everything is rolled back.
 --
 --   -- (a) trigger order: this must sort before the overlap guard.
 --   select tgname from pg_trigger
 --   where tgrelid = 'public.sessions'::regclass and not tgisinternal
---     and tgtype & 4 = 4          -- BEFORE INSERT
+--     and tgtype & 4 = 4          -- INSERT
 --   order by tgname;
 --
 --   Expect session_apply_gate, session_price_snapshot, session_slot_authority,
 --   trg_reject_overlapping_session — in that order.
 --
---   -- (b) a started slot is refused, and a future one is written FROM THE ROW
---   --     even when the caller lies about every time.
+--   -- (b) and (c) together:
 --   begin;
---     set local role authenticated;
---     select set_config('request.jwt.claims',
---       json_build_object('sub','b0df9c2f-02c5-4fef-afb0-9b184c3b9130',
---                         'role','authenticated')::text, true);
+--   do $v$
+--   declare
+--     v_prov  uuid; v_treat uuid; v_past uuid; v_future uuid;
+--     v_state text; v_date date; v_start time; v_end time;
+--   begin
+--     select provider_id, id into v_prov, v_treat
+--     from public.provider_treatments limit 1;
+--     if v_prov is null then
+--       raise exception 'ROLLED BACK. No provider with a treatment, so the trigger cannot be exercised.';
+--     end if;
 --
---     -- pick any provider with a treatment
---     with p as (select provider_id, id as treat from public.provider_treatments limit 1)
 --     insert into public.availability (provider_id, date, start_time, end_time,
 --                                      active_treatments, is_taken)
---     select provider_id, current_date, '00:01', '00:30', array[treat::text], false
---     from p
---     returning id;          -- ← PAST slot (00:01 today)
+--     values (v_prov, current_date, '00:01', '00:30', array[v_treat::text], false)
+--     returning id into v_past;
 --
---     -- inserting against it must raise CV003:
---     --   "That appointment has already started — please choose another time."
---     insert into public.sessions (provider_id, model_user_id, model_id,
---                                  availability_id, duration_minutes, status)
---     select provider_id, auth.uid(), auth.uid(), id, 120, 'pending'
---     from public.availability
---     where date = current_date and start_time = '00:01'
---     order by created_at desc limit 1;
---   rollback;
+--     insert into public.availability (provider_id, date, start_time, end_time,
+--                                      active_treatments, is_taken)
+--     values (v_prov, current_date + 30, '14:00', '16:00', array[v_treat::text], false)
+--     returning id into v_future;
 --
---   -- (c) the lie is discarded. Same shape, a slot 30 days out, with the
---   --     insert claiming a completely different date and time:
---   begin;
---     set local role authenticated;
---     select set_config('request.jwt.claims',
---       json_build_object('sub','b0df9c2f-02c5-4fef-afb0-9b184c3b9130',
---                         'role','authenticated')::text, true);
+--     perform set_config('request.jwt.claims',
+--       json_build_object('sub', 'b0df9c2f-02c5-4fef-afb0-9b184c3b9130',
+--                         'role', 'authenticated')::text, true);
+--     execute 'set local role authenticated';
 --
---     with p as (select provider_id, id as treat from public.provider_treatments limit 1),
---     s as (
---       insert into public.availability (provider_id, date, start_time, end_time,
---                                        active_treatments, is_taken)
---       select provider_id, current_date + 30, '14:00', '16:00',
---              array[treat::text], false
---       from p returning id, provider_id
---     )
+--     -- (b) a slot that started at 00:01 today
+--     begin
+--       insert into public.sessions (provider_id, model_user_id, model_id,
+--                                    availability_id, treatment_id, location_type,
+--                                    duration_minutes, status)
+--       values (v_prov, auth.uid(), auth.uid(), v_past, v_treat, 'provider',
+--               30, 'pending');
+--       v_state := 'NO ERROR — the past slot was ACCEPTED, which is the bug';
+--     exception when others then
+--       v_state := sqlstate || ' ' || sqlerrm;
+--     end;
+--     raise notice 'past slot   -> %', v_state;
+--
+--     -- (c) a slot 30 days out, with every time argument a lie
 --     insert into public.sessions (provider_id, model_user_id, model_id,
 --                                  availability_id, date, start_time, end_time,
---                                  scheduled_at, duration_minutes, status)
---     select provider_id, auth.uid(), auth.uid(), id,
---            current_date + 999, '03:00', '04:00', now(), 120, 'pending'
---     from s;
+--                                  scheduled_at, treatment_id, location_type,
+--                                  duration_minutes, status)
+--     values (v_prov, auth.uid(), auth.uid(), v_future,
+--             current_date + 999, '03:00', '04:00', now(),
+--             v_treat, 'provider', 120, 'pending')
+--     returning date, start_time, end_time into v_date, v_start, v_end;
+--     raise notice 'future slot -> written as % %-% (expected % 14:00-16:00)',
+--       v_date, v_start, v_end, current_date + 30;
 --
---     select date, start_time, end_time, scheduled_at
---     from public.sessions
---     where model_user_id = auth.uid()
---     order by created_at desc limit 1;
+--     execute 'reset role';
+--     raise exception 'ROLLED BACK ON PURPOSE. Read the two notices above.';
+--   end $v$;
 --   rollback;
 --
---   Expect current_date + 30, 14:00, 16:00 — NOT +999 and not 03:00. The
+--   Expect: past slot -> CV003 "That appointment has already started"; future
+--   slot -> current_date + 30 at 14:00-16:00, NOT +999 and not 03:00. The
 --   caller's values were discarded, which is the whole point.
 -- ===========================================================================

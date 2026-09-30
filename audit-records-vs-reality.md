@@ -13947,6 +13947,93 @@ when you ask for it.
 
 ---
 
+## 133. A SLOT THAT HAD ALREADY HAPPENED COULD STILL BE BOOKED
+### Found in real use 30 Sep 2026, closed 1 Oct
+
+**In plain English:** at 16:37 Micky applied for a 9am slot that morning. The
+application went through, and landed in the stylist's diary as a pending
+application for an appointment that had already been and gone.
+
+**The presentation half.** Every availability read in both apps filtered with
+`date >= today` and **nothing anywhere compared the time of day** — five call
+sites, in three web queries and two mobile screens, all wrong in the same way.
+So from midnight a slot was correctly offered, and from the moment it began it
+went on being offered for the rest of the day: as bookable in the wizard, as a
+pale-pink day on the shop calendar, and as "Slots open" in browse.
+
+Fixed in one helper (`lib/slots.ts`) called by all five, because the same rule
+written five times was wrong five times. *The duplication was the bug, not a
+side effect of it* — the same shape as `safeList`/`FeaturedStylists` (item 131).
+
+⚠️ **Europe/London, explicitly, in both halves.** `availability.date` and
+`.start_time` are a bare date and a bare time: UK wall clock with no offset.
+Comparing them against the clock of the machine running the code compares them
+against UTC — Vercel's, and the database's. From late March to late October the
+UK is UTC+1, so an unqualified comparison is an hour **lenient**, which is
+exactly the length of a slot. The fix would have been wrong for seven months of
+the year and right for five, which is the worst kind of wrong.
+
+**The half that mattered, and it was bigger than the symptom.**
+`create_session_with_consent` took `p_date`, `p_start_time`, `p_end_time` and
+`p_scheduled_at` **from the caller** and wrote them straight into the row. It
+never read the availability row at all. Nothing checked that the times being
+recorded bore any relationship to the slot being booked, or that the slot
+belonged to the provider being booked. The past-date case was one symptom of
+that, not the fault.
+
+**Why it is a trigger and not a check in the function.** `"model can create
+session"` is a PERMISSIVE INSERT policy on `public.sessions` for
+`authenticated` whose only check is `auth.uid() = model_user_id`. **Any
+signed-in member can insert a session row directly** — any date, any time, any
+provider — without going near the RPC. A guard inside the function would have
+been a guard with a documented way round it.
+
+`session_slot_authority` (0065) follows `tg_session_price_snapshot` (0052)
+exactly: SECURITY DEFINER, BEFORE INSERT, reads the availability row, overwrites
+columns a client has no business setting. That trigger's own comment already
+said its value is "never supplied by a client"; this is the same sentence for
+four more columns.
+
+**⚠️ Trigger order is alphabetical and load-bearing.** BEFORE INSERT on
+sessions: `session_apply_gate`, `session_price_snapshot`,
+`session_slot_authority`, `trg_reject_overlapping_session`. The overlap guard
+reads the three columns this one corrects, so this must sort before it — `s` <
+`t`. Renaming any of the four reorders them silently, so the verify asserts the
+order rather than trusting the name.
+
+**Verified live, 1 Oct 2026.** Trigger order correct. A slot at 00:01 today is
+refused with `CV003` "That appointment has already started". An insert claiming
+`current_date + 999` at `03:00` came back as **30 October, 14:00–16:00** — the
+caller's values discarded entirely, which is the class closing rather than the
+case. One existing row in the data was this bug (Micky's own, `created_at` after
+the slot began); the only other past-dated pending session is a July booking
+that simply aged out, which is a different question held as its own item.
+
+### The verify block did not run
+
+It had three faults, all found the moment somebody pasted it: `availability` has
+no `created_at` to order by, and `sessions` requires `treatment_id` and
+`location_type`, which the inserts did not supply.
+
+**A verify block that has to be repaired before it runs is not a check, it is a
+draft** — and the next person to open the file meets the draft. Corrected in
+place, and safely: everything below `-- MIGRATION FOOTER` is outside the
+checksum, so the file can be repaired after the fact without disagreeing with
+the ledger. Recomputed before and after to prove it.
+
+The correction also rebuilt it as ONE paste with each half in its own savepoint,
+the shape recorded at 0057 — two blocks pasted separately can be misread as each
+other — and creates the slots as the migration runner so `availability` RLS is
+not in the way, with only the SESSION inserts running as the member.
+
+**The rule worth carrying:** *a verify block is code, and it has never been
+run.* Every other line in a migration gets executed the moment it is applied.
+The verify is the one part that is written, reviewed, committed and shipped
+without anything checking it parses — so it should be written against the actual
+column list, not from memory of it.
+
+---
+
 ## What is open
 
 | | Item | Blocking launch? |
@@ -13966,6 +14053,7 @@ when you ask for it.
 | 130 | ✅ **CLOSED 30 Sep.** "Any distance" dropped its own parameter and fell back to the 20-mile default, so the chip linked to the view it was meant to escape and never showed as selected — while the copy above it said to use it. 5 stylists became 7 | Was live-web |
 | 131 | ✅ **CLOSED AND VERIFIED LIVE 30 Sep.** My own 0060 revoked `bio_publish_problem` from `anon`, and `public_stylists` filters on it — so all six treatment pages showed an empty state while Micky's shop qualified. 0064 applied, view file re-run, types at 0064: the anon read returns **1** where it raised `permission denied` five minutes earlier. `npm run verify` passed throughout the four days it was live | Was live-web |
 | 132 | ⚠️ **FIXED, AND IT REACHED PRODUCTION.** A JSX comment among the `<textarea>`'s attributes made `/stylist/[id]/apply` serve the 404 page — the application flow, live from 10:51 to 14:33 on 30 Sep. tsc, eslint, checks AND `next build` all passed, so Vercel deployed it. Caught by a promo-recorder guard added for something else. Same mistake, same file, already recorded earlier the same day | Was live-web |
+| 133 | ✅ **CLOSED AND VERIFIED LIVE 1 Oct.** A 9am slot was applied for at 16:37 the same day and accepted. Five availability call sites filtered by DATE and none by time of day; the RPC took the date and times FROM THE CALLER and never read the availability row. 0065 makes the slot the authority via a trigger — a function guard was bypassable, because members can insert sessions directly | Was live-web |
 | 127 | ✅ **CLOSED 29 Sep.** `/stylist/[id]` header overlaps itself at ~540px: Saved/Safety move beside the name, the name wraps to three lines and the "posts new times" line is drawn across it. Not present at 390. Width band unmeasured | No, but it is on a public page |
 | 126 | ⚠️ **Noted, not fixed.** For a stylist, Settings is fully off-screen in the phone nav at 360, 390 and 430. Discoverability only — the strip scrolls, a half-visible pill cues it, and the suspension notice links to /settings directly. The nav's two-row phone layout is DESIGNED, not a bug; I reported it as one and disproved myself by measuring | No |
 | 125 | ✅ **Built 27 Sep.** Any photo the browser could not decode was uploaded anyway and rendered nowhere — on the ID check, a blank image against a paid £14.99. Mechanism VERIFIED in the browser pane; **HEIC itself still unconfirmed, no iPhone to hand** | Was live-web |
