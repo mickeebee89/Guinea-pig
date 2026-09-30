@@ -144,8 +144,11 @@ const hideChrome = page => page.addStyleTag({
  * second time in HTML here would be a copy free to drift from the original,
  * which is the fault this whole session keeps finding.
  */
-async function splash(page, ms) {
-  const file = path.join(OUT, 'splash-540x788.png')
+async function splash(page, who, ms) {
+  // One per audience: the headline and the domain are shared, the middle line
+  // is not. A model is asked to help build the thing; a stylist is offered
+  // models. Passing the wrong `who` would end a video on the other side's ask.
+  const file = path.join(OUT, `splash-${who}-540x788.png`)
   if (!fs.existsSync(file)) {
     // Loud, because a missing splash is invisible in a video file: it would
     // just end a beat early, which is exactly how a bad cut gets called good.
@@ -321,7 +324,7 @@ const CUTS = {
     await dwell(page, 3200, 3500)
 
     // ── 9. The closing frame. ─────────────────────────────────────────────
-    await splash(page, 3000)
+    await splash(page, 'model', 3000)
   },
 
   /** A stylist: the work -> applications arrive -> accept -> talk. ~20s */

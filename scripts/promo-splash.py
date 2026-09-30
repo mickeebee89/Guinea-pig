@@ -4,18 +4,18 @@ promo-splash — the closing frame for a walkthrough video.
 
     python scripts/promo-splash.py
 
-Writes promo/video/splash-1080x1920.png   (the finished ad frame)
-       promo/video/splash-540x788.png     (the same artwork, recorder-sized)
+Writes, for each audience in SPLASHES below:
+       promo/video/splash-<who>-1080x1920.png   (the finished ad frame)
+       promo/video/splash-<who>-540x788.png     (the same artwork, recorder-sized)
 
 The only frame in the set that is not a screenshot of the product, so it is
 built from the product's own parts rather than designed fresh: the homepage
 lockup (site/public/guinea-pig-logo.png), Colors.ts cream and rose, and the
 same 896x1306 safe box everything else sits in.
 
-Wording settled with Micky, 30 Sep 2026:
-    Join Cavy now
-    help build the community
-    cavybeauty.com
+Wording settled with Micky, 30 Sep 2026. The headline and the domain are
+shared; only the middle line changes, because the two videos are aimed at
+opposite sides of the same swap and the ask is not the same ask.
 
 The 540x788 copy is CROPPED AND RESIZED FROM the 1080x1920 one, not drawn a
 second time at half scale. scripts/promo-record.js shows it as the video's last
@@ -37,9 +37,15 @@ DARK = (43, 37, 49)
 MUTED = (110, 102, 117)
 
 LOGO = 'site/public/guinea-pig-logo.png'
-OUT = 'promo/video/splash-1080x1920.png'
-OUT_SMALL = 'promo/video/splash-540x788.png'
 REC_W, REC_H = 540, 788
+
+# who -> the middle line. The other two lines are the same for everyone.
+SPLASHES = {
+    'model':   'help build the community',
+    'stylist': 'bring the models to you',
+}
+HEADLINE = 'Join Cavy now'
+DOMAIN = 'cavybeauty.com'
 
 
 def font(size, bold=False):
@@ -56,7 +62,7 @@ def centred(d, text, f, y, fill):
     d.text((PAD_LEFT + (SAFE_W - w) / 2, y), text, font=f, fill=fill)
 
 
-def main():
+def one(who, middle):
     im = Image.new('RGB', (W, H), CREAM)
     d = ImageDraw.Draw(im)
 
@@ -81,19 +87,26 @@ def main():
         print('! no logo at ' + LOGO + ' — text only')
         y = block_top + 120
 
-    centred(d, 'Join Cavy now', font(84, bold=True), y, ROSE)
-    centred(d, 'help build the community', font(42), y + 120, DARK)
-    centred(d, 'cavybeauty.com', font(38), y + 210, MUTED)
+    centred(d, HEADLINE, font(84, bold=True), y, ROSE)
+    centred(d, middle, font(42), y + 120, DARK)
+    centred(d, DOMAIN, font(38), y + 210, MUTED)
 
-    os.makedirs(os.path.dirname(OUT), exist_ok=True)
-    im.save(OUT)
-    print('wrote %s  %dx%d' % (OUT, im.width, im.height))
+    out = 'promo/video/splash-%s-1080x1920.png' % who
+    out_small = 'promo/video/splash-%s-540x788.png' % who
+    os.makedirs(os.path.dirname(out), exist_ok=True)
+    im.save(out)
+    print('wrote %s  %dx%d  "%s"' % (out, im.width, im.height, middle))
 
     small = (im.crop((PAD_LEFT, PAD_TOP, PAD_LEFT + SAFE_W, PAD_TOP + SAFE_H))
                .resize((REC_W, REC_H), Image.LANCZOS))
-    small.save(OUT_SMALL)
+    small.save(out_small)
     print('wrote %s  %dx%d  (safe box only, for the recorder)'
-          % (OUT_SMALL, small.width, small.height))
+          % (out_small, small.width, small.height))
+
+
+def main():
+    for who, middle in SPLASHES.items():
+        one(who, middle)
 
 
 if __name__ == '__main__':
