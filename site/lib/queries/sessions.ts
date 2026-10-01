@@ -147,7 +147,12 @@ export async function getSessions(
     // NB 'declined' is still absent, so a declined application also
     // disappears from both clients. That predates this change and is not
     // obviously wrong — but it is the same question, unanswered.
-    .in('status', ['pending', 'accepted', 'completed', 'cancelled', 'expired'])
+    // 'declined' joined on 1 Oct 2026 (item 137) — FOURTH time this list has
+    // had to grow. A model who was turned down got a notification saying her
+    // booking "was not confirmed" and then watched the booking itself
+    // disappear, so the only durable record of the thing she applied for was
+    // a sentence she could delete.
+    .in('status', ['pending', 'accepted', 'completed', 'cancelled', 'expired', 'declined'])
     .order('date', { ascending: false })
   if (error) throw error
 

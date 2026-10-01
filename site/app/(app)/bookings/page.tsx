@@ -298,6 +298,7 @@ export default async function SessionsPage() {
                   r.status === 'completed'
                   || r.status === 'cancelled'
                   || r.status === 'expired'
+                  || r.status === 'declined'
                   || (r.status === 'accepted' && r.date < today))}
               />
             </>

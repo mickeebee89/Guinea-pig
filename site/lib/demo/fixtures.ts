@@ -366,6 +366,10 @@ export function buildTables(images: DemoImages = NO_IMAGES): Tables {
   // An application nobody answered before the appointment came round.
   book({ stylist: 'priya', model: LEAH, category: 'Lashes', day: -5, start: '10:00:00', end: '12:00:00',
     status: 'expired', note: 'Would love to try a lash lift if you have space.', createdDaysAgo: 12 })
+  // And one that was turned down. Invisible in both clients until item 137,
+  // so there was no way to look at how it renders.
+  book({ stylist: 'priya', model: JESS, category: 'Brows', day: -6, start: '14:00:00', end: '16:00:00',
+    status: 'declined', note: 'Any chance of a Saturday?', createdDaysAgo: 14 })
 
   say(sophieSession, SOPHIE, 'Hi Priya, I’ve never had extensions before — how long will it take?', 210)
   say(sophieSession, DEMO_STYLIST_ID, 'Hi Sophie! A natural classic set takes about two hours. Please come without mascara, and we’ll choose the length together.', 185)

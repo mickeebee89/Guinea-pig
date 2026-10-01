@@ -14204,6 +14204,10 @@ every run and still in the nightly job rather than the monthly purge — only th
 position changed. Verified: `run_email_reconcile(24)` returned a row for the
 first time in its life.
 
+**The 04:10 job succeeded on 1 Oct — "1 row" — for the first time in the
+product's life.** Nine days of nightly failures, then a tile and a working
+function on the same day.
+
 And `email_reconcile_runs` now has a dashboard tile beside `retention_runs`,
 with the same red-when-stale treatment. **The sentence that explains why was
 already in that file, eleven lines above, about the other table:** "the absence
@@ -14214,6 +14218,42 @@ arrived.
 The tile also reports `no_attempt`, not merely that the job ran — because a
 tile that only said "it ran" would repeat the original mistake one level in: the
 monitor working, and nobody reading its finding.
+
+---
+
+## 137. A MODEL WHO WAS TURNED DOWN WATCHED THE BOOKING DISAPPEAR
+### Closed 1 Oct 2026
+
+`getSessions` filters `.in('status', […])` and `'declined'` was never in it. So
+when a stylist declined an application, the model got a notification reading
+*"Your booking for 9 October was not confirmed"* — and then the booking itself
+vanished from her list.
+
+The notification is the only durable trace, and notifications are deletable
+(0008). So the record of a thing she applied for, was told about, and might want
+to refer to could be removed by her own tidying, with nothing behind it.
+
+**Fourth time this one list has had to grow.** It is the single place that
+decides whether a status exists for either client: `'cancelled'` was added on
+24 Sep (item 87) after cancelled bookings disappeared the same way, `'expired'`
+on 1 Oct (item 134), and `'declined'` the same afternoon — found only because
+134 made somebody look at the list rather than through it.
+
+Fixed the same way as `'expired'`: in the query, in the Past group, and a muted
+pill that says what happened with no actions beside it. `STATUS_LABEL` already
+had `'Declined'`; nothing was missing except permission to see the row.
+
+**Nothing else assumed it was invisible.** Checked: the month calendar builds
+its marks from `accepted || pending` with a future date, so a declined booking
+was never going to appear there; the review gate is `status !== 'completed'`,
+which already excludes it; and the slot is freed either way, because
+availability is derived from sessions in `('pending','accepted')`.
+
+**⚠️ Mobile still hides both.** `mobile/src/app/(app)/sessions.tsx` filters
+`.in('status', ['pending','accepted','completed','cancelled'])`, so `'declined'`
+and `'expired'` are invisible there and its UI has no bucket for either. Noted,
+not fixed — same standing as item 109, and it belongs with mobile's unreleased
+work.
 
 ---
 
@@ -14239,6 +14279,7 @@ monitor working, and nobody reading its finding.
 | 133 | ✅ **CLOSED AND VERIFIED LIVE 1 Oct.** A 9am slot was applied for at 16:37 the same day and accepted. Five availability call sites filtered by DATE and none by time of day; the RPC took the date and times FROM THE CALLER and never read the availability row. 0065 makes the slot the authority via a trigger — a function guard was bypassable, because members can insert sessions directly | Was live-web |
 | 135 | **The suspension email is the one type the reconciler never looked at.** 0061 added `admin_suspension` to the notify_email trigger and not to `run_email_reconcile`, so from 25 Sep a suspension email that silently failed was invisible to the check that exists to catch exactly that. 0068 written, not yet applied | No, but it is the most consequential notification in the product |
 | 136 | ✅ **CLOSED AND VERIFIED LIVE 1 Oct.** `run_email_reconcile` raised 42P01 on every run from 22 Sep — a DELETE between a CTE chain and the INSERT that read it — so the check that catches emails which never went had itself never run. Eight nightly failures recorded in `cron.job_run_details`, a table nothing reads. 0069 fixes it; `email_reconcile_runs` now has a dashboard tile | Was live |
+| 137 | ✅ **CLOSED 1 Oct.** A declined application vanished from both clients — the model's only trace was a notification she can delete. Fourth value this one allowlist has needed. Fixed on web; mobile's sessions.tsx still hides `declined` and `expired` | No while mobile is unreleased |
 | 134 | ✅ **CLOSED AND VERIFIED LIVE 1 Oct.** Pending applications sat in a stylist's list for ever and a past accepted booking had no outcome. 0066 makes `expired` terminal and refuses to ACCEPT a started appointment — that refusal, not the job, is the fix. 0067 adds the daily job, run log and the model's notification. B is "Did this happen?", never "missed" | No |
 | 127 | ✅ **CLOSED 29 Sep.** `/stylist/[id]` header overlaps itself at ~540px: Saved/Safety move beside the name, the name wraps to three lines and the "posts new times" line is drawn across it. Not present at 390. Width band unmeasured | No, but it is on a public page |
 | 126 | ⚠️ **Noted, not fixed.** For a stylist, Settings is fully off-screen in the phone nav at 360, 390 and 430. Discoverability only — the strip scrolls, a half-visible pill cues it, and the suspension notice links to /settings directly. The nav's two-row phone layout is DESIGNED, not a bug; I reported it as one and disproved myself by measuring | No |
