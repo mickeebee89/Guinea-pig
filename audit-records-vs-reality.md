@@ -14034,6 +14034,113 @@ column list, not from memory of it.
 
 ---
 
+## 134. AN APPLICATION NOBODY ANSWERED SAT THERE FOR EVER
+### Closed and verified live, 1 Oct 2026
+
+Decided with Micky as two different things, because they are two different
+things. **A for pending, B for accepted.**
+
+**A — pending expires.** `'pending'` had no date filter anywhere in either
+client, so an application nobody answered stayed in a stylist's Awaiting list
+indefinitely, mixed in with the ones needing a decision today. 0066 adds
+`'expired'` to the vocabulary and makes it terminal; 0067 adds a daily job, a
+run log and a notification to the model.
+
+**⚠️ THE JOB IS NOT THE FIX, AND THAT WAS THE MOST USEFUL THING IN THE PLAN.**
+0065 guards INSERT only, so a pending application whose appointment had passed
+could still be ACCEPTED, all day, by a stylist working down her list — item 133
+happening one step later in the flow. A nightly job does not close that, and a
+per-minute job is a job pretending to be a constraint. The refusal lives in
+`enforce_session_status_transition`; the job only tidies a list.
+
+**Declining is never gated** (0045's principle): a stylist must always be able
+to say no, including to something she can no longer say yes to.
+
+**B — accepted becomes a question, not a verdict.** The original framing was
+"missed". It became *"Did this happen?"* because **the system cannot know who
+did not turn up** — and the overwhelmingly likely case is that it went ahead and
+nobody pressed a button. Asserting a no-show would have the product invent a
+fact, and invent it in the record somebody reaches for in a dispute. Same family
+as the neutral platform-cancellation wording (item 87), but the argument is
+stronger here: there, naming the blocker was a privacy risk; here, there is
+nothing true to name.
+
+### What the transition is, and what it is not
+
+A trigger was never an option, and the reason is worth keeping: **a trigger
+fires when a row is WRITTEN, and the passage of time writes nothing.** The only
+moment one could fire is when somebody already has the record in their hands,
+which is the case that does not need fixing.
+
+Derived-at-read-time was right for B — one reader to teach — and wrong for A,
+which needs a durable state so it can be notified and can be terminal. 25
+TypeScript files and 13 SQL files reference `'pending'` or `'accepted'`; that is
+the real cost of deriving.
+
+### ⚠️ The allowlist that decides whether a status exists at all
+
+`getSessions` filters `.in('status', [...])`. A value missing from THAT list
+does not render wrong — it renders **nothing**. I added `'expired'` to the Past
+group, reloaded, and the row still did not appear.
+
+The comment directly above that line records the same fault happening to
+`'cancelled'` on 24 Sep (item 87): *"a cancelled booking simply disappeared from
+both clients"*. **Third instance, and the second one is documented an inch above
+the line that caused the third.** `'declined'` is still absent from it — noted in
+place, unanswered.
+
+### Verified
+
+0066: accept on a started appointment raises CV003; declining the same one
+works. 0067: backfill `notified=f, ok=t, expired=0`; job scheduled daily 03:40
+UTC, active; the notifying path produces one notification addressed to the model,
+reading *"…has expired — it was not answered before the appointment time. That is
+not a no: you are welcome to apply again for another slot."*
+
+### Two faults of mine, both caught by Micky
+
+**The backfill count was wrong before anything was deleted.** I said two rows.
+The number came from a diagnostic query whose predicate was `status in
+('pending','accepted')`; the backfill only touches `'pending'`, and one of the
+two was accepted. *A count carried from a wider question to a narrower action,
+without re-reading the predicate.*
+
+**Verify (d) borrowed a pending row that did not exist.** `limit 1` on a table
+with no pending rows would have updated nothing, expired nothing, and printed a
+clean zero that looked like a pass. **A verify that silently tests nothing is
+worse than one that fails.** It builds its own row now.
+
+---
+
+## 135. THE SUSPENSION EMAIL WAS THE ONE NOBODY CHECKED
+### Found 1 Oct 2026 while editing the same two lists
+
+Two allowlists decide what gets emailed: the `notify_email` trigger's WHEN
+clause decides whether an email is **attempted**, and `run_email_reconcile`'s
+type list decides whether a missing attempt is **noticed**.
+
+**0061 added `'admin_suspension'` to the first and not the second.** So from
+25 Sep, the notification telling somebody their account has been suspended or
+banned was emailed like any other — and excluded from the only check that
+catches an email that never went. `run_email_reconcile`'s own comment says what
+that check is for: `no_attempt > 0` is "the failure the log itself cannot" see.
+
+It is the worst type to have in that state. Every other one — a booking
+accepted, a payment failed — is discoverable by opening the app. A suspension is
+the one where the member's access to the app is itself what changed, and 0061
+went to real trouble to make sure she is told rather than left to work it out.
+
+Fixed in 0068, alone, so `git log` can answer when suspension emails started
+being reconciled and why they were not before. Found only because 0067 had to
+touch both lists for a different type — the second time this week that editing an
+allowlist revealed something already wrong in it.
+
+*Third instance of the tabled "a check correct for the cases present when it was
+written" shape, and the first where the two halves of one rule were allowed to
+disagree silently.*
+
+---
+
 ## What is open
 
 | | Item | Blocking launch? |
@@ -14054,6 +14161,8 @@ column list, not from memory of it.
 | 131 | ✅ **CLOSED AND VERIFIED LIVE 30 Sep.** My own 0060 revoked `bio_publish_problem` from `anon`, and `public_stylists` filters on it — so all six treatment pages showed an empty state while Micky's shop qualified. 0064 applied, view file re-run, types at 0064: the anon read returns **1** where it raised `permission denied` five minutes earlier. `npm run verify` passed throughout the four days it was live | Was live-web |
 | 132 | ⚠️ **FIXED, AND IT REACHED PRODUCTION.** A JSX comment among the `<textarea>`'s attributes made `/stylist/[id]/apply` serve the 404 page — the application flow, live from 10:51 to 14:33 on 30 Sep. tsc, eslint, checks AND `next build` all passed, so Vercel deployed it. Caught by a promo-recorder guard added for something else. Same mistake, same file, already recorded earlier the same day | Was live-web |
 | 133 | ✅ **CLOSED AND VERIFIED LIVE 1 Oct.** A 9am slot was applied for at 16:37 the same day and accepted. Five availability call sites filtered by DATE and none by time of day; the RPC took the date and times FROM THE CALLER and never read the availability row. 0065 makes the slot the authority via a trigger — a function guard was bypassable, because members can insert sessions directly | Was live-web |
+| 135 | **The suspension email is the one type the reconciler never looked at.** 0061 added `admin_suspension` to the notify_email trigger and not to `run_email_reconcile`, so from 25 Sep a suspension email that silently failed was invisible to the check that exists to catch exactly that. 0068 written, not yet applied | No, but it is the most consequential notification in the product |
+| 134 | ✅ **CLOSED AND VERIFIED LIVE 1 Oct.** Pending applications sat in a stylist's list for ever and a past accepted booking had no outcome. 0066 makes `expired` terminal and refuses to ACCEPT a started appointment — that refusal, not the job, is the fix. 0067 adds the daily job, run log and the model's notification. B is "Did this happen?", never "missed" | No |
 | 127 | ✅ **CLOSED 29 Sep.** `/stylist/[id]` header overlaps itself at ~540px: Saved/Safety move beside the name, the name wraps to three lines and the "posts new times" line is drawn across it. Not present at 390. Width band unmeasured | No, but it is on a public page |
 | 126 | ⚠️ **Noted, not fixed.** For a stylist, Settings is fully off-screen in the phone nav at 360, 390 and 430. Discoverability only — the strip scrolls, a half-visible pill cues it, and the suspension notice links to /settings directly. The nav's two-row phone layout is DESIGNED, not a bug; I reported it as one and disproved myself by measuring | No |
 | 125 | ✅ **Built 27 Sep.** Any photo the browser could not decode was uploaded anyway and rendered nowhere — on the ID check, a blank image against a paid £14.99. Mechanism VERIFIED in the browser pane; **HEIC itself still unconfirmed, no iPhone to hand** | Was live-web |

@@ -1,8 +1,8 @@
 // GENERATED FILE — DO NOT EDIT BY HAND.
 //
 // Written by scripts/gen-supabase-types.mjs from the live database.
-// TYPES_STAMP: 0064
-// TYPES_FILES_AT_GEN: 0064
+// TYPES_STAMP: 0067
+// TYPES_FILES_AT_GEN: 0067
 //
 // TYPES_STAMP is the migration the DATABASE was at when these were generated,
 // stated by whoever ran it (--applied). TYPES_FILES_AT_GEN is the newest
@@ -1502,6 +1502,36 @@ export type Database = {
           },
         ]
       }
+      session_expiry_runs: {
+        Row: {
+          duration_ms: number | null
+          expired: number
+          id: number
+          notified: boolean
+          ok: boolean
+          ran_at: string
+          results: Json
+        }
+        Insert: {
+          duration_ms?: number | null
+          expired?: number
+          id?: number
+          notified: boolean
+          ok: boolean
+          ran_at?: string
+          results: Json
+        }
+        Update: {
+          duration_ms?: number | null
+          expired?: number
+          id?: number
+          notified?: boolean
+          ok?: boolean
+          ran_at?: string
+          results?: Json
+        }
+        Relationships: []
+      }
       sessions: {
         Row: {
           availability_id: string
@@ -2453,6 +2483,24 @@ export type Database = {
       }
       delete_account_data: { Args: { p_user: string }; Returns: Json }
       email_unsubscribe_token: { Args: { p_user_id: string }; Returns: string }
+      expire_past_applications: {
+        Args: { p_notify?: boolean }
+        Returns: {
+          duration_ms: number | null
+          expired: number
+          id: number
+          notified: boolean
+          ok: boolean
+          ran_at: string
+          results: Json
+        }
+        SetofOptions: {
+          from: "*"
+          to: "session_expiry_runs"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       has_open_availability: {
         Args: { p_provider_id: string }
         Returns: boolean
