@@ -55,7 +55,8 @@ begin;
 
 do $$
 declare
-  v_def text;
+  v_def  text;
+  v_code text;
 begin
   if exists (select 1 from public.schema_migrations where version = '0068') then
     raise exception 'Migration 0068 has already been applied (see public.schema_migrations)';
@@ -66,10 +67,25 @@ begin
 
   v_def := pg_get_functiondef('public.run_email_reconcile(integer)'::regprocedure);
 
-  if v_def not like '%session_expired%' then
+  -- ⚠️ COMMENTS STRIPPED BEFORE MATCHING, AND THE FIRST VERSION OF THIS GUARD
+  -- DID NOT DO IT. pg_get_functiondef returns the comments as well as the
+  -- code, and 0067's body carries the sentence "'admin_suspension' is STILL
+  -- MISSING and that is a known gap". A plain like '%admin_suspension%'
+  -- therefore matched the DESCRIPTION OF THE GAP and concluded the gap was
+  -- closed — so this migration refused to run, and its preflight reported the
+  -- fix as already applied, on evidence that was a sentence about it not being
+  -- applied.
+  --
+  -- Exactly 0028's lesson, which is quoted in the VERIFY block at the foot of
+  -- this same file: the artefact of a fix must not be able to satisfy the test
+  -- for the fix. The defence was written there and not here, twelve lines
+  -- apart, on the same afternoon.
+  v_code := regexp_replace(v_def, '--[^' || chr(10) || ']*', '', 'g');
+
+  if v_code not like '%session_expired%' then
     raise exception '0068: the live run_email_reconcile does not mention session_expired, so it is not 0067''s version. Read it with pg_get_functiondef before going further.';
   end if;
-  if v_def like '%admin_suspension%' then
+  if v_code like '%admin_suspension%' then
     raise exception '0068: the live run_email_reconcile already lists admin_suspension. This migration has run.';
   end if;
 end $$;
@@ -139,22 +155,31 @@ comment on function public.run_email_reconcile(integer) is
 
 -- MIGRATION FOOTER
 insert into public.schema_migrations (version, name, checksum)
-values ('0068', 'the_suspension_email_was_never_checked', '2cacad1abd4f8308968f1344bc714874198c54c6fed39966ddcbfbae0d0e5320');
+values ('0068', 'the_suspension_email_was_never_checked', 'd9d6c6d77dc5eb81f7bf280d3a9e90d80e155f79fb5e6193700096670a8aad75');
 
 commit;
 
 -- ===========================================================================
 -- ⚠️ PREFLIGHT — RUN THIS BEFORE THE MIGRATION. Read-only, changes nothing.
 --
+--   ⚠️ COMMENTS ARE STRIPPED BEFORE MATCHING. Without that, these read the
+--   comments inside the function as though they were code — 0067's body says
+--   "'admin_suspension' is STILL MISSING", so a plain LIKE reports the fix as
+--   already applied. See the note above the ASSERT in the body.
+--
+--   with f as (
+--     select regexp_replace(
+--              pg_get_functiondef('public.run_email_reconcile(integer)'::regprocedure),
+--              '--[^' || chr(10) || ']*', '', 'g') as code
+--   )
 --   select
 --     (select count(*) from public.schema_migrations where version = '0067') = 1
 --       as v_0067_applied,
---     pg_get_functiondef('public.run_email_reconcile(integer)'::regprocedure)
---       like '%session_expired%'   as live_body_is_0067s,
---     pg_get_functiondef('public.run_email_reconcile(integer)'::regprocedure)
---       not like '%admin_suspension%' as not_already_done,
+--     code like '%session_expired%'       as live_body_is_0067s,
+--     code not like '%admin_suspension%'  as not_already_done,
 --     (select count(*) from public.notifications
---       where type = 'admin_suspension')  as suspensions_ever_sent;
+--       where type = 'admin_suspension')  as suspensions_ever_sent
+--   from f;
 --
 --   Expect the first three true. The fourth is FYI — it is how many rows have
 --   been outside the reconciler's sight since 25 Sep.
