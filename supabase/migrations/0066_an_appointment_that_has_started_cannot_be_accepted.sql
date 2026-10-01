@@ -247,15 +247,13 @@ notify pgrst, 'reload schema';
 --     exception when others then
 --       v_state := sqlstate || ' ' || sqlerrm;
 --     end;
---     v_report := v_report || E'
-decline the same one: ' || v_state;
+--     v_report := v_report || ' | decline the same one: ' || v_state;
 --
 --     execute 'reset role';
 --     -- ⚠️ THE RESULTS GO IN THE EXCEPTION, NOT IN raise notice. The Supabase
 --     -- SQL editor does not surface NOTICE output, so a block reporting
 --     -- through notices reports nothing there at all.
---     raise exception E'ROLLED BACK ON PURPOSE.
-%', v_report;
+--     raise exception 'ROLLED BACK ON PURPOSE. %', v_report;
 --   end $v$;
 --   rollback;
 --

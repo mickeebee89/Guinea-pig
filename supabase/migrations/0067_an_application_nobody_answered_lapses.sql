@@ -411,12 +411,7 @@ notify pgrst, 'reload schema';
 --     from public.notifications n
 --     where n.session_id = v_sess and n.type = 'session_expired';
 --
---     raise exception E'ROLLED BACK ON PURPOSE.
-expired: %
-notified user: % (the MODEL is %)
-type: %
-title: %
-body: %',
+--     raise exception 'ROLLED BACK ON PURPOSE. expired=% | notified_user=% | model=% | type=% | title=% | body=%',
 --       v_expired, v_to, v_model, v_type, v_title, v_body;
 --   end $v$;
 --   rollback;

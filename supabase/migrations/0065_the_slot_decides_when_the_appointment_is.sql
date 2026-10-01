@@ -342,8 +342,7 @@ commit;
 --             current_date + 999, '03:00', '04:00', now(),
 --             v_treat, 'provider', 120, 'pending')
 --     returning date, start_time, end_time into v_date, v_start, v_end;
---     v_report := v_report || E'
-future slot: written as ' || v_date || ' '
+--     v_report := v_report || ' | future slot written as ' || v_date || ' '
 --                 || v_start || '-' || v_end
 --                 || ' (expected ' || (current_date + 30) || ' 14:00-16:00)';
 --
@@ -352,8 +351,7 @@ future slot: written as ' || v_date || ' '
 --     -- SQL editor does not surface NOTICE output, so a block that reports
 --     -- through notices reports nothing at all there. Corrected 1 Oct 2026
 --     -- after Micky had to rewrite it to see the result.
---     raise exception E'ROLLED BACK ON PURPOSE.
-%', v_report;
+--     raise exception 'ROLLED BACK ON PURPOSE. %', v_report;
 --   end $v$;
 --   rollback;
 --
