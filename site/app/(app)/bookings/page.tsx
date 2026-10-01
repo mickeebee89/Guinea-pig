@@ -6,6 +6,7 @@ import { StatusPill, EmptyState, LoadError, Avatar } from '@/components/ui'
 import { SessionActions } from './SessionActions'
 import { MonthCalendar, type CalendarMark } from '@/components/MonthCalendar'
 import { BOOKINGS_PATH } from '@/lib/routes'
+import { slotHasStarted } from '@/lib/slots'
 
 export const metadata = { title: 'Bookings' }
 
@@ -153,10 +154,38 @@ function Group({
                     RLS would refuse it. CANCEL is not: either party can cancel a
                     booking that has not happened, so this renders for both and
                     the component decides which controls to show. */}
+                {/* ⚠️ A QUESTION, NOT A LABEL. An accepted booking whose time
+                     has passed and which nobody marked complete is genuinely
+                     ambiguous: it usually means it went ahead and nobody
+                     pressed a button. Calling it "missed" would have the
+                     product assert a no-show it cannot know, and assert it in
+                     the record somebody would reach for in a dispute.
+
+                     So it asks. The stylist answers with Mark complete below;
+                     the model is told who the question is with, and neither
+                     sentence characterises anybody's behaviour. Same principle
+                     as the neutral platform-cancellation wording (item 87).
+
+                     Decided with Micky, 1 Oct 2026. A "Didn't happen" action
+                     is still to come — it needs a destination status, which is
+                     a decision rather than a detail. */}
+                {s.status === 'accepted' && slotHasStarted(s.date, s.startTime ?? '00:00') && (
+                  <p className="mt-2 text-sm text-muted">
+                    <span className="font-bold text-warm-dark">Did this happen?</span>{' '}
+                    {s.role === 'provider'
+                      ? 'Marking it complete lets you both leave a review.'
+                      : `${s.otherPartyName} can confirm it went ahead.`}
+                  </p>
+                )}
                 <SessionActions
                   sessionId={s.id}
                   status={s.status}
-                  isPast={s.date < new Date().toISOString().slice(0, 10)}
+                  /* ⚠️ BY START TIME, NOT BY DATE. This was `s.date < today`,
+                      the same date-granular comparison as item 133: on the day
+                      itself it reads false until midnight, so a stylist could
+                      not mark this morning's booking complete until tomorrow.
+                      Same helper as the availability queries. */
+                  isPast={slotHasStarted(s.date, s.startTime ?? '00:00')}
                   role={s.role}
                   date={s.date}
                   otherName={s.otherPartyName}
@@ -268,6 +297,7 @@ export default async function SessionsPage() {
                 rows={rows.filter(r =>
                   r.status === 'completed'
                   || r.status === 'cancelled'
+                  || r.status === 'expired'
                   || (r.status === 'accepted' && r.date < today))}
               />
             </>

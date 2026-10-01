@@ -297,7 +297,7 @@ commit;
 --   do $v$
 --   declare
 --     v_prov  uuid; v_treat uuid; v_past uuid; v_future uuid;
---     v_state text; v_date date; v_start time; v_end time;
+--     v_state text; v_date date; v_start time; v_end time; v_report text := '';
 --   begin
 --     select provider_id, id into v_prov, v_treat
 --     from public.provider_treatments limit 1;
@@ -331,7 +331,7 @@ commit;
 --     exception when others then
 --       v_state := sqlstate || ' ' || sqlerrm;
 --     end;
---     raise notice 'past slot   -> %', v_state;
+--     v_report := 'past slot: ' || v_state;
 --
 --     -- (c) a slot 30 days out, with every time argument a lie
 --     insert into public.sessions (provider_id, model_user_id, model_id,
@@ -342,11 +342,18 @@ commit;
 --             current_date + 999, '03:00', '04:00', now(),
 --             v_treat, 'provider', 120, 'pending')
 --     returning date, start_time, end_time into v_date, v_start, v_end;
---     raise notice 'future slot -> written as % %-% (expected % 14:00-16:00)',
---       v_date, v_start, v_end, current_date + 30;
+--     v_report := v_report || E'
+future slot: written as ' || v_date || ' '
+--                 || v_start || '-' || v_end
+--                 || ' (expected ' || (current_date + 30) || ' 14:00-16:00)';
 --
 --     execute 'reset role';
---     raise exception 'ROLLED BACK ON PURPOSE. Read the two notices above.';
+--     -- ⚠️ THE RESULTS GO IN THE EXCEPTION, NOT IN raise notice. The Supabase
+--     -- SQL editor does not surface NOTICE output, so a block that reports
+--     -- through notices reports nothing at all there. Corrected 1 Oct 2026
+--     -- after Micky had to rewrite it to see the result.
+--     raise exception E'ROLLED BACK ON PURPOSE.
+%', v_report;
 --   end $v$;
 --   rollback;
 --

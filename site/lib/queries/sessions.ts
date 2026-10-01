@@ -136,7 +136,18 @@ export async function getSessions(
     // cancelled booking simply disappeared from both clients, and the only
     // trace was a notification — which is deletable (0008), so a member could
     // be left with no record that a booking had ever existed.
-    .in('status', ['pending', 'accepted', 'completed', 'cancelled'])
+    // ⚠️ AND 'expired' JOINED IT ON 1 Oct 2026 (item 134) — FOR THE THIRD
+    // TIME. This allowlist is the single place that decides whether a
+    // status exists for either client, and a value missing from it does not
+    // render wrong, it renders NOTHING. The note above describes the same
+    // fault happening to 'cancelled'; I added 'expired' to the Past group
+    // first and watched the row still not appear, because this line drops
+    // it before the grouping ever sees it.
+    //
+    // NB 'declined' is still absent, so a declined application also
+    // disappears from both clients. That predates this change and is not
+    // obviously wrong — but it is the same question, unanswered.
+    .in('status', ['pending', 'accepted', 'completed', 'cancelled', 'expired'])
     .order('date', { ascending: false })
   if (error) throw error
 

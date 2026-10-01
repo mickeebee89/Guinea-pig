@@ -6,6 +6,9 @@ const STATUS_STYLE: Record<string, string> = {
   completed: 'bg-soft-pink text-warm-dark',
   cancelled: 'bg-input-bg text-muted',
   declined:  'bg-input-bg text-muted',
+  // Same muted treatment as declined and cancelled: it is an ending, and not
+  // one anybody chose.
+  expired:   'bg-input-bg text-muted',
 }
 
 /** Says what the status MEANS, not just what it is called. */
@@ -15,6 +18,11 @@ const STATUS_LABEL: Record<string, string> = {
   completed: 'Completed',
   cancelled: 'Cancelled',
   declined:  'Declined',
+  // ⚠️ NOT 'Declined', and the difference is the whole point of the status
+  // (0067). Declined means a stylist looked and said no. This means nobody
+  // ever answered, and the model needs to know which it was before deciding
+  // whether to apply to that stylist again.
+  expired:   'Expired, not answered',
 }
 
 export function StatusPill({ status }: { status: string }) {

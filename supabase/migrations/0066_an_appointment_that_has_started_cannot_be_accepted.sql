@@ -197,7 +197,7 @@ notify pgrst, 'reload schema';
 --   do $v$
 --   declare
 --     v_prov uuid; v_puser uuid; v_treat uuid; v_slot uuid; v_sess uuid;
---     v_model uuid; v_state text;
+--     v_model uuid; v_state text; v_report text := '';
 --   begin
 --     select p.id, p.user_id, pt.id into v_prov, v_puser, v_treat
 --     from public.providers p
@@ -238,7 +238,7 @@ notify pgrst, 'reload schema';
 --     exception when others then
 --       v_state := sqlstate || ' ' || sqlerrm;
 --     end;
---     raise notice 'accept a started appointment -> %', v_state;
+--     v_report := 'accept a started appointment: ' || v_state;
 --
 --     -- (b) she declines it instead, which must still work
 --     begin
@@ -247,10 +247,15 @@ notify pgrst, 'reload schema';
 --     exception when others then
 --       v_state := sqlstate || ' ' || sqlerrm;
 --     end;
---     raise notice 'decline the same one            -> %', v_state;
+--     v_report := v_report || E'
+decline the same one: ' || v_state;
 --
 --     execute 'reset role';
---     raise exception 'ROLLED BACK ON PURPOSE. Read the two notices above.';
+--     -- ⚠️ THE RESULTS GO IN THE EXCEPTION, NOT IN raise notice. The Supabase
+--     -- SQL editor does not surface NOTICE output, so a block reporting
+--     -- through notices reports nothing there at all.
+--     raise exception E'ROLLED BACK ON PURPOSE.
+%', v_report;
 --   end $v$;
 --   rollback;
 --

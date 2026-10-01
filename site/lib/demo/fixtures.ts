@@ -271,7 +271,7 @@ export function buildTables(images: DemoImages = NO_IMAGES): Tables {
   let sessN = 0
   const book = (o: {
     stylist: string; model: string; category: string; day: number; start: string; end: string
-    status: 'pending' | 'accepted' | 'completed' | 'declined' | 'cancelled'; note?: string; createdDaysAgo: number
+    status: 'pending' | 'accepted' | 'completed' | 'declined' | 'cancelled' | 'expired'; note?: string; createdDaysAgo: number
   }) => {
     const pid = provId(o.stylist)
     const date = d(o.day)
@@ -354,6 +354,18 @@ export function buildTables(images: DemoImages = NO_IMAGES): Tables {
     status: 'pending', createdDaysAgo: 1 })
   book({ stylist: 'priya', model: JESS, category: 'Brows', day: -8, start: '10:00:00', end: '12:00:00',
     status: 'completed', createdDaysAgo: 15 })
+  // ⚠️ THE TWO STATES THE CLIENTS LEARNED IN 0066/0067, so they can be SEEN.
+  // Neither existed in the demo, so "does an expired row render" and "does the
+  // Did-this-happen question appear" could only be reasoned about.
+  //
+  // An accepted booking whose day has gone and which nobody marked complete —
+  // the ordinary case, and the reason the question is a question rather than
+  // the word "missed".
+  book({ stylist: 'priya', model: SOPHIE, category: 'Lashes', day: -3, start: '14:00:00', end: '16:00:00',
+    status: 'accepted', note: 'Second set — happy with the length last time.', createdDaysAgo: 10 })
+  // An application nobody answered before the appointment came round.
+  book({ stylist: 'priya', model: LEAH, category: 'Lashes', day: -5, start: '10:00:00', end: '12:00:00',
+    status: 'expired', note: 'Would love to try a lash lift if you have space.', createdDaysAgo: 12 })
 
   say(sophieSession, SOPHIE, 'Hi Priya, I’ve never had extensions before — how long will it take?', 210)
   say(sophieSession, DEMO_STYLIST_ID, 'Hi Sophie! A natural classic set takes about two hours. Please come without mascara, and we’ll choose the length together.', 185)
