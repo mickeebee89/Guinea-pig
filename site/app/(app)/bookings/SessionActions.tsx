@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { acceptSession, declineSession, completeSession, cancelBooking } from './actions'
+import { acceptSession, declineSession, completeSession, cancelBooking, reportNotHeld } from './actions'
 
 /**
  * Accept / decline / mark-complete for the stylist.
@@ -75,6 +75,18 @@ export function SessionActions({
           </>
         )}
 
+        {/* ── THE TWO ANSWERS TO ONE QUESTION ──────────────────────────
+            "Did this happen?" sits directly above these, so they are a pair
+            and are rendered as one: the affirmative in rose because it is the
+            ordinary outcome and the one that unlocks reviews, the negative as
+            quiet text because it is rarer, terminal, and not a thing to
+            encourage a tired thumb towards.
+
+            ⚠️ "It didn't happen" IS OFFERED TO BOTH PARTIES, unlike every
+            other control here. Accept, decline and complete are the stylist's
+            alone; this is a statement about a shared event and either person
+            has standing to make it (0070). What gets recorded is who said so,
+            never who failed to turn up. */}
         {/* Only offered once the day has passed — marking a future booking
             complete is always a mistake. */}
         {role === 'provider' && status === 'accepted' && isPast && (
@@ -84,6 +96,16 @@ export function SessionActions({
             className="inline-flex min-h-11 items-center rounded-[999px] bg-soft-pink px-4 text-sm font-bold text-rose hover:bg-rose hover:text-white disabled:opacity-50"
           >
             {pending ? 'Working…' : 'Mark complete'}
+          </button>
+        )}
+
+        {status === 'accepted' && isPast && (
+          <button
+            onClick={() => run(reportNotHeld, 'Recorded')}
+            disabled={pending}
+            className="inline-flex min-h-11 items-center rounded-[999px] px-4 text-sm font-bold text-muted underline-offset-4 hover:text-warm-dark hover:underline disabled:opacity-50"
+          >
+            {pending ? 'Working…' : 'It didn’t happen'}
           </button>
         )}
 

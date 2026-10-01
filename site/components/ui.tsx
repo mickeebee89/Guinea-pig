@@ -9,6 +9,7 @@ const STATUS_STYLE: Record<string, string> = {
   // Same muted treatment as declined and cancelled: it is an ending, and not
   // one anybody chose.
   expired:   'bg-input-bg text-muted',
+  not_held:  'bg-input-bg text-muted',
 }
 
 /** Says what the status MEANS, not just what it is called. */
@@ -23,6 +24,10 @@ const STATUS_LABEL: Record<string, string> = {
   // ever answered, and the model needs to know which it was before deciding
   // whether to apply to that stylist again.
   expired:   'Expired, not answered',
+  // Says what is recorded, which is that somebody SAID it did not happen.
+  // Not "Missed" and not "No-show": the product cannot know who failed to
+  // turn up, and the row never claims to.
+  not_held:  'Didn’t happen',
 }
 
 export function StatusPill({ status }: { status: string }) {

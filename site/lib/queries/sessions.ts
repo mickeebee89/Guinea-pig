@@ -37,6 +37,9 @@ export interface SessionRow {
   role: 'model' | 'provider'
   date: string
   startTime: string | null
+  /** When each party SAID the booking did not happen. Null = they have not. */
+  notHeldModelAt: string | null
+  notHeldProviderAt: string | null
   endTime: string | null
   status: string
   note: string | null
@@ -130,7 +133,7 @@ export async function getSessions(
 
   const { data: raw, error } = await supabase
     .from('sessions')
-    .select('id, provider_id, model_user_id, date, start_time, end_time, treatment_id, note, photo_urls, created_at, status, cancelled_by, cancelled_at, cancellation_reason, price_pence')
+    .select('id, provider_id, model_user_id, date, start_time, end_time, treatment_id, note, photo_urls, created_at, status, cancelled_by, cancelled_at, cancellation_reason, price_pence, not_held_model_at, not_held_provider_at')
     .or(orClause)
     // ⚠️ 'cancelled' JOINED THIS LIST ON 24 Sep 2026 (item 87). Before that a
     // cancelled booking simply disappeared from both clients, and the only
@@ -152,13 +155,14 @@ export async function getSessions(
     // booking "was not confirmed" and then watched the booking itself
     // disappear, so the only durable record of the thing she applied for was
     // a sentence she could delete.
-    .in('status', ['pending', 'accepted', 'completed', 'cancelled', 'expired', 'declined'])
+    .in('status', ['pending', 'accepted', 'completed', 'cancelled', 'expired', 'declined', 'not_held'])
     .order('date', { ascending: false })
   if (error) throw error
 
   const rows = (raw ?? []) as {
     id: string; provider_id: string; model_user_id: string
     date: string; start_time: string | null; end_time: string | null
+    not_held_model_at: string | null; not_held_provider_at: string | null
     treatment_id: string | null; note: string | null; status: string
     photo_urls: string[] | null; created_at: string
     cancelled_by: string | null; cancelled_at: string | null
@@ -228,6 +232,8 @@ export async function getSessions(
         role: isModel ? 'model' : 'provider',
         date: r.date,
         startTime: r.start_time,
+        notHeldModelAt: r.not_held_model_at,
+        notHeldProviderAt: r.not_held_provider_at,
         endTime: r.end_time,
         status: r.status,
         note: r.note,
