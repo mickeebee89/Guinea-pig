@@ -19,6 +19,9 @@ interface Stats {
   /** Most recent NON-dry run of run_retention_purge, successful or not. */
   retentionLastRun: { ran_at: string; ok: boolean } | null
   retentionUnavailable: boolean
+  /** Most recent run of run_email_reconcile, successful or not. */
+  reconcileLastRun: { ran_at: string; emailable: number; no_attempt: number } | null
+  reconcileUnavailable: boolean
   /** Deleted accounts whose Stripe billing could not be settled. */
   billingOrphans: BillingOrphan[]
   billingOrphansUnavailable: boolean
@@ -89,6 +92,50 @@ function retentionState(lastRun: { ran_at: string; ok: boolean } | null, unavail
   }
 }
 
+/**
+ * How the email reconciler is doing.
+ *
+ * ⚠️ THIS TILE EXISTS BECAUSE THE JOB FAILED NIGHTLY FOR NINE DAYS AND NOTHING
+ * SAID SO (item 136). run_email_reconcile raised 42P01 on every run from 22 Sep
+ * to 1 Oct — eight consecutive failures recorded in cron.job_run_details, a
+ * table nothing reads — while email_reconcile_runs sat empty. That emptiness
+ * was the designed alarm, exactly as it is for retention_runs above, and the
+ * difference was simply that retention_runs had a tile and this did not.
+ *
+ * An alarm nobody can see is not an alarm. That sentence was already written,
+ * eleven lines up, about the other table.
+ *
+ * ── IT ALSO REPORTS WHAT THE JOB FINDS, NOT JUST THAT IT RAN ──
+ * no_attempt > 0 means a notification that should have been emailed never
+ * reached the send function — the failure that leaves no trace in email_sends
+ * and is the entire reason this job exists. A tile that only said "it ran"
+ * would repeat the original mistake one level in: the monitor working, and
+ * nobody reading its finding.
+ *
+ * It runs daily, so 2 days is "a run has been missed".
+ */
+function reconcileState(
+  lastRun: { ran_at: string; emailable: number; no_attempt: number } | null,
+  unavailable: boolean,
+) {
+  if (unavailable) return { value: '—',     sub: 'could not read email_reconcile_runs', alert: true }
+  if (!lastRun)    return { value: 'Never', sub: 'no run on record',                    alert: true }
+
+  const days = Math.floor((Date.now() - new Date(lastRun.ran_at).getTime()) / 86_400_000)
+  if (lastRun.no_attempt > 0) {
+    return {
+      value: `${lastRun.no_attempt} unsent`,
+      sub: `never reached the mailer · ${days}d ago`,
+      alert: true,
+    }
+  }
+  return {
+    value: `${days}d ago`,
+    sub: `runs daily · 04:10 UTC · ${lastRun.emailable} checked`,
+    alert: days > 2,
+  }
+}
+
 export default function Dashboard() {
   const [stats, setStats] = useState<Stats | null>(null)
 
@@ -110,6 +157,7 @@ export default function Dashboard() {
         // evidence that anything was deleted, and counting it would let a tile
         // stay green while the scheduled job was dead.
         { data: retentionRuns, error: retentionErr },
+        { data: reconcileRuns, error: reconcileErr },
         { data: billingOrphans, error: billingOrphansErr },
       ] = await Promise.all([
         supabase.from('reports').select('*', { count: 'exact', head: true }).eq('status', 'open'),
@@ -121,6 +169,10 @@ export default function Dashboard() {
         supabase.from('verification_payments').select('amount').in('selfie_status', ['failed', 'locked']),
         supabase.from('verification_payments').select('amount').in('selfie_status', ['failed', 'locked']).gte('created_at', last7),
         supabase.from('retention_runs').select('ran_at, ok').eq('dry_run', false)
+          .order('ran_at', { ascending: false }).limit(1),
+        // Every run counts here, unlike retention_runs above: this job has no
+        // dry-run mode, and a run that found something is the interesting one.
+        supabase.from('email_reconcile_runs').select('ran_at, emailable, no_attempt')
           .order('ran_at', { ascending: false }).limit(1),
         // ⚠️ BILLING ORPHANS. When someone deletes their account and Stripe
         // could not be settled — a failed cancel, or Stripe unreachable — the
@@ -161,6 +213,8 @@ export default function Dashboard() {
         // ignore it.
         retentionLastRun:      (retentionRuns ?? [])[0] ?? null,
         retentionUnavailable:  !!retentionErr,
+        reconcileLastRun:      (reconcileRuns ?? [])[0] ?? null,
+        reconcileUnavailable:  !!reconcileErr,
         billingOrphans:        (billingOrphans ?? []) as BillingOrphan[],
         billingOrphansUnavailable: !!billingOrphansErr,
       })
@@ -239,6 +293,11 @@ export default function Dashboard() {
             if (!stats) return <StatCard label="Retention Purge" value="—" />
             const r = retentionState(stats.retentionLastRun, stats.retentionUnavailable)
             return <StatCard label="Retention Purge" value={r.value} sub={r.sub} alert={r.alert} />
+          })()}
+          {(() => {
+            if (!stats) return <StatCard label="Email Reconcile" value="—" />
+            const r = reconcileState(stats.reconcileLastRun, stats.reconcileUnavailable)
+            return <StatCard label="Email Reconcile" value={r.value} sub={r.sub} alert={r.alert} />
           })()}
         </div>
       </section>

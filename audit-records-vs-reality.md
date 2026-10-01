@@ -14141,6 +14141,82 @@ disagree silently.*
 
 ---
 
+## 136. THE CHECK THAT CATCHES MISSED EMAILS HAD ITSELF NEVER RUN
+### Live from 22 Sep to 1 Oct 2026 — eight recorded failures, none seen
+
+**In plain English:** the nightly job that exists to notice emails which were
+never sent had been crashing every night since the day it was written. Nothing
+noticed, because the only thing that would have noticed was the job itself.
+
+**The fault is one line in the wrong place.** A CTE attaches to the single
+statement that follows it. In `run_email_reconcile` a DELETE sat between the
+`with emailable …, attempts …` chain and the INSERT that selects from
+`attempts`, so the INSERT ran with no `attempts` in scope:
+
+    ERROR: 42P01: relation "attempts" does not exist
+    CONTEXT: PL/pgSQL function run_email_reconcile(integer) line 39
+
+Present in `0047` from its first commit and scheduled at 04:10 UTC daily, so it
+raised on every invocation it ever had. `cron.job_run_details` holds **eight
+consecutive failures, 23–30 Sep**, all 42P01.
+
+### Why this is worse than the bug
+
+The function's own comment says what it is for: `no_attempt > 0` is "the failure
+the log itself cannot" see — a notification whose trigger never reached the send
+function leaves nothing behind in `email_sends`, so counting is the only way to
+find it.
+
+**A broken monitor is worse than no monitor.** No monitor is a known gap. A
+broken one is a believed reassurance, and this product believed it for nine
+days.
+
+It also reframes item 135. Adding `admin_suspension` to that type list closed a
+real hole — in a list nothing was reading either way. Worth doing; it did not
+make the list *do* anything until this landed.
+
+### Three things could have reported it
+
+| | Why it did not |
+|---|---|
+| `cron.job_run_details` | Has a `failed` row for every run. **Nothing reads that table.** |
+| `email_reconcile_runs` being empty | Emptiness is the designed alarm — the same contract `retention_runs` has. The difference was that `retention_runs` had a dashboard tile and this had none. |
+| 0047's own VERIFY | Block A asserts the job is **SCHEDULED**, not that it **succeeds**. A scheduled job that raises nightly is indistinguishable from a working one, from the only thing anyone looked at. |
+
+That third row is the second instance of a lesson already recorded about verify
+blocks here: *proving the guard is not proving the function.*
+
+### ⚠️ And it was carried through twice, by me, without being run
+
+`0067` and `0068` both replace this function. **Both reproduce the broken body
+verbatim**, because it was copied out of `pg_get_functiondef` and one string in
+a list was changed. Neither migration's verify ever called it.
+
+*Reading a live definition is not running it.* `pg_get_functiondef` is the
+authority on what the code **is** — it says nothing at all about whether it
+**works**, and it had been treated all week as though it did. 0069's verify calls
+the function, which is the one thing nobody had done to it in ten days.
+
+### The fix, and the tile that should have existed
+
+`0069` moves the DELETE below the INSERT. The 90-day retention still happens on
+every run and still in the nightly job rather than the monthly purge — only the
+position changed. Verified: `run_email_reconcile(24)` returned a row for the
+first time in its life.
+
+And `email_reconcile_runs` now has a dashboard tile beside `retention_runs`,
+with the same red-when-stale treatment. **The sentence that explains why was
+already in that file, eleven lines above, about the other table:** "the absence
+of recent rows IS the alarm, and an alarm nobody queries is not an alarm." It
+was written by whoever built the first table and not applied when the second
+arrived.
+
+The tile also reports `no_attempt`, not merely that the job ran — because a
+tile that only said "it ran" would repeat the original mistake one level in: the
+monitor working, and nobody reading its finding.
+
+---
+
 ## What is open
 
 | | Item | Blocking launch? |
@@ -14162,6 +14238,7 @@ disagree silently.*
 | 132 | ⚠️ **FIXED, AND IT REACHED PRODUCTION.** A JSX comment among the `<textarea>`'s attributes made `/stylist/[id]/apply` serve the 404 page — the application flow, live from 10:51 to 14:33 on 30 Sep. tsc, eslint, checks AND `next build` all passed, so Vercel deployed it. Caught by a promo-recorder guard added for something else. Same mistake, same file, already recorded earlier the same day | Was live-web |
 | 133 | ✅ **CLOSED AND VERIFIED LIVE 1 Oct.** A 9am slot was applied for at 16:37 the same day and accepted. Five availability call sites filtered by DATE and none by time of day; the RPC took the date and times FROM THE CALLER and never read the availability row. 0065 makes the slot the authority via a trigger — a function guard was bypassable, because members can insert sessions directly | Was live-web |
 | 135 | **The suspension email is the one type the reconciler never looked at.** 0061 added `admin_suspension` to the notify_email trigger and not to `run_email_reconcile`, so from 25 Sep a suspension email that silently failed was invisible to the check that exists to catch exactly that. 0068 written, not yet applied | No, but it is the most consequential notification in the product |
+| 136 | ✅ **CLOSED AND VERIFIED LIVE 1 Oct.** `run_email_reconcile` raised 42P01 on every run from 22 Sep — a DELETE between a CTE chain and the INSERT that read it — so the check that catches emails which never went had itself never run. Eight nightly failures recorded in `cron.job_run_details`, a table nothing reads. 0069 fixes it; `email_reconcile_runs` now has a dashboard tile | Was live |
 | 134 | ✅ **CLOSED AND VERIFIED LIVE 1 Oct.** Pending applications sat in a stylist's list for ever and a past accepted booking had no outcome. 0066 makes `expired` terminal and refuses to ACCEPT a started appointment — that refusal, not the job, is the fix. 0067 adds the daily job, run log and the model's notification. B is "Did this happen?", never "missed" | No |
 | 127 | ✅ **CLOSED 29 Sep.** `/stylist/[id]` header overlaps itself at ~540px: Saved/Safety move beside the name, the name wraps to three lines and the "posts new times" line is drawn across it. Not present at 390. Width band unmeasured | No, but it is on a public page |
 | 126 | ⚠️ **Noted, not fixed.** For a stylist, Settings is fully off-screen in the phone nav at 360, 390 and 430. Discoverability only — the strip scrolls, a half-visible pill cues it, and the suspension notice links to /settings directly. The nav's two-row phone layout is DESIGNED, not a bug; I reported it as one and disproved myself by measuring | No |
