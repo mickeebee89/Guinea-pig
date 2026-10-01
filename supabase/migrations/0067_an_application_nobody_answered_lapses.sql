@@ -56,11 +56,23 @@
 -- for history, once for the future — is the fault this file has recorded in
 -- safeList, in FeaturedStylists and in the five copies of `date >= today`.
 --
--- ── ⚠️ THE BACKFILL IS SILENT, DELIBERATELY ────────────
--- Two rows qualify today: one from July and one from 30 September. Emailing
--- somebody in October about an application they made in July is noise about a
--- thing they have long stopped thinking about. `p_notify => false` for
--- history; the scheduled job notifies from here on.
+-- ── ⚠️ THE BACKFILL IS SILENT, AND TODAY IT IS ALSO EMPTY ──
+-- The rule stands whatever the count: emailing somebody in October about an
+-- application they made in July is noise about a thing they stopped thinking
+-- about months ago. `p_notify => false` for history; the scheduled job
+-- notifies from here on.
+--
+-- ⚠️ BUT THE COUNT IS ZERO, AND MY FIRST VERSION OF THIS FILE SAID TWO.
+-- The two rows came from a diagnostic query whose predicate was
+-- `status in ('pending', 'accepted')`. THIS statement only touches 'pending'.
+-- One of those two was accepted, so it was never a candidate — the number was
+-- wrong before anything was deleted, and it was wrong because a count was
+-- carried from a WIDER question to a NARROWER action without re-reading it.
+--
+-- Corrected against the live counts, 1 Oct 2026: accepted 1, cancelled 21,
+-- completed 11, declined 3, pending 0. The backfill is a no-op today, and the
+-- preflight below expects 0 rather than telling you to stop when it sees the
+-- truth.
 --
 -- ── WHAT IS NOT FIXED HERE ─────────────────────────────
 -- run_email_reconcile does not list 'admin_suspension', so the notification
@@ -289,7 +301,7 @@ end $$;
 
 -- MIGRATION FOOTER
 insert into public.schema_migrations (version, name, checksum)
-values ('0067', 'an_application_nobody_answered_lapses', '027293fc2aef55eef0abfadbfd9dc4f4e8afeb41c62890e5663c098f88b00695');
+values ('0067', 'an_application_nobody_answered_lapses', 'af4bc6c30fc685eb93be00d144f791b8d27b041234767ab547e9b53ad84ec037');
 
 commit;
 
@@ -308,8 +320,10 @@ notify pgrst, 'reload schema';
 --     (select count(*) from cron.job where jobname = 'expire-past-applications') = 0
 --       as not_already_scheduled;
 --
---   Expect true, 2, true. If the middle number is not 2, STOP and look at what
---   else is in there before running a statement that changes all of them.
+--   Expect true, 0, true as of 1 Oct 2026 — there are no pending sessions at
+--   all. ANY number is fine to proceed on; the point of printing it is that you
+--   know what the backfill is about to change BEFORE it changes it. If it is
+--   large and you were not expecting it, stop and look.
 --
 --   ⚠️ AND CONFIRM THE CLIENTS ARE DEPLOYED. Nothing in this file can check
 --   it. Open /bookings as a stylist after the deploy and confirm the Past
@@ -323,7 +337,7 @@ notify pgrst, 'reload schema';
 --   select ran_at, notified, ok, expired, results
 --   from public.session_expiry_runs order by id desc limit 1;
 --
---   Expect notified = false, ok = true, expired = 2.
+--   Expect notified = false, ok = true, expired = 0 (nothing pending today).
 --
 --   select count(*) from public.notifications where type = 'session_expired';
 --
@@ -333,31 +347,81 @@ notify pgrst, 'reload schema';
 --   -- (b) the two rows moved, and nothing else did
 --   select status, count(*) from public.sessions group by status order by 1;
 --
---   Expect 'expired' = 2 and 'pending' holding only applications whose
---   appointment is still ahead.
+--   Expect no 'expired' row today, and 'pending' absent entirely. The state
+--   this migration describes will first appear when a real application lapses.
 --
 --   -- (c) the job is scheduled
 --   select jobname, schedule, command, active from cron.job
 --   where jobname = 'expire-past-applications';
 --
---   -- (d) the notifying path works, rolled back. Uses a real pending
---   --     application moved into the past, exactly as (b)'s rows got there.
+--   -- (d) the notifying path, building its own pending row.
+--   --
+--   -- ⚠️ IT CREATES ONE RATHER THAN BORROWING ONE. The first version said
+--   -- "select id from public.sessions where status = 'pending' limit 1",
+--   -- which assumes a pending application exists. None do — so that block
+--   -- would have updated nothing, expired nothing, and printed a clean zero
+--   -- that looked like a pass. A verify that silently tests nothing is worse
+--   -- than one that fails.
+--   --
+--   -- The slot is created in the FUTURE because 0065's insert trigger refuses
+--   -- a session against a started slot, then moved into the past as the
+--   -- migration runner, where auth.uid() is null and the status guard stands
+--   -- aside. That is the same sequence a real application goes through, only
+--   -- faster.
+--   --
+--   -- Results come back in the EXCEPTION, not through raise notice: the
+--   -- Supabase SQL editor does not surface NOTICE output.
 --   begin;
---     with s as (
---       select id from public.sessions
---        where status = 'pending' limit 1
---     )
---     update public.sessions set date = current_date, start_time = '00:01'
---      where id in (select id from s);
+--   do $v$
+--   declare
+--     v_prov uuid; v_treat uuid; v_model uuid; v_slot uuid; v_sess uuid;
+--     v_expired int; v_type text; v_title text; v_body text; v_to uuid;
+--   begin
+--     select p.id, pt.id into v_prov, v_treat
+--     from public.providers p
+--     join public.provider_treatments pt on pt.provider_id = p.id
+--     limit 1;
+--     select u.id into v_model from public.users u
+--      where u.id <> coalesce((select user_id from public.providers where id = v_prov), u.id)
+--      limit 1;
+--     if v_prov is null or v_model is null then
+--       raise exception 'ROLLED BACK. Need a provider with a treatment and one other user.';
+--     end if;
 --
---     select expired from public.expire_past_applications();   -- notifying
+--     insert into public.availability (provider_id, date, start_time, end_time,
+--                                      active_treatments, is_taken)
+--     values (v_prov, current_date + 7, '10:00', '12:00', array[v_treat::text], false)
+--     returning id into v_slot;
 --
---     select n.type, n.title, n.body
+--     insert into public.sessions (provider_id, model_user_id, model_id,
+--                                  availability_id, treatment_id, location_type,
+--                                  duration_minutes, status)
+--     values (v_prov, v_model, v_model, v_slot, v_treat, 'provider', 120, 'pending')
+--     returning id into v_sess;
+--
+--     -- into the past, as the runner
+--     update public.sessions
+--        set date = current_date, start_time = '00:01', end_time = '00:30'
+--      where id = v_sess;
+--
+--     select expired into v_expired from public.expire_past_applications();
+--
+--     select n.type, n.title, n.body, n.user_id
+--       into v_type, v_title, v_body, v_to
 --     from public.notifications n
---     where n.type = 'session_expired'
---     order by n.created_at desc limit 1;
+--     where n.session_id = v_sess and n.type = 'session_expired';
+--
+--     raise exception E'ROLLED BACK ON PURPOSE.
+expired: %
+notified user: % (the MODEL is %)
+type: %
+title: %
+body: %',
+--       v_expired, v_to, v_model, v_type, v_title, v_body;
+--   end $v$;
 --   rollback;
 --
---   Expect one notification, addressed to the MODEL, whose body does not say
---   or imply that the stylist refused. Read the sentence, not just the count.
+--   Expect expired = 1, the notified user to EQUAL the model id printed beside
+--   it, and a body that neither says nor implies the stylist refused. Read the
+--   sentence, not just the count.
 -- ===========================================================================
