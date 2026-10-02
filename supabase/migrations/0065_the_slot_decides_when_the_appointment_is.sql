@@ -320,6 +320,17 @@ commit;
 --                         'role', 'authenticated')::text, true);
 --     execute 'set local role authenticated';
 --
+--     -- ⚠️ PROVE THE ACTOR CAN EXERCISE THE RULE BEFORE TESTING IT.
+--     -- enforce_session_status_transition returns early for admins and for a
+--     -- null auth.uid(). An actor that trips either bypasses every rule below
+--     -- and the block reports a clean pass having tested nothing — which is
+--     -- exactly what happened on 2 Oct, when an unordered `limit 1` over
+--     -- public.users picked ff06d568: a provider AND an admin.
+--     if auth.uid() is null or public.is_admin() then
+--       raise exception 'ROLLED BACK, TESTED NOTHING. actor auth.uid()=% is_admin=%. Admins and the null-uid path bypass this guard, so no rule below could fire. Pick a member who is neither.',
+--         coalesce(auth.uid()::text, 'NULL'), public.is_admin();
+--     end if;
+--
 --     -- (b) a slot that started at 00:01 today
 --     begin
 --       insert into public.sessions (provider_id, model_user_id, model_id,

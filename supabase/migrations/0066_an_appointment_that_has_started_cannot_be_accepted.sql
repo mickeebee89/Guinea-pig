@@ -199,13 +199,18 @@ notify pgrst, 'reload schema';
 --     v_prov uuid; v_puser uuid; v_treat uuid; v_slot uuid; v_sess uuid;
 --     v_model uuid; v_state text; v_report text := '';
 --   begin
+--     -- ⚠️ NOT AN ADMIN. The actor here is the STYLIST, and an admin
+--     -- bypasses the guard entirely. This pick was `limit 1` until 2 Oct and
+--     -- happened to land on a non-admin provider; the same pattern in 0070
+--     -- landed on one who was both and reported a hole that did not exist.
 --     select p.id, p.user_id, pt.id into v_prov, v_puser, v_treat
 --     from public.providers p
 --     join public.provider_treatments pt on pt.provider_id = p.id
 --     where p.user_id is not null
+--       and not exists (select 1 from public.admins a where a.user_id = p.user_id)
 --     limit 1;
 --     select id into v_model from public.users
---      where id <> coalesce(v_puser, id) limit 1;
+--      where id <> coalesce(v_puser, id) limit 1;   -- only owns the row, never acts
 --     if v_prov is null or v_model is null then
 --       raise exception 'ROLLED BACK. Need a provider with a treatment and one other user.';
 --     end if;
@@ -230,6 +235,17 @@ notify pgrst, 'reload schema';
 --     perform set_config('request.jwt.claims',
 --       json_build_object('sub', v_puser::text, 'role', 'authenticated')::text, true);
 --     execute 'set local role authenticated';
+--
+--     -- ⚠️ PROVE THE ACTOR CAN EXERCISE THE RULE BEFORE TESTING IT.
+--     -- enforce_session_status_transition returns early for admins and for a
+--     -- null auth.uid(). An actor that trips either bypasses every rule below
+--     -- and the block reports a clean pass having tested nothing — which is
+--     -- exactly what happened on 2 Oct, when an unordered `limit 1` over
+--     -- public.users picked ff06d568: a provider AND an admin.
+--     if auth.uid() is null or public.is_admin() then
+--       raise exception 'ROLLED BACK, TESTED NOTHING. actor auth.uid()=% is_admin=%. Admins and the null-uid path bypass this guard, so no rule below could fire. Pick a member who is neither.',
+--         coalesce(auth.uid()::text, 'NULL'), public.is_admin();
+--     end if;
 --
 --     -- (a) the stylist tries to accept it
 --     begin

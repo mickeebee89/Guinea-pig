@@ -14257,6 +14257,80 @@ work.
 
 ---
 
+## 139. A VERIFY BLOCK THAT COULD NOT EXERCISE ITS RULE REPORTED A HOLE
+### 2 Oct 2026
+
+0070's verify reported that the guard failed to close the direct-update path:
+a member could set `status = 'not_held'` with no timestamp, leaving the row
+carrying an assertion nobody made.
+
+**The guard was fine.** The block picked its actor with
+
+    select u.id into v_model from public.users u
+     where u.id <> coalesce(v_puser, u.id) limit 1;
+
+and an unordered `limit 1` returned **ff06d568** — Micky's own account, which
+is a provider *and* an admin. `enforce_session_status_transition` returns early
+for admins, so the guard ran, bypassed at its second line, and never reached the
+branch under test. Every assertion below it then passed or failed for reasons
+that had nothing to do with the rule.
+
+CLAUDE.md already warns about that account in another context: break-glass
+became the normal path by drift, and it "holds a provider profile in the
+product it moderates". It is the single worst row in the database to pick at
+random, and `limit 1` picked it.
+
+### The inverse of 0027
+
+The recorded lesson about verify blocks says **the block must satisfy the
+guards of what it tests** — 0027's instance called an admin-only function from
+the SQL editor where `auth.uid()` is null, so the admin gate raised first and
+nothing under test was reachable.
+
+This is the same fault pointing the other way: a rule that applies to
+*everyone except admins*, tested **as an admin**. 0027 could not get past the
+gate; this one sailed through it. Both end in the same place — a block that
+reports on a rule it never ran.
+
+*Having the privilege and lacking it are both ways of not being the actor the
+rule is about.*
+
+### Three outcomes from one pattern
+
+| Migration | Actor chosen by | What happened |
+|---|---|---|
+| 0066 | `limit 1` over providers | **Got lucky.** The actor IS the stylist, so an admin would have bypassed — it happened to land on a non-admin and fired CV003 correctly |
+| 0070 | `limit 1` over users | **Reported a hole that was not there** |
+| 0065 | the model test account, by id | Fine — deliberate, and not an admin |
+| 0067 | `limit 1` over users | Harmless: that block's actor is the migration runner, and the picked user only owns the row |
+
+So of four blocks written the same fortnight, one was right by intent, one by
+luck, one was irrelevant, and one lied.
+
+### What changed
+
+Every block whose actor's privileges decide the outcome now **asserts its own
+premise** before testing anything:
+
+    if auth.uid() is null or public.is_admin() then
+      raise exception 'ROLLED BACK, TESTED NOTHING. actor auth.uid()=% is_admin=%…';
+    end if;
+
+and picks deliberately: the model test account by id, and a provider explicitly
+`not exists (select 1 from public.admins …)`. A block that cannot exercise its
+rule now says so loudly instead of printing a pass.
+
+All four edits sit below `-- MIGRATION FOOTER`, so three applied migrations were
+corrected without their checksums moving — recomputed before and after to prove
+it.
+
+**Tenth distinct way a verify block has gone wrong here.** The constant across
+all ten: every other line of a migration is executed the moment it is applied,
+and the verify is the one part whose correctness nobody checks until a person
+pastes it — by which time it is trusted.
+
+---
+
 ## What is open
 
 | | Item | Blocking launch? |
@@ -14280,6 +14354,7 @@ work.
 | 135 | **The suspension email is the one type the reconciler never looked at.** 0061 added `admin_suspension` to the notify_email trigger and not to `run_email_reconcile`, so from 25 Sep a suspension email that silently failed was invisible to the check that exists to catch exactly that. 0068 written, not yet applied | No, but it is the most consequential notification in the product |
 | 136 | ✅ **CLOSED AND VERIFIED LIVE 1 Oct.** `run_email_reconcile` raised 42P01 on every run from 22 Sep — a DELETE between a CTE chain and the INSERT that read it — so the check that catches emails which never went had itself never run. Eight nightly failures recorded in `cron.job_run_details`, a table nothing reads. 0069 fixes it; `email_reconcile_runs` now has a dashboard tile | Was live |
 | 137 | ✅ **CLOSED 1 Oct.** A declined application vanished from both clients — the model's only trace was a notification she can delete. Fourth value this one allowlist has needed. Fixed on web; mobile's sessions.tsx still hides `declined` and `expired` | No while mobile is unreleased |
+| 139 | ✅ **CLOSED 2 Oct.** 0070's verify picked `ff06d568` with an unordered `limit 1` — a provider AND an admin — so the guard bypassed and the block reported a hole that did not exist. The inverse of 0027: a rule for everyone except admins, tested as an admin. Four blocks audited; every one whose actor matters now asserts its own premise | No |
 | 134 | ✅ **CLOSED AND VERIFIED LIVE 1 Oct.** Pending applications sat in a stylist's list for ever and a past accepted booking had no outcome. 0066 makes `expired` terminal and refuses to ACCEPT a started appointment — that refusal, not the job, is the fix. 0067 adds the daily job, run log and the model's notification. B is "Did this happen?", never "missed" | No |
 | 127 | ✅ **CLOSED 29 Sep.** `/stylist/[id]` header overlaps itself at ~540px: Saved/Safety move beside the name, the name wraps to three lines and the "posts new times" line is drawn across it. Not present at 390. Width band unmeasured | No, but it is on a public page |
 | 126 | ⚠️ **Noted, not fixed.** For a stylist, Settings is fully off-screen in the phone nav at 360, 390 and 430. Discoverability only — the strip scrolls, a half-visible pill cues it, and the suspension notice links to /settings directly. The nav's two-row phone layout is DESIGNED, not a bug; I reported it as one and disproved myself by measuring | No |

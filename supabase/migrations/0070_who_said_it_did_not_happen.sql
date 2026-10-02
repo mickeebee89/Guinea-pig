@@ -422,12 +422,21 @@ notify pgrst, 'reload schema';
 --     v_slot uuid; v_sess uuid; v_state text; v_report text := '';
 --     v_m timestamptz; v_p timestamptz; v_status text; v_notes int;
 --   begin
+--     -- ⚠️ BOTH PARTIES ACT IN THIS BLOCK, so NEITHER may be an admin:
+--     -- an admin bypasses the guard and every assertion below passes without
+--     -- testing anything. On 2 Oct `limit 1` over public.users picked
+--     -- ff06d568 — a provider and an admin — and this block reported a hole
+--     -- in the guard that was not there.
 --     select p.id, p.user_id, pt.id into v_prov, v_puser, v_treat
 --     from public.providers p
 --     join public.provider_treatments pt on pt.provider_id = p.id
---     where p.user_id is not null limit 1;
+--     where p.user_id is not null
+--       and not exists (select 1 from public.admins a where a.user_id = p.user_id)
+--     limit 1;
+--     -- The model test account by id (CLAUDE.md), not whoever sorts first.
 --     select u.id into v_model from public.users u
---      where u.id <> coalesce(v_puser, u.id) limit 1;
+--      where u.id = 'b0df9c2f-02c5-4fef-afb0-9b184c3b9130'
+--        and u.id <> coalesce(v_puser, '00000000-0000-0000-0000-000000000000'::uuid);
 --     if v_prov is null or v_model is null then
 --       raise exception 'ROLLED BACK. Need a provider with a treatment and one other user.';
 --     end if;
@@ -450,6 +459,18 @@ notify pgrst, 'reload schema';
 --     perform set_config('request.jwt.claims',
 --       json_build_object('sub', v_model::text, 'role', 'authenticated')::text, true);
 --     execute 'set local role authenticated';
+--
+--     -- ⚠️ PROVE THE ACTOR CAN EXERCISE THE RULE BEFORE TESTING IT.
+--     -- enforce_session_status_transition returns early for admins and for a
+--     -- null auth.uid(). An actor that trips either bypasses every rule below
+--     -- and the block reports a clean pass having tested nothing — which is
+--     -- exactly what happened on 2 Oct, when an unordered `limit 1` over
+--     -- public.users picked ff06d568: a provider AND an admin.
+--     if auth.uid() is null or public.is_admin() then
+--       raise exception 'ROLLED BACK, TESTED NOTHING. actor auth.uid()=% is_admin=%. Admins and the null-uid path bypass this guard, so no rule below could fire. Pick a member who is neither.',
+--         coalesce(auth.uid()::text, 'NULL'), public.is_admin();
+--     end if;
+--
 --     begin
 --       update public.sessions set status = 'not_held' where id = v_sess;
 --       v_state := 'NO ERROR - an unattributed not_held was accepted, which is the hole';
@@ -471,6 +492,18 @@ notify pgrst, 'reload schema';
 --     perform set_config('request.jwt.claims',
 --       json_build_object('sub', v_puser::text, 'role', 'authenticated')::text, true);
 --     execute 'set local role authenticated';
+--
+--     -- ⚠️ PROVE THE ACTOR CAN EXERCISE THE RULE BEFORE TESTING IT.
+--     -- enforce_session_status_transition returns early for admins and for a
+--     -- null auth.uid(). An actor that trips either bypasses every rule below
+--     -- and the block reports a clean pass having tested nothing — which is
+--     -- exactly what happened on 2 Oct, when an unordered `limit 1` over
+--     -- public.users picked ff06d568: a provider AND an admin.
+--     if auth.uid() is null or public.is_admin() then
+--       raise exception 'ROLLED BACK, TESTED NOTHING. actor auth.uid()=% is_admin=%. Admins and the null-uid path bypass this guard, so no rule below could fire. Pick a member who is neither.',
+--         coalesce(auth.uid()::text, 'NULL'), public.is_admin();
+--     end if;
+--
 --     perform public.report_not_held(v_sess);
 --     execute 'reset role';
 --     select not_held_model_at, not_held_provider_at into v_m, v_p
