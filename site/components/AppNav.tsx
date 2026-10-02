@@ -39,6 +39,11 @@ import { BOOKINGS_PATH } from '@/lib/routes'
  * screen readers, where there is no glance to save.
  */
 const LINKS = [
+  // FIRST, for both roles. It is the day-one destination — a stylist who has
+  // just published a shop has nothing else to do here — and the phone strip
+  // scrolls from the left, so the leftmost item is the one that is always
+  // visible. Item 141.
+  { href: '/salon-floor',   label: 'Salon Floor' },
   // Models browse. A stylist has no use for a list of other stylists.
   { href: '/browse',        label: 'Browse', modelOnly: true },
   // A model's own profile. Until 23 Sep she had NO route to anything she
@@ -102,7 +107,7 @@ export function AppNav({
         <nav aria-label="Member area" className="sm:hidden">
           {/* -mx-4 + px-4 lets the strip bleed to the screen edges, so a
               half-visible pill signals there is more to scroll to. */}
-          <ul className="-mx-4 flex gap-1 overflow-x-auto px-4 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <ul className="-mx-4 flex gap-0.5 overflow-x-auto px-4 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {links.map(l => <NavLink key={l.href} {...l} unread={unread} />)}
           </ul>
         </nav>
@@ -153,7 +158,7 @@ function NavLink({
     <li className="shrink-0">
       <Link
         href={href}
-        className="inline-flex min-h-11 items-center gap-2 whitespace-nowrap rounded-[999px] px-3 text-sm font-bold text-muted transition-colors hover:bg-soft-pink hover:text-rose focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose"
+        className="inline-flex min-h-11 items-center gap-1.5 whitespace-nowrap rounded-[999px] px-2.5 text-[13px] font-bold text-muted transition-colors hover:bg-soft-pink hover:text-rose focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose sm:gap-2 sm:px-3 sm:text-sm"
       >
         {label}
         {badgeKey === 'unread' && unread > 0 && (
