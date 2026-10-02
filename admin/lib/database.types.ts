@@ -1,8 +1,8 @@
 // GENERATED FILE — DO NOT EDIT BY HAND.
 //
 // Written by scripts/gen-supabase-types.mjs from the live database.
-// TYPES_STAMP: 0067
-// TYPES_FILES_AT_GEN: 0067
+// TYPES_STAMP: 0070
+// TYPES_FILES_AT_GEN: 0070
 //
 // TYPES_STAMP is the migration the DATABASE was at when these were generated,
 // stated by whoever ran it (--applied). TYPES_FILES_AT_GEN is the newest
@@ -1550,6 +1550,8 @@ export type Database = {
           model_id: string
           model_note: string | null
           model_user_id: string | null
+          not_held_model_at: string | null
+          not_held_provider_at: string | null
           note: string | null
           photo_urls: string[] | null
           price_pence: number | null
@@ -1576,6 +1578,8 @@ export type Database = {
           model_id: string
           model_note?: string | null
           model_user_id?: string | null
+          not_held_model_at?: string | null
+          not_held_provider_at?: string | null
           note?: string | null
           photo_urls?: string[] | null
           price_pence?: number | null
@@ -1602,6 +1606,8 @@ export type Database = {
           model_id?: string
           model_note?: string | null
           model_user_id?: string | null
+          not_held_model_at?: string | null
+          not_held_provider_at?: string | null
           note?: string | null
           photo_urls?: string[] | null
           price_pence?: number | null
@@ -2552,6 +2558,7 @@ export type Database = {
         Args: { p_provider_id: string }
         Returns: undefined
       }
+      report_not_held: { Args: { p_session_id: string }; Returns: undefined }
       report_subject_history: {
         Args: never
         Returns: {
