@@ -177,6 +177,19 @@ function Group({
                       : `${s.otherPartyName} can confirm it went ahead.`}
                   </p>
                 )}
+                {/* Who SAID it did not happen — never who failed to turn up.
+                    One of them asserting is a different record from both of
+                    them agreeing, which is why there are two timestamps and
+                    why this reads three different ways (0070). */}
+                {s.status === 'not_held' && (
+                  <p className="mt-2 text-sm text-muted">
+                    {s.notHeldModelAt && s.notHeldProviderAt
+                      ? 'You both said this didn’t happen.'
+                      : (s.role === 'model') === !!s.notHeldModelAt
+                        ? 'You said this didn’t happen.'
+                        : `${s.otherPartyName} said this didn’t happen.`}
+                  </p>
+                )}
                 <SessionActions
                   sessionId={s.id}
                   status={s.status}

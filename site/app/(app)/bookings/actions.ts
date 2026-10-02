@@ -113,6 +113,28 @@ export async function completeSession(sessionId: string): Promise<Result> {
  * Either participant may cancel and there is no time cut-off. That is
  * deliberate: a hard limit stops the person who most needs out.
  */
+/**
+ * Either party records that a booking did not happen.
+ *
+ * Goes through the RPC rather than an UPDATE, because the RPC stamps the
+ * caller's own not_held_*_at from auth.uid() — a client that chose which
+ * column to set could record one party's statement under the other's name.
+ * The guard refuses the write without it either way (0070).
+ */
+export async function reportNotHeld(sessionId: string): Promise<Result> {
+  await requireUser()
+  const supabase = await createSupabaseServerClient()
+
+  const { error } = await supabase.rpc('report_not_held', { p_session_id: sessionId })
+  if (error) {
+    console.error('[sessions] report_not_held failed', error)
+    return { ok: false, error: 'That didn’t go through. Nothing has changed.' }
+  }
+
+  revalidatePath(BOOKINGS_PATH)
+  return { ok: true }
+}
+
 export async function cancelBooking(sessionId: string, reason?: string): Promise<Result> {
   await requireUser()
   const supabase = await createSupabaseServerClient()
