@@ -14396,6 +14396,79 @@ type checker, not by `npm run verify` — all of which were green.
 
 ---
 
+## 140. THE RUN LOG NOBODY COULD READ, AND THREE ANSWERS TO ONE QUESTION
+### Closed and verified live, 2 Oct 2026
+
+0067 created `session_expiry_runs` like this:
+
+    alter table public.session_expiry_runs enable row level security;
+    revoke all on public.session_expiry_runs from anon, authenticated;
+
+RLS with **no policy** denies everything, and the revoke removes the table grant
+as well — so the console never reaches RLS at all. Two independent locks,
+neither with a key, on a table whose own comment says *"the absence of recent
+rows is itself the alarm"*. An alarm nobody can read is the thing item 136 was
+about, reproduced four days later by the person who recorded it.
+
+The preflight put the whole fault on one line: `authenticated_can_select false,
+0 policies, 2 rows`. A table with rows in it that the console could not read.
+
+### Three tables, one contract, three access shapes
+
+| | RLS | Policy | Revoked from |
+|---|---|---|---|
+| `retention_runs` (0005) | on | `using (is_admin())` | `anon` |
+| `email_reconcile_runs` (0047) | on | `for select to authenticated using (is_admin())` | — |
+| `session_expiry_runs` (0067) | on | **none** | **`anon` and `authenticated`** |
+
+Same purpose, same contract, three different answers — and the third was
+written without reading the first two. **Locked twice over by belt-and-braces
+instinct, which is the opposite of belt and braces, because nothing about it
+fails safe.** It fails *silent*: the job went on writing rows correctly, nightly,
+to somewhere nobody could look.
+
+The repair needed BOTH halves. The grant decides whether the role may touch the
+table; the policy decides which rows it sees. Adding only the policy would have
+changed nothing, and 0071 would have looked applied while the tile stayed red.
+
+Verified: admin sees 2 rows, a member sees 0 — not an error, zero, because RLS
+filters rather than refusing.
+
+### ⚠️ The tile was right, on its first day
+
+It read **"could not read session_expiry_runs"**, not "Never". That distinction
+— an unreadable table versus an idle job — is the entire reason these tiles
+have an `unavailable` branch, and it is what made the cause diagnosable at a
+glance instead of starting a hunt for a broken cron job.
+
+A monitor earning its keep by reporting on *itself* is the opposite of item
+136, where the monitor was broken and said nothing.
+
+### The headline that answered the wrong question
+
+The Selfie Purge tile first read **`1 purged`** whenever an audit row existed.
+On 2 October that showed a purge from **24 August** as though it were current
+health: a true number, answering a question nobody asked.
+
+Reworded, it reads `None overdue · 1 held · oldest due 6 Oct · last purge 1
+on 24 Aug`. The headline answers whether the promise is being kept; the purge
+count and its date sit in the sub as evidence rather than as the verdict.
+
+**And the rewording identified the row.** 24 August is the date in
+`selfie-retention-never-worked.md`: *"0020 applied 13:04; the end-to-end proof
+completed 16:29 — the first selfie this system has ever deleted."* So that
+audit row is the proof run that accompanied the August fix, not routine
+operation. Surfacing the date settled what the count meant — which the count
+alone never could.
+
+### ⚠️ What this leaves for 6 October
+
+One selfie, held since 8 July, due Monday. It will be the first time the
+retention path has ever run against real data rather than a test row. The tile
+now shows it coming, and will show whether it went.
+
+---
+
 ## What is open
 
 | | Item | Blocking launch? |
@@ -14420,6 +14493,7 @@ type checker, not by `npm run verify` — all of which were green.
 | 136 | ✅ **CLOSED AND VERIFIED LIVE 1 Oct.** `run_email_reconcile` raised 42P01 on every run from 22 Sep — a DELETE between a CTE chain and the INSERT that read it — so the check that catches emails which never went had itself never run. Eight nightly failures recorded in `cron.job_run_details`, a table nothing reads. 0069 fixes it; `email_reconcile_runs` now has a dashboard tile | Was live |
 | 137 | ✅ **CLOSED 1 Oct.** A declined application vanished from both clients — the model's only trace was a notification she can delete. Fourth value this one allowlist has needed. Fixed on web; mobile's sessions.tsx still hides `declined` and `expired` | No while mobile is unreleased |
 | 139 | ✅ **CLOSED 2 Oct.** 0070's verify picked `ff06d568` with an unordered `limit 1` — a provider AND an admin — so the guard bypassed and the block reported a hole that did not exist. The inverse of 0027: a rule for everyone except admins, tested as an admin. Four blocks audited; every one whose actor matters now asserts its own premise | No |
+| 140 | ✅ **CLOSED AND VERIFIED LIVE 2 Oct.** 0067 gave `session_expiry_runs` RLS with no policy AND revoked the table grant, so the tile built to watch it could not read it. Three run-log tables, one contract, three access shapes. The tile reported *"could not read"* rather than *"Never"*, which is what made it diagnosable | No |
 | 138 | ✅ **CLOSED AND VERIFIED LIVE 2 Oct.** `'not_held'` with two timestamps: the row records who SAID it did not happen, never who failed to turn up. Either party, terminal, admin-only undo. The first verify reported a hole in a correct guard — see 139 | No |
 | 134 | ✅ **CLOSED AND VERIFIED LIVE 1 Oct.** Pending applications sat in a stylist's list for ever and a past accepted booking had no outcome. 0066 makes `expired` terminal and refuses to ACCEPT a started appointment — that refusal, not the job, is the fix. 0067 adds the daily job, run log and the model's notification. B is "Did this happen?", never "missed" | No |
 | 127 | ✅ **CLOSED 29 Sep.** `/stylist/[id]` header overlaps itself at ~540px: Saved/Safety move beside the name, the name wraps to three lines and the "posts new times" line is drawn across it. Not present at 390. Width band unmeasured | No, but it is on a public page |
