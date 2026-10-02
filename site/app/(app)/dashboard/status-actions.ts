@@ -21,7 +21,7 @@ type Result = { ok: true } | { ok: false; error: string }
 const MAX = 280
 
 export async function postStatus(providerId: string, body: string): Promise<Result> {
-  await requireUser()
+  const user = await requireUser()
   const supabase = await createSupabaseServerClient()
 
   const text = body.trim()
@@ -43,7 +43,12 @@ export async function postStatus(providerId: string, body: string): Promise<Resu
 
   const { error } = await supabase
     .from('status_posts')
-    .insert({ provider_id: providerId, body: text })
+    // ⚠️ author_user_id IS REQUIRED SINCE 0072. The Salon Floor takes posts
+    // from both roles, so the table records WHO wrote a post as well as which
+    // shop it belongs to — provider_id is now nullable and a model's post has
+    // none. The typed client refused this insert the moment the types caught
+    // up, which is how it was found rather than at run time.
+    .insert({ author_user_id: user.id, provider_id: providerId, body: text })
 
   if (error) {
     console.error('[status] post failed', error)

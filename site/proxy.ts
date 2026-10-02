@@ -68,6 +68,10 @@ export const config = {
     // scripts/check-route-coverage.mjs fails the build rather than letting the
     // route quietly stop refreshing its session cookie.
     '/dashboard/:path*',
+    // The Salon Floor — one wall both roles post to. Added with the route
+    // itself (item 141); check-route-coverage.mjs refuses the build until it
+    // is here, which is what that check is for.
+    '/salon-floor/:path*',
     '/account/:path*',
     // Literal on purpose: config.matcher must be statically analysable at
     // build time, so it cannot import BOOKINGS_PATH from lib/routes.ts.

@@ -384,11 +384,24 @@ export function buildTables(images: DemoImages = NO_IMAGES): Tables {
   )
 
   // ── "What's on near you" — an approved, unexpired stylist update ──────────
+  // ⚠️ author_user_id ON EVERY ROW SINCE 0072. The Salon Floor takes posts from
+  // both roles, so the table records who wrote one as well as which shop it
+  // belongs to. A stylist's post carries BOTH; a model's carries a null
+  // provider_id, which is also what keeps it off cavybeauty.com.
   status_posts.push(
-    { id: uid(7000), provider_id: provId('amelia'), body: 'Two balayage slots free next week for models happy to go a few shades lighter.',
+    { id: uid(7000), provider_id: provId('amelia'), author_user_id: amelia,
+      body: 'Two balayage slots free next week for models happy to go a few shades lighter.',
       moderation_status: 'approved', review_note: null, expires_at: at(3, '23:00'), created_at: at(-1) },
-    { id: uid(7001), provider_id: provId('priya'), body: 'Lash lift practice slots this Saturday morning — natural looks only.',
+    { id: uid(7001), provider_id: provId('priya'), author_user_id: DEMO_STYLIST_ID,
+      body: 'Lash lift practice slots this Saturday morning — natural looks only.',
       moderation_status: 'approved', review_note: null, expires_at: at(2, '23:00'), created_at: at(0, '07:30') },
+    // A model's post, which is the half of the wall that did not exist before.
+    { id: uid(7002), provider_id: null, author_user_id: DEMO_MODEL_ID,
+      body: 'After a cut this week — shoulder length, happy to go shorter if someone is practising.',
+      moderation_status: 'approved', review_note: null, expires_at: at(2, '20:00'), created_at: at(0, '09:10') },
+    { id: uid(7003), provider_id: null, author_user_id: SOPHIE,
+      body: 'Would love to be a lash model, never had them done before.',
+      moderation_status: 'approved', review_note: null, expires_at: at(1, '18:00'), created_at: at(0, '11:40') },
   )
 
   return {
