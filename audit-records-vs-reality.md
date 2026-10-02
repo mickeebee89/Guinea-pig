@@ -7594,22 +7594,47 @@ starts produces no failed run to notice at all.**
   a wrong one is worse than none.
 * **Where it runs:** `.github/workflows/live-drift.yml`, on GitHub, not in
   the build and not on Micky's machine.
-* **How often:** hourly, at 17 past. Off the hour on purpose — the runner
-  queue at :00 is everyone else's cron.
+* **How often:** ~~hourly, at 17 past. Off the hour on purpose — the runner
+  queue at :00 is everyone else's cron.~~ *Superseded 2 Oct 2026 — the cron
+  line says `17 * * * *` and GitHub does not honour it. **Measured: 49 runs in
+  237 hours, a median gap of 5.1 hours.** See item 142; the old wording is left
+  visible because it is what the file and this record both claimed for ten
+  days.* **Now: on every push to `main`, after a 20-minute wait — that is the
+  signal — plus the same cron as a best-effort backstop averaging once every
+  five hours, for drift with no push behind it.**
 * **How it reaches Micky:** the run goes red and GitHub emails on a failed
   workflow run. No new service, no webhook, no account.
-* **What it costs:** one runner-minute an hour — about 12 minutes a day.
-  Free on a public repository; about 360 minutes a month against the 2,000
-  free if it is ever made private.
+* **What it costs:** ~~one runner-minute an hour — about 12 minutes a day.~~
+  About one runner-minute per scheduled run (~5 a day) plus **~21 minutes per
+  push to `main`**, because the push run waits out the deploy window. Roughly
+  300 minutes on a heavy day. Free on a public repository, and worth counting
+  only if this repo is ever made private.
 * **The false-alarm guard:** if `main`'s newest commit is under 20 minutes
   old it does not fail, because a deploy is probably still running. **A check
   that cries wolf hourly gets muted, and a muted check is worse than none.**
+  ⚠️ This guard had a second edge nobody had looked at: keyed to HEAD's age, a
+  burst of pushes keeps the newest commit permanently too young to fail on. On
+  2 Oct the gaps between commits on `main` were mostly 0–7 minutes. The push
+  trigger closes it, because each push is asked about separately.
+* **The superseded guard (2 Oct):** a push run sleeps 20 minutes, so two can
+  overlap. If the live commit is *newer* than the one the run is about, a later
+  push has deployed past it and the run exits 0. Without it, every push within
+  20 minutes of another would report red saying *"0 commits behind"*.
 * **What it reports when red:** how many commits behind, how long the newest
   has sat there, and `git log --oneline` of exactly what is not live.
 
 **What it will not catch:** a deploy that succeeded and shipped something
 broken — it only compares commits, never behaviour. And it is blind to the
-first hour of any outage by design.
+first twenty minutes of any outage by design.
+
+**✅ PROVEN 2 Oct 2026 — its first real test, and it passed.** `main` reached
+`01a12f7` at 01:44 UTC while cavybeauty.com stayed on `779b470`, one commit
+behind, for nineteen hours. The check went red at **02:14 — thirty minutes in,
+the first opportunity after its own grace window expired, which is the best the
+design allows.** It then re-reported at 08:32, 15:47 and 20:43. Those four
+failures are the only four this workflow has ever had; the 45 runs before them
+all passed. *The same investigation found the check was not running as often as
+it claimed — item 142.*
 
 **74. NOBODY WAS EVER EMAILED WHEN SOMETHING HAPPENED ON CAVY — BUILT 22 Sep
 2026. `next build` EXIT 0. THE FUNCTION IS DEPLOYED (proved by its own 400 to a
@@ -14561,6 +14586,144 @@ because shrinking nav items touches every page for both roles at every width.
 
 ---
 
+## 142. THE CHECK SAID HOURLY, GITHUB RAN IT FIVE-HOURLY, AND NOTHING COMPARED THE TWO
+### Found 2 Oct 2026, the same day item 75 passed its first real test. Fixed the same day.
+
+**Plainly:** the one thing watching whether cavybeauty.com is up to date
+promised to look every hour. It looked about every five. So a stale site could
+sit unreported for most of a working day by a check whose own header offered an
+hour — and that is not hypothetical: on 2 Oct it caught the drift at 02:14 and
+its next look was **08:32**. Had the drift begun twenty minutes later, the site
+would have been stale and unreported for **6 hours 48 minutes**. Item 74 was
+nine hours. This check would not reliably have beaten it.
+
+### The measurement
+
+**Sample: every run GitHub reports for `live-drift.yml`** — `total_count` 49,
+returned in one page, nothing truncated, `2026-09-22T23:35Z` to
+`2026-10-02T20:43Z`. The repo is public, so this was read unauthenticated from
+the REST API; no token, no browser step.
+
+| | |
+|---|---|
+| The file says | `cron: '17 * * * *'` — hourly |
+| This record said | "hourly, at 17 past" |
+| Span measured | 237.1 hours |
+| Runs hourly would give | ~237 |
+| Runs GitHub actually ran | **49** |
+| Median gap | **5.1 hours** |
+| Longest gap | 8.6 hours |
+| Gaps of 6 hours or more | 13 |
+| Runs per day | 1, 5, 6, 5, 6, 5, 4, 4, 5, 4, 4 |
+
+Every run's `event` is `schedule`, so these are the cron firings themselves —
+GitHub dropped roughly four in five. **VERIFIED** that the runs are not there;
+**INFERRED** that best-effort load-shedding on a free public repository is the
+mechanism, which is what GitHub documents.
+
+### It is this week's shape again
+
+**A claim and its enforcer disagreed, and nothing compared them.** The claim
+was written in **three** places — the workflow header, this record, and a
+comment in `check-links.mjs` beside `/api/version`, found only because the
+grep for the wording went wider than the two places already known. *A finding
+is only as wide as the check that found it.* The enforcer
+was GitHub's scheduler. The evidence that they disagreed sat in the run history
+for ten days, one unauthenticated request away, and was never looked at —
+because the check was green, and a check that is green is assumed to be
+running.
+
+It is `run_email_reconcile` again (item 136), which claimed to run nightly and
+raised 42P01 on every call from 22 Sep while eight failures accumulated in
+`cron.job_run_details`, a table nothing read. It is item 140 again, where the
+tile built to watch a job could not read the job's log. **Three faults in three
+days where the mechanism existed, was correct, and nobody could see whether it
+had run.**
+
+And the trigger for finding it was not a check. It was Micky asking *"has it
+ever alerted on anything else, or has it been quiet since 22 September the way
+email-reconcile was — a monitor that has only ever fired once is worth checking
+rather than trusting."*
+
+### The fix
+
+1. **`on: push` to `main`, with a 20-minute wait before comparing.** The run
+   asks one question — *twenty minutes after this push, is the site serving
+   it?* — which is the question the whole check exists for, and it no longer
+   depends on the scheduler to get asked. A deploy that fails, is cancelled or
+   never starts always follows a push.
+2. **The cron stays, described honestly** as a best-effort backstop averaging
+   once every five hours. It is the only thing that catches drift with no push
+   behind it, such as a Vercel rollback, so removing it would lose a case.
+3. **Checkout dropped `ref: main`.** The default is the event's own commit,
+   which is exact; `ref: main` re-read the branch tip at checkout time, so a
+   push landing mid-run silently changed which commit the run was about.
+4. **A superseded guard**, which the push trigger makes necessary rather than
+   optional: two push runs can now sit in their deploy windows at once, and
+   without it every push within 20 minutes of another reports red saying *"0
+   commits behind"*. **Verified against the real graph before shipping**, both
+   directions: the day's actual drift (`01a12f7` vs live `779b470`) gives ahead
+   0 / behind 1 and reports red; the superseded case (`01a12f7` vs live
+   `503c7f3`) gives ahead 3 / behind 0 and exits 0.
+5. **The age-grace edge is recorded in the file.** Keyed to HEAD's commit age,
+   a burst of pushes keeps the newest commit permanently too young to fail on —
+   and on 2 Oct the gaps between commits on `main` were mostly 0–7 minutes.
+   The push trigger closes it, because each push is judged separately.
+
+### A correction, recorded as one
+
+Mid-investigation I reported *"4 failures, not 1 — this contradicts the premise
+that it fired for the first time today."* **That was wrong.** All four failures
+are 2 Oct, all the same drift event re-reported, which is exactly the hourly
+emailing Micky described. I had the right count and drew the wrong conclusion
+from it, by reading a count before reading the timestamps.
+
+I also printed commit times with a `Z` suffix taken from `--date=format-local`,
+which is BST — an hour out, and labelled UTC. The first failure looked like it
+fired 15 minutes into the grace window, i.e. like a bug in the check. **A
+timezone label I wrote myself nearly produced a fault report against correct
+code.** Corrected before it reached a conclusion: with real UTC times the ages
+are 29m, 6.8h, 14.0h and 19.0h, all correctly past the 1200s grace.
+
+### Still open: nothing watches whether the workflow runs at all
+
+**A gap in runs is indistinguishable from no drift.** Both look like silence,
+and silence is what this check produces when everything is fine. Worse, GitHub
+**disables a scheduled workflow after 60 days without repo activity** — so the
+monitor switches itself off exactly when the project goes quiet, which is
+precisely when a stale site would go unnoticed longest. Daily commits mean that
+is not a live risk today; it becomes one the moment this repo rests.
+
+A watcher inside GitHub Actions cannot answer this, because it would be
+scheduled by the same scheduler it is checking. **The watcher has to live on
+different infrastructure — and this project already has some that is proven to
+run: Supabase `pg_cron`.** The shape, matching the four jobs that already have
+one:
+
+* a `pg_cron` job calls the public GitHub REST API via `pg_net` —
+  `/actions/workflows/live-drift.yml/runs?per_page=1`, no auth needed on a
+  public repo — and records the newest run's timestamp and conclusion in a
+  `drift_check_runs` table;
+* it raises if the newest run is **older than 12 hours**. That threshold comes
+  out of the sample above rather than out of the air: the longest observed gap
+  is 8.6 hours, so 12 gives about 1.4× headroom and would have produced zero
+  false alarms across ten days, while catching a disabled workflow within half
+  a day;
+* a dashboard tile shows *"live-drift last ran N hours ago"*, like the four
+  tiles for retention, email reconcile, selfie purge and application expiry.
+
+**The tile is the part that matters, and it is the general lesson of items 136,
+140 and 142 together: turn absence into a displayed value.** A gap is
+indistinguishable from no drift only while nothing displays *last checked at*.
+Once a number is on a page Micky looks at, a job that has stopped shows as a
+stale timestamp — it does not need to fire to be noticed, which is the only way
+out of the regress of watchers watching watchers.
+
+Not built. Scoped here so the next person does not have to rediscover why a
+GitHub Action cannot be the thing that watches a GitHub Action.
+
+---
+
 ## What is open
 
 | | Item | Blocking launch? |
@@ -14597,7 +14760,8 @@ because shrinking nav items touches every page for both roles at every width.
 | 120 | ✅ **CLOSED 25 Sep, verified live.** The notice sits in the `(app)` layout beside the auth gate, explains rather than enforces, fails open, and keeps Settings reachable | No |
 | ~~117~~ | ~~**A revoked stylist is told nothing.** Her verification is cleared, her shop hidden and her bookings cancelled, and no notification is written to her — while every model she was booked with gets a considered message~~ *(superseded by the row above, 24 Sep)* | — |
 | 74 | ✅ **CLOSED 23 Sep** — proven end to end, and the mobile switch now exists (item 88). Untested on device |
-| 75 | Drift check is new and unproven — its first real test is the next failed or skipped deploy | No |
+| 75 | ✅ **PROVEN 2 Oct.** Its first real test arrived — `main` at `01a12f7`, live on `779b470` for nineteen hours — and it went red **thirty minutes in**, the first opportunity after its own grace window, which is the best the design allows. Four failures ever, all the same event; 45 passes before them | No |
+| 142 | ✅ **CLOSED 2 Oct.** The check said hourly, the record said hourly, and GitHub ran it **49 times in 237 hours** — median gap 5.1h, longest 8.6h. A stale site could have gone 6h48m unreported by a check offering an hour. Now triggered **on push to `main`** after a 20-minute wait, with the cron kept as an honestly-described backstop. **Open: nothing watches whether the workflow runs at all** — scoped as a `pg_cron` watcher plus a tile, because an Action cannot watch the scheduler that runs it | No |
 | 77 | ✅ **CLOSED 23 Sep** — Micky republished his shop, so one is live. Item 11's condition (one LISTED stylist per CATEGORY) is still unmet with a single shop | No, but launch-relevant |
 | 79 | Slot prices live. Untested: the mobile price field; no model can see a price until step 5 | No |
 | 80 | Consent surface built, **no route until step 5**. Terms §5 still needs its line about displayed prices | No |

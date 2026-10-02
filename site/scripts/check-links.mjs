@@ -300,8 +300,10 @@ const NO_LINK_NEEDED = new Set([
   // and an entry for a route that no longer exists is one that would silence a
   // future route of the same name without anyone deciding to.
   //
-  // Read by .github/workflows/live-drift.yml once an hour, never by a person,
-  // so no page links to it and none should (item 75).
+  // Read by .github/workflows/live-drift.yml on every push to main and on a
+  // best-effort cron — NOT once an hour, which this comment claimed and which
+  // the run history disproved after ten days (item 142). Never read by a
+  // person, so no page links to it and none should (items 75, 142).
   '/api/version',
   // Linked generically as `/${t.slug}` from the treatment page and the 404
   // page, so no literal href to this route exists or should.

@@ -1,15 +1,18 @@
 # ==========================================================================
 #  live-drift — is cavybeauty.com serving the latest commit on main?
 #
-#  Audit item 75.
+#  Audit item 75. Push trigger and honest cadence wording added 2 Oct 2026
+#  (item 142), after its first real test.
 #
 #  ── THE FAILURE THIS EXISTS FOR ──────────────────────────────────────────
 #  A stale site looks exactly like a working one. Every page loads, nothing
-#  errors, the content is simply old. It has now happened twice:
+#  errors, the content is simply old. It has now happened three times:
 #    * 10 Aug – 8 Sep 2026: five weeks of the 10 August build, while CI
 #      reported green the whole time (audit item 45).
 #    * 22 Sep 2026: nine hours, because a link check failed the build
 #      (item 74). Three deploys failed and nobody was told.
+#    * 2 Oct 2026: nineteen hours, one commit behind. THIS CHECK CAUGHT IT,
+#      thirty minutes in — its first real test, and it passed (item 75).
 #
 #  Every other signal answers "did this run fail?". This one answers "is the
 #  live site current?", which is the question that was never being asked —
@@ -22,10 +25,34 @@
 name: live-drift
 
 on:
+  # ⚠️ THIS IS THE SIGNAL. A deploy that fails, is cancelled, or never starts
+  # always follows a push — so the push is when to ask. The job waits out the
+  # deploy window first, then asks the only question that matters: twenty
+  # minutes after this push, is the site serving it?
+  #
+  # Added 2 Oct 2026 because the schedule below cannot be relied on to ask it
+  # (item 142), and because the twenty-minute grace made rapid pushes
+  # invisible: three deploys failing within ten minutes of each other leave
+  # main's newest commit too young to fail on, and the next scheduled run is
+  # hours away rather than an hour.
+  push:
+    branches: [main]
+
   schedule:
-    # Hourly at 17 past — off the hour, because everything in the world runs
-    # on the hour and the runner queue shows it.
+    # Nominally hourly at 17 past — off the hour, because everything in the
+    # world runs on the hour and the runner queue shows it.
+    #
+    # ⚠️ GITHUB DOES NOT RUN THIS HOURLY. Measured 2 Oct 2026 against every
+    # run GitHub reports for this workflow: 49 runs in 237 hours, median gap
+    # 5.1 hours, longest 8.6, thirteen gaps of six hours or more. Scheduled
+    # workflows are best-effort and roughly four firings in five are dropped.
+    #
+    # So read this line as a BACKSTOP that averages about once every five
+    # hours — it is the only thing that catches drift with no push behind it,
+    # such as a Vercel rollback. It is NOT an hourly check, and this file
+    # claimed it was for ten days while the evidence sat in the run history.
     - cron: '17 * * * *'
+
   # So it can be run the moment a deploy is expected to have landed.
   workflow_dispatch:
 
@@ -33,16 +60,41 @@ on:
 permissions:
   contents: read
 
+# No `concurrency` on purpose. Several push runs can sit in their deploy
+# window at once, and the superseded guard below answers each of them
+# correctly. Cancelling the older ones would also cancel a scheduled run that
+# happened to overlap a push, and scheduled runs are too scarce to spend.
+
 jobs:
   drift:
     runs-on: ubuntu-latest
     steps:
       # Full history: the check reports HOW FAR behind, which needs the live
       # commit to be in the graph. A shallow clone cannot answer that.
+      #
+      # ⚠️ NO `ref:` ON PURPOSE. The default is this event's own commit — the
+      # pushed commit on a push, main's head on a schedule — which is EXACT.
+      # `ref: main` re-read the branch tip at checkout time, so a push landing
+      # mid-run silently changed which commit the run was about.
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: main
+
+      # ── THE DEPLOY WINDOW ───────────────────────────────────────────────
+      # On a push there is nothing to measure yet: Vercel has not finished.
+      # Waiting here, rather than failing now and leaving it to a later
+      # scheduled run, IS the point of the push trigger — that later run
+      # averages five hours away.
+      #
+      # Push only. A scheduled run is asking about commits that are already
+      # old, and twenty idle minutes would buy it nothing.
+      #
+      # Cost: about 21 runner-minutes per push to main, free on a public
+      # repository. Roughly 300 minutes on a heavy day, which would be worth
+      # counting if this repo were ever made private.
+      - name: Wait out the deploy window
+        if: github.event_name == 'push'
+        run: sleep 1200
 
       - name: Compare the live commit with main
         run: |
@@ -60,17 +112,42 @@ jobs:
           branch=$(echo "$answer" | jq -r '.branch')
           head=$(git rev-parse HEAD)
 
-          echo "live: $live ($branch)"
-          echo "main: $head"
+          echo "live:     $live ($branch)"
+          echo "this run: $head (on $GITHUB_EVENT_NAME)"
 
           if [ "$live" = "$head" ]; then
             echo "Up to date."
             exit 0
           fi
 
+          # The graph was fetched BEFORE the wait above, so a push that landed
+          # during those twenty minutes is not in it yet — and the guard below
+          # needs it to be.
+          git fetch --quiet origin main || true
+
+          # ── SUPERSEDED, NOT STALE ───────────────────────────────────────
+          # This run is about ONE commit. If the live site is serving something
+          # that has this run's commit in its history, a later push has already
+          # deployed past it, and this run's question is answered and stale.
+          #
+          # Without this, every push landing within twenty minutes of another
+          # reports red saying "0 commits behind" — and a check that cries wolf
+          # gets muted, which is the standing rule in this file's header. The
+          # push trigger is what makes overlapping runs possible, so the guard
+          # arrives with it.
+          ahead=$(git rev-list --count "$head..$live" 2>/dev/null || echo 0)
+          if [ "$ahead" -gt 0 ]; then
+            echo "Live is $ahead commit(s) NEWER than this run's commit: a later push has"
+            echo "already deployed past it. This run's question is stale, not failing."
+            exit 0
+          fi
+
           # A deploy takes a couple of minutes. Without this, every run that
           # lands just after a push is a false alarm — and a check that cries
           # wolf hourly gets muted, which would leave us worse off than now.
+          #
+          # On a push run the wait above has already spent this window, so the
+          # guard only ever bites on a scheduled run.
           age=$(( $(date +%s) - $(git log -1 --format=%ct HEAD) ))
           if [ "$age" -lt 1200 ]; then
             echo "main is only $((age / 60))m old — a deploy is probably still running. Not failing."
