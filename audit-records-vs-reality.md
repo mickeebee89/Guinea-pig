@@ -14169,6 +14169,13 @@ disagree silently.*
 ## 136. THE CHECK THAT CATCHES MISSED EMAILS HAD ITSELF NEVER RUN
 ### Live from 22 Sep to 1 Oct 2026 — eight recorded failures, none seen
 
+*Shared lesson with items 140 and 142 — **a gap is indistinguishable from no
+drift only while nothing displays "last checked at". Turning absence into a
+displayed value is what stops the regress of watchers watching watchers.** This
+job's eight failures sat in `cron.job_run_details` for nine days; the only thing
+that separated it from `retention_runs`, which had the same designed alarm, was
+that `retention_runs` had a tile.*
+
 **In plain English:** the nightly job that exists to notice emails which were
 never sent had been crashing every night since the day it was written. Nothing
 noticed, because the only thing that would have noticed was the job itself.
@@ -14424,6 +14431,13 @@ type checker, not by `npm run verify` — all of which were green.
 ## 140. THE RUN LOG NOBODY COULD READ, AND THREE ANSWERS TO ONE QUESTION
 ### Closed and verified live, 2 Oct 2026
 
+*Shared lesson with items 136 and 142 — **a gap is indistinguishable from no
+drift only while nothing displays "last checked at". Turning absence into a
+displayed value is what stops the regress of watchers watching watchers.** The
+tile here was the diagnosis as well as the cure: it printed "could not read"
+rather than "Never", and those being different words is the whole reason this
+took minutes rather than days.*
+
 0067 created `session_expiry_runs` like this:
 
     alter table public.session_expiry_runs enable row level security;
@@ -14665,7 +14679,13 @@ rather than trusting."*
    directions: the day's actual drift (`01a12f7` vs live `779b470`) gives ahead
    0 / behind 1 and reports red; the superseded case (`01a12f7` vs live
    `503c7f3`) gives ahead 3 / behind 0 and exits 0.
-5. **The age-grace edge is recorded in the file.** Keyed to HEAD's commit age,
+5. **✅ THE PUSH PATH IS PROVEN, not just written.** The commit carrying it
+   triggered its own first run: `1909132`, `event: push`, created 21:32:46Z and
+   concluded **success at 21:52:58Z** — twenty minutes and twelve seconds, which
+   is the wait followed by the comparison. It found the live site serving
+   `1909132`, equal to `main`. The scheduled path was already proven by the four
+   failures above; this was the half that had never executed.
+6. **The age-grace edge is recorded in the file.** Keyed to HEAD's commit age,
    a burst of pushes keeps the newest commit permanently too young to fail on —
    and on 2 Oct the gaps between commits on `main` were mostly 0–7 minutes.
    The push trigger closes it, because each push is judged separately.
@@ -14685,7 +14705,7 @@ timezone label I wrote myself nearly produced a fault report against correct
 code.** Corrected before it reached a conclusion: with real UTC times the ages
 are 29m, 6.8h, 14.0h and 19.0h, all correctly past the 1200s grace.
 
-### Still open: nothing watches whether the workflow runs at all
+### Closed by 0074: something now watches whether the workflow runs at all
 
 **A gap in runs is indistinguishable from no drift.** Both look like silence,
 and silence is what this check produces when everything is fine. Worse, GitHub
@@ -14719,8 +14739,61 @@ Once a number is on a page Micky looks at, a job that has stopped shows as a
 stale timestamp — it does not need to fire to be noticed, which is the only way
 out of the regress of watchers watching watchers.
 
-Not built. Scoped here so the next person does not have to rediscover why a
-GitHub Action cannot be the thing that watches a GitHub Action.
+### What 0074 is, and the one place it departs from what was asked
+
+`drift_check_runs`, `run_drift_watch()`, the `drift-watch` cron job at 35 past
+the hour, and a fifth dashboard tile — **Live-Drift Check** — beside retention,
+email reconcile, selfie purge and application expiry.
+
+**⚠️ IT RECORDS AND DOES NOT RAISE, WHICH IS NOT WHAT WAS AGREED.** The decision
+was "it raises if the newest run is older than 12 hours". It does not, for two
+reasons that only became clear while writing it, and the departure is recorded
+rather than absorbed:
+
+1. **A raise would destroy its own evidence.** The insert and the raise are one
+   transaction, so raising rolls back the row that proves what was seen. The
+   alarm would delete the record of why it fired.
+2. **A raise from `pg_cron` lands in `cron.job_run_details`,** which item 136
+   proved nothing reads — that is precisely where eight consecutive failures sat
+   unread for nine days.
+
+So the job records and the tile judges, which is the same division as the other
+four. The 12 hours lives in exactly one place, `driftWatchState()` in
+`admin/app/page.tsx`, alongside the neighbouring tiles' own thresholds ("It runs
+daily, so 2 days is a run has been missed").
+
+**The threshold is derived, not picked:** the longest gap across the 49 runs is
+8.6 hours, so 12 gives about 1.4× headroom, would have raised nothing across the
+ten days measured, and still catches a disabled workflow within half a day.
+
+**It distinguishes the two silences.** A non-200 means GitHub would not tell us —
+rate-limited, repo gone private, workflow renamed — and the tile says so rather
+than reporting drift. That is item 140's lesson exactly: its tile said *"could
+not read"* rather than *"Never"*, and those being different words is what made
+it diagnosable. The watcher's own heartbeat is checked first, too: if
+`drift-watch` has stopped, every answer beneath it is stale, and reporting a
+stale answer as fact would be this very item repeated one level in.
+
+**One job, not two, and the newest row is always unanswered.** pg_net sends only
+after commit, so a run cannot read its own answer however long it waits. Each
+run settles the previous ask and then asks again — which also means that if the
+job stops, the tile goes stale, which is the point.
+
+### Not yet proven
+
+0074 is written, checksummed by hand (`cfe785af…`) and **not applied** — Micky
+applies it. Until then the tile correctly reads *"could not read
+drift_check_runs"*. Two limits worth stating rather than discovering:
+
+* **`admin` builds clean with a table that does not exist.** Its Supabase client
+  is not typed against the generated types, so `from('drift_check_runs')` raised
+  no error at build time and would not have caught a misspelt table name. The
+  tile is unproven until the migration is applied and the dashboard loaded.
+* **The pg_net chain is unexercised.** VERIFY block (c) is written to prove it
+  for real rather than in a rollback, because pg_net sends only on commit and a
+  rolled-back call proves nothing about the URL, the headers or the parse. It
+  states what each failure code means so a red result is not misread as drift.
+  0069 is why that block exists: a body that parses is not a body that works.
 
 ---
 
@@ -14761,7 +14834,7 @@ GitHub Action cannot be the thing that watches a GitHub Action.
 | ~~117~~ | ~~**A revoked stylist is told nothing.** Her verification is cleared, her shop hidden and her bookings cancelled, and no notification is written to her — while every model she was booked with gets a considered message~~ *(superseded by the row above, 24 Sep)* | — |
 | 74 | ✅ **CLOSED 23 Sep** — proven end to end, and the mobile switch now exists (item 88). Untested on device |
 | 75 | ✅ **PROVEN 2 Oct.** Its first real test arrived — `main` at `01a12f7`, live on `779b470` for nineteen hours — and it went red **thirty minutes in**, the first opportunity after its own grace window, which is the best the design allows. Four failures ever, all the same event; 45 passes before them | No |
-| 142 | ✅ **CLOSED 2 Oct.** The check said hourly, the record said hourly, and GitHub ran it **49 times in 237 hours** — median gap 5.1h, longest 8.6h. A stale site could have gone 6h48m unreported by a check offering an hour. Now triggered **on push to `main`** after a 20-minute wait, with the cron kept as an honestly-described backstop. **Open: nothing watches whether the workflow runs at all** — scoped as a `pg_cron` watcher plus a tile, because an Action cannot watch the scheduler that runs it | No |
+| 142 | ✅ **CLOSED 2 Oct.** The check said hourly, the record said hourly, and GitHub ran it **49 times in 237 hours** — median gap 5.1h, longest 8.6h. A stale site could have gone 6h48m unreported by a check offering an hour. Now triggered **on push to `main`** after a 20-minute wait, with the cron kept as an honestly-described backstop. Its push run passed first time: 20m12s, success. **0074 adds the watcher nothing had** — `drift_check_runs`, the `drift-watch` job and a fifth tile — because an Action cannot watch the scheduler that runs it. ⚠️ **0074 written, not applied**; it records rather than raises, since a raise rolls back its own evidence and lands in the table item 136 proved nothing reads | No |
 | 77 | ✅ **CLOSED 23 Sep** — Micky republished his shop, so one is live. Item 11's condition (one LISTED stylist per CATEGORY) is still unmet with a single shop | No, but launch-relevant |
 | 79 | Slot prices live. Untested: the mobile price field; no model can see a price until step 5 | No |
 | 80 | Consent surface built, **no route until step 5**. Terms §5 still needs its line about displayed prices | No |

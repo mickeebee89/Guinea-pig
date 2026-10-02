@@ -33,6 +33,25 @@ interface Stats {
   /** Deleted accounts whose Stripe billing could not be settled. */
   billingOrphans: BillingOrphan[]
   billingOrphansUnavailable: boolean
+  /**
+   * The last half-day of drift_check_runs, newest first. The whole window
+   * rather than one row, because the newest row is ALWAYS unanswered by
+   * design — pg_net sends after commit, so each run settles the previous ask.
+   * The tile needs both the newest ask (is the watcher alive?) and the newest
+   * answer (is the workflow?), and they are never the same row.
+   */
+  driftRows: DriftCheckRun[]
+  driftUnavailable: boolean
+}
+
+/** One hour's question to GitHub, and whatever came back. 0074. */
+interface DriftCheckRun {
+  asked_at: string
+  answered_at: string | null
+  http_status: number | null
+  newest_run_at: string | null
+  newest_conclusion: string | null
+  note: string | null
 }
 
 /**
@@ -248,6 +267,82 @@ function expiryState(
   }
 }
 
+/**
+ * Is .github/workflows/live-drift.yml still running at all?
+ *
+ * ⚠️ THIS TILE IS THE WHOLE POINT OF ITEM 142, AND THE ALARM IS NOT.
+ * live-drift.yml claimed hourly and GitHub ran it 49 times in 237 hours —
+ * median gap 5.1 hours, longest 8.6 — for ten days, while the evidence sat in
+ * the run history one unauthenticated request away. Nothing compared the claim
+ * with its enforcer, because the check was green and a green check is assumed
+ * to be running.
+ *
+ * **A gap in runs is indistinguishable from no drift.** Both are silence, and
+ * silence is exactly what a healthy monitor emits. GitHub also disables a
+ * scheduled workflow after 60 days of repository inactivity, so it switches
+ * itself off precisely when the project goes quiet — when a stale site would
+ * go unnoticed longest.
+ *
+ * That is why this is a tile and not an email. **Turning absence into a
+ * displayed value is what stops the regress of watchers watching watchers:**
+ * a number on a page does not need to fire to be noticed. It is the shared
+ * lesson of items 136, 140 and 142 — a job failing nightly unseen, a run log
+ * the tile could not read, and a workflow whose cadence nobody compared.
+ *
+ * ── THE 12 HOURS LIVES HERE, ONCE ──
+ * Derived from the sample, not picked: the longest gap across those 49 runs is
+ * 8.6 hours, so 12 gives about 1.4x headroom, would have raised nothing across
+ * the ten days measured, and still catches a disabled workflow within half a
+ * day. 0074 deliberately does NOT hold this number — a raise inside the job
+ * would roll back the row that proves what was seen.
+ *
+ * ── IT MUST SAY WHICH SILENCE IT IS ──
+ * A non-200 means GitHub would not tell us: rate-limited, or the repo went
+ * private, or the workflow was renamed. **That is not evidence the workflow
+ * stopped**, and reporting it as drift would teach the reader to ignore the
+ * tile. Item 140's tile said "could not read" rather than "Never", and being
+ * able to tell those apart is what made it diagnosable in minutes.
+ */
+function driftWatchState(rows: DriftCheckRun[], unavailable: boolean) {
+  if (unavailable)  return { value: '—', sub: 'could not read drift_check_runs', alert: true }
+  if (!rows.length) return { value: 'Never',   sub: 'the watcher has never run',       alert: true }
+
+  const hoursSince = (iso: string) => (Date.now() - new Date(iso).getTime()) / 3_600_000
+
+  // The watcher's own heartbeat comes first: if drift-watch has stopped, every
+  // answer below it is stale too, and reporting the stale answer as fact would
+  // be this item's own mistake one level in.
+  const askedAgo = hoursSince(rows[0].asked_at)
+  if (askedAgo > 3) {
+    return {
+      value: 'Watcher stale',
+      sub: `pg_cron drift-watch last asked ${Math.floor(askedAgo)}h ago`,
+      alert: true,
+    }
+  }
+
+  const answered = rows.find(r => r.answered_at !== null)
+  if (!answered) {
+    return { value: 'Waiting', sub: 'asked, nothing settled yet · hourly at :35', alert: false }
+  }
+
+  if (answered.http_status !== 200) {
+    const code = answered.http_status === null ? 'no response' : `HTTP ${answered.http_status}`
+    return { value: code, sub: 'GitHub would not answer — not evidence of drift', alert: true }
+  }
+
+  if (!answered.newest_run_at) {
+    return { value: '—', sub: answered.note ?? 'answered 200, reported no runs', alert: true }
+  }
+
+  const lag = hoursSince(answered.newest_run_at)
+  return {
+    value: `${Math.floor(lag)}h ago`,
+    sub: `live-drift last ran · ${answered.newest_conclusion ?? 'in progress'}`,
+    alert: lag > 12,
+  }
+}
+
 export default function Dashboard() {
   const [stats, setStats] = useState<Stats | null>(null)
 
@@ -274,6 +369,7 @@ export default function Dashboard() {
         { data: expiryRuns, error: expiryErr },
         { data: reconcileRuns, error: reconcileErr },
         { data: billingOrphans, error: billingOrphansErr },
+        { data: driftRuns, error: driftErr },
       ] = await Promise.all([
         supabase.from('reports').select('*', { count: 'exact', head: true }).eq('status', 'open'),
         supabase.from('users').select('*', { count: 'exact', head: true }),
@@ -316,6 +412,14 @@ export default function Dashboard() {
           .eq('action', 'billing_orphan_on_delete')
           .order('created_at', { ascending: false })
           .limit(20),
+        // Twelve rows, not one. The newest is always an unanswered ask, so a
+        // limit(1) would show "Waiting" for ever and never once report the
+        // workflow's lag. Twelve covers the six hours a row may stay open plus
+        // the hourly cadence either side of it.
+        supabase.from('drift_check_runs')
+          .select('asked_at, answered_at, http_status, newest_run_at, newest_conclusion, note')
+          .order('asked_at', { ascending: false })
+          .limit(12),
       ])
 
       // Revenue from Stripe (source of truth) so the dashboard matches Stripe + the Revenue page.
@@ -350,6 +454,8 @@ export default function Dashboard() {
         reconcileUnavailable:  !!reconcileErr,
         billingOrphans:        (billingOrphans ?? []) as BillingOrphan[],
         billingOrphansUnavailable: !!billingOrphansErr,
+        driftRows:             (driftRuns ?? []) as DriftCheckRun[],
+        driftUnavailable:      !!driftErr,
       })
     }
     load()
@@ -441,6 +547,11 @@ export default function Dashboard() {
             if (!stats) return <StatCard label="Application Expiry" value="—" />
             const r = expiryState(stats.expiryLastRun, stats.expiryUnavailable)
             return <StatCard label="Application Expiry" value={r.value} sub={r.sub} alert={r.alert} />
+          })()}
+          {(() => {
+            if (!stats) return <StatCard label="Live-Drift Check" value="—" />
+            const r = driftWatchState(stats.driftRows, stats.driftUnavailable)
+            return <StatCard label="Live-Drift Check" value={r.value} sub={r.sub} alert={r.alert} />
           })()}
         </div>
       </section>
