@@ -14779,21 +14779,47 @@ after commit, so a run cannot read its own answer however long it waits. Each
 run settles the previous ask and then asks again — which also means that if the
 job stops, the tile goes stale, which is the point.
 
-### Not yet proven
+### ✅ APPLIED AND VERIFIED, 2 Oct 2026
 
-0074 is written, checksummed by hand (`cfe785af…`) and **not applied** — Micky
-applies it. Until then the tile correctly reads *"could not read
-drift_check_runs"*. Two limits worth stating rather than discovering:
+0074 applied with no errors, checksum `cfe785af…` computed by hand and
+cross-checked against a second implementation. All five blocks ran:
 
-* **`admin` builds clean with a table that does not exist.** Its Supabase client
-  is not typed against the generated types, so `from('drift_check_runs')` raised
-  no error at build time and would not have caught a misspelt table name. The
-  tile is unproven until the migration is applied and the dashboard loaded.
-* **The pg_net chain is unexercised.** VERIFY block (c) is written to prove it
-  for real rather than in a rollback, because pg_net sends only on commit and a
-  rolled-back call proves nothing about the URL, the headers or the parse. It
-  states what each failure code means so a red result is not misread as drift.
-  0069 is why that block exists: a body that parses is not a body that works.
+| Block | What it proves | Result |
+|---|---|---|
+| (a) | the access shape matches `email_reconcile_runs`, read from the live catalogue | `t, t, f, t, 1` — and the first two **agree**, which is why both are read |
+| (b) | the job is really scheduled | `drift-watch`, `35 * * * *`, active |
+| (c) | the whole pg_net chain works, for real and not in a rollback | four rows, three settled at HTTP 200, lag 0.2h |
+| (d) | no code path raises, so no alarm can roll back its own evidence | `never_raises` t, `still_asks_github` t |
+| (e) | the console can actually read it, and a member cannot | total 4, admin sees 4, **member sees 0** |
+
+**The watcher's first real observation was the push run triggered by the commit
+that created the watcher.** `dc7943e` landed at 21:59:35Z, which fired
+live-drift's push run; the three settled asks at 22:06, 22:07 and 22:08 all read
+that run, correctly, while it was still sleeping out its twenty-minute deploy
+window.
+
+**And that produced the one question worth asking of a passing verify:**
+`newest_conclusion` was null on all three. Either the run was genuinely still in
+progress, or the parse was not reading the field — *and a green result cannot
+tell you which.* Settled rather than assumed, from the same endpoint the watcher
+calls: `status: in_progress`, `conclusion: null`, straight out of GitHub's own
+JSON. The field was read correctly and there was nothing in it.
+
+⚠️ **A null conclusion is therefore NORMAL for twenty minutes after every
+push**, because the push run sleeps before it compares. That is recorded in
+`driftWatchState()` and here — **not in 0074, whose checksum is now locked by
+having been applied.** It is deliberately given no alarm of its own: a
+"stale in-progress" threshold would be a third number to keep in step with that
+sleep, and the 12-hour lag already catches a run that hangs for ever, because
+the alert keys off when live-drift RAN and never off how it ended.
+
+### One limit that survives being verified
+
+**`admin` builds clean against a table that does not exist.** Its Supabase
+client is not typed against the generated types, so `from('drift_check_runs')`
+raised nothing at build time and would not have caught a misspelt table name.
+The tile was unproven until the migration was applied — so for this table the
+build was never the check, and (e) was.
 
 ---
 
@@ -14834,7 +14860,7 @@ drift_check_runs"*. Two limits worth stating rather than discovering:
 | ~~117~~ | ~~**A revoked stylist is told nothing.** Her verification is cleared, her shop hidden and her bookings cancelled, and no notification is written to her — while every model she was booked with gets a considered message~~ *(superseded by the row above, 24 Sep)* | — |
 | 74 | ✅ **CLOSED 23 Sep** — proven end to end, and the mobile switch now exists (item 88). Untested on device |
 | 75 | ✅ **PROVEN 2 Oct.** Its first real test arrived — `main` at `01a12f7`, live on `779b470` for nineteen hours — and it went red **thirty minutes in**, the first opportunity after its own grace window, which is the best the design allows. Four failures ever, all the same event; 45 passes before them | No |
-| 142 | ✅ **CLOSED 2 Oct.** The check said hourly, the record said hourly, and GitHub ran it **49 times in 237 hours** — median gap 5.1h, longest 8.6h. A stale site could have gone 6h48m unreported by a check offering an hour. Now triggered **on push to `main`** after a 20-minute wait, with the cron kept as an honestly-described backstop. Its push run passed first time: 20m12s, success. **0074 adds the watcher nothing had** — `drift_check_runs`, the `drift-watch` job and a fifth tile — because an Action cannot watch the scheduler that runs it. ⚠️ **0074 written, not applied**; it records rather than raises, since a raise rolls back its own evidence and lands in the table item 136 proved nothing reads | No |
+| 142 | ✅ **CLOSED 2 Oct.** The check said hourly, the record said hourly, and GitHub ran it **49 times in 237 hours** — median gap 5.1h, longest 8.6h. A stale site could have gone 6h48m unreported by a check offering an hour. Now triggered **on push to `main`** after a 20-minute wait, with the cron kept as an honestly-described backstop. Its push run passed first time: 20m12s, success. **0074 applied and verified — the watcher nothing had** — `drift_check_runs`, the `drift-watch` job and a fifth tile, because an Action cannot watch the scheduler that runs it. All five blocks green; member sees 0 rows, admin sees 4. It records rather than raises, since a raise rolls back its own evidence and lands in the table item 136 proved nothing reads. Its first observation was the push run fired by the commit that created it | No |
 | 77 | ✅ **CLOSED 23 Sep** — Micky republished his shop, so one is live. Item 11's condition (one LISTED stylist per CATEGORY) is still unmet with a single shop | No, but launch-relevant |
 | 79 | Slot prices live. Untested: the mobile price field; no model can see a price until step 5 | No |
 | 80 | Consent surface built, **no route until step 5**. Terms §5 still needs its line about displayed prices | No |

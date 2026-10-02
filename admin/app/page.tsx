@@ -336,8 +336,23 @@ function driftWatchState(rows: DriftCheckRun[], unavailable: boolean) {
   }
 
   const lag = hoursSince(answered.newest_run_at)
+
+  // Minutes under the hour. `0h ago` reads as a placeholder rather than as the
+  // freshest answer there is, and being readable at a glance is this tile's
+  // entire job. Found while verifying 0074: the first real observation was
+  // twelve minutes old and the tile would have called it "0h ago".
+  const ago = lag < 1
+    ? `${Math.max(0, Math.round(lag * 60))}m ago`
+    : `${Math.floor(lag)}h ago`
+
+  // ⚠️ A NULL CONCLUSION IS NORMAL FOR TWENTY MINUTES AFTER EVERY PUSH, because
+  // the push run sleeps out the deploy window before it compares anything. So
+  // "in progress" is an ordinary reading here, not a fault, and it is NOT given
+  // its own alarm: a "stale in-progress" threshold would be a third number to
+  // keep in step with that sleep. The lag below already catches a run that
+  // hangs for ever, because alert keys off when it RAN, never off how it ended.
   return {
-    value: `${Math.floor(lag)}h ago`,
+    value: ago,
     sub: `live-drift last ran · ${answered.newest_conclusion ?? 'in progress'}`,
     alert: lag > 12,
   }
