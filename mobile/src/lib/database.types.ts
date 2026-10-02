@@ -1,8 +1,8 @@
 // GENERATED FILE — DO NOT EDIT BY HAND.
 //
 // Written by scripts/gen-supabase-types.mjs from the live database.
-// TYPES_STAMP: 0073
-// TYPES_FILES_AT_GEN: 0073
+// TYPES_STAMP: 0074
+// TYPES_FILES_AT_GEN: 0074
 //
 // TYPES_STAMP is the migration the DATABASE was at when these were generated,
 // stated by whoever ran it (--applied). TYPES_FILES_AT_GEN is the newest
@@ -261,6 +261,39 @@ export type Database = {
           is_active?: boolean
           title?: string
           version?: number
+        }
+        Relationships: []
+      }
+      drift_check_runs: {
+        Row: {
+          answered_at: string | null
+          asked_at: string
+          http_status: number | null
+          id: string
+          newest_conclusion: string | null
+          newest_run_at: string | null
+          note: string | null
+          request_id: number
+        }
+        Insert: {
+          answered_at?: string | null
+          asked_at?: string
+          http_status?: number | null
+          id?: string
+          newest_conclusion?: string | null
+          newest_run_at?: string | null
+          note?: string | null
+          request_id: number
+        }
+        Update: {
+          answered_at?: string | null
+          asked_at?: string
+          http_status?: number | null
+          id?: string
+          newest_conclusion?: string | null
+          newest_run_at?: string | null
+          note?: string | null
+          request_id?: number
         }
         Relationships: []
       }
@@ -2575,6 +2608,25 @@ export type Database = {
       revoke_verification: {
         Args: { p_message?: string; p_reason: string; p_user_id: string }
         Returns: Json
+      }
+      run_drift_watch: {
+        Args: never
+        Returns: {
+          answered_at: string | null
+          asked_at: string
+          http_status: number | null
+          id: string
+          newest_conclusion: string | null
+          newest_run_at: string | null
+          note: string | null
+          request_id: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "drift_check_runs"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       run_email_reconcile: {
         Args: { p_hours?: number }
