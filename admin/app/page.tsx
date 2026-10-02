@@ -193,19 +193,29 @@ function selfieState(
       alert: true,
     }
   }
-  if (lastPurge) {
-    return {
-      value: `${purged ?? '?'} purged`,
-      sub: `${purgedAgo}d ago · ${held.length} held, none overdue`,
-      alert: false,
-    }
-  }
+  // ⚠️ THE HEADLINE ANSWERS "IS THE PROMISE BEING KEPT", NOT "DID SOMETHING
+  // ONCE GET DELETED". The first version read `1 purged` whenever an audit row
+  // existed, which on 2 Oct showed a purge from 25 AUGUST as though it were
+  // current health — a true number answering a question nobody asked. The
+  // August row is almost certainly the end-to-end proof that accompanied 0020's
+  // fix (selfie-retention-never-worked.md), not routine operation.
+  //
+  // The purge count still appears, in the sub, where it says what it is: the
+  // last time anything was actually deleted. Micky asked to be able to see that
+  // a run DELETED something rather than only that it ran, and that is where it
+  // belongs — as evidence, not as the verdict.
   const next = held.length > 0 ? Math.min(...held.map(dueAt)) : null
+  const nextDue = next
+    ? new Date(next).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+    : null
+  const purgeNote = lastPurge
+    ? `last purge ${purged ?? '?'} on ${new Date(lastPurge.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}`
+    : 'nothing ever purged'
   return {
-    value: 'Nothing due',
-    sub: next
-      ? `${held.length} held · oldest due ${new Date(next).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}`
-      : 'no selfies held',
+    value: held.length === 0 ? 'None held' : 'None overdue',
+    sub: nextDue
+      ? `${held.length} held · oldest due ${nextDue} · ${purgeNote}`
+      : purgeNote,
     alert: false,
   }
 }
