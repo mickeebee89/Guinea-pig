@@ -19,6 +19,14 @@ interface Stats {
   /** Most recent NON-dry run of run_retention_purge, successful or not. */
   retentionLastRun: { ran_at: string; ok: boolean } | null
   retentionUnavailable: boolean
+  /** Selfies still held, with the clock that decides when each is overdue. */
+  selfiesHeld: { created_at: string; reviewed_at: string | null }[]
+  /** Most recent purge-selfies run that actually DELETED something. */
+  lastSelfiePurge: { created_at: string; details: unknown } | null
+  selfieUnavailable: boolean
+  /** Most recent run of expire_past_applications(). */
+  expiryLastRun: { ran_at: string; ok: boolean; expired: number } | null
+  expiryUnavailable: boolean
   /** Most recent run of run_email_reconcile, successful or not. */
   reconcileLastRun: { ran_at: string; emailable: number; no_attempt: number } | null
   reconcileUnavailable: boolean
@@ -136,6 +144,100 @@ function reconcileState(
   }
 }
 
+/** The published retention period for identity selfies. legal.ts says 90 days. */
+const SELFIE_RETAIN_DAYS = 90
+
+/**
+ * Whether the selfie retention promise is being kept.
+ *
+ * ⚠️ THE ALARM IS "SOMETHING IS OVERDUE AND NOTHING DELETED IT", NOT "NO
+ * RECENT RUNS". purge-selfies writes an admin_audit_log row ONLY when it
+ * actually purges something; a run with nothing to delete writes nothing at
+ * all. So an empty log is the NORMAL state, and a tile that went red on it
+ * would cry wolf every night and be ignored by the time it mattered.
+ *
+ * What matters is the gap between the policy and the data: a selfie older than
+ * 90 days that is still held. That is the thing cavybeauty.com/privacy promises
+ * will not exist, and it is special-category data.
+ *
+ * ── WHY THIS TILE EXISTS ──
+ * The purge has run nightly since 22 Sep and has never had anything to delete:
+ * the oldest selfie dates from 8 July, so the first crosses 90 days on
+ * 6 October 2026. The first real deletion this system will ever perform happens
+ * then, and until now no screen would have shown whether it worked. The
+ * evidence was being written to admin_audit_log and read by nobody.
+ */
+function selfieState(
+  held: { created_at: string; reviewed_at: string | null }[],
+  lastPurge: { created_at: string; details: unknown } | null,
+  unavailable: boolean,
+) {
+  if (unavailable) return { value: '\u2014', sub: 'could not read verification_requests', alert: true }
+
+  // The clock runs from the decision, or from arrival if it was never decided.
+  const dueAt = (r: { created_at: string; reviewed_at: string | null }) =>
+    new Date(r.reviewed_at ?? r.created_at).getTime() + SELFIE_RETAIN_DAYS * 86_400_000
+  const overdue = held.filter(r => dueAt(r) < Date.now())
+
+  const purged = (lastPurge?.details as { purged?: number } | null)?.purged
+  const purgedAgo = lastPurge
+    ? Math.floor((Date.now() - new Date(lastPurge.created_at).getTime()) / 86_400_000)
+    : null
+
+  if (overdue.length > 0) {
+    return {
+      value: `${overdue.length} overdue`,
+      sub: lastPurge
+        ? `past 90 days and still held · last purge ${purgedAgo}d ago`
+        : 'past 90 days and still held · nothing has ever been purged',
+      alert: true,
+    }
+  }
+  if (lastPurge) {
+    return {
+      value: `${purged ?? '?'} purged`,
+      sub: `${purgedAgo}d ago · ${held.length} held, none overdue`,
+      alert: false,
+    }
+  }
+  const next = held.length > 0 ? Math.min(...held.map(dueAt)) : null
+  return {
+    value: 'Nothing due',
+    sub: next
+      ? `${held.length} held · oldest due ${new Date(next).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}`
+      : 'no selfies held',
+    alert: false,
+  }
+}
+
+/**
+ * Whether applications nobody answered are still being expired.
+ *
+ * Same contract as the retention and reconcile tiles: the absence of recent
+ * rows is the alarm. Added alongside the selfie tile because session_expiry_runs
+ * was built with that contract three days earlier and given no screen — the
+ * same omission, by the same hand, that left the email reconciler failing unseen
+ * for nine days.
+ *
+ * Runs daily, so 2 days is a missed run. `expired: 0` is a perfectly good night:
+ * it means nothing lapsed, not that nothing happened.
+ */
+function expiryState(
+  lastRun: { ran_at: string; ok: boolean; expired: number } | null,
+  unavailable: boolean,
+) {
+  if (unavailable) return { value: '\u2014', sub: 'could not read session_expiry_runs', alert: true }
+  if (!lastRun)    return { value: 'Never',   sub: 'no run on record',                   alert: true }
+
+  const days = Math.floor((Date.now() - new Date(lastRun.ran_at).getTime()) / 86_400_000)
+  if (!lastRun.ok) return { value: 'Failed',  sub: `last attempt ${days}d ago`,           alert: true }
+  return {
+    value: `${days}d ago`,
+    sub: `runs daily · 03:40 UTC · ${lastRun.expired} expired`,
+    alert: days > 2,
+  }
+}
+
 export default function Dashboard() {
   const [stats, setStats] = useState<Stats | null>(null)
 
@@ -157,6 +259,9 @@ export default function Dashboard() {
         // evidence that anything was deleted, and counting it would let a tile
         // stay green while the scheduled job was dead.
         { data: retentionRuns, error: retentionErr },
+        { data: selfiesHeldRows, error: selfieErr },
+        { data: selfiePurges },
+        { data: expiryRuns, error: expiryErr },
         { data: reconcileRuns, error: reconcileErr },
         { data: billingOrphans, error: billingOrphansErr },
       ] = await Promise.all([
@@ -172,6 +277,19 @@ export default function Dashboard() {
           .order('ran_at', { ascending: false }).limit(1),
         // Every run counts here, unlike retention_runs above: this job has no
         // dry-run mode, and a run that found something is the interesting one.
+        // Every selfie still held. A tiny set by design — one at the time this
+        // tile was written — so the 90-day arithmetic happens in selfieState
+        // rather than in a filter PostgREST cannot express (coalesce of two
+        // columns against now()).
+        supabase.from('verification_requests').select('created_at, reviewed_at')
+          .not('selfie_url', 'is', null),
+        // Only a run that DELETED something writes this row, so its absence is
+        // the normal state and is never treated as a failure. See selfieState.
+        supabase.from('admin_audit_log').select('created_at, details')
+          .eq('action', 'selfie_retention_purge')
+          .order('created_at', { ascending: false }).limit(1),
+        supabase.from('session_expiry_runs').select('ran_at, ok, expired')
+          .order('ran_at', { ascending: false }).limit(1),
         supabase.from('email_reconcile_runs').select('ran_at, emailable, no_attempt')
           .order('ran_at', { ascending: false }).limit(1),
         // ⚠️ BILLING ORPHANS. When someone deletes their account and Stripe
@@ -213,6 +331,11 @@ export default function Dashboard() {
         // ignore it.
         retentionLastRun:      (retentionRuns ?? [])[0] ?? null,
         retentionUnavailable:  !!retentionErr,
+        selfiesHeld:           (selfiesHeldRows ?? []) as Stats['selfiesHeld'],
+        lastSelfiePurge:       (selfiePurges ?? [])[0] ?? null,
+        selfieUnavailable:     !!selfieErr,
+        expiryLastRun:         (expiryRuns ?? [])[0] ?? null,
+        expiryUnavailable:     !!expiryErr,
         reconcileLastRun:      (reconcileRuns ?? [])[0] ?? null,
         reconcileUnavailable:  !!reconcileErr,
         billingOrphans:        (billingOrphans ?? []) as BillingOrphan[],
@@ -298,6 +421,16 @@ export default function Dashboard() {
             if (!stats) return <StatCard label="Email Reconcile" value="—" />
             const r = reconcileState(stats.reconcileLastRun, stats.reconcileUnavailable)
             return <StatCard label="Email Reconcile" value={r.value} sub={r.sub} alert={r.alert} />
+          })()}
+          {(() => {
+            if (!stats) return <StatCard label="Selfie Purge" value="—" />
+            const r = selfieState(stats.selfiesHeld, stats.lastSelfiePurge, stats.selfieUnavailable)
+            return <StatCard label="Selfie Purge" value={r.value} sub={r.sub} alert={r.alert} />
+          })()}
+          {(() => {
+            if (!stats) return <StatCard label="Application Expiry" value="—" />
+            const r = expiryState(stats.expiryLastRun, stats.expiryUnavailable)
+            return <StatCard label="Application Expiry" value={r.value} sub={r.sub} alert={r.alert} />
           })()}
         </div>
       </section>
