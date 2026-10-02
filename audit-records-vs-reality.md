@@ -14823,6 +14823,149 @@ build was never the check, and (e) was.
 
 ---
 
+## 143. A NOTIFICATION SAID "TAP TO VIEW THEIR SHOP" AND NO SHOP WAS EVER RECORDED
+### Found 2 Oct 2026 by using the invite for the first time. Live on the web since 9 Aug 2026 — 54 days.
+
+**Plainly:** a model was told a stylist wanted her, or that a stylist she had
+saved had posted new times, and given no way to go and see who. One of the two
+even said *"tap to view their shop"* in its own body, on a row that carried no
+shop and never had.
+
+**This is the published-claim-with-no-mechanism shape — the thing this whole
+audit was created to find — and this time it was inside a notification body
+rather than a legal page.** Terms, Privacy and `/delete-account` have all been
+checked against the code for exactly this. Nobody had thought to check the
+sentences the product writes to people every day.
+
+### Two types, and the second was worse than the one reported
+
+The two notification types that are about a **person** rather than a booking:
+
+| | carries the stylist? | linked on mobile? | linked on web? |
+|---|---|---|---|
+| `stylist_invite` | yes, `data.provider_id` | yes | **no** |
+| `new_availability` | **web: no. mobile: yes** | yes | **no** |
+
+`stylist_invite` was the reported one, and it is the mild case: the row always
+carried `data.provider_id`, so the web screen simply never read it. Every invite
+ever sent becomes tappable the moment the fix deploys.
+
+**`new_availability` is the serious one.** The web insert in
+`site/lib/availability.ts` never wrote `provider_id` at all, while its body
+reads *"has new slots available — tap to view their shop"*. So the promise went
+out with nothing behind it from `bfd7ead`, **9 Aug 2026**, the commit that
+brought availability editing to the web — fifty-four days.
+
+⚠️ **AND IT IS NOT FIXABLE RETROSPECTIVELY.** The stylist's id was never
+recorded on those rows and cannot be recovered from them: the row holds a name
+inside a sentence, not a foreign key. Every `new_availability` notice sent to a
+web user in those eight weeks stays untappable for ever. The fix only reaches
+notices sent from here on. *This is the first fault in the audit that cannot be
+repaired backwards — 131, 133, 136 and 140 were all live and all fixable once
+found.*
+
+### The mobile copy of the same insert says "don't drop it"
+
+`mobile/src/lib/availability.ts`, directly above the identical insert:
+
+> `data.provider_id` is what notificationRouting uses to deep-link
+> new_availability to the stylist's shop — don't drop it.
+
+The web port dropped it. **A comment written specifically to prevent this did
+not prevent it**, because the port was a reimplementation rather than a shared
+call, and nothing reads a comment in the file you are not editing. That is the
+same root as `safeList`, `FeaturedStylists`, the five copies of `date >= today`
+and the two email allowlists — and the counter-measure that has worked every
+time is a single call site, not a warning.
+
+*Related: [rules I wrote get walked past] in miniature. The mechanism adopted to
+stop a trap was a comment, and a comment is the weakest mechanism available.*
+
+### What the web screen was doing
+
+`site/app/(app)/notifications/page.tsx` linked on one condition:
+
+```
+{n.session_id ? <Link href={`/messages/${n.session_id}`}> … : <div>
+```
+
+Mobile's `routeForNotification` has had two branches since it was written — the
+session thread, and `/(app)/provider/[id]` keyed on `data.provider_id` for
+exactly these two types. **The web port kept the first branch and dropped the
+second.** `getNotifications` was already selecting `data` and already typed it,
+so the field was sitting in the component, unread.
+
+The footer comment on that screen had even enumerated the types with nowhere to
+go — "a warning, a verification result, a rejected update" — and an invite was
+not in that list, because the list was written before invites existed and nobody
+revisited it.
+
+### And the email had it too, by a different route
+
+`copyFor()` in `supabase/functions/send-email/index.ts` had no `stylist_invite`
+case, so it fell to the default: `cta: 'Open Cavy'`, `path: '/dashboard'`. **Every
+invite email sent her to the dashboard** — told that somebody wanted her as a
+model, and handed the one screen that does not say who.
+
+It could not have done better as written, because the handler selected
+`id, user_id, type, title, body, session_id` and **not `data`**. The copy
+function was never given the field it needed, so this was two faults deep: no
+case, and nothing for a case to read.
+
+Fixed 2 Oct: `data` selected, threaded into `copyFor`, and a case —
+*"A stylist would like you as a model"* / *"See their shop"* /
+`/stylist/{provider_id}`.
+
+**The CTA moves with the path.** When the id is absent it does not keep saying
+"See their shop" while going somewhere else; it becomes "Open Cavy" to
+`/notifications`. A button naming a destination it does not reach is this very
+item one layer up. For the same reason `/stylist/undefined` is never built:
+**a link that 404s looks like the feature working and fails later, in front of
+her** — which is item 132 exactly, where a 404 on the apply route passed every
+gate because nothing tried to walk through it.
+
+### The sample, so this is not mistaken for the whole
+
+**The 11 types in `notify_email`'s allowlist, plus every type written at the 19
+`notifications` insert sites across `site`, `admin`, `mobile` and the edge
+functions.** Two are about a person; both are above. The rest are clean for a
+reason rather than by luck:
+
+* about a booking — `session_applied`, `session_accepted`, `session_declined`,
+  `session_cancelled`, `session_expired`, `session_not_held`, `session_completed`
+  — all carry `session_id` and were already linked;
+* about the reader's own account — `verification`, `payment_failed`;
+* about Cavy itself — `admin_message`, `admin_warning`, `admin_suspension` —
+  and these deliberately name nobody, because the reason can name a reporter
+  (items 117 and 118). *An unlinked notification is correct here.* The rule is
+  not "link everything"; it is "a notification that names a person must reach
+  them".
+
+### Not yet proven
+
+* **The web half is deployed by the next push and nothing more.** `npm run
+  verify` passed, `tsc` clean, and the link check counted 47 reachable routes
+  where it had counted 46 — that is the new `/stylist/[id]` edge registering.
+  It does **not** prove the link navigates; `check-links.mjs` says so in its own
+  header, and item 132 is what happens when that limit is forgotten.
+* **The email half needs deploying by hand:** `npx supabase functions deploy
+  send-email --no-verify-jwt` from the repo root. The flag is in that function's
+  own header: its caller is a database trigger carrying a shared secret, not a
+  JWT, so without it the gateway refuses every send and nothing appears on
+  screen.
+* **The edge function is parse-checked, not type-checked.** Deno is not
+  installed here, so the resolved imports were never checked; what was verified
+  is 0 syntax diagnostics from TypeScript's own parser plus the presence of all
+  three changes. The proof is a deploy and one real invite.
+* ⚠️ **An earlier claim in this session that it parsed was false.** `esbuild`
+  was not installed, and `… | tail -8 && echo "esbuild: parses"` printed the
+  success line off the pipe's exit code rather than the compiler's. Caught and
+  redone against a real exit code. *Second instance of that exact trap this
+  week — the first was reading `check-queries.mjs`'s exit status through
+  `| tail`, which produced a finding that had to be withdrawn.*
+
+---
+
 ## What is open
 
 | | Item | Blocking launch? |
@@ -14848,6 +14991,7 @@ build was never the check, and (e) was.
 | 137 | ✅ **CLOSED 1 Oct.** A declined application vanished from both clients — the model's only trace was a notification she can delete. Fourth value this one allowlist has needed. Fixed on web; mobile's sessions.tsx still hides `declined` and `expired` | No while mobile is unreleased |
 | 139 | ✅ **CLOSED 2 Oct.** 0070's verify picked `ff06d568` with an unordered `limit 1` — a provider AND an admin — so the guard bypassed and the block reported a hole that did not exist. The inverse of 0027: a rule for everyone except admins, tested as an admin. Four blocks audited; every one whose actor matters now asserts its own premise | No |
 | 140 | ✅ **CLOSED AND VERIFIED LIVE 2 Oct.** 0067 gave `session_expiry_runs` RLS with no policy AND revoked the table grant, so the tile built to watch it could not read it. Three run-log tables, one contract, three access shapes. The tile reported *"could not read"* rather than *"Never"*, which is what made it diagnosable | No |
+| 143 | ✅ **FIXED 2 Oct, web half deployed by the next push; email half needs deploying by hand.** A model was told a stylist wanted her, with no way to see who — and `new_availability` said *"tap to view their shop"* on a row that never recorded one, live on the web since **9 Aug** (54 days). The invite's rows always carried the id so every invite becomes tappable; ⚠️ **`new_availability`'s do not and never will — the first fault in this audit that cannot be repaired backwards.** Mobile's copy of the same insert warns *"don't drop it"*; the port dropped it, because a comment is the weakest mechanism available | No, but it is a false promise the product repeats daily |
 | 141 | **The Salon Floor.** One wall both roles post to, instead of stylist-side browse — a model appears because she posted, not because she exists. 0072 in and verified: both roles can post, model posts cannot reach the public site, and a post containing a phone number is held for review. 0073 and the client to follow | No, but a stylist has nothing to do without it |
 | 138 | ✅ **CLOSED AND VERIFIED LIVE 2 Oct.** `'not_held'` with two timestamps: the row records who SAID it did not happen, never who failed to turn up. Either party, terminal, admin-only undo. The first verify reported a hole in a correct guard — see 139 | No |
 | 134 | ✅ **CLOSED AND VERIFIED LIVE 1 Oct.** Pending applications sat in a stylist's list for ever and a past accepted booking had no outcome. 0066 makes `expired` terminal and refuses to ACCEPT a started appointment — that refusal, not the job, is the fix. 0067 adds the daily job, run log and the model's notification. B is "Did this happen?", never "missed" | No |

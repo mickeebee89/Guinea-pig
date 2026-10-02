@@ -66,7 +66,12 @@ function respond(body: unknown, status = 200) {
 
 interface Copy { subject: string; heading: string; cta: string; path: string }
 
-function copyFor(type: string, title: string, sessionId: string | null): Copy {
+function copyFor(
+  type: string,
+  title: string,
+  sessionId: string | null,
+  data: Record<string, unknown> | null,
+): Copy {
   const bookings = '/bookings'
   switch (type) {
     case 'session_applied':
@@ -92,6 +97,28 @@ function copyFor(type: string, title: string, sessionId: string | null): Copy {
     case 'admin_warning':
       return { subject: 'A warning from Cavy', heading: 'A warning from Cavy',
         cta: 'Read it in full', path: '/notifications' }
+
+    // ⚠️ THE ONLY CASE THAT READS `data`, AND THE WHOLE REASON `data` IS NOW
+    // SELECTED. An invite carries no session, so until 2 Oct 2026 it fell
+    // through to the default below and sent her to **/dashboard** — told that
+    // somebody wanted her as a model, and handed the one screen that does not
+    // say who. Reported by Micky the first time the invite ran end to end:
+    // button, email and notification all worked, and the only missing piece was
+    // the only thing she would want to do next. Item 143.
+    //
+    // THE CTA MOVES WITH THE PATH. When the id is missing this does NOT keep
+    // saying "See their shop" while going somewhere else — a button that names
+    // a destination it does not reach is the same fault one layer up, and it is
+    // why /stylist/undefined is not built here either: a link that 404s looks
+    // like the feature working and fails later, in front of her.
+    case 'stylist_invite': {
+      const id = data?.provider_id
+      const subject = 'A stylist would like you as a model'
+      return typeof id === 'string' && id.length > 0
+        ? { subject, heading: subject, cta: 'See their shop', path: `/stylist/${id}` }
+        : { subject, heading: subject, cta: 'Open Cavy', path: '/notifications' }
+    }
+
     default:
       return { subject: 'Something happened on Cavy', heading: title || 'Something happened on Cavy',
         cta: 'Open Cavy', path: sessionId ? `/messages/${sessionId}` : '/dashboard' }
@@ -340,11 +367,16 @@ Deno.serve(async (req) => {
       const id = String(body.notification_id ?? '')
       if (!id) return respond({ error: 'notification_id required' }, 400)
 
+      // `data` is selected for stylist_invite, which is the only type whose
+      // destination lives there rather than in session_id. It was absent until
+      // 2 Oct 2026, so the invite case COULD NOT have been written without this
+      // line — the copy function was never given the field it needed.
       const { data: n } = await db.from('notifications')
-        .select('id, user_id, type, title, body, session_id').eq('id', id).maybeSingle()
+        .select('id, user_id, type, title, body, session_id, data').eq('id', id).maybeSingle()
       const note = n as {
         id: string; user_id: string; type: string; title: string | null
         body: string | null; session_id: string | null
+        data: Record<string, unknown> | null
       } | null
       if (!note) return respond({ error: 'no such notification' }, 404)
 
@@ -364,7 +396,7 @@ Deno.serve(async (req) => {
         return respond({ skipped: 'preferences' })
       }
 
-      const c = copyFor(note.type, note.title ?? '', note.session_id)
+      const c = copyFor(note.type, note.title ?? '', note.session_id, note.data)
       const sent = await send({
         to: who.email, subject: c.subject, heading: c.heading,
         body: note.body ?? note.title ?? '', cta: c.cta, path: c.path,
