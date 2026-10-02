@@ -312,6 +312,12 @@ export default async function DashboardPage({
       {feed && (
         <section className="mb-6 rounded-lg border border-hairline bg-white p-5 shadow-card">
           <div className="mb-3 flex flex-wrap items-baseline justify-between gap-3">
+            {/* Deliberately NOT relabelled as the Salon Floor, and not fed
+                from it. This is stylist updates — a narrower thing with a
+                narrower name — and the wall is everything. Two feeds with
+                DIFFERENT names and different contents are two features; two
+                feeds both claiming to be the wall would be one rule written
+                twice, which is the drift this codebase keeps paying for. */}
             <h2 className="font-display text-xl text-warm-dark">Stylist updates</h2>
             {/* ⚠️ NOT RENDERED AS LINKS WHEN WE CANNOT PLACE HER (item 90).
                 These used to be live whatever we knew, and picking one emptied
@@ -319,6 +325,12 @@ export default async function DashboardPage({
                 control that silently does nothing is worse than no control:
                 mobile disables its distance chips for exactly this reason
                 (index.tsx:882) and has been right all along. */}
+            <Link
+              href="/salon-floor"
+              className="text-sm font-bold text-rose hover:underline"
+            >
+              Salon Floor →
+            </Link>
             <nav aria-label="Distance" className="flex flex-wrap gap-1.5">
               {RADII.map(r =>
                 feed.viewerHasLocation ? (
@@ -362,12 +374,21 @@ export default async function DashboardPage({
 
           {/* Said out loud rather than left as a shorter list. A radius that
               hid someone is recoverable — widening it brings them back — and
-              only if she knows there is something to widen for. */}
+              only if she knows there is something to widen for.
+
+              ⚠️ AND IT SAYS WHAT THE NUMBER MEANS, WHICH IS NOT WHAT IT SAID
+              UNTIL 2 Oct 2026. unplaceableHidden is `placed.length -
+              kept.length` — EVERYONE the radius removed, nearly all of whom
+              have a location and are simply further away. The old wording
+              asserted they had not shared one: a claim about somebody else's
+              behaviour, false for most of them, and shown to a member. Found
+              30 Sep; fixed when the Salon Floor put the same count on a second
+              surface. */}
           {feed.viewerHasLocation && feed.unplaceableHidden > 0 && (
             <p className="mb-3 rounded-md bg-input-bg px-3 py-2 text-xs text-muted">
               {feed.unplaceableHidden === 1
-                ? 'One stylist hasn’t told us where they are, so they’re not shown at this distance.'
-                : `${feed.unplaceableHidden} stylists haven’t told us where they are, so they’re not shown at this distance.`}{' '}
+                ? 'One stylist isn’t shown at this distance.'
+                : `${feed.unplaceableHidden} stylists aren’t shown at this distance.`}{' '}
               Choose <span className="font-bold">Any distance</span> to include them.
             </p>
           )}

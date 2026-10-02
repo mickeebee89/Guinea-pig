@@ -53,7 +53,16 @@ const LINKS = [
   { href: BOOKINGS_PATH,    label: 'Bookings' },
   { href: '/shop',          label: 'Shop',         providerOnly: true },
   { href: '/availability',  label: 'Availability', providerOnly: true },
-  { href: '/portfolio',     label: 'Portfolio',    providerOnly: true },
+  // ⚠️ PORTFOLIO IS NOT IN THE NAV, AND THAT IS HOW THE SALON FLOOR FITS.
+  // Measured 2 Oct 2026: the stylist strip was 574px of content in 360-430px
+  // of viewport, with Messages AND Settings unreachable without scrolling at
+  // every phone width — item 126, which recorded only Settings. Shrinking the
+  // items bought 61px; 'Salon Floor' costs 93px. Something had to leave.
+  //
+  // Portfolio is the one that can, because it is the only stylist item with a
+  // second route to it: the dashboard's "Manage your portfolio" link. Removing
+  // a nav item that is the ONLY way to reach a page would be hiding the page.
+  // { href: '/portfolio',     label: 'Portfolio',    providerOnly: true },
   { href: '/messages',      label: 'Messages', badgeKey: 'unread' as const },
   { href: '/settings',      label: 'Settings' },
 ]
