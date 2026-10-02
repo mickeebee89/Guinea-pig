@@ -1,8 +1,8 @@
 // GENERATED FILE — DO NOT EDIT BY HAND.
 //
 // Written by scripts/gen-supabase-types.mjs from the live database.
-// TYPES_STAMP: 0070
-// TYPES_FILES_AT_GEN: 0070
+// TYPES_STAMP: 0072
+// TYPES_FILES_AT_GEN: 0072
 //
 // TYPES_STAMP is the migration the DATABASE was at when these were generated,
 // stated by whoever ran it (--applied). TYPES_FILES_AT_GEN is the newest
@@ -1682,34 +1682,37 @@ export type Database = {
       }
       status_posts: {
         Row: {
+          author_user_id: string
           body: string
           created_at: string
           expires_at: string
           id: string
           moderation_status: string
-          provider_id: string
+          provider_id: string | null
           review_note: string | null
           reviewed_at: string | null
           reviewed_by: string | null
         }
         Insert: {
+          author_user_id: string
           body: string
           created_at?: string
           expires_at?: string
           id?: string
           moderation_status?: string
-          provider_id: string
+          provider_id?: string | null
           review_note?: string | null
           reviewed_at?: string | null
           reviewed_by?: string | null
         }
         Update: {
+          author_user_id?: string
           body?: string
           created_at?: string
           expires_at?: string
           id?: string
           moderation_status?: string
-          provider_id?: string
+          provider_id?: string | null
           review_note?: string | null
           reviewed_at?: string | null
           reviewed_by?: string | null
@@ -2523,6 +2526,7 @@ export type Database = {
       is_admin: { Args: never; Returns: boolean }
       is_blocked_pair: { Args: { a: string; b: string }; Returns: boolean }
       is_suspended: { Args: { uid: string }; Returns: boolean }
+      looks_like_a_phone_number: { Args: { p_text: string }; Returns: boolean }
       model_may_apply:
         | { Args: never; Returns: boolean }
         | { Args: { p_user_id: string }; Returns: boolean }

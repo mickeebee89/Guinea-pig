@@ -14469,6 +14469,98 @@ now shows it coming, and will show whether it went.
 
 ---
 
+## 141. THE SALON FLOOR — ONE WALL, BOTH ROLES
+### Schema and screening in, 2 Oct 2026. Client to follow.
+
+A stylist who signs up on the web has nothing to do until somebody happens to
+apply to her. The answer chosen was **not** stylist-side browse but **one shared
+wall** both roles post to: a model appears because she posted, not because she
+exists, which answers the privacy question before it is asked.
+
+That reframing matters, because the browse version had a problem the wall does
+not. Every part of a model's profile is ALREADY readable by any signed-in
+account — `public_profiles` has no WHERE clause, and `model_attributes` and
+`model_photos` are both `using (true)`. Browse would not have granted new
+access; it would have turned "if you know the id" into "here are 200,
+filterable". The wall never raises the question.
+
+**And the consent document already disagreed with the database.** Consent v3
+says *"Your name and profile picture will be visible to the provider when you
+apply"* — scoped to applying, scoped to name and photo. Neither scope is real.
+The wall does not fix that; it avoids widening it.
+
+### What 0072 changed
+
+`status_posts` was stylist-only by its foreign key, not by policy:
+`provider_id uuid not null references providers(id)`. Models could already READ
+every approved post — `status_posts_read_visible` has no role condition and
+never had one.
+
+One column and four policies, not a new table. A separate `wall_posts` would
+have needed its own copies of the link stripper, the screen, the moderation
+vocabulary and the admin queue — four rules duplicated, which this file has now
+recorded five times.
+
+⚠️ **`provider_id` becoming nullable is a safety mechanism, not a
+convenience.** `public_stylist_status` is granted to `anon` and inner-joins
+`providers` on it, so a model's post cannot reach cavybeauty.com. The migration
+ASSERTS that rather than claiming it, because safety by construction is the kind
+that rots when somebody later changes the join.
+
+The insert policy has two clauses and the second is the one that matters: anyone
+may post as themselves, nobody may post as a shop that is not theirs. Without it
+a model could insert another stylist's `provider_id` and put words in her mouth
+on the public website.
+
+### ⚠️ The screen could not see a phone number
+
+A model posting *"after a cut this week, text me on 07700 900123"* passed
+everything: not a banned word, not a URL, not a bare domain. `screen_status_post`
+sets `approved` on a clean body, so it would have been **auto-approved and
+visible to every member for 48 hours with nobody having read it.**
+
+On the stylist side that was tolerable — her own business contact, and she is
+fee-verified. On a wall where models post it is the thing a UGC surface is
+normally expected to catch, and it sits directly against the store obligations
+already recorded here.
+
+The rule holds at `'pending'` for a human rather than rejecting, and is checked
+BEFORE the word list: the missing-list and unreadable-list paths already end in
+`'pending'`, and a phone check placed after them could have downgraded that to
+`'approved'`.
+
+### ⚠️ I wrote the rule wrong first, and caught it before it shipped
+
+The first implementation was collapse-then-measure: three `regexp_replace`
+passes joining digits across separators, then a nine-digit test.
+
+**`regexp_replace` with `'g'` does not re-examine the characters it has
+consumed.** One pass over `0 7 7 0 0` matches `0 7`, resumes after it, joins
+`7 0`, and leaves gaps. Eleven spaced digits needed four passes; three were
+written. It would have let the most obvious evasion — spacing a number out —
+straight through, while passing every example in the plan, because every example
+in the plan was short.
+
+*A rule tested only against the cases you thought of is tested against your
+imagination.* The same sentence is already in `check-status-coverage.mjs`, from
+the week before.
+
+It is now one pattern in one pass: `(\d[ \t\-\.\(\)\/]*){9,}`, with a letter
+ending the run. Excluding the colon fell out of the rewrite and is an
+improvement: `10:00-12:00` now has a longest run of four rather than eight.
+
+Verified live across twelve strings — false for every date, time and price,
+true for all five number formats including the spaced-out one.
+
+### Still open
+
+The client: the `/salon-floor` page, the nav item, the dashboard cards becoming
+previews, the invite button, and the `unplaceableHidden` copy fix. The nav fix
+is item 126 and goes in its own commit with measurements at 360, 390 and 430,
+because shrinking nav items touches every page for both roles at every width.
+
+---
+
 ## What is open
 
 | | Item | Blocking launch? |
@@ -14494,6 +14586,7 @@ now shows it coming, and will show whether it went.
 | 137 | ✅ **CLOSED 1 Oct.** A declined application vanished from both clients — the model's only trace was a notification she can delete. Fourth value this one allowlist has needed. Fixed on web; mobile's sessions.tsx still hides `declined` and `expired` | No while mobile is unreleased |
 | 139 | ✅ **CLOSED 2 Oct.** 0070's verify picked `ff06d568` with an unordered `limit 1` — a provider AND an admin — so the guard bypassed and the block reported a hole that did not exist. The inverse of 0027: a rule for everyone except admins, tested as an admin. Four blocks audited; every one whose actor matters now asserts its own premise | No |
 | 140 | ✅ **CLOSED AND VERIFIED LIVE 2 Oct.** 0067 gave `session_expiry_runs` RLS with no policy AND revoked the table grant, so the tile built to watch it could not read it. Three run-log tables, one contract, three access shapes. The tile reported *"could not read"* rather than *"Never"*, which is what made it diagnosable | No |
+| 141 | **The Salon Floor.** One wall both roles post to, instead of stylist-side browse — a model appears because she posted, not because she exists. 0072 in and verified: both roles can post, model posts cannot reach the public site, and a post containing a phone number is held for review. 0073 and the client to follow | No, but a stylist has nothing to do without it |
 | 138 | ✅ **CLOSED AND VERIFIED LIVE 2 Oct.** `'not_held'` with two timestamps: the row records who SAID it did not happen, never who failed to turn up. Either party, terminal, admin-only undo. The first verify reported a hole in a correct guard — see 139 | No |
 | 134 | ✅ **CLOSED AND VERIFIED LIVE 1 Oct.** Pending applications sat in a stylist's list for ever and a past accepted booking had no outcome. 0066 makes `expired` terminal and refuses to ACCEPT a started appointment — that refusal, not the job, is the fix. 0067 adds the daily job, run log and the model's notification. B is "Did this happen?", never "missed" | No |
 | 127 | ✅ **CLOSED 29 Sep.** `/stylist/[id]` header overlaps itself at ~540px: Saved/Safety move beside the name, the name wraps to three lines and the "posts new times" line is drawn across it. Not present at 390. Width band unmeasured | No, but it is on a public page |
