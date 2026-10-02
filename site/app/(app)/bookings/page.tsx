@@ -312,6 +312,14 @@ export default async function SessionsPage() {
                   || r.status === 'cancelled'
                   || r.status === 'expired'
                   || r.status === 'declined'
+                  // ⚠️ 'not_held' HAD TO BE ADDED HERE TOO, and I forgot it —
+                  // three days after writing the note above about this being
+                  // the place a status has to be let in twice. I put it in the
+                  // query's allowlist and not in this filter, so pressing "It
+                  // didn't happen" made the booking disappear from the screen
+                  // it was pressed on. Found by clicking the button in demo,
+                  // not by reading the diff.
+                  || r.status === 'not_held'
                   || (r.status === 'accepted' && r.date < today))}
               />
             </>

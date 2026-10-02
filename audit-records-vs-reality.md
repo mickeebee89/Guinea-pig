@@ -14331,6 +14331,71 @@ pastes it — by which time it is trusted.
 
 ---
 
+## 138. SOMEBODY CAN NOW SAY A BOOKING DID NOT HAPPEN
+### Closed and verified live, 2 Oct 2026
+
+The other half of item 134's question. "Did this happen?" could be answered yes,
+with Mark complete, and not answered no — so a booking that genuinely did not go
+ahead stayed `'accepted'` for ever, indistinguishable from one that happened and
+was never marked.
+
+`'not_held'` is the sixth status. **The row records "Micky said this did not
+happen, at 14:32" and never "the model did not turn up."** The first is a fact
+about a statement; the second is an accusation nothing in this system can
+establish, and it would be recorded in the one place a dispute reaches for.
+
+**Two timestamps, not one column.** A single "who said so" holds one answer, so
+the second person to say it would overwrite the first or be dropped — and both
+agreeing is a materially different record from one asserting. `not_held_model_at`
+and `not_held_provider_at`, each nullable, each meaning one person's statement
+and when they made it.
+
+**Either party may press it**, unlike every other control on that card: accept,
+decline and complete are the stylist's alone, but this is a statement about a
+shared event. **Terminal**, with no self-service way to withdraw it — one
+designed in a hurry would let somebody quietly un-say a thing the other party
+has already been told about and may have acted on. ⚠️ **An accidental press
+needs an admin**, who bypasses the actor rules and can move it back to
+`'accepted'` with both timestamps nulled. That is written into 0070's header
+because it will be the first support request this feature generates.
+
+**The other party is told once, neutrally**, and not at all when they are
+agreeing with something they already said — telling somebody you agree with them
+is not news.
+
+Verified: the unattributed direct update refused with `CV004`; after the model,
+`not_held` with `model_at` set and `provider_at` not; after both, both set and
+exactly one notification.
+
+### ⚠️ The first verify reported a hole in a correct guard
+
+That is the part worth keeping, and it is worse than missing one. A check that
+stays silent about a real fault costs you the fault. **A check that invents a
+fault costs you the fault, the trust, and the time spent looking for it** — and
+the obvious next move is to "fix" a guard that was already right, which would
+have opened the hole the block was imagining.
+
+The guard was correct from the first line written. The block picked its actor
+with an unordered `limit 1` over `public.users` and got an admin, so the guard
+bypassed and the branch under test was never reached. Full account in item 139.
+
+### And the same allowlist caught me a fourth time
+
+`'not_held'` went into `getSessions`' status list and **not** into the Past
+group's filter. Pressing "It didn't happen" therefore made the booking vanish
+from the screen it was pressed on.
+
+Three days earlier I had written a comment in that exact file about this exact
+pair of places, having just made the same mistake with `'expired'`. **Knowing
+where a trap is does not stop you walking into it; only something that checks
+does.** There is still nothing that checks this pair, which is why it is the
+fourth instance.
+
+Found by clicking the button in the demo. Not by reading the diff, not by the
+type checker, not by `npm run verify` — all of which were green.
+
+---
+
 ## What is open
 
 | | Item | Blocking launch? |
@@ -14355,6 +14420,7 @@ pastes it — by which time it is trusted.
 | 136 | ✅ **CLOSED AND VERIFIED LIVE 1 Oct.** `run_email_reconcile` raised 42P01 on every run from 22 Sep — a DELETE between a CTE chain and the INSERT that read it — so the check that catches emails which never went had itself never run. Eight nightly failures recorded in `cron.job_run_details`, a table nothing reads. 0069 fixes it; `email_reconcile_runs` now has a dashboard tile | Was live |
 | 137 | ✅ **CLOSED 1 Oct.** A declined application vanished from both clients — the model's only trace was a notification she can delete. Fourth value this one allowlist has needed. Fixed on web; mobile's sessions.tsx still hides `declined` and `expired` | No while mobile is unreleased |
 | 139 | ✅ **CLOSED 2 Oct.** 0070's verify picked `ff06d568` with an unordered `limit 1` — a provider AND an admin — so the guard bypassed and the block reported a hole that did not exist. The inverse of 0027: a rule for everyone except admins, tested as an admin. Four blocks audited; every one whose actor matters now asserts its own premise | No |
+| 138 | ✅ **CLOSED AND VERIFIED LIVE 2 Oct.** `'not_held'` with two timestamps: the row records who SAID it did not happen, never who failed to turn up. Either party, terminal, admin-only undo. The first verify reported a hole in a correct guard — see 139 | No |
 | 134 | ✅ **CLOSED AND VERIFIED LIVE 1 Oct.** Pending applications sat in a stylist's list for ever and a past accepted booking had no outcome. 0066 makes `expired` terminal and refuses to ACCEPT a started appointment — that refusal, not the job, is the fix. 0067 adds the daily job, run log and the model's notification. B is "Did this happen?", never "missed" | No |
 | 127 | ✅ **CLOSED 29 Sep.** `/stylist/[id]` header overlaps itself at ~540px: Saved/Safety move beside the name, the name wraps to three lines and the "posts new times" line is drawn across it. Not present at 390. Width band unmeasured | No, but it is on a public page |
 | 126 | ⚠️ **Noted, not fixed.** For a stylist, Settings is fully off-screen in the phone nav at 360, 390 and 430. Discoverability only — the strip scrolls, a half-visible pill cues it, and the suspension notice links to /settings directly. The nav's two-row phone layout is DESIGNED, not a bug; I reported it as one and disproved myself by measuring | No |

@@ -66,6 +66,27 @@ export function demoRpc(name: string, args: Row, store: DemoStore, user: DemoUse
       return id
     }
 
+    /**
+     * ⚠️ WITHOUT THIS THE DEMO THROWS WHEN SOMEBODY PRESSES "It didn't happen".
+     * The control renders on any accepted booking whose time has passed, and
+     * the demo has one, so the button is reachable in every walkthrough.
+     *
+     * It stamps the CALLER'S OWN column, as the real function does — that is
+     * the part worth mirroring, because a demo that let the caller choose
+     * which party said so would misrepresent the one rule this feature is
+     * built around. It writes no notification: nothing in demo mode reads one.
+     */
+    case 'report_not_held': {
+      const sess = store.tables.sessions.find(s => s.id === args.p_session_id)
+      if (!sess) return null
+      const isModel = sess.model_user_id === user?.id
+      const now = new Date().toISOString()
+      if (isModel) sess.not_held_model_at = sess.not_held_model_at ?? now
+      else sess.not_held_provider_at = sess.not_held_provider_at ?? now
+      sess.status = 'not_held'
+      return null
+    }
+
     case 'cancel_sessions_for_block':
       return { ok: true, cancelled: 0 }
 
