@@ -185,11 +185,22 @@ export async function notifyFavourites(
     // is notified twice every time this stylist posts times.
     const users = [...new Set(((data ?? []) as { user_id: string }[]).map(f => f.user_id))]
     if (users.length === 0) return
+    // ⚠️ `data.provider_id` IS WHAT MAKES THE BODY TRUE. The copy says "tap to
+    // view their shop", and without this field there is nothing to tap: the row
+    // carries no session and no stylist, so neither client can build a link to
+    // anywhere. Mobile's copy of this insert says *"don't drop it"* in a comment
+    // directly above the same line; this port dropped it anyway, and the promise
+    // in the body went out unbacked from the day the web screen shipped.
+    //
+    // ⚠️ NOT RETROSPECTIVE. Rows already written have no provider_id, so they
+    // stay unlinkable for ever — the id was never recorded and cannot be
+    // recovered from the row. Only notices sent from here on can be tapped.
     await supabase.from('notifications').insert(users.map(uid => ({
       user_id: uid,
       type: 'new_availability',
       title: 'New availability posted',
       body: `${stylistName} has new slots available — tap to view their shop`,
+      data: { provider_id: providerId },
     })))
   } catch (e) {
     console.warn('[availability] notifying favourites failed', e)

@@ -7,6 +7,31 @@ import { MarkOneReadButton } from './MarkOneReadButton'
 
 export const metadata = { title: 'Notifications' }
 
+/**
+ * Where a notification goes when it is not about a booking.
+ *
+ * ⚠️ A NOTIFICATION THAT TELLS YOU ABOUT A PERSON MUST REACH THAT PERSON.
+ * `stylist_invite` and `new_availability` are the only two types that are about
+ * somebody rather than about a session, and both carry the stylist in
+ * `data.provider_id`. Mobile has routed them that way since it was written —
+ * `routeForNotification` pushes `/(app)/provider/[id]` keyed on exactly this
+ * field — and the web port of this screen kept the `session_id` branch and
+ * dropped this one.
+ *
+ * So an invite said somebody wanted you as a model and gave you no way to see
+ * who. Reported by Micky, 2 Oct 2026, the first time the invite was used end to
+ * end: the button worked, the email arrived, the notification arrived, and the
+ * one thing missing was the only thing she would want to do next.
+ *
+ * Returns null rather than a dead href when the id is absent, because a link to
+ * `/stylist/undefined` is worse than no link: it looks like the feature works.
+ */
+function providerHref(n: AppNotification): string | null {
+  if (n.type !== 'stylist_invite' && n.type !== 'new_availability') return null
+  const id = n.data?.provider_id
+  return typeof id === 'string' && id.length > 0 ? `/stylist/${id}` : null
+}
+
 export default async function NotificationsPage() {
   const user = await requireUser()
   const supabase = await createSupabaseServerClient()
@@ -38,6 +63,9 @@ export default async function NotificationsPage() {
       ) : (
         <ul className="space-y-2">
           {items.map(n => {
+            // A session thread first, then the person. Both branches existed on
+            // mobile; only the first one survived the port.
+            const href = n.session_id ? `/messages/${n.session_id}` : providerHref(n)
             const body = (
               <>
                 <div className="flex items-start gap-2">
@@ -83,9 +111,9 @@ export default async function NotificationsPage() {
                   n.read_at ? 'border-hairline/60 bg-cream' : 'border-hairline bg-white'
                 }`}
               >
-                {n.session_id ? (
+                {href ? (
                   <Link
-                    href={`/messages/${n.session_id}`}
+                    href={href}
                     className="block p-4 transition-colors hover:bg-input-bg focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-rose"
                   >
                     {body}
@@ -100,7 +128,8 @@ export default async function NotificationsPage() {
                     steals the click. It is on every row rather than only the
                     linked ones — a notification with nowhere to go (a warning, a
                     verification result, a rejected update) is exactly the kind you
-                    want to be able to clear. */}
+                    want to be able to clear. An invite and a new-availability
+                    notice are no longer in that list — they link to the shop. */}
                 <div className="flex justify-end border-t border-hairline/70 px-3 py-1">
                   {n.read_at ? (
                     <span className="inline-flex items-center gap-1.5 py-2 text-xs font-bold text-muted/70">
