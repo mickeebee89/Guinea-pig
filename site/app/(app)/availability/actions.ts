@@ -37,7 +37,7 @@ export async function saveAvailability(date: string, slots: Slot[]): Promise<Res
     const { skippedBooked } = await saveDay(supabase, provider.id, date, slots)
     // Only shout about it when slots were actually added.
     if (slots.length > 0) {
-      await notifyFavourites(supabase, provider.id, provider.name ?? 'A stylist')
+      await notifyFavourites(supabase)
     }
     revalidatePath('/availability')
     revalidatePath('/dashboard')

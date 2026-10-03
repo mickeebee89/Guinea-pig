@@ -274,7 +274,7 @@ export default function AddAvailabilityScreen() {
         const s = daySlots[d] ?? []
         if (s.length > 0) await applySlotsToDates(providerId, [d], s)
       }
-      await notifyFavourites(providerId)
+      await notifyFavourites()
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
       const dayCount = sortedSelected.filter(d => (daySlots[d] ?? []).length > 0).length
       Alert.alert(

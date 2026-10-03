@@ -160,48 +160,25 @@ export async function deleteSlots(
 /**
  * Tell models who favourited this stylist that new slots are up.
  *
- * Best-effort by design: a notification failure must never affect whether the
- * availability itself saved.
+ * ⚠️ ONE LINE, BECAUSE THE RULE LIVES IN THE DATABASE NOW (0075). The payload —
+ * type, title, body and `data.provider_id` — was written twice, once per
+ * client, and the web copy omitted provider_id for 54 days while its own body
+ * said "tap to view their shop" (item 143). Mobile's copy carried the field
+ * under a comment reading "don't drop it". A comment is the weakest mechanism
+ * available; a single call site is the one that has worked every time here.
+ *
+ * The RPC TAKES NO ARGUMENT: it derives the stylist from auth.uid(), so it
+ * cannot be aimed at anyone else's favourites. Nothing to pass means nothing to
+ * pass wrongly.
+ *
+ * Still best-effort, and still called once per save action rather than per
+ * statement — a trigger would have sent several notices where one was sent,
+ * because applySlotsToDates saves a date at a time.
  */
-export async function notifyFavourites(
-  supabase: SupabaseClient,
-  providerId: string,
-  stylistName: string,
-): Promise<void> {
+export async function notifyFavourites(supabase: SupabaseClient): Promise<void> {
   try {
-    const { data } = await supabase.from('favourites').select('user_id').eq('provider_id', providerId)
-    // De-duplicated, and as of 23 Sep 2026 this is belt-and-braces rather
-    // than a fix. ~~No file in this repo creates a unique index on
-    // (user_id, provider_id), and the database has not been asked which of
-    // mobile's two entry points is right.~~
-    //
-    // ASKED AND ANSWERED (item 94): `favourites` DOES carry a unique index on
-    // (user_id, provider_id), and no duplicate rows exist. So duplicates were
-    // never possible, verify-payment.tsx's careful version was right, and the
-    // heart's missing check is the defect rather than the safeguard.
-    //
-    // The Set stays because it costs nothing and because the harm it guards
-    // against lands here and only here: two rows for one model would mean she
-    // is notified twice every time this stylist posts times.
-    const users = [...new Set(((data ?? []) as { user_id: string }[]).map(f => f.user_id))]
-    if (users.length === 0) return
-    // ⚠️ `data.provider_id` IS WHAT MAKES THE BODY TRUE. The copy says "tap to
-    // view their shop", and without this field there is nothing to tap: the row
-    // carries no session and no stylist, so neither client can build a link to
-    // anywhere. Mobile's copy of this insert says *"don't drop it"* in a comment
-    // directly above the same line; this port dropped it anyway, and the promise
-    // in the body went out unbacked from the day the web screen shipped.
-    //
-    // ⚠️ NOT RETROSPECTIVE. Rows already written have no provider_id, so they
-    // stay unlinkable for ever — the id was never recorded and cannot be
-    // recovered from the row. Only notices sent from here on can be tapped.
-    await supabase.from('notifications').insert(users.map(uid => ({
-      user_id: uid,
-      type: 'new_availability',
-      title: 'New availability posted',
-      body: `${stylistName} has new slots available — tap to view their shop`,
-      data: { provider_id: providerId },
-    })))
+    const { error } = await supabase.rpc('notify_favourites_of_availability')
+    if (error) console.warn('[availability] favourite notify failed', error.message)
   } catch (e) {
     console.warn('[availability] notifying favourites failed', e)
   }

@@ -348,30 +348,27 @@ export async function deleteDay(
   return await deleteSlots(((data ?? []) as any[]).map(r => r.id as string))
 }
 
-// Tell models who favourited this stylist that new availability is up. Best-effort:
-// never let a notification failure affect the save result.
-export async function notifyFavourites(providerId: string): Promise<void> {
+/**
+ * Tell models who favourited this stylist that new slots are up.
+ *
+ * ⚠️ ONE LINE, BECAUSE THE RULE LIVES IN THE DATABASE NOW (0075). The payload —
+ * type, title, body and `data.provider_id` — was written twice, once per
+ * client, and the web copy omitted provider_id for 54 days while its own body
+ * said "tap to view their shop" (item 143). Mobile's copy carried the field
+ * under a comment reading "don't drop it". A comment is the weakest mechanism
+ * available; a single call site is the one that has worked every time here.
+ *
+ * The RPC TAKES NO ARGUMENT: it derives the stylist from auth.uid(), so it
+ * cannot be aimed at anyone else's favourites. Nothing to pass means nothing to
+ * pass wrongly.
+ *
+ * Still best-effort, and still called once per save action rather than per
+ * statement — a trigger would have sent several notices where one was sent,
+ * because applySlotsToDates saves a date at a time.
+ */
+export async function notifyFavourites(): Promise<void> {
   try {
-    const [{ data: prov }, { data: favs }] = await Promise.all([
-      supabase.from('providers').select('name').eq('id', providerId).single(),
-      supabase.from('favourites').select('user_id').eq('provider_id', providerId),
-    ])
-    if (!favs || (favs as any[]).length === 0) return
-    const providerName = (prov as any)?.name ?? 'A stylist'
-    // session_id is omitted (not tied to a session) so it can't violate
-    // notifications_session_id_fkey. `data.provider_id` is what notificationRouting
-    // uses to deep-link new_availability to the stylist's shop — don't drop it.
-    // TODO(notifications): this best-effort insert can 23503 on some rows —
-    // investigate when locking down the notifications table; must never affect save UX.
-    const { error } = await supabase.from('notifications').insert(
-      (favs as any[]).map(f => ({
-        user_id: f.user_id,
-        type:    'new_availability',
-        title:   'New availability posted',
-        body:    `${providerName} has new slots available — tap to view their shop`,
-        data:    { provider_id: providerId },
-      })),
-    )
+    const { error } = await supabase.rpc('notify_favourites_of_availability')
     if (error) console.warn('availability: favourite notify failed:', error.message)
   } catch (e) {
     console.warn('availability: favourite notify threw:', e)

@@ -148,7 +148,7 @@ export default function EditDayScreen() {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
     try {
       const { skippedBooked } = await saveDay(providerId, date, slots)
-      await notifyFavourites(providerId)
+      await notifyFavourites()
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
       if (skippedBooked > 0) {
         Alert.alert(
