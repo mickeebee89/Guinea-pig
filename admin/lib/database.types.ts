@@ -1,8 +1,8 @@
 // GENERATED FILE — DO NOT EDIT BY HAND.
 //
 // Written by scripts/gen-supabase-types.mjs from the live database.
-// TYPES_STAMP: 0076
-// TYPES_FILES_AT_GEN: 0076
+// TYPES_STAMP: 0079
+// TYPES_FILES_AT_GEN: 0079
 //
 // TYPES_STAMP is the migration the DATABASE was at when these were generated,
 // stated by whoever ran it (--applied). TYPES_FILES_AT_GEN is the newest
@@ -2450,7 +2450,12 @@ export type Database = {
         Returns: Json
       }
       admin_decide_status_post: {
-        Args: { p_decision: string; p_note?: string; p_post_id: string }
+        Args: {
+          p_decision: string
+          p_member_message?: string
+          p_note?: string
+          p_post_id: string
+        }
         Returns: Json
       }
       admin_decide_verification: {
@@ -2587,6 +2592,14 @@ export type Database = {
         }[]
       }
       notify_favourites_of_availability: { Args: never; Returns: number }
+      notify_session_applied: {
+        Args: { p_session_id: string }
+        Returns: undefined
+      }
+      notify_session_transition: {
+        Args: { p_session_id: string; p_to: string }
+        Returns: undefined
+      }
       provider_fee_settled: { Args: { p_user_id: string }; Returns: boolean }
       provider_shop_is_publishable: {
         Args: { p_provider_id: string }
@@ -2670,6 +2683,10 @@ export type Database = {
           end_time: string
           start_time: string
         }[]
+      }
+      transition_session: {
+        Args: { p_session_id: string; p_to: string }
+        Returns: Json
       }
       unsubscribe_email: { Args: { p_token: string }; Returns: boolean }
     }
