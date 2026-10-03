@@ -299,18 +299,26 @@ commit;
 --
 -- ── VERIFY ──────────────────────────────────────────────────────────────
 --
---   ⚠️ EVERY BLOCK ASSERTS ITS PREMISE BEFORE TESTING ANYTHING, because the
---   trigger's own THIRD statement is
+--   ⚠️ WRITTEN TO THREE CONVENTIONS LEARNED THE HARD WAY ON 0079, all three
+--   now in scripts/migration-status.mjs:
 --
---       if auth.uid() is null or is_admin() then return new; end if;
+--     1. NO `select ... into` inside a `do` block. The Supabase editor reads it
+--        as SELECT INTO <table>, which is CREATE TABLE AS, and splices
+--        `ALTER TABLE v_x ENABLE ROW LEVEL SECURITY` into the block, breaking
+--        the dollar quoting. Every assignment below is `v := (select …)`.
+--        `get diagnostics` is safe and is left alone.
+--     2. ONE `%` fed one concatenated string. `%%` is an escaped literal
+--        percent, not two placeholders, so a fifteen-field raise written with
+--        `%%` dies with "too many parameters specified for RAISE".
+--     3. EVERY variable in the `declare` section. A block with declarations in
+--        a footnote does not compile as pasted, and a block that has to be
+--        repaired before it runs is a block that gets skipped.
 --
---   so an actor who is null or an admin bypasses the branch under test and the
---   block would report a pass having exercised nothing. Micky's account
---   ff06d568 is BOTH a provider and an admin, so an unordered pick lands on
---   exactly that. This is 0070's instance for the third time, in the very
---   function stage B exists to test — hence "TESTED NOTHING" rather than a pass.
+--   ⚠️ AND EVERY BLOCK ASSERTS ITS PREMISE, because the trigger's third
+--   statement is `if auth.uid() is null or is_admin() then return new; end if;`
+--   and ff06d568 is both a provider and an admin.
 --
---   -- (a) the shapes
+--   -- (a) the shapes. Plain select: it neither switches role nor rolls back.
 --   select p.proname, pg_get_function_identity_arguments(p.oid) as args, p.prosecdef
 --     from pg_proc p join pg_namespace n on n.oid = p.pronamespace
 --    where n.nspname = 'public'
@@ -319,105 +327,116 @@ commit;
 --
 --   Expect notify_session_transition prosecdef **t**, transition_session **f**.
 --
---   -- (b) THE MODEL CANNOT ACCEPT HER OWN BOOKING. The trigger's rule, proved
---   --     through the new function rather than assumed from its body.
+--   -- (b) THE MODEL CANNOT ACCEPT HER OWN BOOKING.
 --   begin;
 --   do $v$
 --   declare
---     v_sid uuid; v_model uuid; v_got text := 'NO ERROR — THE GUARD DID NOT FIRE';
+--     v_sid   uuid;
+--     v_model uuid;
+--     v_got   text := 'NO ERROR — THE GUARD DID NOT FIRE';
 --   begin
---     select s.id, s.model_user_id into v_sid, v_model
---       from public.sessions s
---      where s.status = 'pending' and s.model_user_id is not null
---      order by s.created_at desc limit 1;
+--     v_sid := (select s.id from public.sessions s
+--                where s.status = 'pending' and s.model_user_id is not null
+--                order by s.created_at desc limit 1);
 --     if v_sid is null then
---       raise exception 'ROLLED BACK, TESTED NOTHING. No pending booking to try.';
+--       raise exception '%', 'ROLLED BACK, TESTED NOTHING. No pending booking to try.';
 --     end if;
+--     v_model := (select s.model_user_id from public.sessions s where s.id = v_sid);
 --
 --     perform set_config('request.jwt.claims',
 --       json_build_object('sub', v_model::text, 'role', 'authenticated')::text, true);
 --     execute 'set local role authenticated';
 --
---     -- ⚠️ THE PREMISE, asserted in the order the trigger checks it.
 --     if auth.uid() is null then
---       raise exception 'ROLLED BACK, TESTED NOTHING. auth.uid() is null, so the trigger returns at its first check.';
+--       raise exception '%', 'ROLLED BACK, TESTED NOTHING. auth.uid() is null — the trigger returns at its first check.';
 --     end if;
 --     if public.is_admin() then
---       raise exception 'ROLLED BACK, TESTED NOTHING. The chosen model is an admin, so the trigger bypasses before the provider check.';
+--       raise exception '%', 'ROLLED BACK, TESTED NOTHING. The model is an admin, so the trigger bypasses before the provider check.';
 --     end if;
 --     if exists (select 1 from public.providers p
 --                 join public.sessions s on s.provider_id = p.id
 --                where s.id = v_sid and p.user_id = auth.uid()) then
---       raise exception 'ROLLED BACK, TESTED NOTHING. The chosen model also OWNS this booking''s shop, so she is the provider and is meant to be allowed.';
+--       raise exception '%', 'ROLLED BACK, TESTED NOTHING. The model also owns this booking''s shop, so she IS the provider.';
 --     end if;
 --
 --     begin
 --       perform public.transition_session(v_sid, 'accepted');
 --     exception when others then
---       v_got := sqlerrm;
+--       v_got := sqlstate || ' ' || sqlerrm;
 --     end;
 --     execute 'reset role';
---     raise exception 'ROLLED BACK ON PURPOSE. as the model: %', v_got;
+--     raise exception '%', 'ROLLED BACK ON PURPOSE. as the model: ' || v_got;
 --   end $v$;
 --   rollback;
 --
---   Expect "Only the provider can set a session to accepted". Anything else,
---   and especially THE GUARD DID NOT FIRE, means the actor rule is not reaching
---   this path.
+--   Expect "Only the provider can set a session to accepted". THE GUARD DID NOT
+--   FIRE means the actor rule is not reaching this path.
 --
---   -- (c) THE PROVIDER CAN, AND EXACTLY ONE NOTIFICATION IS WRITTEN — then the
---   --     SAME CALL AGAIN WRITES NONE. The second half is the no-op the trigger
---   --     permits and this function absorbs; without it a double-click sends a
+--   ⚠️ 'accepted' is correct HERE and was wrong in 0079's test 5, for a reason
+--   worth keeping straight: this block picks a **pending** row, so accepted is a
+--   real transition. 0079's picked an already-accepted row, so the same value
+--   was a no-op that returned before any check. The target status must differ
+--   from the row's current one, whatever the test.
+--
+--   -- (c) THE PROVIDER CAN, EXACTLY ONE NOTICE IS WRITTEN, AND THE SAME CALL
+--   --     AGAIN WRITES NONE. The second half is the no-op the trigger permits
+--   --     and transition_session absorbs; without it a double-click sends a
 --   --     second real email.
 --   begin;
 --   do $v$
 --   declare
---     v_sid uuid; v_owner uuid; v_model uuid;
---     v_n0 int; v_n1 int; v_n2 int; v_r1 jsonb; v_r2 jsonb; v_body text;
+--     v_sid   uuid;
+--     v_owner uuid;
+--     v_n0 int; v_n1 int; v_n2 int;
+--     v_r1 jsonb; v_r2 jsonb;
+--     v_body text;
 --   begin
---     select s.id, p.user_id, s.model_user_id into v_sid, v_owner, v_model
---       from public.sessions s join public.providers p on p.id = s.provider_id
---      where s.status = 'pending' and p.user_id is not null
---      order by s.created_at desc limit 1;
+--     v_sid := (select s.id from public.sessions s
+--                 join public.providers p on p.id = s.provider_id
+--                where s.status = 'pending' and p.user_id is not null
+--                order by s.created_at desc limit 1);
 --     if v_sid is null then
---       raise exception 'ROLLED BACK, TESTED NOTHING. No pending booking with a shop owner.';
+--       raise exception '%', 'ROLLED BACK, TESTED NOTHING. No pending booking with a shop owner.';
 --     end if;
+--     v_owner := (select p.user_id from public.providers p
+--                   join public.sessions s on s.provider_id = p.id
+--                  where s.id = v_sid);
 --
 --     perform set_config('request.jwt.claims',
 --       json_build_object('sub', v_owner::text, 'role', 'authenticated')::text, true);
 --     execute 'set local role authenticated';
 --
 --     if auth.uid() is null then
---       raise exception 'ROLLED BACK, TESTED NOTHING. auth.uid() is null.';
+--       raise exception '%', 'ROLLED BACK, TESTED NOTHING. auth.uid() is null.';
 --     end if;
 --     if public.is_admin() then
---       raise exception 'ROLLED BACK, TESTED NOTHING. The provider is also an admin, so the trigger bypasses and this proves nothing about the provider branch.';
+--       raise exception '%', 'ROLLED BACK, TESTED NOTHING. The provider is also an admin, so the trigger bypasses and this proves nothing about the provider branch.';
 --     end if;
 --
---     select count(*) into v_n0 from public.notifications
---      where session_id = v_sid and type = 'session_accepted';
---
+--     v_n0 := (select count(*) from public.notifications
+--               where session_id = v_sid and type = 'session_accepted');
 --     v_r1 := public.transition_session(v_sid, 'accepted');
---     select count(*) into v_n1 from public.notifications
---      where session_id = v_sid and type = 'session_accepted';
---
+--     v_n1 := (select count(*) from public.notifications
+--               where session_id = v_sid and type = 'session_accepted');
 --     v_r2 := public.transition_session(v_sid, 'accepted');
---     select count(*) into v_n2 from public.notifications
---      where session_id = v_sid and type = 'session_accepted';
---
---     select body into v_body from public.notifications
---      where session_id = v_sid and type = 'session_accepted'
---      order by created_at desc limit 1;
+--     v_n2 := (select count(*) from public.notifications
+--               where session_id = v_sid and type = 'session_accepted');
+--     v_body := (select body from public.notifications
+--                 where session_id = v_sid and type = 'session_accepted'
+--                 order by created_at desc limit 1);
 --     execute 'reset role';
 --
---     raise exception 'ROLLED BACK ON PURPOSE. first=% second=% | notices %->%->% | body=%',
---       v_r1, v_r2, v_n0, v_n1, v_n2, v_body;
+--     raise exception '%', 'ROLLED BACK ON PURPOSE.' || chr(10)
+--       || 'first:  ' || coalesce(v_r1::text, 'null') || chr(10)
+--       || 'second: ' || coalesce(v_r2::text, 'null') || chr(10)
+--       || 'notices: ' || v_n0 || ' -> ' || v_n1 || ' -> ' || v_n2 || chr(10)
+--       || 'body: ' || coalesce(v_body, 'null');
 --   end $v$;
 --   rollback;
 --
---   Expect first `{"ok":true,"changed":true,...}`, second
---   `{"ok":true,"changed":false,...}`, notices going n -> n+1 -> **n+1**, and a
---   body reading 'Your booking for Friday 3 October has been confirmed.' with
---   the weekday and month spelt out. If the third count is n+2, the no-op
---   absorption is not working and a double-click sends two emails.
+--   Expect first `{"ok":true,"changed":true,…}`, second
+--   `{"ok":true,"changed":false,…}`, notices n -> n+1 -> **n+1**, and a body
+--   reading 'Your booking for Friday 3 October has been confirmed.' with the
+--   weekday and month spelt out. **n+2 means the no-op absorption is not
+--   working and a double-click sends two emails.**
 -- ===========================================================================

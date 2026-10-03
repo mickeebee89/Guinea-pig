@@ -101,6 +101,57 @@
  *
  *   * `begin; ... rollback;` is fine — it is the multi-statement dependencies
  *     inside that break, not the transaction.
+ *
+ *   ── ⚠️ NEVER `select ... into` INSIDE A `do` BLOCK. ADDED 3 Oct 2026 ─────
+ *
+ *     The Supabase editor REWRITES it. It reads `select ... into v_x` as SQL's
+ *     `SELECT INTO <table>` — which is `CREATE TABLE AS` — and splices lines
+ *     like `ALTER TABLE v_other ENABLE ROW LEVEL SECURITY` into the middle of
+ *     the block, breaking the dollar quoting. The block then fails on a syntax
+ *     error that names a variable as if it were a table.
+ *
+ *     ASSIGN FROM A SCALAR SUBQUERY INSTEAD:
+ *
+ *         v_other := (select p.id from public.providers p limit 1);
+ *
+ *     ⚠️ AND A PREVIOUS DIAGNOSIS OF THIS WAS WRONG. It was attributed to
+ *     `record` declarations, and renaming the tag to `$blk$` appeared to fix
+ *     it — 0059 to 0062 still carry that tag. **The tag was coincidental.**
+ *     Proved 3 Oct: the editor named exactly the three variables assigned with
+ *     `select ... into` and ignored the two assigned by `get diagnostics` and
+ *     `:=`. The trigger is the `into` keyword and nothing else.
+ *
+ *     `get diagnostics v_rows = row_count` is untouched by this and is safe.
+ *
+ *     This is the SECOND false rule to have lived in this file. The first is
+ *     above, about temp tables. Both were written from an error message plus an
+ *     assumption. A rule here is read by everyone and designed around.
+ *
+ *   ── ⚠️ ONE `%` FED ONE CONCATENATED STRING. ADDED 3 Oct 2026 ────────────
+ *
+ *     In PL/pgSQL `%%` is an ESCAPED LITERAL PERCENT SIGN, not two
+ *     placeholders. A `raise` written with `%%` between fifteen fields has two
+ *     real placeholders for fifteen arguments and dies with "too many
+ *     parameters specified for RAISE" — 0079's verify did exactly that.
+ *
+ *     Do not count placeholders. Build the message and pass one:
+ *
+ *         raise exception '%', 'ROLLED BACK ON PURPOSE.' || chr(10)
+ *           || '1 move: '  || r1 || chr(10)
+ *           || '2 price: ' || r2;
+ *
+ *     The counting problem is removed rather than solved, which is the only
+ *     version that survives someone adding a field later.
+ *
+ *   ── ⚠️ A BLOCK HANDED OVER MUST BE COMPLETE. ADDED 3 Oct 2026 ───────────
+ *
+ *     Every variable declared in the `declare` section, not listed in a
+ *     footnote below the block. 0079's verify named five variables underneath
+ *     it as "declare alongside the others", so it would not compile as pasted.
+ *     A block someone has to repair before running is a block that gets
+ *     skipped — the same failure as the four unrunnable ones above, arrived at
+ *     from the opposite direction: not written for the wrong tool, but written
+ *     for no tool at all.
  */
 
 import { readFileSync, readdirSync, writeFileSync } from 'node:fs'

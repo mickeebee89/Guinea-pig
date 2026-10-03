@@ -347,9 +347,12 @@ commit;
 --     r4 text := 'NO ERROR — STILL WRITABLE';
 --     r5 text := 'not reached';
 --   begin
---     select p.id into v_other from public.providers p
---      where p.id is distinct from (select provider_id from public.sessions where id = v_sid)
---      limit 1;
+--     -- scalar subquery, never `select ... into`: the editor rewrites that as
+--     -- CREATE TABLE AS and breaks the block. See migration-status.mjs.
+--     v_other := (select p.id from public.providers p
+--                  where p.id is distinct from
+--                        (select provider_id from public.sessions where id = v_sid)
+--                  limit 1);
 --
 --     perform set_config('request.jwt.claims',
 --       json_build_object('sub', v_model::text, 'role', 'authenticated')::text, true);
@@ -389,8 +392,19 @@ commit;
 --     --
 --     -- DO NOT SIMPLIFY THIS TO A SQLSTATE MATCH. That is the exact shape this
 --     -- record keeps logging: a check that passes without testing its claim.
+--     -- ⚠️ 'declined', NOT 'accepted'. ON ITS FIRST RUN THIS TEST PROVED
+--     -- NOTHING. The session under test is already 'accepted', so a write of
+--     -- 'accepted' hit the trigger's FIRST line —
+--     --     if new.status is not distinct from old.status then return new;
+--     -- — and succeeded as a permitted no-op BEFORE any actor check ran.
+--     -- Result: "NO ERROR, rows=1", verdict UNEXPECTED. Benign, but the test
+--     -- never reached the thing it was written to prove.
+--     --
+--     -- From 'accepted', 'declined' is a REAL transition, the model is not the
+--     -- provider, and the trigger refuses — which is the message the verdict
+--     -- below looks for. Choose a target status the row is NOT already in.
 --     begin
---       update public.sessions set status = 'accepted' where id = v_sid;
+--       update public.sessions set status = 'declined' where id = v_sid;
 --       get diagnostics v_rows = row_count;
 --       r5 := 'NO ERROR, rows=' || v_rows;
 --     exception when others then r5 := sqlstate || ' ' || sqlerrm; end;
@@ -399,6 +413,12 @@ commit;
 --       v5 := 'FAIL — THE GRANT IS WRONG. accept and decline are broken product-wide.';
 --     elsif r5 like '%Only the provider can set%' then
 --       v5 := 'PASS — reached the trigger, so status is still writable.';
+--     elsif r5 like 'NO ERROR%' then
+--       -- The fourth branch, added after the first run hit it.
+--       v5 := 'NO-OP — the column IS writable, but the actor check never ran: '
+--             || 'the trigger returns early when new.status equals old.status. '
+--             || 'This row was already in the target status. Re-run against a '
+--             || 'status it is NOT in. Proves the grant, proves nothing about the guard.';
 --     else
 --       v5 := 'UNEXPECTED — read r5 by hand before concluding anything.';
 --     end if;
@@ -415,10 +435,9 @@ commit;
 --     -- through. So is_admin() is printed and the reason it passed is on the
 --     -- record, rather than the block refusing to run. That is the opposite of
 --     -- the negative tests, where an admin bypass makes the result meaningless.
---     select p.user_id into v_owner
---       from public.providers p
---       join public.sessions s on s.provider_id = p.id
---      where s.id = v_sid;
+--     v_owner := (select p.user_id from public.providers p
+--                   join public.sessions s on s.provider_id = p.id
+--                  where s.id = v_sid);
 --     if v_owner is null then
 --       r6 := 'ROLLED BACK, TESTED NOTHING. This booking has no shop owner.';
 --     else
@@ -432,7 +451,7 @@ commit;
 --         begin
 --           update public.sessions set status = 'accepted' where id = v_sid;
 --           get diagnostics v_rows = row_count;
---           select status into v6_now from public.sessions where id = v_sid;
+--           v6_now := (select status from public.sessions where id = v_sid);
 --           r6 := 'rows=' || v_rows || ' status now ' || coalesce(v6_now, 'null')
 --                 || ' | provider is_admin=' || v6_admin;
 --         exception when others then
