@@ -14966,6 +14966,142 @@ reason rather than by luck:
 
 ---
 
+## 144. ANY SIGNED-IN ACCOUNT CAN SEND ANY NOTIFICATION TO ANYONE — AND CAVY WILL EMAIL IT
+### Found 3 Oct 2026 while collapsing item 143's duplication. VERIFIED from pg_policies. NOT FIXED. Plan only.
+
+**Plainly:** the only condition on writing a notification is *being logged in*.
+Not owning it, not being party to the booking it mentions, not being an admin.
+Any member can write a row addressed to any other member, with a title and body
+they choose — and because `notify_email` fires on insert for eleven types, Cavy
+will then **email that text to that person from `notifications@cavybeauty.com`**,
+with the real sender, the real branding and the real footer.
+
+### Verified, from the live database
+
+Every policy on `public.notifications` scopes to the owner except the one that
+writes:
+
+| policy | cmd | predicate |
+|---|---|---|
+| read own notifications | SELECT | `user_id = auth.uid()` |
+| notifications_select_admin | SELECT | `is_admin()` |
+| update own notifications | UPDATE | `user_id = auth.uid()` |
+| delete own notifications | DELETE | `user_id = auth.uid()` |
+| **authenticated can create notifications** | **INSERT** | **`auth.uid() IS NOT NULL`** |
+
+Read from `pg_policies` by Micky, 3 Oct 2026 — **not** from
+`schema-snapshot-2026-08-08-policies.sql`, where it was first spotted. The
+snapshot agreed, which means this has been true since at least 8 Aug.
+
+**And the capability was verified before the predicate was**, by using the
+product: `inviteFromFloor` runs as the signed-in stylist through
+`createSupabaseServerClient()` — the user's session, not the service role — and
+inserted a row with `user_id: modelUserId`. That worked end to end on 2 Oct.
+
+### Why it is worse than a spoofed in-app badge
+
+`session_accepted`, `payment_failed` and `admin_warning` are all in
+`notify_email`'s allowlist, so the text can impersonate Cavy's own transactional
+mail — *"Your booking is confirmed"*, *"We couldn't take your £4.99 payment"* —
+and arrive from the verified sender with a working unsubscribe footer. Recipient
+ids are obtainable by any signed-in account, because `public_profiles` has no
+WHERE clause (already recorded under item 141).
+
+So it is a phishing vector that borrows the product's own reputation. **The
+email half, built in item 74 to make the web usable without an app, is what
+turned a local nuisance into that** — which is worth saying plainly, because 74
+was right and this is the cost nobody priced.
+
+### ⚠️ THE INVENTORY, WHICH IS WHY THE OBVIOUS FIX IS WRONG
+
+`with check (user_id = auth.uid())` is the predicate every other policy on the
+table uses, and it would **break all fifteen client-side inserts**, because not
+one of them writes to the caller:
+
+| # | site | type | target |
+|---|---|---|---|
+| 1 | `site/app/(app)/bookings/actions.ts:64` | accept / decline / cancel | `row.model_user_id` |
+| 2 | `site/app/(app)/stylist/[id]/apply/actions.ts:335` | `session_applied` | `providerUserId` |
+| 3 | `site/app/(app)/salon-floor/actions.ts:107` | `stylist_invite` | `modelUserId` |
+| 4 | `admin/app/messages/page.tsx:67` | `admin_message` | `selected.id` |
+| 5 | `admin/app/moderation/page.tsx:453` | `admin_message` | `result.notify_user_id` |
+| 6–7 | `admin/app/verification/page.tsx:207, 242` | `verification` | `result.user_id` |
+| 8 | `mobile/.../apply-session.tsx:631` | `session_applied` | the stylist |
+| 9 | `mobile/.../chat/[sessionId].tsx:365` | message | `chat.model_user_id` |
+| 10 | `mobile/.../model/[id].tsx:344` | `stylist_invite` | `modelId` |
+| 11–12 | `mobile/.../provider-dashboard.tsx:671, 711` | accept / decline | `s.model_user_id` |
+| 13 | `mobile/.../provider-dashboard.tsx:789` | — | `m.id` *(not session-bound; needs a look)* |
+| 14–16 | `mobile/.../sessions.tsx:254, 288, 320` | accept / decline / cancel | `s.model_user_id` |
+
+*Plus two now closed by 0075: the `new_availability` inserts in
+`site/lib/availability.ts` and `mobile/src/lib/availability.ts`.*
+
+**Tightening the policy before moving these fifteen would silently stop
+notifications across the whole product** — the client swallows the error in most
+of these paths, so nothing would appear on screen. That is the same reasoning
+that split 0066 from 0067: make the refusal correct first, then add the job.
+
+### What is NOT affected, checked rather than assumed
+
+* **All four edge functions use the service role** — `stripe-webhook`,
+  `send-email`, `delete-account`, `purge-selfies` — so they bypass RLS entirely.
+  **The Stripe webhook's `payment_failed` insert needs no change.**
+* **The SQL-side inserts are inside SECURITY DEFINER functions.** Twenty-four
+  `insert into public.notifications` across the migrations, in
+  `admin_act_on_user`, the cancellation and revocation functions, the
+  subscription writers and the email triggers. Definer functions run as the
+  owner, so the policy never applies. *Spot-checked across twelve files, not
+  exhaustively proven.*
+* ⚠️ **The admin console IS affected, contrary to the first guess.** It uses
+  `createBrowserClient` with the **anon key** and the admin's own session
+  (`admin/lib/supabase.ts:11`), so its four inserts go through RLS as that
+  admin's user, not as the service role. Verification and moderation already
+  call a definer RPC and *then* insert the notification separately — so those
+  are the easiest of the fifteen, because the notification belongs inside the
+  RPC that already decided the outcome.
+
+### The plan: three functions, then the policy
+
+1. **`notify_session_counterparty(p_session_id, p_type, p_title, p_body)`** —
+   authorises on *the caller is a participant in that session*, which is a rule
+   the database can check and the client cannot fake. Covers sites 1, 2, 8, 9,
+   11, 12, 14, 15, 16 — nine of the fifteen. Site 13 needs reading first; it is
+   not session-bound.
+2. **Fold the admin notifications into the RPCs that already exist** rather than
+   adding a fourth function. Sites 5, 6 and 7 already receive `notify_user_id` /
+   `user_id` back from a definer RPC, which means the decision and the telling
+   are currently two round trips that can half-fail. Site 4 (`admin_message`)
+   needs a small `notify_as_admin(...)` gated on `is_admin()`.
+3. **`invite_model_from_floor(p_model_user_id)`** — authorises on *the caller is
+   a stylist*, covering sites 3 and 10. The Salon Floor's no-rate-limit decision
+   (2 Oct) moves into it unchanged.
+4. **Only then** `alter policy` to `with check (user_id = auth.uid())`, in its
+   own migration, with a verify block that proves a member can no longer write
+   to somebody else AND that each of the three functions still can.
+
+**Staged in that order on purpose: every step before 4 is additive and safe to
+apply alone.** Step 4 is the only one that can break anything, and by the time
+it runs there is nothing left for it to break.
+
+### Two things to fix while the paths are open, not separately
+
+* **Blocks are not filtered.** A model who blocked a stylist still receives her
+  notifications, on every one of these paths. That is an Apple Guideline 1.2
+  matter and the filter belongs inside the three functions above, where it is
+  written once. 0075 deliberately left it out to stay behaviour-neutral.
+* **`notify_email` trusts the row's own title and body.** Even with the policy
+  closed, whatever a definer function writes is what gets emailed. The functions
+  above should take the *event*, not free text, for every type the allowlist
+  emails — otherwise the hole moves rather than closes.
+
+### Not built, and the record says why
+
+Micky's call, 3 Oct: *"I want the inventory first… a hasty fix that silently
+stops notifications is worse than the hole."* Nothing has been written. This
+entry is the plan, and the fifteen rows above are the thing to work from.
+
+---
+
 ## What is open
 
 | | Item | Blocking launch? |
@@ -14991,6 +15127,7 @@ reason rather than by luck:
 | 137 | ✅ **CLOSED 1 Oct.** A declined application vanished from both clients — the model's only trace was a notification she can delete. Fourth value this one allowlist has needed. Fixed on web; mobile's sessions.tsx still hides `declined` and `expired` | No while mobile is unreleased |
 | 139 | ✅ **CLOSED 2 Oct.** 0070's verify picked `ff06d568` with an unordered `limit 1` — a provider AND an admin — so the guard bypassed and the block reported a hole that did not exist. The inverse of 0027: a rule for everyone except admins, tested as an admin. Four blocks audited; every one whose actor matters now asserts its own premise | No |
 | 140 | ✅ **CLOSED AND VERIFIED LIVE 2 Oct.** 0067 gave `session_expiry_runs` RLS with no policy AND revoked the table grant, so the tile built to watch it could not read it. Three run-log tables, one contract, three access shapes. The tile reported *"could not read"* rather than *"Never"*, which is what made it diagnosable | No |
+| 144 | ⚠️ **VERIFIED, NOT FIXED — PLAN ONLY, 3 Oct.** The `notifications` INSERT policy is `with check (auth.uid() is not null)`: **any signed-in account can write any notification to anyone**, and `notify_email` will then send that text from `notifications@cavybeauty.com` for eleven types — a phishing vector using the product's own verified sender. Every other policy on the table scopes to the owner. ⚠️ **All 15 client inserts are cross-user, so tightening the policy first would silently stop notifications product-wide.** Staged plan: three definer functions, then the policy. Edge functions unaffected (service role); **the admin console IS affected** (anon key + admin session) | **Yes — it lets a member send mail as Cavy** |
 | 143 | ✅ **FIXED 2 Oct, web half deployed by the next push; email half needs deploying by hand.** A model was told a stylist wanted her, with no way to see who — and `new_availability` said *"tap to view their shop"* on a row that never recorded one, live on the web since **9 Aug** (54 days). The invite's rows always carried the id so every invite becomes tappable; ⚠️ **`new_availability`'s do not and never will — the first fault in this audit that cannot be repaired backwards.** Mobile's copy of the same insert warns *"don't drop it"*; the port dropped it, because a comment is the weakest mechanism available | No, but it is a false promise the product repeats daily |
 | 141 | **The Salon Floor.** One wall both roles post to, instead of stylist-side browse — a model appears because she posted, not because she exists. 0072 in and verified: both roles can post, model posts cannot reach the public site, and a post containing a phone number is held for review. 0073 and the client to follow | No, but a stylist has nothing to do without it |
 | 138 | ✅ **CLOSED AND VERIFIED LIVE 2 Oct.** `'not_held'` with two timestamps: the row records who SAID it did not happen, never who failed to turn up. Either party, terminal, admin-only undo. The first verify reported a hole in a correct guard — see 139 | No |
