@@ -15218,7 +15218,43 @@ again; this is where that copy stops being duplicated.
 decision behind it, so there is no existing RPC to fold into. Gated on
 `is_admin()`.
 
-#### Stage E — read site 13 before planning it
+#### ✅ Stage E — CLOSED 4 Oct by reading it, nothing built
+
+`provider-dashboard.tsx:789` was "unclassified, needs reading not guessing".
+Read: it is `handleInvite`, writing `stylist_invite`. **Never a fourth
+category — it is stage C, which makes the invite THREE sites rather than two.**
+
+#### ⚠️ Stage C corrected twice by measuring instead of remembering
+
+* **`notify_chat_counterparty` IS NOT NEEDED.** That site —
+  `chat/[sessionId].tsx` — was absorbed by stage B's client half, which
+  replaced its status update and its notification together. The stage C plan
+  listed it because the plan was written from an inventory snapshot taken
+  *before* stage B shipped. **A plan that is not re-measured describes the
+  product as it was when the plan was written.**
+* **The invite is three sites**, not two, per stage E above.
+
+#### ⚠️⚠️ A DEFERRED PIECE LOST ITS OWNER — stage A is not finished
+
+`admin/app/verification/page.tsx:207`, the verification **approval** notice,
+is still a client-side insert. 0077 deferred it in writing: *"The verification
+APPROVAL notice stays in the client until 0078."* **0078 then became stage B.**
+The promise pointed at a migration number, the number was used for something
+else, and nothing noticed — because the plan tracked stages while the promise
+tracked a filename.
+
+Found on 4 Oct by listing every remaining `from('notifications').insert` rather
+than by consulting the plan. **Five remain; 0081 covers four.** This is the
+fifth, and **stage F cannot close until it is moved**, because F's whole
+premise is that no client writes a cross-user notification.
+
+It is the hardest of the set: its body comes from `stylistApprovalBody(role,
+shops)`, which branches on role, on whether each shop is published, and on
+which fields are missing. `admin_decide_verification` already computes
+`_provider_shops_state`, so it is portable — it was always going to need its
+own migration, which is why it was deferred rather than that being wrong.
+
+#### Stage E — original note, kept so the plan's own drift is visible
 
 `mobile/.../provider-dashboard.tsx:789` targets `m.id` and is not session-bound.
 **Unclassified: it needs reading, not guessing.** It is one of the fifteen and
@@ -15434,6 +15470,24 @@ not a rule being followed*, and the gap between those two is the thing this
 entry is now about. The first instance deployed an edge function. The second
 cost two words. The difference between those outcomes was luck, not care —
 which is the same sentence this entry already contained before tonight.
+
+### A third instance, of a different kind: a timestamp without its zone
+
+Reporting the 151 deploy, I wrote *"still version 4, `updated_at` unchanged at
+00:36:42"* — correct, and in UTC — immediately beside a figure converted to
+local. Micky read the two together and they appeared to contradict: a version 4
+timestamp two minutes *after* version 5 landed.
+
+They reconcile. Both are genuine `updated_at` readings in UTC; `00:36:42` and
+`23:34:36` are twenty-three hours apart on the same day, not two minutes. **The
+fault was mine in the reporting:** a timestamp offered as evidence has to carry
+its zone, and that one was load-bearing for the claim that the failed deploy
+half-landed nothing.
+
+It is the second zone fault in two days — the first printed
+`--date=format-local` output with a `Z` suffix and nearly produced a fault
+report against correct code. *A time without an explicit, correct zone is not
+evidence.*
 
 ### And the general one
 
