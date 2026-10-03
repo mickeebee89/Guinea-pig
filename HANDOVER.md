@@ -1,6 +1,6 @@
 # Cavy — where things stand
 
-_Current picture, 24 September 2026. **This file says where we are; it is not a
+_Current picture, **3 October 2026**. **This file says where we are; it is not a
 record of how we got here.** For that, see `audit-records-vs-reality.md` and the
 per-item write-ups it links._
 
@@ -22,8 +22,8 @@ deletion, a model's own profile, postcodes and distance filtering, favourites,
 and name changes. **The site is live on Vercel and has been the live product
 since 14 Sep.**
 
-**Migrations `0000`–`0056` are applied**, `0009` superseded and must never be
-run. The ledger is the authority, not this line — which said `0030` until
+**Migrations `0000`–`0077` are applied**, `0009` superseded and must never be
+run. **`0078` is written and NOT applied** (see *In flight* below). The ledger is the authority, not this line — which said `0030` until
 24 Sep, twenty-six migrations out of date:
 
 ```bash
@@ -31,9 +31,77 @@ $env:SUPABASE_SERVICE_ROLE_KEY = '<service-role-key>'; node scripts/migration-st
 ```
 
 **A three-week audit closed on 4 Sep** with fourteen items. **It did not stay
-closed** — it is at 113 and still finding things, because each fix walks a
+closed** — it is at **147** and still finding things, because each fix walks a
 journey and journeys keep ending somewhere nobody had looked. Everything below
 is what it has left.
+
+---
+
+## ⚠️ In flight, 3 October 2026 — read this before starting anything
+
+**The one live hole: item 144.** `public.notifications`' INSERT policy is
+`with check (auth.uid() is not null)`. **Any signed-in account can write any
+notification to anyone**, and `notify_email` then sends that text as Cavy for
+eleven types — a phishing vector using the product's own verified sender.
+Verified from `pg_policies`, not inferred.
+
+It cannot be closed by tightening the policy, because **every client-side
+notification insert is cross-user**. It is being closed in stages, each one
+additive and safely applicable alone, with the policy last:
+
+| stage | what | state |
+|---|---|---|
+| A | fold notifications into the RPC that already decided — `create_session_with_consent`, `admin_decide_verification` (reject), `admin_decide_status_post` | ✅ **0077 applied, clients deployed** |
+| B | `transition_session` + `notify_session_transition` for accept / decline / complete | **0078 written, NOT applied. Client half NOT written — 8 sites** |
+| C | `invite_model_from_floor`, `notify_chat_counterparty` | not started |
+| D | `notify_as_admin` for the free-form admin message | not started |
+| E | `mobile/.../provider-dashboard.tsx:789` — unclassified, **needs reading not guessing** | not started |
+| F | tighten the INSERT policy | **last, and it makes B irreversible** |
+
+**Stage B's deploy order is the opposite of stage A's.** 0078 is inert — nothing
+calls it until the clients deploy — so applying it is free. The risk is all in
+the client deploy, and if it is wrong **no booking can be accepted, declined or
+completed.** Rollback is a Vercel revert, and that only works while stage F has
+not run.
+
+⚠️ **Stage B's client half must add a `transition_session` case to
+`site/lib/demo/rpc.ts`.** `demoRpc`'s default throws, so without it accept and
+decline break in demo mode — which is where the promo videos are recorded.
+
+### Waiting on Micky
+
+* **Apply `0078`** (checksum `0a2849e2…`), then its PREFLIGHT and verify blocks.
+* **Three rolled-back test blocks for item 147**, supplied in chat 3 Oct. They
+  settle whether either participant can rewrite a booking's `date`,
+  `start_time`, `price_pence` and `provider_id` in a plain UPDATE. ⚠️ A refusal
+  mentioning *overlap* on the date or provider tests is
+  `trg_reject_overlapping_session`, **not** an actor guard — inconclusive, not a
+  pass. `price_pence` is the clean signal, since no trigger covers it.
+
+### Item 147 — inferred, not yet tested
+
+`authenticated` **and** `anon` hold table-wide UPDATE on all 26 columns of
+`public.sessions`. The only narrowing is the `participants can update sessions`
+policy. `trg_enforce_session_status` is `BEFORE UPDATE OF status`, so it never
+fires on an update that leaves status alone.
+
+**The inventory is done and it is unambiguous: all eight client UPDATE sites set
+exactly one column, `status`.** So the fix is
+`grant update (status) on public.sessions to authenticated` plus revoking
+`anon` — which is behaviour-neutral, since no UPDATE policy names anon, making
+it latent rather than live. Not written yet: the tests decide the wording, and
+0070's comment about *"the row can never say it did not happen without saying
+who said so"* gets corrected in the same migration, because
+`not_held_provider_at` is writable without touching status.
+
+### Recording promo videos
+
+`site-demo-label` on port 3100 (`.claude/launch.json`), with `DEMO_MODE=1` and
+`DEMO_LABEL=1`. **Restart the server before every take** — the demo store is
+in-memory and mutates across runs, so a second recording starts from the first
+one's end state. `notify_favourites_of_availability` has no demo case since
+0075, so the "new times" notification no longer appears in demo; the flow still
+works because the caller catches it.
 
 ---
 
