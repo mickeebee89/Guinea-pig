@@ -115,8 +115,24 @@ jobs:
           echo "live:     $live ($branch)"
           echo "this run: $head (on $GITHUB_EVENT_NAME)"
 
+          # ⚠️ EVERY EXIT SAYS WHICH BRANCH IT TOOK, AS A ::notice::.
+          # A passing run used to be indistinguishable from any other passing
+          # run: "up to date", "superseded by a later push" and "still inside
+          # the grace window" all exited 0 and printed a plain echo, which lives
+          # only in the run log. Reading a log needs an authenticated gh, and on
+          # 3 Oct that turned "did the superseded guard actually fire?" into a
+          # question nobody could answer — about a guard added the day before
+          # precisely to prevent a false alarm.
+          #
+          # ::notice:: becomes a run annotation, which for a public repository is
+          # readable without a token. So the branch taken is now part of the
+          # run's own record rather than buried in its output.
+          #
+          # This is item 142's lesson applied to the checker itself: turn the
+          # thing you need to know into a displayed value, rather than hoping
+          # somebody can reconstruct it later.
           if [ "$live" = "$head" ]; then
-            echo "Up to date."
+            echo "::notice title=live-drift::Up to date — the live site is serving $head."
             exit 0
           fi
 
@@ -137,8 +153,7 @@ jobs:
           # arrives with it.
           ahead=$(git rev-list --count "$head..$live" 2>/dev/null || echo 0)
           if [ "$ahead" -gt 0 ]; then
-            echo "Live is $ahead commit(s) NEWER than this run's commit: a later push has"
-            echo "already deployed past it. This run's question is stale, not failing."
+            echo "::notice title=live-drift::Superseded — live is $ahead commit(s) NEWER than this run's $head, so a later push has already deployed past it. Not failing."
             exit 0
           fi
 
@@ -150,7 +165,7 @@ jobs:
           # guard only ever bites on a scheduled run.
           age=$(( $(date +%s) - $(git log -1 --format=%ct HEAD) ))
           if [ "$age" -lt 1200 ]; then
-            echo "main is only $((age / 60))m old — a deploy is probably still running. Not failing."
+            echo "::notice title=live-drift::Inside the grace window — main's newest commit is only $((age / 60))m old, so a deploy is probably still running. Not failing."
             exit 0
           fi
 
