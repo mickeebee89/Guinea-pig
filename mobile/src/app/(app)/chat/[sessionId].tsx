@@ -358,18 +358,17 @@ export default function ChatScreen() {
             try {
               // Completing is what unlocks the model's ability to review, so a
               // silent refusal here leaves them permanently unable to leave one.
+              // ⚠️ ONE RPC SINCE 0078 (item 144), and this site carried a THIRD
+              // wording for the same event — 'Your stylist has marked the
+              // treatment as complete.', different again from both sessions.tsx
+              // and the web. It was missed by the six-copy diff that scoped
+              // 0078, because that diff was built from the sites that notify
+              // after a status UPDATE and this one reads differently. Found by
+              // searching the table name instead. The copy is in the database
+              // now, so there is one.
               await mustWrite(
-                supabase.from('sessions').update({ status: 'completed' }).eq('id', sessionId),
+                supabase.rpc('transition_session', { p_session_id: sessionId, p_to: 'completed' }),
                 'mark session complete')
-              if (chat?.model_user_id) {
-                tryWrite(supabase.from('notifications').insert({
-                  user_id:    chat.model_user_id,
-                  type:       'session_completed',
-                  title:      'Treatment completed ✓',
-                  body:       'Your stylist has marked the treatment as complete.',
-                  session_id: sessionId,
-                }), 'complete notification')
-              }
               await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
               setChat(prev => prev ? { ...prev, status: 'completed' } : prev)
             } catch {

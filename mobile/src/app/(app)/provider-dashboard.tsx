@@ -664,19 +664,17 @@ export default function ProviderDashboardScreen() {
       // accept on an already-cancelled session, or suspension policies blocking
       // a suspended provider. Without this the model gets pushed "accepted!"
       // for a booking that never changed.
+      // ⚠️ ONE RPC SINCE 0078 (item 144). The notification was a separate
+      // insert addressed to the MODEL, which only worked because the
+      // notifications INSERT policy lets any signed-in account write to anyone.
+      // transition_session does both in one transaction, so the status can no
+      // longer move while the telling fails into a console.error. The copy is
+      // in the database, which is also why formatSessionDate is no longer used
+      // here — it rendered 'Fri 3 Oct' where web rendered 'Friday 3 October',
+      // and both reached inboxes.
       await mustWrite(
-        supabase.from('sessions').update({ status: 'accepted' }).eq('id', s.id),
+        supabase.rpc('transition_session', { p_session_id: s.id, p_to: 'accepted' }),
         'accept session')
-      try {
-        const { error } = await supabase.from('notifications').insert({
-          user_id: s.model_user_id,
-          type: 'session_accepted',
-          title: 'Treatment accepted! 🎉',
-          body: `Your booking for ${formatSessionDate(s.date)} has been confirmed.`,
-          session_id: s.id,
-        })
-        if (error) console.error('accept session notification failed:', error)
-      } catch (e) { console.error('accept session notification failed:', e) }
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
       setPendingSessions(prev => prev.filter(x => x.id !== s.id))
       if (s.date >= todayKey()) {
@@ -704,19 +702,10 @@ export default function ProviderDashboardScreen() {
             await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
             setProcessing(s.id, true)
             try {
+              // One RPC since 0078 (item 144) — see the accept path above.
               await mustWrite(
-                supabase.from('sessions').update({ status: 'declined' }).eq('id', s.id),
+                supabase.rpc('transition_session', { p_session_id: s.id, p_to: 'declined' }),
                 'decline session')
-              try {
-                const { error } = await supabase.from('notifications').insert({
-                  user_id: s.model_user_id,
-                  type: 'session_declined',
-                  title: 'Treatment update',
-                  body: `Your booking for ${formatSessionDate(s.date)} was not confirmed.`,
-                  session_id: s.id,
-                })
-                if (error) console.error('decline session notification failed:', error)
-              } catch (e) { console.error('decline session notification failed:', e) }
               setPendingSessions(prev => prev.filter(x => x.id !== s.id))
             } catch {
               Alert.alert('Error', 'Could not decline treatment. Please try again.')

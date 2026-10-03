@@ -26,78 +26,84 @@ import { BOOKINGS_PATH } from '@/lib/routes'
 
 type Result = { ok: true } | { ok: false; error: string }
 
-const fmtDate = (iso: string) =>
-  new Date(iso + 'T00:00:00').toLocaleDateString('en-GB', {
-    weekday: 'long', day: 'numeric', month: 'long',
-  })
+// fmtDate was deleted with the notification copy it served (0078). The date
+// is rendered in SQL now — to_char(d, 'FMDay FMDD FMMonth') — so that web and
+// mobile cannot drift again. They already had: 'Friday 3 October' here,
+// 'Fri 3 Oct' on mobile, both reaching inboxes.
 
+/**
+ * Accept, decline or complete a booking.
+ *
+ * ⚠️ ONE RPC, BECAUSE THE TRANSITION AND THE TELLING ARE ONE THING (0078,
+ * item 144). This used to be a table UPDATE followed by a best-effort
+ * notification insert, and both halves were wrong in their own way:
+ *
+ *   * the insert was addressed to somebody else, which only worked because
+ *     the notifications INSERT policy lets any signed-in account write a
+ *     notification to anyone — the hole item 144 exists to close; and
+ *   * "best-effort, deliberately" meant a booking could be accepted while the
+ *     model was never told, with a console warning nobody reads.
+ *
+ * Now `transition_session` does both in one transaction. If the trigger
+ * refuses, nothing is written and nothing is announced.
+ *
+ * ⚠️ THE COPY MOVED INTO THE DATABASE and is NOT duplicated here. It existed
+ * six times across two clients and had already drifted three ways — the
+ * completed title, the review prompt, and the date format, which rendered
+ * "Friday 3 October" on web and "Fri 3 Oct" on mobile while both reached
+ * inboxes. Changing it is now a migration. That is the cost and the point.
+ *
+ * ⚠️ A DOUBLE-CLICK SENDS ONE EMAIL, NOT TWO. The status trigger permits a
+ * no-op update, so the old code notified on every click. The RPC returns
+ * `changed: false` for the second one and announces nothing — demonstrated,
+ * not reasoned: notices went 0 -> 1 -> 1 across two identical calls.
+ */
 async function transition(
   sessionId: string,
   to: 'accepted' | 'declined' | 'completed',
-  notify: { type: string; title: string; body: (date: string) => string },
 ): Promise<Result> {
   await requireUser()
   const supabase = await createSupabaseServerClient()
 
-  const { data, error } = await supabase
-    .from('sessions')
-    .update({ status: to })
-    .eq('id', sessionId)
-    .select('id, model_user_id, date')
+  const { data, error } = await supabase.rpc('transition_session', {
+    p_session_id: sessionId,
+    p_to: to,
+  })
 
   if (error) {
+    // The trigger's own refusals land here — "Only the provider can set a
+    // session to accepted" among them. Verified: the model is refused 42501.
     console.error(`[sessions] ${to} failed`, error)
     return { ok: false, error: 'That didn’t go through. Nothing has changed.' }
   }
 
-  const rows = (data ?? []) as { id: string; model_user_id: string; date: string }[]
-  if (rows.length === 0) {
-    // Zero rows means the guard or RLS refused it — most often because the
-    // booking already moved on. Do NOT notify.
-    console.warn(`[sessions] ${to} matched no rows`, sessionId)
+  const res = (data ?? {}) as { ok?: boolean; changed?: boolean; reason?: string }
+
+  if (!res.ok) {
+    // `not_found_or_not_yours` is deliberately not distinguished for the user:
+    // RLS hides a booking you are not party to, so the function cannot tell
+    // "gone" from "not yours" and neither should the message.
+    console.warn(`[sessions] ${to} refused`, { sessionId, reason: res.reason })
     return { ok: false, error: 'This booking has already changed. Reload to see where it is now.' }
   }
 
-  const row = rows[0]
-  // Best-effort, deliberately: the status change is the thing that matters and
-  // a failed notification must not undo it or report failure to the stylist.
-  const { error: noteErr } = await supabase.from('notifications').insert({
-    user_id: row.model_user_id,
-    type: notify.type,
-    title: notify.title,
-    body: notify.body(row.date),
-    session_id: row.id,
-  })
-  if (noteErr) console.warn(`[sessions] ${to} notification failed`, noteErr)
-
+  // changed:false is the no-op — the booking is already what was asked for.
+  // Not an error, and nothing was announced.
   revalidatePath(BOOKINGS_PATH)
   revalidatePath('/dashboard')
   return { ok: true }
 }
 
 export async function acceptSession(sessionId: string): Promise<Result> {
-  return transition(sessionId, 'accepted', {
-    type: 'session_accepted',
-    title: 'Treatment accepted! 🎉',
-    body: d => `Your booking for ${fmtDate(d)} has been confirmed.`,
-  })
+  return transition(sessionId, 'accepted')
 }
 
 export async function declineSession(sessionId: string): Promise<Result> {
-  return transition(sessionId, 'declined', {
-    type: 'session_declined',
-    // Mobile's wording, kept: it does not say "declined" to the model.
-    title: 'Treatment update',
-    body: d => `Your booking for ${fmtDate(d)} was not confirmed.`,
-  })
+  return transition(sessionId, 'declined')
 }
 
 export async function completeSession(sessionId: string): Promise<Result> {
-  return transition(sessionId, 'completed', {
-    type: 'session_completed',
-    title: 'Treatment complete',
-    body: d => `Your treatment on ${fmtDate(d)} is marked complete. Leave a review?`,
-  })
+  return transition(sessionId, 'completed')
 }
 
 /**

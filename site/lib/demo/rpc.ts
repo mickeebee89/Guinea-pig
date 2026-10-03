@@ -15,6 +15,30 @@ export function demoRpc(name: string, args: Row, store: DemoStore, user: DemoUse
     case 'bio_publish_problem':
       return null
 
+    /**
+     * ⚠️ WITHOUT THIS, ACCEPT AND DECLINE BREAK ON CAMERA. Since 0078 the web
+     * calls transition_session instead of updating sessions directly, and
+     * demoRpc's default THROWS on an unknown name — so a recorded walkthrough
+     * would end on an error at the moment the stylist accepts. Same class as
+     * the wizard fault below.
+     *
+     * It absorbs the no-op the way the real function does, because the
+     * recording clicks once and a stray second click should not look different.
+     *
+     * It writes NO notification, matching cancel_booking above and
+     * report_not_held below: demo RPCs do not notify, and fixtures seed the
+     * notifications a walkthrough needs. Not a second implementation of the
+     * rule — nothing here is authoritative about anything.
+     */
+    case 'transition_session': {
+      const s = store.tables.sessions.find(r => r.id === args.p_session_id)
+      if (!s) return { ok: false, changed: false, reason: 'not_found_or_not_yours' }
+      const to = args.p_to as string
+      if (s.status === to) return { ok: true, changed: false, status: s.status }
+      s.status = to
+      return { ok: true, changed: true, status: to }
+    }
+
     case 'cancel_booking': {
       const s = store.tables.sessions.find(r => r.id === args.p_session_id)
       if (!s) throw new Error('cancel_booking: booking not found')
