@@ -15709,7 +15709,31 @@ is 0070's neutrality rule stated from the reader's side rather than the
 writer's. Four words, characterises nobody, leaves both the action and the
 attribution to the body.
 
-### Why it is raised rather than done now
+### ✅ DEPLOYED 3 Oct 2026, 23:34 UTC — and only ONE of the three headings is provable
+
+send-email version 5, `verify_jwt` still false, and the downloaded deployed
+source diffs **clean** against the repo. The three headings are present in the
+deployed copy, not only in the repo.
+
+⚠️ **The first deploy attempt FAILED** — HTTP 500, `errorEventId b5ccf50f…`,
+exit 1. Checked before retrying: still version 4, `updated_at` unchanged, so it
+was a true no-op and email kept working on the old code. The retry succeeded.
+*A failed deploy is not automatically harmless, and the version is how you know.*
+
+### ⚠️ The proof status of the three, which is not the same for all three
+
+| heading | status |
+|---|---|
+| `admin_suspension` — *You can't book or apply* | **Provable on demand.** Suspend the hotmail test account from the console, read the email, reinstate. Micky's next action on this item |
+| `session_expired` — *No reply came in time* | **SHIPS UNPROVEN.** Needs a pending application to pass its appointment time unanswered |
+| `session_not_held` — *Nothing is settled yet* | **SHIPS UNPROVEN.** Needs an accepted booking past its time, then one party reporting it |
+
+**Recorded as unproven rather than as covered.** One proven heading is evidence
+about one heading — believing the other two are fine because the first was is
+the generalisation this record keeps catching. Both will be proven by the first
+real one.
+
+### Why it was raised rather than done sooner
 
 It is an edge-function deploy, independent of stage F and of any migration — so
 it *could* go in at any time. It is held back because it carries member-facing

@@ -65,7 +65,24 @@ _This file is read automatically at the start of every Claude Code session. It h
   the public website.
 - **Run mobile:** `cd C:\Users\micky\Documents\Guinea-pig\mobile` then `npx expo start -c --dev-client`.
 - **Deploy an edge function:** from repo ROOT, `npx supabase functions deploy <name>` (the "Docker not running" warning is harmless).
-  **⚠️ `send-push`, `stripe-webhook` and `waitlist-signup` must add `--no-verify-jwt`** — each says so in its own header, and there is no `supabase/config.toml` to remember it. Deployed without it, the gateway demands a JWT their callers never send (the push triggers via `pg_net`, Stripe, anonymous signups), and they fail with nothing on screen. `purge-selfies`'s header does not say either way — check before redeploying it.
+  **⚠️ THE FLAG IS NOT OPTIONAL AND IT IS NOT A STYLE CHOICE. There is no `supabase/config.toml`** (confirmed by `ls` and a repo-wide `find`, 3 Oct 2026), so nothing declares these settings: **the posture of a function is decided by whoever types the deploy command.** Omit `--no-verify-jwt` on a function that needs it and the gateway demands a JWT its caller never sends — it fails with **nothing on screen**, which is the hardest failure in this system to notice (item 153).
+
+  **The table below is a lookup, not a question.** Read from `npx supabase functions list` on 3 Oct 2026 at 23:34 UTC:
+
+  | function | `verify_jwt` | deploy flag | why |
+  |---|---|---|---|
+  | `send-email` | **false** | **`--no-verify-jwt`** | called by the `notify_email` trigger via `pg_net`, carrying `x-email-secret` — not a JWT |
+  | `send-push` | **false** | **`--no-verify-jwt`** | same shape: a trigger through `pg_net` with a shared secret |
+  | `stripe-webhook` | **false** | **`--no-verify-jwt`** | Stripe calls it; it authenticates by signature, not JWT |
+  | `stripe-payment` | true | *(none)* | called by a signed-in member from the app |
+  | `delete-account` | true | *(none)* | called by a signed-in member from Settings |
+  | `purge-selfies` | **true** | *(none)* | ~~header does not say either way~~ **answered 3 Oct 2026: it is `true`.** Previously a stated unknown in this file |
+
+  ⚠️ **A FALSE `verify_jwt` IS NOT AN OPEN ENDPOINT, PROVIDED THE FUNCTION CHECKS ITS OWN SECRET.** `send-email` does, at line 349 of the deployed source — `x-email-secret` compared to `EMAIL_HOOK_SECRET`, 403 on mismatch, 500 if unconfigured, and the check sits **before** the work rather than after it. If you ever add a `--no-verify-jwt` function, that gate is the thing that makes the posture defensible rather than merely intended.
+
+  ⚠️ **`waitlist-signup` IS NOT DEPLOYED.** This file instructed `--no-verify-jwt` for it; it is not among the six functions that exist. The waitlist route was removed on 22 Sep 2026 (item 71) and the function went with it. Kept visible rather than deleted so the old instruction is recognisable in older notes.
+
+  **After any deploy, prove it landed** — `npx supabase functions download <name>` and diff against the repo copy, plus `functions list` for the version and the flag. The version proves the deploy; the diff proves *what* deployed; the flag proves the posture did not move. A deploy is not done until that diff is clean (item 146).
 
 ## Key identifiers
 
