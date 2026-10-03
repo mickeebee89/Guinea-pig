@@ -15689,11 +15689,47 @@ copy for three types, and folding that into item 150's migration would mix a
 copy change into a verify written for a different one. **Do it immediately after
 150, not inside it.**
 
-⚠️ And a `copyFor` case is still a sentence, not a mechanism. The durable
-version is a check that fails when a type is in `notify_email`'s allowlist and
-absent from `copyFor` — the allowlist is in SQL and `copyFor` is in TypeScript,
-so that is a cross-language check of the kind `check-status-coverage.mjs`
-already does for statuses. Worth adding with this.
+⚠️ And a `copyFor` case is still a sentence, not a mechanism.
+
+### ⚠️ THE CHECK MUST COVER THREE LISTS, NOT TWO
+
+I first scoped it as "the allowlist against `copyFor`". That is wrong. **The
+eleven types are written out by hand in THREE places:**
+
+1. `notify_email`'s `WHEN` clause — decides whether an email is ATTEMPTED
+2. `run_email_reconcile`'s allowlist — decides whether a missing one is NOTICED
+3. `copyFor` in `send-email` — decides what the member SEES
+
+**Two of the three pairings have already drifted, and the files prove it:**
+
+* `admin_suspension` was in the trigger and **not** in the reconciler from 0061
+  to 0068 — emailed and never checked, across seven migrations. That is item
+  135.
+* `session_not_held` is in the trigger **and** the reconciler and has **no
+  `copyFor` case today** — which is precisely how it acquired an
+  attacker-controlled heading this week (item 144's default branch).
+
+⚠️ **And the only thing holding them together is a comment.**
+`run_email_reconcile` says:
+
+> MUST MATCH the notify_email TRIGGER'S WHEN CLAUSE. A type in one and not the
+> other is emailed and never checked — where admin_suspension sat from 0061 to
+> 0068.
+
+**That comment was already there when `admin_suspension` drifted.** It is the
+same finding as item 143's *"don't drop it"*, and the same one as item 146,
+where a rule I wrote was broken two commits later: *a sentence describing a
+property does not enforce it.*
+
+So: **one check, reading all three, failing when any type is in one and not the
+others.** The two SQL lists come from the **live definitions**, not the repo
+files — same reason as everywhere else in this record. `copyFor` is parsed from
+the TypeScript, which makes it cross-language, like `check-status-coverage.mjs`
+is for statuses.
+
+**Leave the MUST MATCH comment, but point it at the check rather than at the
+reader's memory.** The comment then says where the enforcement is, instead of
+being the enforcement.
 
 ---
 
@@ -15812,15 +15848,62 @@ the admin dashboard tile shows it.
 2. **The window is `p_hours`, default 24, run nightly at 04:10** — contiguous,
    so no gap, but anything older than the window at the next run is invisible.
 
-⚠️ **One qualification on the evidence.** That logic was read from 0069's text.
-0073 later rewrote the function to widen the type allowlist, so the LIVE body is
-0073's. The counting is believed unchanged — 0073's stated purpose was the type
-list — but this is repo-read, not live-read, which is the distinction this
-record keeps insisting on. One line settles it:
+✅ **LIVE-READ AND CONFIRMED, 3 Oct 2026.** The qualification above was that
+this logic came from 0069's text while 0073 later rewrote the function. The live
+definition was read and matches exactly: `no_attempt = sum(case when tries = 0
+then 1 else 0 end)` over a `LEFT JOIN` on `email_sends`. **Observed, not
+inferred.**
+
+Worth keeping the fact that it was checked: the qualification came back clean,
+which is the outcome that makes raising it look unnecessary in hindsight and is
+the reason to raise it anyway.
+
+---
+
+## 154. THE ELEVEN TYPES ARE HAND-MAINTAINED IN THREE PLACES BECAUSE THERE IS NOWHERE FOR THE LIST TO LIVE
+### Raised 3 Oct 2026. NOT STARTED, and deliberately bigger than item 151.
+
+Item 151 adds a check that the three copies of the emailable-type list agree.
+**A check catches drift; it does not remove the reason drift happens.** There
+are three hand-maintained copies because the list has no home.
+
+### What it would look like
+
+One source — a table, or a `stable` function returning `text[]`:
 
 ```sql
-select pg_get_functiondef('public.run_email_reconcile(integer)'::regprocedure);
+create function public.emailable_notification_types() returns text[] ...
 ```
+
+Then `notify_email`'s `WHEN` clause and `run_email_reconcile` both read it, and
+**only `copyFor` remains a copy — one pairing to check instead of three.**
+
+### What it would cost, which is why it is raised and not done
+
+* **It touches a live trigger.** `notify_email` must be dropped and recreated to
+  change its `WHEN` clause. Get that wrong and **every notification email in the
+  product stops, silently** — no error, no failed run, just nothing arriving.
+  That is the 0075 failure mode with a far larger blast radius, and item 153 has
+  just established that a silent absence of email is the hardest thing here to
+  notice.
+* **A `WHEN` clause calling a function is evaluated per row.** Trivial at this
+  volume, but it moves a constant-time comparison to a function call on every
+  notification insert, and that is a real change to a hot path.
+* **It does not reach `copyFor`.** TypeScript cannot read a SQL function at
+  build time, so the third copy stays a copy regardless — 151's check is still
+  needed afterwards, just narrower.
+* **It would want its own verify** proving that all eleven types still fire the
+  trigger after the rewrite, which means exercising the trigger rather than
+  reading its definition.
+
+### Why not now
+
+Stage F of item 144 is still pending, and 151 is unstarted. **Dropping and
+recreating the trigger that sends every email in the product, while the policy
+work that depends on that trigger's behaviour is half-finished, is the kind of
+sequencing this record has repeatedly found to be the actual fault.** Do 151's
+check first: it makes the drift visible immediately and costs nothing live. This
+can follow once stage F has landed and settled.
 
 ---
 
@@ -15849,6 +15932,7 @@ select pg_get_functiondef('public.run_email_reconcile(integer)'::regprocedure);
 | 137 | ✅ **CLOSED 1 Oct.** A declined application vanished from both clients — the model's only trace was a notification she can delete. Fourth value this one allowlist has needed. Fixed on web; mobile's sessions.tsx still hides `declined` and `expired` | No while mobile is unreleased |
 | 139 | ✅ **CLOSED 2 Oct.** 0070's verify picked `ff06d568` with an unordered `limit 1` — a provider AND an admin — so the guard bypassed and the block reported a hole that did not exist. The inverse of 0027: a rule for everyone except admins, tested as an admin. Four blocks audited; every one whose actor matters now asserts its own premise | No |
 | 140 | ✅ **CLOSED AND VERIFIED LIVE 2 Oct.** 0067 gave `session_expiry_runs` RLS with no policy AND revoked the table grant, so the tile built to watch it could not read it. Three run-log tables, one contract, three access shapes. The tile reported *"could not read"* rather than *"Never"*, which is what made it diagnosable | No |
+| 154 | ⚠️ **RAISED 3 Oct, not started.** The eleven emailable types are hand-maintained in **three** places because the list has nowhere to live. One `stable` function could feed the trigger and the reconciler, leaving only `copyFor` a copy. ⚠️ Costs: it drops and recreates the trigger that sends **every** email, where a mistake stops all mail **silently** (item 153 just showed that is the hardest failure here to see); it moves a constant comparison to a per-row function call; and it cannot reach `copyFor` anyway. **Do 151's check first** — visible immediately, costs nothing live | No |
 | 153 | ⚠️ **RAISED 3 Oct.** `net.http_request_queue` is **unlogged**, so a crash or restart **TRUNCATES it and silently discards queued email**. The notification row survives, so the member sees the in-app notice, never gets the mail, and no error exists anywhere. Item 136 from the other end: the only thing that would notice is `run_email_reconcile`, which had never completed since 22 Sep. ✅ Checked that it WOULD catch it — `no_attempt` counts notifications with ZERO `email_sends` rows, not failures. It reports and never resends | No, but mail is lost silently |
 | 152 | ✅ **CLOSED 3 Oct.** A rolled-back transaction CANNOT deliver an email. Closed on the SIGNATURE, not the implementation: `net.wake()` is `LANGUAGE c` and unreadable, but **takes no arguments**, so the queue row is the only channel — and an uncommitted row is invisible to a background worker under MVCC. ⚠️ The four migrations asserting this cannot be corrected in place: their comments are above the footer and checksum-locked | No |
 | 151 | ⚠️ **RAISED 3 Oct, not started.** `copyFor()`'s default is `heading: title || …`, so **any emailed type without a `case` hands its heading to whoever wrote the row** — today `admin_suspension`, `session_expired`, `session_not_held`, one of which was created this week. A pattern, not three instances. ⚠️ Hardening the default alone would degrade three real emails, so the three cases must be added first; proposed copy in the item, **needs Micky's word**. Plus a cross-language check, since a `case` is a sentence not a mechanism | No |
