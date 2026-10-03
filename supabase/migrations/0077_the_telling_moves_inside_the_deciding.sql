@@ -439,12 +439,30 @@ begin
 end
 $function$;
 
+-- ⚠️ service_role IS RE-GRANTED EXPLICITLY, and that is not belt-and-braces.
+-- The dropped function's ACL had execute for BOTH authenticated and
+-- service_role, with anon already revoked — which is the signature of Supabase's
+-- ALTER DEFAULT PRIVILEGES granting all three at creation and a later migration
+-- removing anon alone. Those are real ACL entries, and **a DROP takes them with
+-- it.** BYPASSRLS does not help here: function EXECUTE is an ordinary privilege
+-- check, not a row rule, so the service role has no implicit way back in.
+--
+-- Nothing is known to call this as the service role today. It is re-granted
+-- anyway, because the alternative is discovering in a month that something
+-- which used to work silently cannot — and restoring a privilege nobody
+-- recorded is far harder than preserving one. Spotted by Micky reading the
+-- preflight, which is the only reason it was asked at all.
+--
+-- The revoke stays ahead of the grants: a newly created function picks up
+-- default privileges again, anon included, so this removes that before the
+-- two intended grants go back on.
 revoke all on function public.admin_decide_status_post(uuid, text, text, text) from public, anon;
 grant execute on function public.admin_decide_status_post(uuid, text, text, text) to authenticated;
+grant execute on function public.admin_decide_status_post(uuid, text, text, text) to service_role;
 
 -- MIGRATION FOOTER
 insert into public.schema_migrations (version, name, checksum)
-values ('0077', 'the_telling_moves_inside_the_deciding', '77582c6b87f0d4a7ba441fceb1293a997bd2dc0ab81d4134be0a3b0911bbb043');
+values ('0077', 'the_telling_moves_inside_the_deciding', '58cba9e3d5c5f671a467c4a5958fc29af0a5e5a7151a05ab5f8e869ae8eda45f');
 
 commit;
 
@@ -467,15 +485,23 @@ commit;
 --   relies on the booking function being INVOKER, which is why the notice needs
 --   its own definer helper.
 --
---   -- (ii) ⚠️ THE GRANTS ON THE FUNCTION BEING DROPPED. A drop takes its grants
---   --      with it, and this migration re-grants only `authenticated`. If this
---   --      returns anything else, tell me BEFORE applying.
---   select r.rolname, has_function_privilege(r.rolname,
---            'public.admin_decide_status_post(uuid,text,text)', 'execute') as can_execute
---     from pg_roles r
---    where r.rolname in ('anon','authenticated','service_role','public');
+--   -- (ii) ⚠️ THE GRANTS ON THE FUNCTION BEING DROPPED. A drop takes its ACL
+--   --      with it, so read the ACL ITSELF rather than asking role by role.
+--   --
+--   --      An earlier version of this block filtered pg_roles for 'public',
+--   --      which can NEVER match: PUBLIC is a pseudo-role with no pg_roles row,
+--   --      so the question went unasked and read as "not listed". Asking the
+--   --      catalogue for the grant is the fix; asking it per role was the bug.
+--   select p.proname,
+--          pg_get_function_identity_arguments(p.oid) as args,
+--          coalesce(p.proacl::text, '(null = no grants ever changed; defaults apply)') as acl
+--     from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+--    where n.nspname = 'public' and p.proname = 'admin_decide_status_post';
 --
---   Expect authenticated true; anon and public false.
+--   Each entry reads grantee=privileges/grantor. `service_role=X/postgres` is an
+--   explicit grant the drop destroys; an entry starting `=X/` is PUBLIC.
+--   Expect authenticated and service_role present, anon absent — which is what
+--   this migration restores. Anything else, stop and say so before applying.
 -- ===========================================================================
 --
 -- ── VERIFY ──────────────────────────────────────────────────────────────
