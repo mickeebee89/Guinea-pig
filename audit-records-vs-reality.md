@@ -15723,9 +15723,104 @@ If the body inserts into a table, the claim is proven and all four comments
 should say so with that evidence. If it does anything else, three files are
 wrong about a safety property. **Either way, one wording across all four.**
 
-Until then the practical mitigation stands and is better than the claim: point
-the test at an account that is safe to email, which removes the exposure rather
-than resolving the uncertainty.
+### ✅ CLOSED 3 Oct 2026 — and the shape of the argument is the useful part
+
+**We could not read the implementation, so we closed it on the signature.**
+
+* `net.http_request_queue` is `relkind = r`, `relpersistence = u` — an ordinary
+  **unlogged** table. Unlogged is still fully transactional; it only fails to
+  survive a crash. So the rollback argument holds on the table side.
+* `net.wake()` is `LANGUAGE c`, `$libdir/pg_net`, so its body cannot be read.
+  **It does not need to be. It takes NO ARGUMENTS**, so it cannot convey the
+  request to the worker — the queue row is the only channel.
+* That row is an uncommitted insert, and a background worker reads through
+  normal MVCC and cannot see another backend's uncommitted data.
+
+**Therefore a rolled-back transaction cannot deliver an email, whatever
+`wake()` does when it fires.** Observed, not inferred.
+
+*An unreadable function with no parameters cannot carry a payload.* That is a
+stronger result than reading the C would have given, because it does not depend
+on the implementation staying the same.
+
+### ⚠️ The four files CANNOT be corrected in place
+
+The ask was to make 0039, 0044 and 0045 carry this evidence and upgrade 0042's
+label. **They are applied migrations, and their comments sit above
+`-- MIGRATION FOOTER`, so editing them changes their checksums and breaks the
+ledger against what the database recorded.**
+
+So the evidence lives here, and this entry is the correction. That is a general
+property worth stating once: **an applied migration's prose cannot be fixed, so
+a claim that turns out wrong in one can only be corrected somewhere else.**
+Which is a large part of what this record is for.
+
+The practical mitigation stands regardless and is better than the claim ever
+was: point the test at an account that is safe to email, which removes the
+exposure rather than resolving the uncertainty.
+
+---
+
+## 153. THE EMAIL QUEUE IS UNLOGGED, SO A CRASH SILENTLY DISCARDS QUEUED MAIL
+### Raised 3 Oct 2026, out of item 152's answer rather than out of a search.
+
+`net.http_request_queue` is `relpersistence = u`. **An unlogged table is
+TRUNCATED on crash recovery.** So a database crash or restart discards every
+email queued and not yet dispatched.
+
+**And nothing raises.** `public.notifications` is a normal logged table, so the
+notification row survives — the member sees the in-app notice and never gets the
+mail. There is no error anywhere to find, in any log, because nothing failed:
+the send simply never happened.
+
+### It is item 136 from the other end
+
+This is exactly what `run_email_reconcile` exists to catch. And item 136 found
+that job **had never once completed since 22 September** — it raised 42P01 on
+every call, and the failures landed in `cron.job_run_details`, which nothing
+reads. 0069 fixed it this week.
+
+**So the queue can lose mail by design, and for nine days the only mechanism
+that would have noticed was itself broken.** Two halves of one gap, found from
+opposite directions a day apart.
+
+### ⚠️ The reconciler is the COMPENSATING CONTROL for an unlogged queue
+
+Written down so that if anyone later wonders whether that nightly job earns its
+place, **the answer is in pg_net's storage model and not in anyone's
+judgement.** Delete it and the product has no way to know that a restart ate a
+day's email.
+
+### Would it actually catch this? YES — checked, because it matters
+
+The worry was that it might only look at sends that errored. It does not:
+
+```sql
+tries      = count(s.id)      -- LEFT JOIN public.email_sends
+no_attempt = sum(case when tries = 0 then 1 else 0 end)
+```
+
+`no_attempt` counts emailable notifications with **zero** `email_sends` rows,
+which is precisely the truncation case — the send function never ran, so it
+wrote no row of any status. A truncated queue surfaces as `no_attempt > 0`, and
+the admin dashboard tile shows it.
+
+**Two limits, both real:**
+
+1. **It reports; it never resends** (0047's design). So catching it means a
+   person must act. The mail is gone either way.
+2. **The window is `p_hours`, default 24, run nightly at 04:10** — contiguous,
+   so no gap, but anything older than the window at the next run is invisible.
+
+⚠️ **One qualification on the evidence.** That logic was read from 0069's text.
+0073 later rewrote the function to widen the type allowlist, so the LIVE body is
+0073's. The counting is believed unchanged — 0073's stated purpose was the type
+list — but this is repo-read, not live-read, which is the distinction this
+record keeps insisting on. One line settles it:
+
+```sql
+select pg_get_functiondef('public.run_email_reconcile(integer)'::regprocedure);
+```
 
 ---
 
@@ -15754,7 +15849,8 @@ than resolving the uncertainty.
 | 137 | ✅ **CLOSED 1 Oct.** A declined application vanished from both clients — the model's only trace was a notification she can delete. Fourth value this one allowlist has needed. Fixed on web; mobile's sessions.tsx still hides `declined` and `expired` | No while mobile is unreleased |
 | 139 | ✅ **CLOSED 2 Oct.** 0070's verify picked `ff06d568` with an unordered `limit 1` — a provider AND an admin — so the guard bypassed and the block reported a hole that did not exist. The inverse of 0027: a rule for everyone except admins, tested as an admin. Four blocks audited; every one whose actor matters now asserts its own premise | No |
 | 140 | ✅ **CLOSED AND VERIFIED LIVE 2 Oct.** 0067 gave `session_expiry_runs` RLS with no policy AND revoked the table grant, so the tile built to watch it could not read it. Three run-log tables, one contract, three access shapes. The tile reported *"could not read"* rather than *"Never"*, which is what made it diagnosable | No |
-| 152 | ⚠️ **RAISED 3 Oct, not started.** *"queued by pg_net and only sent if this commits"* appears as a FACT in 0039, 0044 and 0045, and as an explicit INFERENCE in 0042. Same claim, two epistemic statuses, and it is the claim deciding whether a rolled-back verify can email a real member. `tg_notify_email`'s body settles the path, not the transactionality. One read of `net.http_post` settles it; then one wording across all four | No |
+| 153 | ⚠️ **RAISED 3 Oct.** `net.http_request_queue` is **unlogged**, so a crash or restart **TRUNCATES it and silently discards queued email**. The notification row survives, so the member sees the in-app notice, never gets the mail, and no error exists anywhere. Item 136 from the other end: the only thing that would notice is `run_email_reconcile`, which had never completed since 22 Sep. ✅ Checked that it WOULD catch it — `no_attempt` counts notifications with ZERO `email_sends` rows, not failures. It reports and never resends | No, but mail is lost silently |
+| 152 | ✅ **CLOSED 3 Oct.** A rolled-back transaction CANNOT deliver an email. Closed on the SIGNATURE, not the implementation: `net.wake()` is `LANGUAGE c` and unreadable, but **takes no arguments**, so the queue row is the only channel — and an uncommitted row is invisible to a background worker under MVCC. ⚠️ The four migrations asserting this cannot be corrected in place: their comments are above the footer and checksum-locked | No |
 | 151 | ⚠️ **RAISED 3 Oct, not started.** `copyFor()`'s default is `heading: title || …`, so **any emailed type without a `case` hands its heading to whoever wrote the row** — today `admin_suspension`, `session_expired`, `session_not_held`, one of which was created this week. A pattern, not three instances. ⚠️ Hardening the default alone would degrade three real emails, so the three cases must be added first; proposed copy in the item, **needs Micky's word**. Plus a cross-language check, since a `case` is a sentence not a mechanism | No |
 | 150 | ⚠️ **DECISION PENDING, 3 Oct.** `session_applied` says *"on 5 Oct 2026 at 09:00"* and `session_accepted` says *"for Monday 5 October"* — same booking, two formats, **both emailed**, one to each party. An accident of which migration touched which string: `notify_session_applied` is 0077 and predates the date decision made for 0078. Two options in the item; one line in each function either way. **Nothing written** | No |
 | 147 | ✅ **CLOSED 3 Oct — confirmed, fixed, and verified by re-running the four tests that proved it.** Either party could rewrite a booking's date, price, **owning stylist** and either `not_held` timestamp in a plain UPDATE — no actor check, no guard, no notification. 0079 narrows UPDATE to `status`. The licence came from the SECOND control design; the first could not run. ⚠️ My column inventory missed `cancelled_at` because a regex wanted it at line start — PREFLIGHT (ii) caught it. Completes item 133 | Was live |
