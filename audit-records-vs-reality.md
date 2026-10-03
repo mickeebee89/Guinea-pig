@@ -15672,14 +15672,42 @@ member in order to close a hole against an attacker.
 2. *then* fix the default to a fixed string, as a backstop for the next type
    somebody adds.
 
-Proposed copy, **needing Micky's word before it is written** — it reaches
-members:
+### ✅ The copy, decided 3 Oct 2026
+
+My first draft repeated the subject verbatim in all three headings, which is one
+of the two ways a heading fails here. It sits under a fixed subject and above
+the row's body, so it must **name what happened** without restating the subject
+or pre-empting the body. The template's own `payment_failed` is the model:
+subject = what happened, heading = what it means for you.
 
 | type | subject | heading |
 |---|---|---|
-| `admin_suspension` | Your Cavy account is restricted | Your Cavy account is restricted |
-| `session_expired` | Your application has expired | Your application has expired |
-| `session_not_held` | A booking was marked as not held | A booking was marked as not held |
+| `admin_suspension` | Your Cavy account is suspended | **You can't book or apply** |
+| `session_expired` | Your application has expired | **No reply came in time** |
+| `session_not_held` | A booking was marked as not held | **Nothing is settled yet** |
+
+⚠️ **`admin_suspension`: NOT "for now".** The draft said *"You can't book or
+apply for now"*, conditional on a check — and the check failed. **A permanent
+ban writes `admin_suspension` too.** `admin_act_on_user` has two separate
+inserts, `when 'suspend'` and `when 'ban'`, and both use that type. So *"for
+now"* would have told a banned member their account is coming back, in the most
+consequential email Cavy sends. Confirmed at the insert, not from a verify
+block.
+
+**`session_expired`: "No reply came in time", not "Nobody answered in time".**
+*Nobody* reads as though the recipient were among those who failed to answer.
+The replacement states the same fact without implicating the reader.
+
+**`session_not_held`: "Nothing is settled yet",** and the reasoning is worth
+keeping because both of my proposals were wrong in opposite directions. *"You
+can agree, or say otherwise"* instructs — and the body already closes with *"If
+that is not right, you can say so on the booking"*, so the heading would tell
+the reader to do what the next sentence explains how to do. *"One of you has
+recorded this"* is neutral but says almost nothing in a preview pane. **What the
+reader needs at a glance is that this is a claim and not a conclusion** — which
+is 0070's neutrality rule stated from the reader's side rather than the
+writer's. Four words, characterises nobody, leaves both the action and the
+attribution to the body.
 
 ### Why it is raised rather than done now
 
