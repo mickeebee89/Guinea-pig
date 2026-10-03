@@ -15347,6 +15347,26 @@ Every multi-line commit message in this session after this point goes through
 `git commit -F <file>`, never `-m "$(printf ...)"`, because the latter is the
 construct that made it possible.
 
+### ⚠️ IT HAPPENED AGAIN THE SAME NIGHT, TWO COMMITS AFTER THE RULE WAS WRITTEN
+
+Commit `26bd21b` used `git commit -m "… `' + '`into`' + `' …"` with backticks inside
+double quotes. Bash executed them. `into` is not a command, so nothing ran and
+nothing was damaged beyond the commit message, which lost the word in two
+places: *"same editor session.  is present in both"* and *"made that block run.
+ is NOT established as the cause"*. The files themselves are correct.
+
+**The rule above — never backticks inside a double-quoted shell string,
+multi-line messages through `-F <file>` only — was written by me, in this
+entry, two commits earlier.** I then wrote a nine-paragraph `-m` chain
+containing backticks.
+
+Not force-pushed to repair two words: the meaning survives in context and the
+file it describes is right. Recorded instead, because *a rule being written is
+not a rule being followed*, and the gap between those two is the thing this
+entry is now about. The first instance deployed an edge function. The second
+cost two words. The difference between those outcomes was luck, not care —
+which is the same sentence this entry already contained before tonight.
+
 ### And the general one
 
 *When tool output surprises me, the first place to look is my own last command,
