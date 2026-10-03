@@ -299,30 +299,34 @@ commit;
 --
 -- ── VERIFY ──────────────────────────────────────────────────────────────
 --
---   ⚠️ WRITTEN TO THREE CONVENTIONS LEARNED THE HARD WAY ON 0079, all three
---   now in scripts/migration-status.mjs:
+--   SUBJECTS, created 3 Oct 2026 THROUGH THE LIVE APPLY FLOW in the browser,
+--   not hand-inserted — so the row has a real consent record, slot-derived
+--   times and a price snapshot. A hand-made row risks testing a shape the real
+--   flow does not produce, and a false pass is worse than no pass.
 --
---     1. SCALAR SUBQUERIES, `v := (select …)`, rather than `select ... into`.
---        ⚠️ NOT because `into` is the cause — it is NOT established as the
---        cause, and this file claimed it was for one commit before the
---        counter-examples came in. The editor rewrote ONE block on 3 Oct,
---        splicing `ALTER TABLE <name> ENABLE ROW LEVEL SECURITY` into it, and
---        the scalar-subquery form is the workaround that made it run. Three
---        other blocks the same evening used `select ... into` without
---        incident. The trigger is unidentified; this form is used here because
---        it is known to work, not because the alternative is known to break.
---     2. ONE `%` fed one concatenated string. `%%` is an escaped literal
---        percent, not two placeholders, so a fifteen-field raise written with
---        `%%` dies with "too many parameters specified for RAISE".
---     3. EVERY variable in the `declare` section. A block with declarations in
---        a footnote does not compile as pasted, and a block that has to be
---        repaired before it runs is a block that gets skipped.
+--     pending session  fd6c10f9-1834-4171-a438-409802b3da06
+--     model            b0df9c2f-02c5-4fef-afb0-9b184c3b9130   (not an admin)
+--     provider_user    ff06d568-8936-45fa-ad5f-0b88c150ec30   (IS an admin)
 --
---   ⚠️ AND EVERY BLOCK ASSERTS ITS PREMISE, because the trigger's third
---   statement is `if auth.uid() is null or is_admin() then return new; end if;`
---   and ff06d568 is both a provider and an admin.
+--   ⚠️ THE EMAIL MITIGATION. transition_session inserts a notification and
+--   notify_email fires AFTER INSERT, so a send is queued. Whether a rollback
+--   cancels it is INFERRED, not observed — 0042's own comment says so. The
+--   model here is Micky's own test account, confirmed against auth.users by
+--   boolean comparison without printing the address, so anything that escapes
+--   a rollback reaches him rather than a member. **The exposure is removed
+--   rather than the uncertainty resolved**, which is what makes the pg_net
+--   question non-blocking.
 --
---   -- (a) the shapes. Plain select: it neither switches role nor rolls back.
+--   ⚠️ TIMING. expire_past_applications is scheduled, so do not leave this
+--   pending row for days before running these. Every block rolls back, so the
+--   row survives for the first real accept afterwards.
+--
+--   WRITTEN TO THREE CONVENTIONS (scripts/migration-status.mjs): every variable
+--   in `declare`; one `%` fed one concatenated string, because `%%` is an
+--   escaped literal percent; and scalar subqueries rather than `select ...
+--   into` — the workaround for an editor rewrite whose cause is NOT known.
+--
+--   -- (a) the shapes. Runs now, needs no subjects.
 --   select p.proname, pg_get_function_identity_arguments(p.oid) as args, p.prosecdef
 --     from pg_proc p join pg_namespace n on n.oid = p.pronamespace
 --    where n.nspname = 'public'
@@ -331,22 +335,16 @@ commit;
 --
 --   Expect notify_session_transition prosecdef **t**, transition_session **f**.
 --
---   -- (b) THE MODEL CANNOT ACCEPT HER OWN BOOKING.
+--   -- (b) THE MODEL CANNOT ACCEPT HER OWN BOOKING. Runs now, and this one
+--   --     DOES prove the authorisation: the model is not an admin and not the
+--   --     provider, so the trigger reaches its provider-only branch.
 --   begin;
 --   do $v$
 --   declare
---     v_sid   uuid;
---     v_model uuid;
+--     v_sid   uuid := 'fd6c10f9-1834-4171-a438-409802b3da06';
+--     v_model uuid := 'b0df9c2f-02c5-4fef-afb0-9b184c3b9130';
 --     v_got   text := 'NO ERROR — THE GUARD DID NOT FIRE';
 --   begin
---     v_sid := (select s.id from public.sessions s
---                where s.status = 'pending' and s.model_user_id is not null
---                order by s.created_at desc limit 1);
---     if v_sid is null then
---       raise exception '%', 'ROLLED BACK, TESTED NOTHING. No pending booking to try.';
---     end if;
---     v_model := (select s.model_user_id from public.sessions s where s.id = v_sid);
---
 --     perform set_config('request.jwt.claims',
 --       json_build_object('sub', v_model::text, 'role', 'authenticated')::text, true);
 --     execute 'set local role authenticated';
@@ -360,7 +358,7 @@ commit;
 --     if exists (select 1 from public.providers p
 --                 join public.sessions s on s.provider_id = p.id
 --                where s.id = v_sid and p.user_id = auth.uid()) then
---       raise exception '%', 'ROLLED BACK, TESTED NOTHING. The model also owns this booking''s shop, so she IS the provider.';
+--       raise exception '%', 'ROLLED BACK, TESTED NOTHING. The model also owns this shop, so she IS the provider.';
 --     end if;
 --
 --     begin
@@ -373,39 +371,37 @@ commit;
 --   end $v$;
 --   rollback;
 --
---   Expect "Only the provider can set a session to accepted". THE GUARD DID NOT
---   FIRE means the actor rule is not reaching this path.
+--   Expect "Only the provider can set a session to accepted".
 --
---   ⚠️ 'accepted' is correct HERE and was wrong in 0079's test 5, for a reason
---   worth keeping straight: this block picks a **pending** row, so accepted is a
---   real transition. 0079's picked an already-accepted row, so the same value
---   was a no-op that returned before any check. The target status must differ
---   from the row's current one, whatever the test.
+--   ⚠️ 'accepted' is correct here because this row is PENDING. 0079's test 5
+--   used an already-accepted row, so the same value was a no-op that returned
+--   before any check. The target status must differ from the current one.
 --
---   -- (c) THE PROVIDER CAN, EXACTLY ONE NOTICE IS WRITTEN, AND THE SAME CALL
---   --     AGAIN WRITES NONE. The second half is the no-op the trigger permits
---   --     and transition_session absorbs; without it a double-click sends a
---   --     second real email.
+--   -- (c) ⚠️ THE PROVIDER CAN — BUT THIS BLOCK PROVES THE MECHANISM, NOT THE
+--   --     AUTHORISATION. ff06d568 is an ADMIN, so enforce_session_status_
+--   --     transition returns at its is_admin() branch BEFORE the provider-only
+--   --     check. What this proves: the RPC runs, the status transitions, the
+--   --     notice is written with the new wording and the new date format, and
+--   --     the second identical call writes NO second notice.
+--   --
+--   --     is_admin is REPORTED, not asserted away, and the output names the
+--   --     branch that allowed it. Same rule as 0079's test 6: for a positive
+--   --     test an admin bypass does not invalidate the result, it changes what
+--   --     the result is evidence of.
+--   --
+--   --     **Stage B's provider-only check is proven by the trigger body we
+--   --     read, not by this block.** Only (b) exercises it.
 --   begin;
 --   do $v$
 --   declare
---     v_sid   uuid;
---     v_owner uuid;
+--     v_sid    uuid := 'fd6c10f9-1834-4171-a438-409802b3da06';
+--     v_owner  uuid := 'ff06d568-8936-45fa-ad5f-0b88c150ec30';
+--     v_admin  boolean;
+--     v_branch text;
 --     v_n0 int; v_n1 int; v_n2 int;
 --     v_r1 jsonb; v_r2 jsonb;
 --     v_body text;
 --   begin
---     v_sid := (select s.id from public.sessions s
---                 join public.providers p on p.id = s.provider_id
---                where s.status = 'pending' and p.user_id is not null
---                order by s.created_at desc limit 1);
---     if v_sid is null then
---       raise exception '%', 'ROLLED BACK, TESTED NOTHING. No pending booking with a shop owner.';
---     end if;
---     v_owner := (select p.user_id from public.providers p
---                   join public.sessions s on s.provider_id = p.id
---                  where s.id = v_sid);
---
 --     perform set_config('request.jwt.claims',
 --       json_build_object('sub', v_owner::text, 'role', 'authenticated')::text, true);
 --     execute 'set local role authenticated';
@@ -413,9 +409,11 @@ commit;
 --     if auth.uid() is null then
 --       raise exception '%', 'ROLLED BACK, TESTED NOTHING. auth.uid() is null.';
 --     end if;
---     if public.is_admin() then
---       raise exception '%', 'ROLLED BACK, TESTED NOTHING. The provider is also an admin, so the trigger bypasses and this proves nothing about the provider branch.';
---     end if;
+--
+--     v_admin := public.is_admin();
+--     v_branch := case when v_admin
+--       then 'the is_admin() BYPASS — the provider-only check never ran'
+--       else 'the PROVIDER branch — the provider-only check passed' end;
 --
 --     v_n0 := (select count(*) from public.notifications
 --               where session_id = v_sid and type = 'session_accepted');
@@ -431,6 +429,8 @@ commit;
 --     execute 'reset role';
 --
 --     raise exception '%', 'ROLLED BACK ON PURPOSE.' || chr(10)
+--       || 'allowed by: ' || v_branch || chr(10)
+--       || 'provider is_admin: ' || v_admin || chr(10)
 --       || 'first:  ' || coalesce(v_r1::text, 'null') || chr(10)
 --       || 'second: ' || coalesce(v_r2::text, 'null') || chr(10)
 --       || 'notices: ' || v_n0 || ' -> ' || v_n1 || ' -> ' || v_n2 || chr(10)
@@ -440,7 +440,26 @@ commit;
 --
 --   Expect first `{"ok":true,"changed":true,…}`, second
 --   `{"ok":true,"changed":false,…}`, notices n -> n+1 -> **n+1**, and a body
---   reading 'Your booking for Friday 3 October has been confirmed.' with the
---   weekday and month spelt out. **n+2 means the no-op absorption is not
---   working and a double-click sends two emails.**
+--   reading 'Your booking for Friday 3 October has been confirmed.'
+--   **n+2 means the no-op absorption is not working and a double-click sends
+--   two emails.**
+--
+--   -- (d) THE THREE COPY DECISIONS, read from the live function body. Static,
+--   --     runs now, needs no subjects — and it covers the two transitions (b)
+--   --     and (c) never exercise, since there is only one pending row.
+--   with f as (
+--     select pg_get_functiondef('public.notify_session_transition(uuid,text)'::regprocedure) as code
+--   )
+--   select code like '%FMDay FMDD FMMonth%'        as date_is_long_form,
+--          code like '%Treatment accepted!%'       as accepted_title,
+--          code like '%Treatment update%'          as declined_title,
+--          code like '%Treatment complete%'        as completed_title,
+--          code like '%was not confirmed%'         as declined_avoids_the_word_declined,
+--          code not like '%Treatment completed%'   as tick_variant_is_gone,
+--          code like '%Leave a review?%'           as review_prompt_kept
+--     from f;
+--
+--   Expect all seven true. `tick_variant_is_gone` is the one that catches
+--   mobile's 'Treatment completed ✓' surviving the merge, and it is written as
+--   a NEGATIVE because the positive form would also match 'Treatment complete'.
 -- ===========================================================================
