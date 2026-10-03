@@ -83,6 +83,23 @@ revoke update on public.sessions from anon;
 -- else. Found by searching for the table name, which is also how the count
 -- went from six to eight — the earlier figure came from a notification-based
 -- list and missed two sites that change status without notifying.
+--
+-- ⚠️⚠️ AND THE COLUMN LIST HERE MUST BE DERIVED FROM LIVE FUNCTION
+-- DEFINITIONS, NOT FROM A SEARCH OVER THIS REPO. Here is why, from the first
+-- run of this migration's own PREFLIGHT (ii):
+--
+--   public._withdraw_stylist is SECURITY INVOKER and writes TWO session
+--   columns:  set status = 'cancelled', cancelled_at = now()
+--
+-- My inventory said it wrote `status` alone. The regex that produced that
+-- inventory required a column name to follow `set` or a comma at the START of a
+-- line, and `cancelled_at = now()` shares a line with `set status = …`, so it
+-- was never seen. The repo file was not stale — **my parse of it was wrong**,
+-- which is a failure mode no amount of re-reading the file would have caught.
+--
+-- So PREFLIGHT (ii) is not a formality and must be run every time this grant is
+-- narrowed further. **The next person will run the same repo search and get the
+-- same wrong answer.**
 grant update (status) on public.sessions to authenticated;
 
 -- ---------------------------------------------------------------------------
@@ -192,7 +209,7 @@ end $function$;
 
 -- MIGRATION FOOTER
 insert into public.schema_migrations (version, name, checksum)
-values ('0079', 'the_column_grant_is_the_only_guard', 'ed4d76860e740cd31ac5344841b99e0bd20a6447b96c6945213688b2ee0674a0');
+values ('0079', 'the_column_grant_is_the_only_guard', '99eb930d4c24f6c41a7768286e4e095431b0e381954581d2b54b930846a48927');
 
 commit;
 
