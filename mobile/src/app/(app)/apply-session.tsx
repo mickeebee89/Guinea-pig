@@ -616,21 +616,19 @@ export default function ApplySessionScreen() {
         return
       }
 
-      if (providerUserId && sessionData) {
-        const notifPayload = {
-          user_id:    providerUserId,
-          type:       'session_applied',
-          title:      'New treatment application',
-          body:       `A model has applied for ${selectedTreatment?.name ?? 'a treatment'} on ${formatDateShort(selectedDate)} at ${fmtTime(selectedSlot.start_time)}`,
-          // session_id must be TOP-LEVEL so tap/deep-link + the Leave-review CTA can read
-          // n.session_id (matches the model-directed inserts). Unread is tracked by read_at
-          // (null = unread) — there is NO `read` column, so we don't set one.
-          session_id: sessionData.id,
-          data:       { provider_id: providerId },
-        }
-        const { error: notifErr } = await supabase.from('notifications').insert(notifPayload)
-        if (notifErr) console.error('session_applied notification insert failed:', notifErr)
-      }
+      // ⚠️ THE STYLIST NOTIFICATION WAS DELETED HERE, 3 Oct 2026, 0077, item 144.
+      // create_session_with_consent — the RPC called above — now writes it
+      // itself, via notify_session_applied(). Leaving it would have sent the
+      // stylist TWO notifications and two emails for one application.
+      //
+      // The empty `if (providerUserId && sessionData)` went with it: a block
+      // guarding nothing is a place a future reader puts something back.
+      //
+      // ⚠️ ONE FIELD IS GONE ON PURPOSE: that payload carried data.provider_id
+      // and the SQL version does not. Checked rather than assumed —
+      // routeForNotification keys provider_id off
+      // ['new_availability','stylist_invite'] only, and routes session types by
+      // session_id, which the SQL version still sets top-level.
       if (sessionErr) throw sessionErr
 
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)

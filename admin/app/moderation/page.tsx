@@ -5,7 +5,6 @@ import { supabase } from '@/lib/supabase'
 import { useLoader } from '@/lib/useLoader'
 import { logAction } from '@/lib/audit'
 import { humanError } from '@/lib/adminActions'
-import type { ActionResult } from '@/lib/adminActions'
 import Image from 'next/image'
 
 interface PortfolioItem {
@@ -424,10 +423,20 @@ export default function ModerationPage() {
       if (!ok) return
     }
 
-    const { data, error } = await supabase.rpc('admin_decide_status_post', {
+    // No `data`: the RPC sends the notice itself now, so nothing here reads
+    // notify_user_id. It is still RETURNED — removing a field from a return
+    // shape is a separate change from ceasing to use it (0077's own note).
+    const { error } = await supabase.rpc('admin_decide_status_post', {
       p_post_id:  post.id,
       p_decision: decision,
       p_note:     note.trim() || null,
+      // ⚠️ THE PREVIEWED STRING ITSELF, passed rather than rebuilt in SQL
+      // (0077, item 144). The admin was just shown this exact text in the
+      // confirm() above. Composing it in the database would make a second
+      // copy of the same copy, free to drift from what was previewed — which
+      // is the fault item 143 was, one layer along. This is the admin's own
+      // words, not an event, so the event-only rule does not apply to it.
+      p_member_message: stylistMessage,
     })
     if (error) {
       alert(`Couldn't ${decision === 'approved' ? 'approve' : 'reject'} this post.\n\n`
@@ -448,21 +457,11 @@ export default function ModerationPage() {
     //
     // Approval is deliberately silent: the post simply appears, which is what
     // the stylist expected when they wrote it.
-    const result = (data ?? {}) as ActionResult
-    if (stylistMessage && result.notify_user_id) {
-      const { error: noteErr } = await supabase.from('notifications').insert({
-        user_id: result.notify_user_id,
-        type:    'admin_message',
-        title:   'Your update wasn\u2019t published',
-        // The previewed string itself. Rebuilding it here is how a preview
-        // stops describing what is actually sent.
-        body:    stylistMessage,
-      })
-      if (noteErr) {
-        alert(`The post is rejected and that is recorded, but the stylist could not be told: `
-          + `${noteErr.message}\n\nThey have NOT been notified. Contact them by hand.`)
-      }
-    }
+    // ⚠️ THE NOTICE MOVED INTO THE RPC, 3 Oct 2026, 0077, item 144. It is sent
+    // in the same transaction as the decision, from p_member_message above, so
+    // a rejected post can no longer be recorded while its author is never told.
+    // The alert that used to say "contact them by hand" is gone because the
+    // case it covered cannot arise.
 
     reloadStatusPosts()
   }

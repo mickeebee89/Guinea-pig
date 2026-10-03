@@ -318,31 +318,23 @@ export async function submitApplication(form: FormData): Promise<ApplyResult> {
 
   const sessionId = String(data)
 
-  // ── Tell the stylist ─────────────────────────────────────────────────────
-  // Separate from the booking on purpose: a failed notification must not undo
-  // a confirmed application. Since 0047 this insert is also what sends them
-  // an email, so a silent failure here is a stylist who never hears.
-  const { data: provRow } = await supabase
-    .from('providers').select('user_id').eq('id', providerId).maybeSingle()
-  const providerUserId = (provRow as { user_id: string | null } | null)?.user_id
-  if (providerUserId) {
-    const { data: treatRow } = await supabase
-      .from('provider_treatments').select('name, category').eq('id', treatmentId).maybeSingle()
-    const treat = treatRow as { name: string | null; category: string | null } | null
-    const when = new Date(`${date}T00:00:00`).toLocaleDateString('en-GB', {
-      day: 'numeric', month: 'short', year: 'numeric',
-    })
-    const { error: notifErr } = await supabase.from('notifications').insert({
-      user_id: providerUserId,
-      type: 'session_applied',
-      title: 'New treatment application',
-      body: `A model has applied for ${treat?.name?.trim() || treat?.category || 'a treatment'} on ${when} at ${startTime}`,
-      session_id: sessionId,
-    })
-    if (notifErr) console.error('[apply] stylist notification failed', notifErr)
-  } else {
-    console.error('[apply] no provider user_id — the stylist will not be told', { providerId })
-  }
+  // ── The stylist is told by create_session_with_consent ───────────────────
+  // ⚠️ DELETED HERE 3 Oct 2026, 0077, item 144. This used to be a separate
+  // best-effort insert addressed to somebody else, which only worked because
+  // the notifications INSERT policy lets any signed-in account write a
+  // notification to anyone. It now happens inside the RPC that makes the
+  // booking, through notify_session_applied(), which authorises on the caller
+  // being the model ON that booking.
+  //
+  // Two things improved by moving it, not just one: the hole closes, AND the
+  // application can no longer succeed while the stylist is never told —
+  // "separate from the booking on purpose" is what made that possible, and
+  // it was the wrong trade once the telling could be made atomic.
+  //
+  // ⚠️ The copy did NOT change. The body is rebuilt in SQL from the session
+  // row, with to_char(d, 'FMDD Mon YYYY') so it still reads "3 Oct 2026".
+  // Date and time come from the ROW, because 0065's trigger fills them and
+  // this function's own date arguments are dead.
 
   revalidatePath(BOOKINGS_PATH)
   revalidatePath('/dashboard')

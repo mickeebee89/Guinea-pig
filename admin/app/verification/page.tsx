@@ -226,7 +226,10 @@ export default function VerificationQueuePage() {
     setWorking(req.id)
     const note = notes[req.id] ?? ''
     try {
-      const { data, error } = await supabase.rpc('admin_decide_verification', {
+      // No `data` on this path since 0077: the RPC writes the rejection
+      // notice itself. The APPROVE path above still reads it, for the
+      // approval copy that moves in 0078.
+      const { error } = await supabase.rpc('admin_decide_verification', {
         p_request_id: req.id,
         p_decision:   'rejected',
         p_note:       note.trim() || null,
@@ -237,22 +240,18 @@ export default function VerificationQueuePage() {
         return
       }
 
-      const result = (data ?? {}) as ActionResult
-      if (!result.user_id) return
-      const { error: notifyErr } = await supabase.from('notifications').insert({
-        user_id: result.user_id,
-        type:    'verification',
-        title:   'Verification not approved',
-        body:    note.trim()
-          ? `Your verification was not approved: ${note.trim()}`
-          : 'Your verification was not approved. Please resubmit with a clearer photo.',
-      })
-      // Said plainly: a rejected person who is never told is the silent failure
-      // this console exists to remove.
-      if (notifyErr) {
-        alert(`The rejection is recorded, but they could not be notified: ${notifyErr.message}\n\n`
-          + 'They have NOT been told. Contact them by hand.')
-      }
+      // ⚠️ THE REJECTION NOTICE MOVED INTO THE RPC, 3 Oct 2026, 0077, item 144.
+      // admin_decide_verification now writes it from the same p_note this
+      // console already passes, so the same words reach the same person — and
+      // the decision and the telling can no longer half-fail apart from each
+      // other. "a rejected person who is never told is the silent failure this
+      // console exists to remove" was this block's own comment, and it is now
+      // structurally impossible rather than carefully handled.
+      //
+      // ⚠️ THE APPROVAL NOTICE IS STILL SENT FROM HERE, until 0078. Its body
+      // comes from stylistApprovalBody(role, shops), which branches on role,
+      // on publication and on which fields are missing. Do not assume this
+      // file no longer writes notifications — it writes exactly one.
     } finally {
       setWorking(null)
       reload()
