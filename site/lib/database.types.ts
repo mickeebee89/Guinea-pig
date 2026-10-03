@@ -1,8 +1,8 @@
 // GENERATED FILE — DO NOT EDIT BY HAND.
 //
 // Written by scripts/gen-supabase-types.mjs from the live database.
-// TYPES_STAMP: 0079
-// TYPES_FILES_AT_GEN: 0079
+// TYPES_STAMP: 0080
+// TYPES_FILES_AT_GEN: 0080
 //
 // TYPES_STAMP is the migration the DATABASE was at when these were generated,
 // stated by whoever ran it (--applied). TYPES_FILES_AT_GEN is the newest
@@ -2484,6 +2484,10 @@ export type Database = {
       banned_words_check: { Args: { p_text: string }; Returns: string }
       bio_is_publishable: { Args: { p_bio: string }; Returns: boolean }
       bio_publish_problem: { Args: { p_bio: string }; Returns: string }
+      booking_when: {
+        Args: { p_date: string; p_start: string }
+        Returns: string
+      }
       cancel_booking: {
         Args: { p_reason?: string; p_session_id: string }
         Returns: Json

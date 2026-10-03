@@ -119,8 +119,70 @@ function copyFor(
         : { subject, heading: subject, cta: 'Open Cavy', path: '/notifications' }
     }
 
+    // ── The three that used to fall through. Item 151, 3 Oct 2026. ─────────
+    //
+    // ⚠️ A HEADING SITS UNDER A FIXED SUBJECT AND ABOVE THE ROW'S BODY, so it
+    // names what happened without restating the subject or pre-empting the
+    // body. The first draft of all three repeated the subject word for word,
+    // which is the other way to get it wrong. payment_failed above is the
+    // model: subject = what happened, heading = what it means for you.
+
+    // ⚠️ NO "for now". A PERMANENT BAN WRITES THIS TYPE TOO — admin_act_on_user
+    // has two inserts, `when 'suspend'` and `when 'ban'`, and both use
+    // 'admin_suspension'. Checked at the insert, not assumed from the names.
+    // "You can't book or apply for now" would tell a banned member their
+    // account is coming back, in the most consequential email Cavy sends.
+    //
+    // The body already says until when and why, in a direct voice with no
+    // euphemism — "Your account is suspended until 5 November… you keep
+    // spamming stylists after being denied". This has to sit above that
+    // without softening it.
+    case 'admin_suspension':
+      return { subject: 'Your Cavy account is suspended', heading: 'You can’t book or apply',
+        cta: 'Read it in full', path: '/notifications' }
+
+    // ⚠️ "No reply came in time", not "Nobody answered in time". *Nobody* reads
+    // as though the recipient were among those who failed to answer, and she is
+    // the one being told. Same fact, nobody implicated.
+    case 'session_expired':
+      return { subject: 'Your application has expired', heading: 'No reply came in time',
+        cta: 'Find another stylist', path: '/browse' }
+
+    // ⚠️ "Nothing is settled yet" is 0070's neutrality rule stated from the
+    // READER's side. The body closes with "If that is not right, you can say so
+    // on the booking", so a heading like "You can agree, or say otherwise"
+    // would instruct the reader to do what the next sentence explains. And
+    // "One of you has recorded this" is neutral but says almost nothing in a
+    // preview pane. What she needs at a glance is that this is a CLAIM AND NOT
+    // A CONCLUSION. Four words, characterises nobody, leaves the action and the
+    // attribution to the body.
+    case 'session_not_held':
+      return { subject: 'A booking was marked as not held', heading: 'Nothing is settled yet',
+        cta: 'Open the booking', path: sessionId ? `/bookings` : '/dashboard' }
+
+    // ⚠️⚠️ THE DEFAULT NO LONGER PASSES THE ROW'S TITLE THROUGH, AND THAT IS
+    // THE POINT OF THIS CHANGE — the three cases above are what make it
+    // affordable.
+    //
+    // It used to be `heading: title || …`, so ANY emailed type without a case
+    // handed its heading to whoever wrote the notification row. Three types
+    // were in that state and nobody had decided it; session_not_held arrived
+    // there this week via 0070. Combined with the open notifications INSERT
+    // policy (item 144), that is an attacker-chosen heading under a real Cavy
+    // subject.
+    //
+    // Hardening this alone would have made three real emails worse — a
+    // suspension notice headed "Something happened on Cavy" says nothing. So
+    // the cases came first and this is the backstop for the NEXT type somebody
+    // adds, not the fix for these three.
+    //
+    // ⚠️ AND A case IS STILL A SENTENCE, NOT A MECHANISM. The check that makes
+    // this durable is scripts/check-email-type-coverage.mjs, which fails when a
+    // type is in notify_email's WHEN clause, run_email_reconcile's allowlist or
+    // this switch and not the other two. All three are copies of one list and
+    // two pairings have already drifted.
     default:
-      return { subject: 'Something happened on Cavy', heading: title || 'Something happened on Cavy',
+      return { subject: 'Something happened on Cavy', heading: 'Something happened on Cavy',
         cta: 'Open Cavy', path: sessionId ? `/messages/${sessionId}` : '/dashboard' }
   }
 }
