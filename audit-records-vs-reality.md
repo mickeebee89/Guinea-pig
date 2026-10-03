@@ -15102,6 +15102,93 @@ entry is the plan, and the fifteen rows above are the thing to work from.
 
 ---
 
+## 145. MY OWN 0075 RAISED ON EVERY CALL, AND THE CALLER WAS BUILT TO SWALLOW IT
+### Found 3 Oct 2026 by running 0075's own VERIFY block, minutes after applying it.
+
+```
+ERROR 42804: column "session_id" is of type uuid but expression is of type text
+CONTEXT: PL/pgSQL function notify_favourites_of_availability() line 25
+```
+
+A bare `null` in a SELECT list is typed `text`. `notifications.session_id` is
+`uuid`. So the insert could never have worked, and the function raised every
+time a stylist saved availability while having at least one favouriter.
+
+### How it would have presented, which is worse than the bug
+
+**Both wrappers swallow the error and `console.warn` it**, because the notice is
+best-effort by design — a notification failure must never affect whether the
+availability saved. So `new_availability` would simply have **stopped**: nothing
+on screen, nothing in any log a person reads, and the save still succeeding.
+
+**That is 0069's family exactly** (item 136). `run_email_reconcile` raised on
+every call from 22 Sep and nobody knew for nine days, because its failures went
+to `cron.job_run_details` and its silence looked like a quiet night. *A function
+that cannot run, inside a caller that cannot complain, is indistinguishable from
+a feature nobody is using.*
+
+Micky named that shape on sight, before the fix was written.
+
+### COULD ANY CHECK HAVE CAUGHT IT? NO — AND THAT WAS WORTH ESTABLISHING
+
+Asked explicitly, answered per check rather than in general:
+
+| | why not |
+|---|---|
+| `site tsc` | the function is SQL; TypeScript never sees it. It does not even verify the RPC *name* — 0075's commit records tsc passing against an RPC that did not yet exist |
+| `eslint`, `next build` | TypeScript only |
+| `check-migration-tails` | proves everything below `commit;` is a comment, nothing about what is above it |
+| `check-types-freshness` | compares a stamp; its own output says it never contacts the database |
+| `check-anon-view-grants` | reads the repo, and only for anon-readable views |
+| `check-status-coverage` | status strings against client rendering |
+| `check-handrun-drift` | declared overlaps between hand-run files and migrations |
+| **PREFLIGHT** | read-only, and ran *before* the function existed |
+| **VERIFY (b)** | **caught it — the only check in this repo that executes a plpgsql body** |
+
+So the checks were not missing a rule. **Nothing static can type-check a plpgsql
+body, and the only executor runs after `commit;`** — which is why the broken
+function was live for the minutes between applying 0075 and reaching its verify
+block. On a busier day that gap is hours.
+
+### The fix is to stop naming the column, not to cast the null
+
+`null::uuid` compiles and would be patching the symptom. The actual mistake was
+listing a column whose value is meant to be its default: `session_id` is
+nullable and a new-times notice is not tied to a session. **Both clients'
+original inserts omitted it**, and mobile's said why — *"session_id is omitted
+(not tied to a session) so it can't violate notifications_session_id_fkey"*.
+0075 named it and then had to invent a value for it.
+
+Four columns with values; the rest default. *Nothing to type wrongly if there is
+nothing to type.*
+
+### What 0076 adds: the migration exercises its own function before committing
+
+The self-test calls the body as a real stylist, requires at least one row, then
+discards those rows through a nested `BEGIN/EXCEPTION` subtransaction. **If the
+body raises, the migration fails and never applies.** That moves the only check
+capable of finding this class of fault from *after* commit to *before* it.
+
+⚠️ **AND IT MUST IMPERSONATE, OR IT TESTS NOTHING.** Run as `postgres`,
+`auth.uid()` is null, the guard returns 0, and the INSERT is never reached — a
+self-test that called the function plainly would have passed 0075 **unchanged**.
+That is 0070's verify picking an admin to test a rule about non-admins, and
+0027's before it, for the third time: *a block that cannot reach the code it
+tests reports a pass.*
+
+With no favourited stylist in the database it raises a WARNING saying the body
+was not exercised, rather than passing quietly.
+
+### Whose fault, recorded plainly
+
+I wrote 0075, its VERIFY block, and the wrapper that would have hidden it. The
+system worked — the block I wrote caught the bug I wrote, within minutes — and
+the lesson is not "write better SQL" but **that the executing check belongs
+inside the migration**, because a verify block depends on somebody running it
+while a self-test cannot be skipped.
+
+---
+
 ## What is open
 
 | | Item | Blocking launch? |
@@ -15127,6 +15214,7 @@ entry is the plan, and the fifteen rows above are the thing to work from.
 | 137 | ✅ **CLOSED 1 Oct.** A declined application vanished from both clients — the model's only trace was a notification she can delete. Fourth value this one allowlist has needed. Fixed on web; mobile's sessions.tsx still hides `declined` and `expired` | No while mobile is unreleased |
 | 139 | ✅ **CLOSED 2 Oct.** 0070's verify picked `ff06d568` with an unordered `limit 1` — a provider AND an admin — so the guard bypassed and the block reported a hole that did not exist. The inverse of 0027: a rule for everyone except admins, tested as an admin. Four blocks audited; every one whose actor matters now asserts its own premise | No |
 | 140 | ✅ **CLOSED AND VERIFIED LIVE 2 Oct.** 0067 gave `session_expiry_runs` RLS with no policy AND revoked the table grant, so the tile built to watch it could not read it. Three run-log tables, one contract, three access shapes. The tile reported *"could not read"* rather than *"Never"*, which is what made it diagnosable | No |
+| 145 | ✅ **FIXED by 0076 — written, not applied.** My own 0075 raised 42804 on **every** call: a bare `null` in a select list is `text` and `session_id` is `uuid`. Both wrappers swallow and `console.warn`, so `new_availability` would have **stopped silently** — 0069's family exactly. **No check in this repo could have caught it**: nothing static type-checks a plpgsql body, and the only executor is the VERIFY block, which runs after `commit;`. Fixed by not naming a column that should default; 0076 also **exercises the function inside its own transaction**, impersonating a stylist — without which the guard returns 0 and the insert is never reached | No |
 | 144 | ⚠️ **VERIFIED, NOT FIXED — PLAN ONLY, 3 Oct.** The `notifications` INSERT policy is `with check (auth.uid() is not null)`: **any signed-in account can write any notification to anyone**, and `notify_email` will then send that text from `notifications@cavybeauty.com` for eleven types — a phishing vector using the product's own verified sender. Every other policy on the table scopes to the owner. ⚠️ **All 15 client inserts are cross-user, so tightening the policy first would silently stop notifications product-wide.** Staged plan: three definer functions, then the policy. Edge functions unaffected (service role); **the admin console IS affected** (anon key + admin session) | **Yes — it lets a member send mail as Cavy** |
 | 143 | ✅ **FIXED 2 Oct, web half deployed by the next push; email half needs deploying by hand.** A model was told a stylist wanted her, with no way to see who — and `new_availability` said *"tap to view their shop"* on a row that never recorded one, live on the web since **9 Aug** (54 days). The invite's rows always carried the id so every invite becomes tappable; ⚠️ **`new_availability`'s do not and never will — the first fault in this audit that cannot be repaired backwards.** Mobile's copy of the same insert warns *"don't drop it"*; the port dropped it, because a comment is the weakest mechanism available | No, but it is a false promise the product repeats daily |
 | 141 | **The Salon Floor.** One wall both roles post to, instead of stylist-side browse — a model appears because she posted, not because she exists. 0072 in and verified: both roles can post, model posts cannot reach the public site, and a post containing a phone number is held for review. 0073 and the client to follow | No, but a stylist has nothing to do without it |
