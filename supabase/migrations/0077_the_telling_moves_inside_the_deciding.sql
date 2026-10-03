@@ -519,6 +519,23 @@ commit;
 --   create_session_with_consent: prosecdef f (unchanged on purpose).
 --   admin_decide_status_post: four args ending `p_member_message text`.
 --
+--   -- (a2) ⚠️ THE ACL SURVIVED THE DROP, asserted rather than assumed.
+--   --      Before the drop it was exactly:
+--   --        {postgres=X/postgres, authenticated=X/postgres, service_role=X/postgres}
+--   --      postgres=X/postgres is the OWNER's entry — self-granted, materialised
+--   --      when any grant or revoke first touches the function — so CREATE
+--   --      restores it and it needs no re-grant. authenticated and service_role
+--   --      are real grants this migration puts back by hand.
+--   select array(select unnest(p.proacl)::text order by 1) as acl_sorted
+--     from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+--    where n.nspname = 'public' and p.proname = 'admin_decide_status_post';
+--
+--   Expect those three entries and NOTHING else. An `=X/` entry means PUBLIC
+--   came back through default privileges and the revoke did not hold; an
+--   `anon=X/` entry means the same for anon. Either is a widening nobody asked
+--   for, and the whole point of dropping and recreating by hand is that it
+--   happens where it can be read.
+--
 --   -- (b) the notice is REFUSED to someone who is not the model on the booking.
 --   --     This is the authorisation the open policy does not have, so it is the
 --   --     one thing worth proving rather than reading.
