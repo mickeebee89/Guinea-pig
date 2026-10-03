@@ -14941,9 +14941,30 @@ reason rather than by luck:
   not "link everything"; it is "a notification that names a person must reach
   them".
 
-### Not yet proven
+### ✅ CLOSED 3 Oct 2026 — and the fix needed fixing first
 
-* **The web half is deployed by the next push and nothing more.** `npm run
+0075 collapsed the duplication to one RPC; **0076 fixed 0075, which raised 42804
+on every call** (item 145). Both applied. 0076's self-test ran inside its own
+transaction and passed, and all three verify blocks are green:
+
+| block | result |
+|---|---|
+| (a) | security definer **t**, **args empty**, `search_path` set, authenticated **t**, anon **f** |
+| (b) | `favourites=1 wrote=1`, body *"Micky B has posted new times."*, `session_id` **null**, `data.provider_id` **matches the expected id** |
+| (c) | `overloads_with_args` **0** |
+
+Types regenerated at 0076, which also confirms the RPC name — the generator
+reads the live database, and that is the check `site tsc` could not give,
+because tsc passed against an RPC that did not exist.
+
+**(b) is the one that matters**: `data.provider_id` is *compared* with the
+expected id rather than displayed, because the whole of item 143 was that field
+being absent, and an id you read by eye is how 0070's block passed while testing
+nothing.
+
+### What was true before, kept visible
+
+* **The web half deployed with the push and nothing more.** `npm run
   verify` passed, `tsc` clean, and the link check counted 47 reachable routes
   where it had counted 46 — that is the new `/stylist/[id]` edge registering.
   It does **not** prove the link navigates; `check-links.mjs` says so in its own
@@ -15060,28 +15081,114 @@ that split 0066 from 0067: make the refusal correct first, then add the job.
   are the easiest of the fifteen, because the notification belongs inside the
   RPC that already decided the outcome.
 
-### The plan: three functions, then the policy
+### THE PLAN — and it is not three new functions
 
-1. **`notify_session_counterparty(p_session_id, p_type, p_title, p_body)`** —
-   authorises on *the caller is a participant in that session*, which is a rule
-   the database can check and the client cannot fake. Covers sites 1, 2, 8, 9,
-   11, 12, 14, 15, 16 — nine of the fifteen. Site 13 needs reading first; it is
-   not session-bound.
-2. **Fold the admin notifications into the RPCs that already exist** rather than
-   adding a fourth function. Sites 5, 6 and 7 already receive `notify_user_id` /
-   `user_id` back from a definer RPC, which means the decision and the telling
-   are currently two round trips that can half-fail. Site 4 (`admin_message`)
-   needs a small `notify_as_admin(...)` gated on `is_admin()`.
-3. **`invite_model_from_floor(p_model_user_id)`** — authorises on *the caller is
-   a stylist*, covering sites 3 and 10. The Salon Floor's no-rate-limit decision
-   (2 Oct) moves into it unchanged.
-4. **Only then** `alter policy` to `with check (user_id = auth.uid())`, in its
-   own migration, with a verify block that proves a member can no longer write
-   to somebody else AND that each of the three functions still can.
+Reading what the clients already call changed the shape of this. **Most of the
+fifteen inserts sit immediately after a definer RPC that had already done the
+authorising work.** The product has twenty-one RPCs, including
+`create_session_with_consent`, `cancel_booking`, `report_not_held`,
+`revoke_verification`, `admin_act_on_user`, `admin_act_on_report` and
+`admin_decide_verification` — so cancellation, not-held, revocation and every
+admin decision are *already* inside functions that notify.
 
-**Staged in that order on purpose: every step before 4 is additive and safe to
-apply alone.** Step 4 is the only one that can break anything, and by the time
-it runs there is nothing left for it to break.
+The pattern in the fifteen is therefore not "notifications were never secured".
+It is **the notification was bolted on outside the function that made the
+decision**, every time. That is two faults in one:
+
+1. the insert needs the open policy, which is this item; and
+2. **the state change and the telling can half-fail** — the status moves and the
+   notification does not, with the client logging a warning nobody reads. Every
+   one of those sites says "best-effort, deliberately" in a comment.
+
+0039 already settled the doctrine for the admin side and called it *admin
+decisions are atomic*. This is the same argument for the member side.
+
+#### Stage A — fold notifications into the RPC that already exists (4 sites, no new functions)
+
+| site | already calls | fold into it |
+|---|---|---|
+| `site/.../apply/actions.ts:335` | `create_session_with_consent` | `session_applied` |
+| `admin/.../verification/page.tsx:207` | `admin_decide_verification` | `verification` (approve) |
+| `admin/.../verification/page.tsx:242` | `admin_decide_verification` | `verification` (reject) |
+| `admin/.../moderation/page.tsx:453` | `admin_act_on_report` | `admin_message` |
+
+These three admin sites already receive the target id *back* from the RPC —
+`result.user_id`, `result.notify_user_id` — which is the clearest possible sign
+the notification belongs inside it. **Additive and independently applicable: the
+RPC starts writing the row, and the client insert is deleted in the same
+deploy.** ⚠️ Both halves must ship together or the member is told twice.
+
+#### Stage B — `transition_session(p_session_id, p_to)` (6 sites)
+
+accept / decline / completed have **no RPC at all**: the clients UPDATE
+`sessions.status` directly and then insert. So this stage is a new function, and
+it is the largest.
+
+`site/.../bookings/actions.ts:64`, `mobile/.../provider-dashboard.tsx:671, 711`,
+`mobile/.../sessions.tsx:254, 288, 320`.
+
+Authorises on *the caller is the provider for this session* (accept, decline) or
+*a party to it* (completed) — rules the database can check and a client cannot
+fake. Modelled on `cancel_booking`, which already does exactly this for the
+fourth transition. **Six sites currently hold their own copy of the title and
+body for the same three events**, which is item 143's shape waiting to happen
+again; this is where that copy stops being duplicated.
+
+#### Stage C — the two person-notices (3 sites)
+
+* `invite_model_from_floor(p_model_user_id)` — authorises on *the caller is a
+  stylist*. `site/.../salon-floor/actions.ts:107`,
+  `mobile/.../model/[id].tsx:344`. The no-rate-limit decision of 2 Oct moves in
+  unchanged.
+* `notify_chat_counterparty(p_session_id)` — `mobile/.../chat/[sessionId].tsx:365`.
+  Authorises on *the caller is a party to the session*, which is the same
+  predicate as stage B and should share a helper rather than restate it.
+
+#### Stage D — `notify_as_admin(p_user_id, ...)` (1 site)
+
+`admin/.../messages/page.tsx:67` sends a free-form `admin_message` with no
+decision behind it, so there is no existing RPC to fold into. Gated on
+`is_admin()`.
+
+#### Stage E — read site 13 before planning it
+
+`mobile/.../provider-dashboard.tsx:789` targets `m.id` and is not session-bound.
+**Unclassified: it needs reading, not guessing.** It is one of the fifteen and
+the policy cannot close until it is accounted for.
+
+#### Stage F — the policy, last
+
+```sql
+alter policy "authenticated can create notifications" on public.notifications
+  with check (user_id = auth.uid());
+```
+
+Its own migration, with a verify block that proves **both** halves: a member can
+no longer write to somebody else, AND each function above still can. A verify
+that only proved the first would pass on a product whose notifications had all
+stopped.
+
+**Stages A–E are additive and every one is safe to apply alone.** F is the only
+step that can break anything, and by the time it runs there is nothing left for
+it to break. *Same reasoning that split 0066 from 0067: make the refusal correct
+first, then change what depends on it.*
+
+#### ⚠️ The decision this plan needs before stage B
+
+**Do the functions take free text, or the event?**
+
+* **Free text** — `(p_session_id, p_type, p_title, p_body)` — is a smaller
+  change and closes the policy hole. But `notify_email` emails the row's own
+  title and body, so a member could still make Cavy email arbitrary text **to
+  their own counterparty**. Narrower than today, not closed.
+* **The event** — `(p_session_id, p_to)`, with the database building the copy —
+  is the actual closure, and it also ends the six copies of the same body text.
+  It costs moving that copy into migrations, where changing it is a migration.
+
+0075 already took the event-only route for `new_availability` and Micky accepted
+the cost explicitly. **Recommended: event-only**, for the same reason, and
+because free text leaves the hole half-open while looking fixed — which is the
+state item 133 was in.
 
 ### Two things to fix while the paths are open, not separately
 
@@ -15179,6 +15286,12 @@ tests reports a pass.*
 With no favourited stylist in the database it raises a WARNING saying the body
 was not exercised, rather than passing quietly.
 
+### ✅ CLOSED 3 Oct 2026
+
+0076 applied. **The self-test ran and passed inside the transaction**, which is
+the part worth recording: the mechanism built to stop this class of fault was
+exercised by the very migration that introduced it, before it could commit.
+
 ### Whose fault, recorded plainly
 
 I wrote 0075, its VERIFY block, and the wrapper that would have hidden it. The
@@ -15214,9 +15327,9 @@ while a self-test cannot be skipped.
 | 137 | ✅ **CLOSED 1 Oct.** A declined application vanished from both clients — the model's only trace was a notification she can delete. Fourth value this one allowlist has needed. Fixed on web; mobile's sessions.tsx still hides `declined` and `expired` | No while mobile is unreleased |
 | 139 | ✅ **CLOSED 2 Oct.** 0070's verify picked `ff06d568` with an unordered `limit 1` — a provider AND an admin — so the guard bypassed and the block reported a hole that did not exist. The inverse of 0027: a rule for everyone except admins, tested as an admin. Four blocks audited; every one whose actor matters now asserts its own premise | No |
 | 140 | ✅ **CLOSED AND VERIFIED LIVE 2 Oct.** 0067 gave `session_expiry_runs` RLS with no policy AND revoked the table grant, so the tile built to watch it could not read it. Three run-log tables, one contract, three access shapes. The tile reported *"could not read"* rather than *"Never"*, which is what made it diagnosable | No |
-| 145 | ✅ **FIXED by 0076 — written, not applied.** My own 0075 raised 42804 on **every** call: a bare `null` in a select list is `text` and `session_id` is `uuid`. Both wrappers swallow and `console.warn`, so `new_availability` would have **stopped silently** — 0069's family exactly. **No check in this repo could have caught it**: nothing static type-checks a plpgsql body, and the only executor is the VERIFY block, which runs after `commit;`. Fixed by not naming a column that should default; 0076 also **exercises the function inside its own transaction**, impersonating a stylist — without which the guard returns 0 and the insert is never reached | No |
+| 145 | ✅ **CLOSED 3 Oct — 0076 applied, self-test passed inside the transaction.** My own 0075 raised 42804 on **every** call: a bare `null` in a select list is `text` and `session_id` is `uuid`. Both wrappers swallow and `console.warn`, so `new_availability` would have **stopped silently** — 0069's family exactly. **No check in this repo could have caught it**: nothing static type-checks a plpgsql body, and the only executor is the VERIFY block, which runs after `commit;`. Fixed by not naming a column that should default; 0076 also **exercises the function inside its own transaction**, impersonating a stylist — without which the guard returns 0 and the insert is never reached | No |
 | 144 | ⚠️ **VERIFIED, NOT FIXED — PLAN ONLY, 3 Oct.** The `notifications` INSERT policy is `with check (auth.uid() is not null)`: **any signed-in account can write any notification to anyone**, and `notify_email` will then send that text from `notifications@cavybeauty.com` for eleven types — a phishing vector using the product's own verified sender. Every other policy on the table scopes to the owner. ⚠️ **All 15 client inserts are cross-user, so tightening the policy first would silently stop notifications product-wide.** Staged plan: three definer functions, then the policy. Edge functions unaffected (service role); **the admin console IS affected** (anon key + admin session) | **Yes — it lets a member send mail as Cavy** |
-| 143 | ✅ **FIXED 2 Oct, web half deployed by the next push; email half needs deploying by hand.** A model was told a stylist wanted her, with no way to see who — and `new_availability` said *"tap to view their shop"* on a row that never recorded one, live on the web since **9 Aug** (54 days). The invite's rows always carried the id so every invite becomes tappable; ⚠️ **`new_availability`'s do not and never will — the first fault in this audit that cannot be repaired backwards.** Mobile's copy of the same insert warns *"don't drop it"*; the port dropped it, because a comment is the weakest mechanism available | No, but it is a false promise the product repeats daily |
+| 143 | ✅ **CLOSED 3 Oct for the web and the data; ⚠️ THE EMAIL HALF IS WRITTEN AND NOT CONFIRMED DEPLOYED** ({"project_ref":"ptluekkhiopowuyvkgnd","functions":["send-email"],"dashboard_url":"https://supabase.com/dashboard/project/ptluekkhiopowuyvkgnd/functions","message":"Deployed Functions."}). A model was told a stylist wanted her, with no way to see who — and `new_availability` said *"tap to view their shop"* on a row that never recorded one, live on the web since **9 Aug** (54 days). The invite's rows always carried the id so every invite becomes tappable; ⚠️ **`new_availability`'s do not and never will — the first fault in this audit that cannot be repaired backwards.** Mobile's copy of the same insert warns *"don't drop it"*; the port dropped it, because a comment is the weakest mechanism available | No, but it is a false promise the product repeats daily |
 | 141 | **The Salon Floor.** One wall both roles post to, instead of stylist-side browse — a model appears because she posted, not because she exists. 0072 in and verified: both roles can post, model posts cannot reach the public site, and a post containing a phone number is held for review. 0073 and the client to follow | No, but a stylist has nothing to do without it |
 | 138 | ✅ **CLOSED AND VERIFIED LIVE 2 Oct.** `'not_held'` with two timestamps: the row records who SAID it did not happen, never who failed to turn up. Either party, terminal, admin-only undo. The first verify reported a hole in a correct guard — see 139 | No |
 | 134 | ✅ **CLOSED AND VERIFIED LIVE 1 Oct.** Pending applications sat in a stylist's list for ever and a past accepted booking had no outcome. 0066 makes `expired` terminal and refuses to ACCEPT a started appointment — that refusal, not the job, is the fix. 0067 adds the daily job, run log and the model's notification. B is "Did this happen?", never "missed" | No |

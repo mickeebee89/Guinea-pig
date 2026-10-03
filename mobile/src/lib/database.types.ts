@@ -1,8 +1,8 @@
 // GENERATED FILE — DO NOT EDIT BY HAND.
 //
 // Written by scripts/gen-supabase-types.mjs from the live database.
-// TYPES_STAMP: 0074
-// TYPES_FILES_AT_GEN: 0074
+// TYPES_STAMP: 0076
+// TYPES_FILES_AT_GEN: 0076
 //
 // TYPES_STAMP is the migration the DATABASE was at when these were generated,
 // stated by whoever ran it (--applied). TYPES_FILES_AT_GEN is the newest
@@ -2586,6 +2586,7 @@ export type Database = {
           skin_tone: string
         }[]
       }
+      notify_favourites_of_availability: { Args: never; Returns: number }
       provider_fee_settled: { Args: { p_user_id: string }; Returns: boolean }
       provider_shop_is_publishable: {
         Args: { p_provider_id: string }
