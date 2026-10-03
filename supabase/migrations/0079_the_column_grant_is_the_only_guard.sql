@@ -1,0 +1,318 @@
+-- ===========================================================================
+-- 0079_the_column_grant_is_the_only_guard
+--
+-- Narrows UPDATE on public.sessions to the one column the clients write.
+-- Audit item 147. Completes item 133, whose fix was insert-only.
+--
+-- ⚠️ Apply 0078 first? **NO — this does not depend on 0078 and should not wait
+-- for it.** Current clients write only `status`, so this is behaviour-neutral
+-- today, and 0078's transition_session needs exactly UPDATE (status) as an
+-- INVOKER function. Applying this first closes a CONFIRMED hole with a smaller
+-- migration. 0077 is the real prerequisite, and only for ordering.
+--
+-- ── THE FAULT, CONFIRMED NOT INFERRED ──────────────────
+-- `authenticated` and `anon` held table-wide UPDATE on all 26 columns of
+-- public.sessions. The only narrowing was the `participants can update
+-- sessions` policy, which is USING-only — so either party to a booking could
+-- rewrite it.
+--
+-- Proved 3 Oct 2026 as model b0df9c2f on accepted session 60c22f40, every test
+-- rolled back, under a harness first shown to be enforcing RLS:
+--
+--   licence  relrowsecurity=t, relforcerowsecurity=f, and a WITH CHECK control
+--            on the same table/command/role was refused 42501 — so the four
+--            results below are not vacuous
+--   test 1   MOVE      rows=1  date and start_time rewritten to 2027-08-13 04:17
+--   test 2   PRICE     rows=1  price_pence null -> 0
+--   test 3   REASSIGN  rows=1  provider_id 09c6d70c -> 49d40aae
+--   test 4   NOT_HELD  rows=1  not_held_provider_at set BY THE MODEL
+--
+-- ⚠️ TEST 3 IS THE CONSEQUENTIAL ONE: provider_id changed while status stayed
+-- 'accepted', so a stylist who never saw the application had a confirmed
+-- booking in her diary and was never notified. Test 1 is next: the appointment
+-- moved with no notification, because trg_enforce_session_status is
+-- BEFORE UPDATE **OF status** and never fired.
+--
+-- ⚠️⚠️ WHY THE COLUMN GRANT IS THE ONLY THING THAT CAN GUARD THESE COLUMNS.
+-- All three of the table's protective triggers are INSERT-time:
+--
+--   tg_session_apply_gate       BEFORE INSERT
+--   tg_session_price_snapshot   BEFORE INSERT
+--   tg_session_slot_authority   BEFORE INSERT
+--
+-- So nothing in the database watches an UPDATE to date, start_time, end_time,
+-- price_pence, provider_id or either not_held timestamp. There is no trigger to
+-- add a guard to and no policy that distinguishes columns. **The grant is the
+-- mechanism. Widening it back for convenience re-opens all four tests above.**
+--
+-- ── IT COMPLETES ITEM 133 ──────────────────────────────
+-- 0065 made the availability row the authority for WHEN an appointment is, via
+-- tg_session_slot_authority — correct for the path it guards, and insert-only.
+-- The update path stayed open, so the slot was authoritative at booking and
+-- rewritable afterwards. A guard with a door beside it, which is the phrase
+-- used when item 144 was scoped. 133 and 147 are the same fault at two ends of
+-- one row's life, and each should be findable from the other.
+--
+-- ── anon ───────────────────────────────────────────────
+-- anon held the grant too and gets nothing back. Behaviour-neutral by
+-- construction: no UPDATE policy names anon, so it was latent, never live.
+-- Revoked because a grant nothing uses is a grant nobody will notice being
+-- used.
+-- ===========================================================================
+begin;
+
+do $$
+begin
+  if not exists (select 1 from public.schema_migrations where version = '0077') then
+    raise exception '0079: apply 0077 first.';
+  end if;
+  if not (select relrowsecurity from pg_class where oid = 'public.sessions'::regclass) then
+    raise exception '0079: RLS is OFF on public.sessions. Narrowing the grant would leave the policy inert and every row writable — stop and fix that first.';
+  end if;
+end $$;
+
+-- ⚠️ UPDATE ONLY. INSERT is deliberately untouched: create_session_with_consent
+-- is SECURITY INVOKER, so the model's own grant is what lets her book at all.
+-- SELECT and DELETE are untouched for the same class of reason — this migration
+-- is about one verb.
+revoke update on public.sessions from authenticated;
+revoke update on public.sessions from anon;
+
+-- The whole client surface, measured rather than assumed: eight call sites
+-- across site/ and mobile/, every one of them `{ status: ... }` and nothing
+-- else. Found by searching for the table name, which is also how the count
+-- went from six to eight — the earlier figure came from a notification-based
+-- list and missed two sites that change status without notifying.
+grant update (status) on public.sessions to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- 0070's comment becomes TRUE, so it is strengthened rather than corrected.
+--
+-- It said: "the row can never say it did not happen without saying who said
+-- so". That was wider than its mechanism — the guard enforces it for the
+-- actor's own timestamp ON A STATUS CHANGE, and test 4 above set
+-- not_held_provider_at in an update that never touched status, so the trigger
+-- never ran and the row could be made to say the stylist agreed.
+--
+-- The grant above closes that. **So the sentence stays and now names what
+-- enforces it**, because a comment that says which mechanism holds a property
+-- is what stops the next person removing the wrong half. Reproduced from the
+-- live definition; the only change is the comment.
+-- ---------------------------------------------------------------------------
+create or replace function public.report_not_held(p_session_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path to 'public', 'pg_temp'
+as $function$
+declare
+  v_me         uuid := auth.uid();
+  v_date       date;
+  v_status     text;
+  v_model      uuid;
+  v_provider   uuid;
+  v_is_model   boolean;
+  v_other      uuid;
+  v_who        text;
+begin
+  if v_me is null then
+    raise exception 'Not signed in' using errcode = '42501';
+  end if;
+
+  select s.date, s.status, s.model_user_id, p.user_id
+    into v_date, v_status, v_model, v_provider
+  from public.sessions s
+  join public.providers p on p.id = s.provider_id
+  where s.id = p_session_id
+  for update of s;
+
+  if not found then
+    raise exception 'No such booking' using errcode = 'CV004';
+  end if;
+
+  v_is_model := (v_me = v_model);
+  if not (v_is_model or v_me = v_provider) then
+    raise exception 'Not a participant of this booking' using errcode = '42501';
+  end if;
+
+  -- The remaining conditions are enforced by the guard on the UPDATE below.
+  -- They are not repeated here: one implementation, and the guard is the one
+  -- that cannot be gone round.
+  if v_is_model then
+    update public.sessions
+       set not_held_model_at = coalesce(not_held_model_at, now()),
+           status = 'not_held'
+     where id = p_session_id;
+    v_other := v_provider;
+    select coalesce(u.first_name, 'The model') into v_who
+    from public.users u where u.id = v_me;
+  else
+    update public.sessions
+       set not_held_provider_at = coalesce(not_held_provider_at, now()),
+           status = 'not_held'
+     where id = p_session_id;
+    v_other := v_model;
+    select coalesce(p.name, 'The stylist') into v_who
+    from public.providers p where p.user_id = v_me;
+  end if;
+
+  -- ⚠️ THE OTHER PARTY IS TOLD, NEUTRALLY, AND ONLY ONCE. It is the only way
+  -- they learn there is something to agree with or dispute. The sentence
+  -- reports a statement and characterises nobody: "X has recorded that…", not
+  -- "X says you did not turn up".
+  --
+  -- Suppressed when they have already said it themselves — telling somebody
+  -- you agree with them is not news, and would arrive as a second
+  -- notification about a thing they started.
+  --
+  -- ⚠️ THE ROW CAN NEVER SAY IT DID NOT HAPPEN WITHOUT SAYING WHO SAID SO —
+  -- AND SINCE 0079 THE THING THAT MAKES THAT TRUE IS THE **COLUMN GRANT**, NOT
+  -- THIS GUARD. authenticated holds UPDATE on `status` alone, so
+  -- not_held_model_at and not_held_provider_at are writable only in here.
+  -- Before 0079 a model could set not_held_provider_at directly in an update
+  -- that never touched status, so trg_enforce_session_status never fired and
+  -- the row could be made to say the stylist agreed (item 147, test 4).
+  --
+  -- **Do not widen that grant.** The trigger cannot defend these columns: it is
+  -- BEFORE UPDATE OF status and an update that leaves status alone is invisible
+  -- to it.
+  if v_other is not null and (
+       (v_is_model     and (select not_held_provider_at from public.sessions where id = p_session_id) is null)
+    or (not v_is_model and (select not_held_model_at    from public.sessions where id = p_session_id) is null)
+  ) then
+    insert into public.notifications (user_id, type, title, body, session_id)
+    values (
+      v_other, 'session_not_held', 'Booking marked as not held',
+      v_who || ' has recorded that your appointment on '
+            || to_char(v_date, 'FMDD FMMonth') || ' did not go ahead. '
+            || 'If that is not right, you can say so on the booking.',
+      p_session_id);
+  end if;
+end $function$;
+
+-- MIGRATION FOOTER
+insert into public.schema_migrations (version, name, checksum)
+values ('0079', 'the_column_grant_is_the_only_guard', 'ed4d76860e740cd31ac5344841b99e0bd20a6447b96c6945213688b2ee0674a0');
+
+commit;
+
+-- ===========================================================================
+-- ⚠️ PREFLIGHT — RUN THIS BEFORE THE MIGRATION. Read-only, changes nothing.
+--
+--   -- (i) the state this assumes, and the fault still being present
+--   select
+--     (select count(*) from public.schema_migrations where version = '0077') = 1
+--       as v_0077_applied,
+--     (select relrowsecurity from pg_class where oid = 'public.sessions'::regclass)
+--       as rls_is_on_MUST_BE_TRUE,
+--     has_table_privilege('authenticated', 'public.sessions', 'update')
+--       as authed_has_table_wide_update_NOW,
+--     has_column_privilege('authenticated', 'public.sessions', 'price_pence', 'update')
+--       as authed_can_write_price_NOW,
+--     has_table_privilege('authenticated', 'public.sessions', 'insert')
+--       as authed_can_insert_MUST_STAY_TRUE;
+--
+--   Expect true, true, true, true, true. The third and fourth are the fault;
+--   the fifth must still be true AFTER the migration — booking depends on it,
+--   because create_session_with_consent is SECURITY INVOKER.
+--
+--   -- (ii) ⚠️ EVERY FUNCTION THAT UPDATES sessions, AND WHICH COLUMNS, READ
+--   --      FROM THE LIVE BODIES. A SECURITY INVOKER function runs with the
+--   --      CALLER's privileges, so one writing a column other than `status`
+--   --      would break the moment this migration applies.
+--   --
+--   --      My own inventory of this came from a regex over repo files and
+--   --      found public._withdraw_stylist as INVOKER writing sessions.status.
+--   --      Repo files are not the database — confirm it here.
+--   select p.proname,
+--          case when p.prosecdef then 'DEFINER' else 'INVOKER' end as security,
+--          regexp_replace(
+--            substring(pg_get_functiondef(p.oid)
+--                      from 'update[[:space:]]+public\.sessions.*?(?:where|;)'),
+--            '[[:space:]]+', ' ', 'g') as the_update
+--     from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+--    where n.nspname = 'public'
+--      and pg_get_functiondef(p.oid) ~* 'update[[:space:]]+public\.sessions'
+--    order by p.prosecdef, p.proname;
+--
+--   ⚠️ READ THE **INVOKER** ROWS. Each one must write `status` and nothing else.
+--   A DEFINER row is unaffected — it runs as its owner. If an INVOKER function
+--   writes any other column, STOP: either it needs that column granted, or it
+--   needs to become DEFINER, and neither decision belongs inside this migration.
+-- ===========================================================================
+--
+-- ── VERIFY ──────────────────────────────────────────────────────────────
+--
+--   ⚠️ IT RE-RUNS ITEM 147'S FOUR TESTS AND EXPECTS THEM TO FAIL — and then
+--   tests that a STATUS update still SUCCEEDS. Without that last part a grant
+--   of nothing at all would pass every other check while accept and decline
+--   were broken for every member. Test the thing that must still work, not only
+--   the things that must stop.
+--
+--   Use the SAME model and session as the original run, or a pair from the
+--   locator query (an accepted session whose model is neither an admin nor the
+--   owner of that booking's shop).
+--
+--   begin;
+--   do $v$
+--   declare
+--     v_sid   uuid := '60c22f40-cd0f-430d-927c-477d3aa587d0';
+--     v_model uuid := 'b0df9c2f-02c5-4fef-afb0-9b184c3b9130';
+--     v_other uuid; v_rows int;
+--     r1 text := 'NO ERROR — STILL WRITABLE';
+--     r2 text := 'NO ERROR — STILL WRITABLE';
+--     r3 text := 'NO ERROR — STILL WRITABLE';
+--     r4 text := 'NO ERROR — STILL WRITABLE';
+--     r5 text := 'not reached';
+--   begin
+--     select p.id into v_other from public.providers p
+--      where p.id is distinct from (select provider_id from public.sessions where id = v_sid)
+--      limit 1;
+--
+--     perform set_config('request.jwt.claims',
+--       json_build_object('sub', v_model::text, 'role', 'authenticated')::text, true);
+--     execute 'set local role authenticated';
+--
+--     -- the premises, in the order the trigger checks them
+--     if auth.uid() is null then
+--       raise exception 'ROLLED BACK, TESTED NOTHING. auth.uid() is null.';
+--     end if;
+--     if public.is_admin() then
+--       raise exception 'ROLLED BACK, TESTED NOTHING. The actor is an admin and bypasses the trigger.';
+--     end if;
+--
+--     begin update public.sessions set date = date + 400 where id = v_sid;
+--     exception when others then r1 := sqlstate || ' ' || sqlerrm; end;
+--
+--     begin update public.sessions set price_pence = 0 where id = v_sid;
+--     exception when others then r2 := sqlstate || ' ' || sqlerrm; end;
+--
+--     begin update public.sessions set provider_id = v_other where id = v_sid;
+--     exception when others then r3 := sqlstate || ' ' || sqlerrm; end;
+--
+--     begin update public.sessions set not_held_provider_at = now() where id = v_sid;
+--     exception when others then r4 := sqlstate || ' ' || sqlerrm; end;
+--
+--     -- ⚠️ THE ONE THAT MUST STILL WORK. The model is not the provider, so the
+--     -- TRIGGER will refuse 'accepted' with 42501 "Only the provider can set" —
+--     -- that is the RIGHT refusal and proves the column is writable. A
+--     -- "permission denied for table sessions" here means the grant is wrong
+--     -- and every accept and decline in the product is broken.
+--     begin
+--       update public.sessions set status = 'accepted' where id = v_sid;
+--       get diagnostics v_rows = row_count;
+--       r5 := 'no error, rows=' || v_rows;
+--     exception when others then r5 := sqlstate || ' ' || sqlerrm; end;
+--
+--     execute 'reset role';
+--     raise exception 'ROLLED BACK ON PURPOSE.%  1 move: %%  2 price: %%  3 reassign: %%  4 not_held: %%  5 STATUS: %',
+--       chr(10), chr(10), r1, chr(10), r2, chr(10), r3, chr(10), r4, chr(10), r5;
+--   end $v$;
+--   rollback;
+--
+--   Expect 1 to 4 all **42501 permission denied for table sessions**, and 5 to
+--   be the TRIGGER's message — "Only the provider can set a session to
+--   accepted" — not a permission error. If any of 1 to 4 says STILL WRITABLE
+--   the grant did not take. If 5 says permission denied, revert immediately:
+--   `grant update (status) on public.sessions to authenticated;`
+-- ===========================================================================
