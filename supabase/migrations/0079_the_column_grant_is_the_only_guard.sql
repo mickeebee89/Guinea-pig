@@ -100,6 +100,40 @@ revoke update on public.sessions from anon;
 -- So PREFLIGHT (ii) is not a formality and must be run every time this grant is
 -- narrowed further. **The next person will run the same repo search and get the
 -- same wrong answer.**
+--
+-- ── ⚠️ THE ONE EXEMPTION, AND WHAT WOULD END IT ────────
+-- `_withdraw_stylist` writes `status` AND `cancelled_at`, so `status` alone
+-- would appear to break it. It does not, and the reason is reachability rather
+-- than privilege:
+--
+--   _withdraw_stylist           INVOKER   authenticated CANNOT execute,
+--                                         acl {postgres, service_role}, no PUBLIC
+--     <- _admin_apply_user_action  INVOKER   authenticated CANNOT execute
+--          <- revoke_verification       DEFINER
+--          <- admin_act_on_provider     DEFINER
+--          <- admin_act_on_report       DEFINER
+--          <- admin_act_on_user         DEFINER
+--     <- delete_account_data       DEFINER
+--     <- revoke_verification       DEFINER
+--
+-- The whole closure was walked. **No node is INVOKER and executable by
+-- `authenticated`.** So every route into _withdraw_stylist crosses a DEFINER
+-- boundary first, it always runs as the function owner, and this grant never
+-- applies to it.
+--
+-- ⚠️⚠️ **THE EXEMPTION IS NOT A PROPERTY OF _withdraw_stylist. IT IS A
+-- PROPERTY OF THAT CLOSURE, AND IT CAN BE ENDED FROM A DIFFERENT FILE.**
+-- If anyone grants EXECUTE on `_admin_apply_user_action` to `authenticated`, or
+-- makes any of `revoke_verification`, `admin_act_on_provider`,
+-- `admin_act_on_report` or `admin_act_on_user` SECURITY INVOKER, then
+-- _withdraw_stylist starts running as a member and **stylist withdrawal breaks
+-- on a permission error in the middle of an admin action** — a verification
+-- revocation on a live account. Nothing in this file would change, and nothing
+-- would warn.
+--
+-- If you need that, add `cancelled_at` to the grant below in the same
+-- migration, and read the note above about why granting it to members is a
+-- smaller version of the hole this closes.
 grant update (status) on public.sessions to authenticated;
 
 -- ---------------------------------------------------------------------------
@@ -209,7 +243,7 @@ end $function$;
 
 -- MIGRATION FOOTER
 insert into public.schema_migrations (version, name, checksum)
-values ('0079', 'the_column_grant_is_the_only_guard', '99eb930d4c24f6c41a7768286e4e095431b0e381954581d2b54b930846a48927');
+values ('0079', 'the_column_grant_is_the_only_guard', '2a5343e732bcfa9d8bb7152bb57341f287ae62b3374b56ee06b860b8f6f1cdec');
 
 commit;
 
@@ -251,6 +285,37 @@ commit;
 --    where n.nspname = 'public'
 --      and pg_get_functiondef(p.oid) ~* 'update[[:space:]]+public\.sessions'
 --    order by p.prosecdef, p.proname;
+--
+--   -- (iii) ⚠️ WHO OWNS THOSE DEFINER FUNCTIONS. The exemption above assumes
+--   --       they run as a role that still holds UPDATE after the revoke. If one
+--   --       is owned by a role that gets UPDATE only by inheriting
+--   --       `authenticated`, the revoke cuts it off and withdrawal breaks
+--   --       regardless of the call chain. Answers rather than raises.
+--   select p.proname,
+--          pg_get_userbyid(p.proowner) as owner,
+--          has_table_privilege(pg_get_userbyid(p.proowner), 'public.sessions', 'update')
+--            as owner_has_update,
+--          pg_has_role(pg_get_userbyid(p.proowner), 'authenticated', 'MEMBER')
+--            as owner_inherits_authenticated,
+--          (select pg_get_userbyid(relowner) from pg_class
+--            where oid = 'public.sessions'::regclass) as sessions_owner
+--     from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+--    where n.nspname = 'public'
+--      and p.proname in ('_withdraw_stylist', '_admin_apply_user_action',
+--                        'delete_account_data', 'revoke_verification',
+--                        'admin_act_on_provider', 'admin_act_on_report',
+--                        'admin_act_on_user')
+--    order by p.proname;
+--
+--   ACCEPTABLE ANSWER: seven rows, every `owner_has_update` **true** and every
+--   `owner_inherits_authenticated` **false** — and ideally `owner` equal to
+--   `sessions_owner`, because the table owner holds every privilege implicitly
+--   and cannot be cut off by a revoke aimed at `authenticated`.
+--
+--   ⚠️ STOP IF: any `owner_inherits_authenticated` is true, or any
+--   `owner_has_update` is false. Either means this migration would break
+--   stylist withdrawal through the owner rather than through the call chain,
+--   which is a different fault from the one the chain analysis cleared.
 --
 --   ⚠️ READ THE **INVOKER** ROWS. Each one must write `status` and nothing else.
 --   A DEFINER row is unaffected — it runs as its owner. If an INVOKER function

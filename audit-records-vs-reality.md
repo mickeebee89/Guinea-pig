@@ -15356,6 +15356,52 @@ earlier.
 
 ---
 
+## 149. FOUR ADMIN RPCs ARE DEFINER AND EXECUTABLE BY ANY MEMBER, AND NOBODY HAS READ THEIR GUARDS
+### Raised 3 Oct 2026 while closing item 147. NOT STARTED, deliberately.
+
+**Plainly:** `revoke_verification`, `admin_act_on_provider`, `admin_act_on_report`
+and `admin_act_on_user` are all `SECURITY DEFINER` and all have EXECUTE granted
+to `authenticated`. So an `is_admin()` guard inside each is the only thing
+between **any signed-in member** and admin powers over somebody else's account —
+suspending them, banning them, revoking their verification, acting on reports.
+
+Found as a by-product of walking the `_withdraw_stylist` call closure for 0079:
+the chain analysis needed each caller's security and grants, and those six rows
+are what came back.
+
+### ⚠️ WHY IT MATTERS MORE HERE THAN IT WOULD ELSEWHERE
+
+**They are DEFINER, so there is no RLS underneath to catch a mistake.** A
+missing or misordered guard in an INVOKER function still meets the row policies;
+the same mistake in a DEFINER function runs as the owner, and the owner is not
+subject to RLS. The guard is not the first line of defence — it is the only one.
+
+Two things to confirm, and the second is the one that gets missed:
+
+1. **Each refuses a non-admin at all.**
+2. **The refusal comes BEFORE any state change**, not after. A guard that raises
+   after the first UPDATE leaves the write committed if the raise is ever caught
+   upstream, and leaves a misleading audit row even when it is not.
+
+`admin_decide_verification` and `admin_decide_status_post` were both read in full
+on 2–3 Oct for 0077 and both check `is_admin()` as their first statement, before
+any read or write. That is the shape to confirm in the other four — **it is
+evidence that the pattern is right here, not evidence that these four follow
+it.** *A finding is only as wide as the check.*
+
+### Not started, and that is a decision
+
+**Do not begin until 0079 and 0078 are applied.** 147 is confirmed and being
+closed; this is unread. Opening a second investigation across four
+owner-privileged functions while a confirmed hole is still open is how the
+confirmed one stops getting finished.
+
+The work is: `pg_get_functiondef` on all four, read each in full, and record
+whether the `is_admin()` check precedes every read and every write. No migration
+until that is known.
+
+---
+
 ## What is open
 
 | | Item | Blocking launch? |
@@ -15381,6 +15427,7 @@ earlier.
 | 137 | ✅ **CLOSED 1 Oct.** A declined application vanished from both clients — the model's only trace was a notification she can delete. Fourth value this one allowlist has needed. Fixed on web; mobile's sessions.tsx still hides `declined` and `expired` | No while mobile is unreleased |
 | 139 | ✅ **CLOSED 2 Oct.** 0070's verify picked `ff06d568` with an unordered `limit 1` — a provider AND an admin — so the guard bypassed and the block reported a hole that did not exist. The inverse of 0027: a rule for everyone except admins, tested as an admin. Four blocks audited; every one whose actor matters now asserts its own premise | No |
 | 140 | ✅ **CLOSED AND VERIFIED LIVE 2 Oct.** 0067 gave `session_expiry_runs` RLS with no policy AND revoked the table grant, so the tile built to watch it could not read it. Three run-log tables, one contract, three access shapes. The tile reported *"could not read"* rather than *"Never"*, which is what made it diagnosable | No |
+| 149 | ⚠️ **RAISED 3 Oct, NOT STARTED.** `revoke_verification`, `admin_act_on_provider`, `admin_act_on_report` and `admin_act_on_user` are all **SECURITY DEFINER with EXECUTE to `authenticated`**, so an `is_admin()` guard inside each is the only thing between any signed-in member and admin powers over another account. **Nobody has read those four guards.** DEFINER means no RLS underneath, so the guard is the only line, and it must refuse BEFORE any state change. Found while walking the `_withdraw_stylist` closure for 0079. Deliberately not started until 0079 and 0078 are applied | **Yes if a guard is missing** |
 | 146 | ⚠️ **PROCESS, 3 Oct.** Backticks inside a double-quoted shell string executed, so **I deployed send-email to the live project by accident** and its JSON output overwrote part of row 143. Then I reported the deploy as unattributable and said I had not run it — the evidence was in my own tool call. Nothing broke; the deploy was correct in every respect, which is luck not care. Rule: never backticks inside double quotes; multi-line commit messages via `-F <file>` only | No |
 | 145 | ✅ **CLOSED 3 Oct — 0076 applied, self-test passed inside the transaction.** My own 0075 raised 42804 on **every** call: a bare `null` in a select list is `text` and `session_id` is `uuid`. Both wrappers swallow and `console.warn`, so `new_availability` would have **stopped silently** — 0069's family exactly. **No check in this repo could have caught it**: nothing static type-checks a plpgsql body, and the only executor is the VERIFY block, which runs after `commit;`. Fixed by not naming a column that should default; 0076 also **exercises the function inside its own transaction**, impersonating a stylist — without which the guard returns 0 and the insert is never reached | No |
 | 144 | ⚠️ **VERIFIED, NOT FIXED — PLAN ONLY, 3 Oct.** The `notifications` INSERT policy is `with check (auth.uid() is not null)`: **any signed-in account can write any notification to anyone**, and `notify_email` will then send that text from `notifications@cavybeauty.com` for eleven types — a phishing vector using the product's own verified sender. Every other policy on the table scopes to the owner. ⚠️ **All 15 client inserts are cross-user, so tightening the policy first would silently stop notifications product-wide.** Staged plan: three definer functions, then the policy. Edge functions unaffected (service role); **the admin console IS affected** (anon key + admin session) | **Yes — it lets a member send mail as Cavy** |
