@@ -15046,7 +15046,7 @@ So what an attacker actually controls:
 
 | | attacker-controlled? |
 |---|---|
-| **Subject** | **Never.** One of nine Cavy-authored strings, chosen only by choosing the `type` |
+| **Subject** | **Never invented.** One of **ten** Cavy-authored strings, selected by choosing the `type` — ⚠️ *and for `verification`, selected between TWO by crafting the title*, see below |
 | **Heading** | **For 3 of the 11 emailed types** — `admin_suspension`, `session_expired`, `session_not_held` have no `case` in `copyFor`, so the default applies and `heading: title \|\| …` takes the ROW's title |
 | **Body** | **Always** |
 
@@ -15062,6 +15062,27 @@ subject. **The subject lends the authenticity; the body carries the payload.**
 
 The three default-branch types are the weaker case: full control of the heading,
 but under the subject *"Something happened on Cavy"*.
+
+### ⚠️ The count: ten, not nine — and reconciling it found a third mechanism
+
+An earlier version of this entry said nine subject strings while also saying
+eight types have a `case`. That does not close, and the discrepancy was real
+rather than a typo:
+
+* **8 cases**, but `verification` returns **two** subjects through a ternary, so
+  **9 subjects live in the cases**;
+* **plus the default's own string** — *"Something happened on Cavy"* — makes
+  **10**.
+
+No fossil: every string is reachable. **And the ternary is the finding.** It
+branches on `/not approved/i.test(title)` — and `title` is the ROW's title,
+which the attacker writes. So for `verification` the subject is **not
+type-determined**: a crafted title selects between *"Your ID check wasn't
+approved"* and *"You're verified"*.
+
+That is a third mechanism of influence, after the body and the default-branch
+heading, and it was found only by making the arithmetic close. *A count that
+does not reconcile is a reading that is wrong somewhere.*
 
 **Severity unchanged in kind, narrower in shape.** The fix is unaffected: the
 staged plan closes the write, not the template.
@@ -15621,6 +15642,93 @@ covers both the in-app notice and the email.
 
 ---
 
+## 151. THE EMAIL TEMPLATE'S DEFAULT BRANCH IS A TRAP FOR EVERY FUTURE TYPE
+### Raised 3 Oct 2026. ⚠️ NOT STARTED — one decision inside it, below.
+
+`copyFor()`'s default returns `heading: title || 'Something happened on Cavy'`,
+so **any emailed type without a `case` hands its heading to whoever wrote the
+row.** Today that is `admin_suspension`, `session_expired` and
+`session_not_held`.
+
+**It is a pattern, not three instances.** `session_not_held` was created this
+week, in 0070. So the rule is: *add a type to `notify_email`'s allowlist without
+adding a `copyFor` case, and that type silently acquires an attacker-controlled
+heading — and nothing warns.* Three types reached that state by nobody deciding
+it.
+
+**The move is 0079's move:** stop relying on everyone remembering, and make the
+mechanism not permit it.
+
+### ⚠️ But hardening the default ALONE would make legitimate copy worse
+
+Replacing `title ||` with a fixed string removes the hole and simultaneously
+degrades three real emails: a suspension notice would arrive headed *"Something
+happened on Cavy"* instead of saying what it is. That is a worse email for the
+member in order to close a hole against an attacker.
+
+**So the two halves go together:**
+
+1. give those three types their own `case`, with a real subject and heading; and
+2. *then* fix the default to a fixed string, as a backstop for the next type
+   somebody adds.
+
+Proposed copy, **needing Micky's word before it is written** — it reaches
+members:
+
+| type | subject | heading |
+|---|---|---|
+| `admin_suspension` | Your Cavy account is restricted | Your Cavy account is restricted |
+| `session_expired` | Your application has expired | Your application has expired |
+| `session_not_held` | A booking was marked as not held | A booking was marked as not held |
+
+### Why it is raised rather than done now
+
+It is an edge-function deploy, independent of stage F and of any migration — so
+it *could* go in at any time. It is held back because it carries member-facing
+copy for three types, and folding that into item 150's migration would mix a
+copy change into a verify written for a different one. **Do it immediately after
+150, not inside it.**
+
+⚠️ And a `copyFor` case is still a sentence, not a mechanism. The durable
+version is a check that fails when a type is in `notify_email`'s allowlist and
+absent from `copyFor` — the allowlist is in SQL and `copyFor` is in TypeScript,
+so that is a cross-language check of the kind `check-status-coverage.mjs`
+already does for statuses. Worth adding with this.
+
+---
+
+## 152. "ONLY SENT IF THIS COMMITS" IS ASSERTED IN SEVERAL MIGRATIONS WITH NOTHING BEHIND IT
+### Raised 3 Oct 2026. Small, and it is a documentation-integrity item.
+
+0039, 0044 and 0045 each say a `pg_net` dispatch is *"queued by pg_net and only
+sent if this commits"*. 0042 says the same and labels it honestly:
+*"(INFERRED from how pg_net queues; not observed)"*.
+
+**So the same claim appears as a fact in three files and as an inference in a
+fourth.** The reasoning is sound — `net.http_post` is understood to insert into
+`net.http_request_queue`, an ordinary table, which a rollback would discard —
+but soundness is not observation, and this is the claim that decides whether a
+rolled-back verify block can email a real member.
+
+`tg_notify_email`'s live body (read 3 Oct) settles the **path** — it is
+`perform net.http_post(...)` and nothing else — but **not the transactionality**,
+which is a property of `net.http_post`, not of the caller. Settling it is one
+read:
+
+```sql
+select pg_get_functiondef('net.http_post'::regproc);
+```
+
+If the body inserts into a table, the claim is proven and all four comments
+should say so with that evidence. If it does anything else, three files are
+wrong about a safety property. **Either way, one wording across all four.**
+
+Until then the practical mitigation stands and is better than the claim: point
+the test at an account that is safe to email, which removes the exposure rather
+than resolving the uncertainty.
+
+---
+
 ## What is open
 
 | | Item | Blocking launch? |
@@ -15646,6 +15754,8 @@ covers both the in-app notice and the email.
 | 137 | ✅ **CLOSED 1 Oct.** A declined application vanished from both clients — the model's only trace was a notification she can delete. Fourth value this one allowlist has needed. Fixed on web; mobile's sessions.tsx still hides `declined` and `expired` | No while mobile is unreleased |
 | 139 | ✅ **CLOSED 2 Oct.** 0070's verify picked `ff06d568` with an unordered `limit 1` — a provider AND an admin — so the guard bypassed and the block reported a hole that did not exist. The inverse of 0027: a rule for everyone except admins, tested as an admin. Four blocks audited; every one whose actor matters now asserts its own premise | No |
 | 140 | ✅ **CLOSED AND VERIFIED LIVE 2 Oct.** 0067 gave `session_expiry_runs` RLS with no policy AND revoked the table grant, so the tile built to watch it could not read it. Three run-log tables, one contract, three access shapes. The tile reported *"could not read"* rather than *"Never"*, which is what made it diagnosable | No |
+| 152 | ⚠️ **RAISED 3 Oct, not started.** *"queued by pg_net and only sent if this commits"* appears as a FACT in 0039, 0044 and 0045, and as an explicit INFERENCE in 0042. Same claim, two epistemic statuses, and it is the claim deciding whether a rolled-back verify can email a real member. `tg_notify_email`'s body settles the path, not the transactionality. One read of `net.http_post` settles it; then one wording across all four | No |
+| 151 | ⚠️ **RAISED 3 Oct, not started.** `copyFor()`'s default is `heading: title || …`, so **any emailed type without a `case` hands its heading to whoever wrote the row** — today `admin_suspension`, `session_expired`, `session_not_held`, one of which was created this week. A pattern, not three instances. ⚠️ Hardening the default alone would degrade three real emails, so the three cases must be added first; proposed copy in the item, **needs Micky's word**. Plus a cross-language check, since a `case` is a sentence not a mechanism | No |
 | 150 | ⚠️ **DECISION PENDING, 3 Oct.** `session_applied` says *"on 5 Oct 2026 at 09:00"* and `session_accepted` says *"for Monday 5 October"* — same booking, two formats, **both emailed**, one to each party. An accident of which migration touched which string: `notify_session_applied` is 0077 and predates the date decision made for 0078. Two options in the item; one line in each function either way. **Nothing written** | No |
 | 147 | ✅ **CLOSED 3 Oct — confirmed, fixed, and verified by re-running the four tests that proved it.** Either party could rewrite a booking's date, price, **owning stylist** and either `not_held` timestamp in a plain UPDATE — no actor check, no guard, no notification. 0079 narrows UPDATE to `status`. The licence came from the SECOND control design; the first could not run. ⚠️ My column inventory missed `cancelled_at` because a regex wanted it at line start — PREFLIGHT (ii) caught it. Completes item 133 | Was live |
 | 149 | ⚠️ **RAISED 3 Oct, NOT STARTED.** `revoke_verification`, `admin_act_on_provider`, `admin_act_on_report` and `admin_act_on_user` are all **SECURITY DEFINER with EXECUTE to `authenticated`**, so an `is_admin()` guard inside each is the only thing between any signed-in member and admin powers over another account. **Nobody has read those four guards.** DEFINER means no RLS underneath, so the guard is the only line, and it must refuse BEFORE any state change. Found while walking the `_withdraw_stylist` closure for 0079. Deliberately not started until 0079 and 0078 are applied | **Yes if a guard is missing** |
