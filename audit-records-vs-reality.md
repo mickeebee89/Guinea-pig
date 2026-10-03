@@ -15422,6 +15422,142 @@ until that is known.
 
 ---
 
+## 147. EITHER PARTY COULD REWRITE A BOOKING — THE TIME, THE PRICE, AND WHOSE IT WAS
+### Confirmed, fixed and verified 3 Oct 2026. 0079 applied. Completes item 133.
+
+**Plainly:** a model could move her own appointment to a different day, set its
+price to zero, **reassign it to a different stylist's diary**, and record that
+the stylist had agreed it did not happen — all with a plain UPDATE, no actor
+check, no guard, and no notification to anybody.
+
+`authenticated` and `anon` held table-wide UPDATE on all 26 columns of
+`public.sessions`. The only narrowing was `participants can update sessions`,
+which is USING-only.
+
+### The licence came from the SECOND control design
+
+⚠️ **Recorded because a future reader would otherwise think the first one ran.**
+The first negative control was an update on a session the model is *not* party
+to — and it could not run: she is party to every session in this data, so no
+such row exists. Replaced with a `WITH CHECK` control on the same table, command
+and role — as the model, set `model_user_id` to another user — which was refused
+`42501 new row violates row-level security policy`. That, plus
+`relrowsecurity=t`, is what makes the four results below non-vacuous rather than
+a demonstration that RLS was off.
+
+| test | result, all rolled back |
+|---|---|
+| 1 MOVE | `rows=1` — date and start_time rewritten |
+| 2 PRICE | `rows=1` — `price_pence` null → 0 |
+| 3 REASSIGN | `rows=1` — `provider_id` 09c6d70c → 49d40aae |
+| 4 NOT_HELD | `rows=1` — `not_held_provider_at` set **by the model** |
+
+**Test 3 is the consequential one:** `provider_id` changed while status stayed
+`accepted`, so a stylist who never saw the application had a confirmed booking
+in her diary and was never told. Test 1 next: the appointment moved with no
+notification, because `trg_enforce_session_status` is `BEFORE UPDATE OF status`
+and never fired.
+
+### Why the grant was the only possible fix
+
+All three protective triggers are INSERT-time — `tg_session_apply_gate`,
+`tg_session_price_snapshot`, `tg_session_slot_authority`. **Nothing in the
+database watches an UPDATE to those columns.** There is no trigger to add a
+guard to and no policy that distinguishes columns. 0079 revokes table-wide
+UPDATE from `authenticated` and `anon` and grants `update (status)` back to
+`authenticated` — the whole client surface, measured.
+
+### ⚠️ MY INVENTORY WAS WRONG AND THE PREFLIGHT CAUGHT IT
+
+`_withdraw_stylist` is `SECURITY INVOKER` and writes **two** columns:
+`set status = 'cancelled', cancelled_at = now()`. My inventory said `status`
+alone — the regex required a column to follow `set` or a comma at the *start of
+a line*, and `cancelled_at` shares a line with `status`.
+
+**The repo file was not stale. My parse of it was wrong** — a failure mode no
+amount of re-reading the file would catch, and one the "read the live
+definition" rule had never been aimed at.
+
+It turned out exempt, but by reachability rather than privilege: the whole call
+closure was walked and **no node is INVOKER and executable by `authenticated`**,
+so every route crosses a DEFINER boundary and it always runs as the owner.
+⚠️ **That exemption is a property of the closure and can be ended from another
+file** — granting EXECUTE on `_admin_apply_user_action` to `authenticated`, or
+making any of its three DEFINER callers INVOKER, breaks stylist withdrawal on a
+permission error mid verification-revocation, with nothing in 0079 changed and
+nothing warning. That sentence is in the migration.
+
+### The verify re-ran the four tests that proved it
+
+1–4 all `42501 permission denied for table sessions`. Test 6 — the real path,
+as the provider — `rows=1`, status changed, `is_admin=false`, so no bypass
+carried it and members can still be served.
+
+⚠️ **Test 5 proved nothing on its first run and was fixed in the file rather
+than annotated.** It wrote `'accepted'` to an already-accepted row, so it hit
+the trigger's first line — `new.status is not distinct from old.status` — and
+succeeded as a permitted no-op *before any actor check*. Verdict UNEXPECTED,
+benign, and the test never reached its subject. It now writes `'declined'`, and
+a fourth verdict branch names the no-op outcome.
+
+It also carried a defect that would have certified a broken grant: the trigger
+raises `using errcode = '42501'` and a missing column privilege is *also* 42501,
+so a check keyed on SQLSTATE passes in both cases — including the one where
+accept and decline are broken product-wide. It compares `sqlerrm` text, with
+"DO NOT SIMPLIFY THIS TO A SQLSTATE MATCH" beside it.
+
+### It completes item 133, and strengthens 0070's comment rather than weakening it
+
+0065 made the availability row the authority for *when* an appointment is —
+correct, and insert-only. The update path stayed open, so the slot was
+authoritative at booking and rewritable afterwards. **133 and 147 are one fault
+at two ends of a row's life**, and each now names the other.
+
+And 0070's sentence — *"the row can never say it did not happen without saying
+who said so"* — was going to be narrowed as wider than its mechanism. Micky's
+call, and the better one: **narrow the grant and the sentence becomes true.** It
+stays, and now names the column grant as what enforces it, because the trigger
+is `BEFORE UPDATE OF status` and cannot see an update that leaves status alone.
+
+---
+
+## 150. THE SAME APPOINTMENT IS WRITTEN TWO WAYS, AND BOTH REACH INBOXES
+### Raised 3 Oct 2026. ⚠️ DECISION PENDING — nothing written.
+
+Found while verifying stage B. Two notifications about one booking, going to the
+two people involved, rendering the same day differently:
+
+```
+session_applied    A model has applied for Brows on 5 Oct 2026 at 09:00
+session_accepted   Your booking for Monday 5 October has been confirmed.
+```
+
+Both are emailed — `session_applied` and `session_accepted` are each in
+`notify_email`'s allowlist.
+
+**This is an accident of which migration touched which string, not a choice.**
+`notify_session_applied` came from 0077, before the date format was decided for
+0078, so it was never part of that decision. The 0078 copy went through a
+deliberate call — long form, because these are read days later out of context
+and a spelt-out weekday stops a misread day — and the 0077 string simply
+predates it.
+
+**Two options, Micky's call:**
+
+1. **All four read the same way** — `Monday 5 October at 9:00am`. Consistent
+   across both roles, and the apply notice gains the weekday that the
+   transitions were given it for. Costs the time on three notices that do not
+   currently carry one.
+2. **Fix the apply notice's format only**, leaving the transitions date-only.
+   Smaller change; the apply notice keeps its time because a stylist needs the
+   hour, and the transitions stay as verified.
+
+One line in each function either way, plus a re-run of blocks already written.
+**Cheap, but it is a copy decision and not mine.** Not folded into stage B's
+client half, which is deliberately behaviour-neutral on wording.
+
+---
+
 ## What is open
 
 | | Item | Blocking launch? |
@@ -15447,6 +15583,8 @@ until that is known.
 | 137 | ✅ **CLOSED 1 Oct.** A declined application vanished from both clients — the model's only trace was a notification she can delete. Fourth value this one allowlist has needed. Fixed on web; mobile's sessions.tsx still hides `declined` and `expired` | No while mobile is unreleased |
 | 139 | ✅ **CLOSED 2 Oct.** 0070's verify picked `ff06d568` with an unordered `limit 1` — a provider AND an admin — so the guard bypassed and the block reported a hole that did not exist. The inverse of 0027: a rule for everyone except admins, tested as an admin. Four blocks audited; every one whose actor matters now asserts its own premise | No |
 | 140 | ✅ **CLOSED AND VERIFIED LIVE 2 Oct.** 0067 gave `session_expiry_runs` RLS with no policy AND revoked the table grant, so the tile built to watch it could not read it. Three run-log tables, one contract, three access shapes. The tile reported *"could not read"* rather than *"Never"*, which is what made it diagnosable | No |
+| 150 | ⚠️ **DECISION PENDING, 3 Oct.** `session_applied` says *"on 5 Oct 2026 at 09:00"* and `session_accepted` says *"for Monday 5 October"* — same booking, two formats, **both emailed**, one to each party. An accident of which migration touched which string: `notify_session_applied` is 0077 and predates the date decision made for 0078. Two options in the item; one line in each function either way. **Nothing written** | No |
+| 147 | ✅ **CLOSED 3 Oct — confirmed, fixed, and verified by re-running the four tests that proved it.** Either party could rewrite a booking's date, price, **owning stylist** and either `not_held` timestamp in a plain UPDATE — no actor check, no guard, no notification. 0079 narrows UPDATE to `status`. The licence came from the SECOND control design; the first could not run. ⚠️ My column inventory missed `cancelled_at` because a regex wanted it at line start — PREFLIGHT (ii) caught it. Completes item 133 | Was live |
 | 149 | ⚠️ **RAISED 3 Oct, NOT STARTED.** `revoke_verification`, `admin_act_on_provider`, `admin_act_on_report` and `admin_act_on_user` are all **SECURITY DEFINER with EXECUTE to `authenticated`**, so an `is_admin()` guard inside each is the only thing between any signed-in member and admin powers over another account. **Nobody has read those four guards.** DEFINER means no RLS underneath, so the guard is the only line, and it must refuse BEFORE any state change. Found while walking the `_withdraw_stylist` closure for 0079. Deliberately not started until 0079 and 0078 are applied | **Yes if a guard is missing** |
 | 146 | ⚠️ **PROCESS, 3 Oct.** Backticks inside a double-quoted shell string executed, so **I deployed send-email to the live project by accident** and its JSON output overwrote part of row 143. Then I reported the deploy as unattributable and said I had not run it — the evidence was in my own tool call. Nothing broke; the deploy was correct in every respect, which is luck not care. Rule: never backticks inside double quotes; multi-line commit messages via `-F <file>` only | No |
 | 145 | ✅ **CLOSED 3 Oct — 0076 applied, self-test passed inside the transaction.** My own 0075 raised 42804 on **every** call: a bare `null` in a select list is `text` and `session_id` is `uuid`. Both wrappers swallow and `console.warn`, so `new_availability` would have **stopped silently** — 0069's family exactly. **No check in this repo could have caught it**: nothing static type-checks a plpgsql body, and the only executor is the VERIFY block, which runs after `commit;`. Fixed by not naming a column that should default; 0076 also **exercises the function inside its own transaction**, impersonating a stylist — without which the guard returns 0 and the insert is never reached | No |
