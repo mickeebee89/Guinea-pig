@@ -293,26 +293,90 @@ commit;
 --     begin update public.sessions set not_held_provider_at = now() where id = v_sid;
 --     exception when others then r4 := sqlstate || ' ' || sqlerrm; end;
 --
---     -- ⚠️ THE ONE THAT MUST STILL WORK. The model is not the provider, so the
---     -- TRIGGER will refuse 'accepted' with 42501 "Only the provider can set" —
---     -- that is the RIGHT refusal and proves the column is writable. A
---     -- "permission denied for table sessions" here means the grant is wrong
---     -- and every accept and decline in the product is broken.
+--     -- ⚠️⚠️ THE ONE THAT MUST STILL WORK — AND IT **MUST NOT** BE DECIDED
+--     -- ON SQLSTATE. Both outcomes are 42501:
+--     --
+--     --     grant correct  42501  Only the provider can set a session to accepted
+--     --     grant WRONG    42501  permission denied for table sessions
+--     --
+--     -- enforce_session_status_transition raises with `using errcode = '42501'`
+--     -- and a missing column privilege is insufficient_privilege, which is also
+--     -- 42501. **A check keyed on sqlstate passes in both cases, including the
+--     -- one where every accept and decline in the product is broken.** So the
+--     -- verdict below compares sqlerrm TEXT.
+--     --
+--     -- DO NOT SIMPLIFY THIS TO A SQLSTATE MATCH. That is the exact shape this
+--     -- record keeps logging: a check that passes without testing its claim.
 --     begin
 --       update public.sessions set status = 'accepted' where id = v_sid;
 --       get diagnostics v_rows = row_count;
---       r5 := 'no error, rows=' || v_rows;
+--       r5 := 'NO ERROR, rows=' || v_rows;
 --     exception when others then r5 := sqlstate || ' ' || sqlerrm; end;
 --
+--     if r5 like '%permission denied%' then
+--       v5 := 'FAIL — THE GRANT IS WRONG. accept and decline are broken product-wide.';
+--     elsif r5 like '%Only the provider can set%' then
+--       v5 := 'PASS — reached the trigger, so status is still writable.';
+--     else
+--       v5 := 'UNEXPECTED — read r5 by hand before concluding anything.';
+--     end if;
 --     execute 'reset role';
---     raise exception 'ROLLED BACK ON PURPOSE.%  1 move: %%  2 price: %%  3 reassign: %%  4 not_held: %%  5 STATUS: %',
---       chr(10), chr(10), r1, chr(10), r2, chr(10), r3, chr(10), r4, chr(10), r5;
+--
+--     -- ── TEST 6: THE REAL PRODUCTION PATH, POSITIVE ────────────────────────
+--     -- Test 5 is a proxy: the model can never successfully write status, so
+--     -- her refusal only proves the statement REACHED the trigger. This proves
+--     -- the path members actually use.
+--     --
+--     -- ⚠️ ITS PREMISE IS REPORTED, NOT ASSERTED AWAY. For a POSITIVE test an
+--     -- admin bypass does not invalidate the result — the UPDATE still needs
+--     -- the column privilege either way — it only changes which branch let it
+--     -- through. So is_admin() is printed and the reason it passed is on the
+--     -- record, rather than the block refusing to run. That is the opposite of
+--     -- the negative tests, where an admin bypass makes the result meaningless.
+--     select p.user_id into v_owner
+--       from public.providers p
+--       join public.sessions s on s.provider_id = p.id
+--      where s.id = v_sid;
+--     if v_owner is null then
+--       r6 := 'ROLLED BACK, TESTED NOTHING. This booking has no shop owner.';
+--     else
+--       perform set_config('request.jwt.claims',
+--         json_build_object('sub', v_owner::text, 'role', 'authenticated')::text, true);
+--       execute 'set local role authenticated';
+--       if auth.uid() is null then
+--         r6 := 'ROLLED BACK, TESTED NOTHING. auth.uid() is null for the provider.';
+--       else
+--         v6_admin := public.is_admin();
+--         begin
+--           update public.sessions set status = 'accepted' where id = v_sid;
+--           get diagnostics v_rows = row_count;
+--           select status into v6_now from public.sessions where id = v_sid;
+--           r6 := 'rows=' || v_rows || ' status now ' || coalesce(v6_now, 'null')
+--                 || ' | provider is_admin=' || v6_admin;
+--         exception when others then
+--           r6 := sqlstate || ' ' || sqlerrm || ' | provider is_admin=' || v6_admin;
+--         end;
+--       end if;
+--       execute 'reset role';
+--     end if;
+--
+--     raise exception 'ROLLED BACK ON PURPOSE.%  1 move: %%  2 price: %%  3 reassign: %%  4 not_held: %%  5 STATUS as model: %%     verdict: %%  6 STATUS as PROVIDER: %',
+--       chr(10), chr(10), r1, chr(10), r2, chr(10), r3, chr(10), r4,
+--       chr(10), r5, chr(10), v5, chr(10), r6;
 --   end $v$;
 --   rollback;
 --
---   Expect 1 to 4 all **42501 permission denied for table sessions**, and 5 to
---   be the TRIGGER's message — "Only the provider can set a session to
---   accepted" — not a permission error. If any of 1 to 4 says STILL WRITABLE
---   the grant did not take. If 5 says permission denied, revert immediately:
---   `grant update (status) on public.sessions to authenticated;`
+--   Declare alongside the others:
+--     v_owner uuid; v6_now text; v6_admin boolean;
+--     v5 text := 'not reached'; r6 text := 'not reached';
+--
+--   EXPECT:
+--     1-4  42501 **permission denied for table sessions** — the grant took.
+--          Any "STILL WRITABLE" means it did not.
+--     5    verdict PASS. A FAIL verdict means the grant is wrong and the
+--          one-line revert is: grant update (status) on public.sessions
+--          to authenticated;
+--     6    rows=1 and status now 'accepted'. This is the test that proves
+--          members can still be served. If 5 passes and 6 fails, the column
+--          is writable but something else refuses the real path — read r6.
 -- ===========================================================================
