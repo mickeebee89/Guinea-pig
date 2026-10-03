@@ -15021,12 +15021,59 @@ inserted a row with `user_id: modelUserId`. That worked end to end on 2 Oct.
 
 ### Why it is worse than a spoofed in-app badge
 
-`session_accepted`, `payment_failed` and `admin_warning` are all in
-`notify_email`'s allowlist, so the text can impersonate Cavy's own transactional
-mail — *"Your booking is confirmed"*, *"We couldn't take your £4.99 payment"* —
-and arrive from the verified sender with a working unsubscribe footer. Recipient
-ids are obtainable by any signed-in account, because `public_profiles` has no
-WHERE clause (already recorded under item 141).
+⚠️ **THIS SECTION WAS WRONG AND IS CORRECTED, 3 Oct 2026.** It said
+`notify_email` *"emails the recipient the notification's own title and body"*,
+and that sentence is what justified the phishing claim. **The title is not
+emailed for most types.**
+
+Found by a real email arriving, not by any check: the row's title was
+*"Treatment accepted! 🎉"* and the email subject read *"Your booking is
+confirmed"*. The body matched the row exactly. Same discovery shape as item 132,
+found by tapping, and 128, found by looking at a screenshot.
+
+**Observed, not inferred.** The DEPLOYED function was downloaded
+(`supabase functions download send-email`) and is byte-identical to the repo
+copy — which matters here because item 146 is the reason repo and deployed
+cannot be assumed equal. It sends:
+
+```
+subject: c.subject      from copyFor(), BY TYPE
+heading: c.heading      from copyFor(), BY TYPE
+body:    note.body      FROM THE ROW
+```
+
+So what an attacker actually controls:
+
+| | attacker-controlled? |
+|---|---|
+| **Subject** | **Never.** One of nine Cavy-authored strings, chosen only by choosing the `type` |
+| **Heading** | **For 3 of the 11 emailed types** — `admin_suspension`, `session_expired`, `session_not_held` have no `case` in `copyFor`, so the default applies and `heading: title \|\| …` takes the ROW's title |
+| **Body** | **Always** |
+
+### What that changes, and what it does not
+
+**It is still a phishing vector and still worth closing, but not the shape
+recorded.** The attacker cannot invent a subject — and that cuts both ways,
+because the subjects they *can* select are Cavy's real ones. A message arriving
+under *"Your booking is confirmed"* or *"We couldn't take your £4.99 payment"*,
+from the verified sender, with a working unsubscribe footer and an
+attacker-written body, is if anything more credible than one with an invented
+subject. **The subject lends the authenticity; the body carries the payload.**
+
+The three default-branch types are the weaker case: full control of the heading,
+but under the subject *"Something happened on Cavy"*.
+
+**Severity unchanged in kind, narrower in shape.** The fix is unaffected: the
+staged plan closes the write, not the template.
+
+Recipient ids remain obtainable by any signed-in account, because
+`public_profiles` has no WHERE clause (item 141).
+
+⚠️ **AND THE GENERAL LESSON IS THE ONE THIS RECORD KEEPS WRITING.** The claim
+was made from reading `notify_email`'s *existence* and assuming what it carried,
+never from reading `send-email`'s `copyFor`. It then justified a severity rating
+for a week. *An inference stated once becomes a premise everything after it
+rests on.*
 
 So it is a phishing vector that borrows the product's own reputation. **The
 email half, built in item 74 to make the web usable without an app, is what
@@ -15555,6 +15602,22 @@ predates it.
 One line in each function either way, plus a re-run of blocks already written.
 **Cheap, but it is a copy decision and not mine.** Not folded into stage B's
 client half, which is deliberately behaviour-neutral on wording.
+
+### ✅ It does NOT reach the email template — checked, not assumed
+
+The worry was fair: the blocks we ran prove the notification ROW, and the row is
+demonstrably not the whole of what a member reads — the email subject comes from
+`copyFor`, not the row. So if the template rendered its own date, a fix confined
+to the two SQL functions would miss it.
+
+**It does not.** The only date-like expression in the deployed `send-email` is
+`new Date(Date.now() - CHAT_THROTTLE_MINUTES …)`, a throttle timestamp that
+never reaches a member. None of the nine `copyFor` subjects or headings contains
+a date.
+
+**So the only date a member ever reads is in the body, and the body is the row's
+verbatim.** Fixing `notify_session_applied` and `notify_session_transition`
+covers both the in-app notice and the email.
 
 ---
 
