@@ -102,30 +102,56 @@
  *   * `begin; ... rollback;` is fine — it is the multi-statement dependencies
  *     inside that break, not the transaction.
  *
- *   ── ⚠️ NEVER `select ... into` INSIDE A `do` BLOCK. ADDED 3 Oct 2026 ─────
+ *   ── ⚠️ THE EDITOR SOMETIMES REWRITES A `do` BLOCK. CAUSE UNKNOWN ───────
  *
- *     The Supabase editor REWRITES it. It reads `select ... into v_x` as SQL's
- *     `SELECT INTO <table>` — which is `CREATE TABLE AS` — and splices lines
- *     like `ALTER TABLE v_other ENABLE ROW LEVEL SECURITY` into the middle of
- *     the block, breaking the dollar quoting. The block then fails on a syntax
- *     error that names a variable as if it were a table.
+ *     OBSERVED ONCE, 3 Oct 2026, on 0079's verify block. The Supabase SQL
+ *     editor spliced `ALTER TABLE <name> ENABLE ROW LEVEL SECURITY` lines into
+ *     the middle of the block, breaking the dollar quoting. The names it used
+ *     were the three variables assigned by `select ... into`.
  *
- *     ASSIGN FROM A SCALAR SUBQUERY INSTEAD:
+ *     THE WORKAROUND THAT WORKED: assign from a scalar subquery instead.
  *
  *         v_other := (select p.id from public.providers p limit 1);
  *
- *     ⚠️ AND A PREVIOUS DIAGNOSIS OF THIS WAS WRONG. It was attributed to
- *     `record` declarations, and renaming the tag to `$blk$` appeared to fix
- *     it — 0059 to 0062 still carry that tag. **The tag was coincidental.**
- *     Proved 3 Oct: the editor named exactly the three variables assigned with
- *     `select ... into` and ignored the two assigned by `get diagnostics` and
- *     `:=`. The trigger is the `into` keyword and nothing else.
+ *     ⚠️⚠️ `into` IS **NOT** ESTABLISHED AS THE CAUSE, AND THIS FILE SAID IT
+ *     WAS FOR ONE COMMIT. The same editor session ran THREE other `do` blocks
+ *     containing `select ... into` without incident — one of them with five
+ *     such statements, including a five-target
+ *     `select date, start_time, price_pence, provider_id, not_held_provider_at
+ *     into v_d0, v_t0, v_p0, v_prov0, v_nh0`.
  *
- *     `get diagnostics v_rows = row_count` is untouched by this and is safe.
+ *     And the counter-example is exact rather than approximate:
  *
- *     This is the SECOND false rule to have lived in this file. The first is
- *     above, about temp tables. Both were written from an error message plus an
- *     assumption. A rule here is read by everyone and designed around.
+ *         select p.id into v_other_prov from public.providers p where ...   RAN
+ *         select p.id into v_other      from public.providers p where ...   REWRITTEN
+ *
+ *     Same shape. `into` is present in both, so it cannot be what separates
+ *     them. **Do not repeat the claim that it is.**
+ *
+ *     THE TRIGGER IS UNIDENTIFIED. Candidates that the available evidence
+ *     cannot separate: something else in that particular block's text, a
+ *     non-deterministic heuristic on the editor's side, or an interaction with
+ *     block length or structure. **Do not pick one.** If a block gets
+ *     rewritten, reach for the scalar-subquery form; do not reason about why.
+ *
+ *     ── THE HISTORY, WHICH IS WORTH MORE THAN THE RULE ──
+ *
+ *     This is the THIRD attempt at a causal rule for this one behaviour:
+ *
+ *       1. `record` declarations cause it. FALSE. Inferred from an error
+ *          message. The `$blk$` tag rename that appeared to fix it was
+ *          coincidental — 0059 to 0062 still carry that tag and **it records no
+ *          established reason.** Leave them; do not copy the tag expecting it
+ *          to help.
+ *       2. The `into` keyword causes it. FALSE, disproved within a day by the
+ *          blocks that worked, above.
+ *       3. Not attempted. This entry.
+ *
+ *     Two causal rules, both wrong, both written from a single failure plus an
+ *     assumption, both into this file. **The editor's behaviour here is not
+ *     understood.** That sentence is the useful one: it tells you to work
+ *     around a rewritten block rather than design every block around a cause
+ *     nobody has pinned down.
  *
  *   ── ⚠️ ONE `%` FED ONE CONCATENATED STRING. ADDED 3 Oct 2026 ────────────
  *

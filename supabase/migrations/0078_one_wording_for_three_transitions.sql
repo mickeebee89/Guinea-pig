@@ -302,11 +302,15 @@ commit;
 --   ⚠️ WRITTEN TO THREE CONVENTIONS LEARNED THE HARD WAY ON 0079, all three
 --   now in scripts/migration-status.mjs:
 --
---     1. NO `select ... into` inside a `do` block. The Supabase editor reads it
---        as SELECT INTO <table>, which is CREATE TABLE AS, and splices
---        `ALTER TABLE v_x ENABLE ROW LEVEL SECURITY` into the block, breaking
---        the dollar quoting. Every assignment below is `v := (select …)`.
---        `get diagnostics` is safe and is left alone.
+--     1. SCALAR SUBQUERIES, `v := (select …)`, rather than `select ... into`.
+--        ⚠️ NOT because `into` is the cause — it is NOT established as the
+--        cause, and this file claimed it was for one commit before the
+--        counter-examples came in. The editor rewrote ONE block on 3 Oct,
+--        splicing `ALTER TABLE <name> ENABLE ROW LEVEL SECURITY` into it, and
+--        the scalar-subquery form is the workaround that made it run. Three
+--        other blocks the same evening used `select ... into` without
+--        incident. The trigger is unidentified; this form is used here because
+--        it is known to work, not because the alternative is known to break.
 --     2. ONE `%` fed one concatenated string. `%%` is an escaped literal
 --        percent, not two placeholders, so a fifteen-field raise written with
 --        `%%` dies with "too many parameters specified for RAISE".

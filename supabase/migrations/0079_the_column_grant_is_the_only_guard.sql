@@ -347,8 +347,9 @@ commit;
 --     r4 text := 'NO ERROR — STILL WRITABLE';
 --     r5 text := 'not reached';
 --   begin
---     -- scalar subquery, never `select ... into`: the editor rewrites that as
---     -- CREATE TABLE AS and breaks the block. See migration-status.mjs.
+--     -- Scalar subquery: the workaround for the editor rewrite that hit THIS
+--     -- block on 3 Oct. ⚠️ `into` is not established as the cause — other
+--     -- blocks used it the same evening and ran. See migration-status.mjs.
 --     v_other := (select p.id from public.providers p
 --                  where p.id is distinct from
 --                        (select provider_id from public.sessions where id = v_sid)
