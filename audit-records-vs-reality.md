@@ -16233,6 +16233,51 @@ update or upsert targets any of the 20; the single UPDATE that exists runs as th
 service role; checked 4 Oct 2026.* Which is narrower than "behaviour-neutral by
 construction" and actually true.
 
+### ⚠️ AND THE CLIENT SWEEP IS NOT SUFFICIENT ON ITS OWN — THIS IS THE CHECK THAT SAVED 0079
+
+**A search of the three apps and the edge functions cannot see a `SECURITY
+INVOKER` function in the database.** An INVOKER function runs with the CALLER's
+privileges, so it breaks the instant a grant narrows — and it appears in no
+client file.
+
+**This exact class nearly broke 0079.** `_withdraw_stylist` is INVOKER, updates
+`public.sessions`, appears in no client file, and would have failed the moment
+0079 applied. It was caught only by that migration's PREFLIGHT (ii), which read
+the live function definitions rather than the repo. *The claim "no authenticated
+client update targets any of the 20" is true and does not cover it.*
+
+So the revoke's PREFLIGHT runs this as well, and **zero rows is the licence**:
+
+```sql
+with t(name) as (values ('admin_audit_log'),('admins'),('blocks'),('drift_check_runs'),
+                        ('email_reconcile_runs'),('email_sends'),('email_unsubscribe_tokens'),
+                        ('favourites'),('migration_findings'),('moderation_actions'),
+                        ('name_changes'),('provider_availability'),('retention_runs'),
+                        ('reviews'),('schema_migrations'),('session_consents'),
+                        ('stripe_webhook_events'),('treatments'),('verification_attempts'),
+                        ('waitlist')),
+f as (select p.oid, p.proname::text as fname,
+             case when p.prosecdef then 'DEFINER' else 'INVOKER' end as security,
+             pg_get_functiondef(p.oid) as def
+        from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+       where n.nspname = 'public' and p.prokind in ('f','p'))
+select f.fname, f.security, t.name as updates_table
+  from f join t on f.def ~* ('update[[:space:]]+(public\.)?' || t.name || '[^a-z_]')
+ order by f.security, f.fname, t.name;
+```
+
+**Zero rows** means nothing in the database updates those tables at all.
+**A DEFINER row** is unaffected — it runs as its owner. **Any INVOKER row must be
+resolved BEFORE the revoke**: either that table keeps its grant, or the function
+becomes DEFINER with its execute grant checked. **Neither decision belongs inside
+the revoke migration.**
+
+⚠️ **TWO SEARCHES, NOT ONE.** The client sweep is the easier one to think of and
+it is the incomplete one. Recorded here by name so the next person narrowing a
+grant runs both — `prokind in ('f','p')` excludes aggregates, which
+`pg_get_functiondef` refuses, and that refusal killed an earlier version of this
+query outright.
+
 * **`patch_tests` has a third answer, and the repo already knew it.**
   `site/content/legal.ts:80` states **"NO CODE WRITES patch_tests. The table is
   empty"**, repeated in `legal.ts` and in 0007. So whether `pt_update` matches is
