@@ -16013,6 +16013,108 @@ can follow once stage F has landed and settled.
 
 ---
 
+## 155. A PROMISE THAT NAMES A MIGRATION NUMBER POINTS AT NOTHING THE MOMENT THE NUMBER IS REUSED
+### Swept 4 Oct 2026, across all 82 migrations. Two void promises found. One left dead columns in the live database.
+
+0077 said *"the verification APPROVAL notice stays in the client until 0078"*.
+Migration numbers are allocated by sequence, so **the instant 0078 became stage
+B, that sentence pointed at nothing** — and no check could ever have caught it,
+because a promise naming a number has no relationship to anything a tool can
+inspect.
+
+Same family as the `MUST MATCH` comment (item 151) and the backtick rule (item
+146): **a sentence doing a mechanism's job, and failing silently when it stops
+being true.**
+
+### The sweep, and what it actually found
+
+Every comment line in all 82 migrations, matched for forward references — a
+number higher than the file's own, which is mechanically exactly "a number not
+yet allocated when this was written". **100 hits**, triaged rather than counted:
+
+| category | count | verdict |
+|---|---|---|
+| the `0040` ledger footer, back-ported into older files | ~35 | **not a promise** |
+| `0000`/`0009` framework examples and incident history | ~10 | **not a promise** |
+| multi-migration plans that were executed — 0005→0006, 0026→0027, 0031→0032/0033, 0033→0034, 0054→0055, 0066→0067/0070 | ~50 | **kept**, spot-checked against the named successors |
+| 0078's references to 0079 | 2 | **noise** — written after 0079 existed |
+| **void promises** | **2** | **below** |
+
+**So one found instance did imply more, and it implied exactly one more.** Worth
+stating as a number rather than as a worry: 82 files, two broken promises.
+
+### ⚠️ VOID 1 — the verification approval notice (0077 → 0078)
+
+The known one. Three mentions in 0077. **0078 became stage B.** Still an open
+promise; it becomes **0082**, which is the first thing with an owner rather than
+a filename.
+
+### ⚠️ VOID 2 — two dead columns nobody dropped (0031 → 0034 → 0035)
+
+A chain that broke at its last link, and this one left residue in the live
+database.
+
+* 0031 planned the cutover: *"0034 … migrates live status_text values in, drops
+  the two"*.
+* 0034 deferred it: *"The drop goes in 0035, after the clients read
+  status_posts"*, and *"0035 will drop base columns the view still reads"*.
+* **0035 became `admin_act_on_user`.**
+
+**No migration drops them, and `providers.status_text` and
+`providers.status_expires_at` are still in the live database** — confirmed from
+types generated at 0080 off the live project, not from a repo file.
+
+**Inert, not dangerous.** Every client reference to them is a *comment* saying
+they are no longer read — `site/lib/queries/dashboard.ts`,
+`site/lib/supabase-public.ts`, `mobile/.../provider/[id].tsx`. Nothing reads
+them, nothing writes them. But:
+
+* they appear in the generated types, so to every developer they look like real
+  fields on `providers`;
+* they remain writable by anyone holding UPDATE on `providers`, which is item
+  147's class applied to a different table and not yet examined there; and
+* the promise to remove them sits frozen in an applied migration, pointing at a
+  number that did something else.
+
+A one-statement drop migration closes it. Not urgent, and it should not jump the
+144 queue.
+
+### ⚠️ THE RULE THAT REPLACES THE PRACTICE, because the practice is the fault
+
+**1. A deferral names a CONDITION, never a number.**
+
+> ~~"stays in the client until 0078"~~ → "stays in the client until the approval
+> notice has a definer function"
+
+The first is checkable by nothing. The second is checkable by reading the
+database, and it stays true no matter which number does the work.
+
+**2. Anything deferred gets an audit item AT THE MOMENT it is deferred** — not a
+sentence in a file that is about to be applied and frozen. An applied
+migration's prose cannot be corrected (item 152), so a promise written there is
+a promise that can never be updated, only abandoned.
+
+**3. A plan is re-measured before it is acted on.** Stage C listed
+`notify_chat_counterparty`, which was no longer needed — stage B's client half
+had already absorbed that site. The plan was written from an inventory taken
+before stage B shipped. **A document cannot notice the world moved**, which is
+the same fault as the number deferral wearing different clothes: both are
+writing down a fact and then trusting the writing instead of the fact.
+
+### It can be mechanised, and should be
+
+**A check that rejects a forward migration-number reference in prose** — any
+comment citing a number higher than the file's own. That is precisely the
+dangerous class, it is purely mechanical, and it would have caught both
+instances at the moment they were written.
+
+The legitimate multi-step plans lose nothing: *"the drop goes in a later
+migration, after the clients read status_posts"* says everything *"the drop goes
+in 0035"* said, minus the part that can rot. **Not built yet** — it belongs with
+0082 rather than ahead of it.
+
+---
+
 ## What is open
 
 | | Item | Blocking launch? |
@@ -16038,6 +16140,7 @@ can follow once stage F has landed and settled.
 | 137 | ✅ **CLOSED 1 Oct.** A declined application vanished from both clients — the model's only trace was a notification she can delete. Fourth value this one allowlist has needed. Fixed on web; mobile's sessions.tsx still hides `declined` and `expired` | No while mobile is unreleased |
 | 139 | ✅ **CLOSED 2 Oct.** 0070's verify picked `ff06d568` with an unordered `limit 1` — a provider AND an admin — so the guard bypassed and the block reported a hole that did not exist. The inverse of 0027: a rule for everyone except admins, tested as an admin. Four blocks audited; every one whose actor matters now asserts its own premise | No |
 | 140 | ✅ **CLOSED AND VERIFIED LIVE 2 Oct.** 0067 gave `session_expiry_runs` RLS with no policy AND revoked the table grant, so the tile built to watch it could not read it. Three run-log tables, one contract, three access shapes. The tile reported *"could not read"* rather than *"Never"*, which is what made it diagnosable | No |
+| 155 | ⚠️ **SWEPT 4 Oct. TWO void promises in 82 migrations.** A deferral naming a migration **number** points at nothing once the number is reused, and no check can catch it. (1) 0077's approval notice → 0078 became stage B; becomes **0082**. (2) 0031→0034→**0035** promised to drop `providers.status_text` and `status_expires_at`; 0035 became `admin_act_on_user` and **the columns are still in the live database**, inert but real. Rule: a deferral names a **condition**, and gets an item the moment it is deferred. A forward-number check would have caught both | No |
 | 154 | ⚠️ **RAISED 3 Oct, not started.** The eleven emailable types are hand-maintained in **three** places because the list has nowhere to live. One `stable` function could feed the trigger and the reconciler, leaving only `copyFor` a copy. ⚠️ Costs: it drops and recreates the trigger that sends **every** email, where a mistake stops all mail **silently** (item 153 just showed that is the hardest failure here to see); it moves a constant comparison to a per-row function call; and it cannot reach `copyFor` anyway. **Do 151's check first** — visible immediately, costs nothing live | No |
 | 153 | ⚠️ **RAISED 3 Oct.** `net.http_request_queue` is **unlogged**, so a crash or restart **TRUNCATES it and silently discards queued email**. The notification row survives, so the member sees the in-app notice, never gets the mail, and no error exists anywhere. Item 136 from the other end: the only thing that would notice is `run_email_reconcile`, which had never completed since 22 Sep. ✅ Checked that it WOULD catch it — `no_attempt` counts notifications with ZERO `email_sends` rows, not failures. It reports and never resends | No, but mail is lost silently |
 | 152 | ✅ **CLOSED 3 Oct.** A rolled-back transaction CANNOT deliver an email. Closed on the SIGNATURE, not the implementation: `net.wake()` is `LANGUAGE c` and unreadable, but **takes no arguments**, so the queue row is the only channel — and an uncommitted row is invisible to a background worker under MVCC. ⚠️ The four migrations asserting this cannot be corrected in place: their comments are above the footer and checksum-locked | No |
