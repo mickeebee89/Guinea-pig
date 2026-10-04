@@ -16210,6 +16210,29 @@ had.
   `schema-snapshot-2026-08-08-policies.sql`, which already flags *"POLICY
   SPRAWL"* at line 82. So provenance cannot name the leftover — neither is the
   original, and which to drop is arbitrary.
+### The 20-table revoke: the claim was wider than the evidence
+
+I called it *"behaviour-neutral by construction"*. **That is too wide, and it was
+my claim as much as anyone's.** With no UPDATE-capable policy, an update from
+`authenticated` matches zero rows and raises nothing. **After the revoke it
+raises `permission denied`.** A silent no-op becomes a loud error. Probably an
+improvement — but a change, and the claim has to say so.
+
+**So it was checked rather than asserted, 4 Oct 2026**, across `site`, `admin`,
+`mobile` and the edge functions, for `.update(` and `.upsert(` only — a plain
+INSERT is unaffected by revoking UPDATE.
+
+**Result: exactly one UPDATE touches any of the 20**, and it is
+`supabase/functions/stripe-webhook/index.ts:311`, which runs on
+`SERVICE_ROLE_KEY` and is therefore unaffected by a revoke from `authenticated`.
+Twelve of the twenty are referenced by client code at all; every one of those
+references is a SELECT or an INSERT.
+
+**The claim, at the width the evidence supports:** *no `authenticated` client
+update or upsert targets any of the 20; the single UPDATE that exists runs as the
+service role; checked 4 Oct 2026.* Which is narrower than "behaviour-neutral by
+construction" and actually true.
+
 * **`patch_tests` has a third answer, and the repo already knew it.**
   `site/content/legal.ts:80` states **"NO CODE WRITES patch_tests. The table is
   empty"**, repeated in `legal.ts` and in 0007. So whether `pt_update` matches is
@@ -16219,6 +16242,12 @@ had.
   provider_id`) and `provider_treatments` (the standard `provider_id IN (select
   providers.id …)`). Same name, same schema, opposite shapes. The next person
   copying "pt_update" can pick either.
+
+  ✅ **RECORDED AS NEEDING NO FIX.** No code writes it, the table is empty, and
+  `legal.ts` says so three times. Rewriting a policy that guards nothing would
+  be work with no subject. **The remaining hazard is the name collision**, and
+  its fix is a comment on the DEAD one saying which shape is correct — so the
+  next person copying `pt_update` is told, rather than left to pick.
 
 **Both are pre-`0000` hand-made artifacts.** The migration framework has been
 disciplined; the schema that predates it has never been revisited under that
@@ -16295,11 +16324,65 @@ protected columns is an allowlist by omission. **These two columns were ADDED BY
 0060, three weeks after 0040 wrote its list**, and became unprotected by default
 with nothing to notice. The next column added will do the same.
 
-So it belongs inside item 156's column-scoped grant on `users` — which 0040
-already planned and whose blocker is now cleared. Not a separate fix.
+### ⚠️ OWNED BY ITEM 156. DO NOT PATCH THIS ALONE.
 
-⚠️ **It is live now and the grant is not written.** The right fix is known,
-scoped, and queued behind 0081 and 0082.
+**Patching the trigger to name two more columns is writing the eighth entry in
+the list whose missing eighth entry IS the bug.** 0040 warned its own trigger
+was an allowlist by omission; 0060 then added two columns three weeks later and
+walked straight through the gap. Adding them now proves the warning and ignores
+it in the same commit.
+
+**157 closes as a by-product of 156's `users` grant** — revoke table-wide UPDATE
+on `users`, grant only the columns a member legitimately writes, and these two
+stop being writable without being named. Recorded in both items so neither looks
+unowned.
+
+⚠️ **It is live now and the grant is not written.** Known, scoped, and queued
+behind 0081 and 0082.
+
+---
+
+## 158. THE SCHEMA THAT PREDATES THE MIGRATION FRAMEWORK HAS NEVER BEEN READ UNDER ITS DISCIPLINE
+### Raised 4 Oct 2026. ⚠️ DO NOT START. Pre-launch, and behind everything currently queued.
+
+Both of the oddest objects found on 4 Oct were created by **no migration at
+all**:
+
+* `model_attributes` carries **two identical ALL policies** —
+  `model_attrs_policy` and `"users can manage own attributes"`, same predicate,
+  both live. Provenance cannot name the leftover because neither is the
+  original.
+* `patch_tests`' `pt_update` compares `auth.uid()` to a `provider_id`, a shape
+  used nowhere else — while a DIFFERENT `pt_update`, on
+  `provider_treatments`, uses the standard subquery.
+
+And `schema-snapshot-2026-08-08-policies.sql` **already carries a "POLICY
+SPRAWL" warning about that region**, at line 82. It has been there since before
+0000.
+
+**82 migrations have been written under a framework with checksums, preflights,
+verify blocks and a ledger. The schema that predates them has never been read
+under that discipline at all.** Two findings in one evening, from two tables,
+both pre-framework, is not a coincidence worth ignoring — it is a better
+predictor of where more of this lives than table size or row count.
+
+### The sweep is bounded, which is why it is worth raising rather than dreading
+
+**Every policy, trigger, function and constraint in `public` that no migration
+created** — listed, with whatever can be said about what created it. The
+migrations are 82 files of searchable text, so "created by a migration" is
+mechanically decidable; what is left over is the answer.
+
+Expect it to find: duplicate policies, inconsistent predicates for the same
+intent, policies on tables nothing uses, and triggers whose stated purpose no
+longer matches the product.
+
+### Why not now
+
+**It sits behind 0081's client half, 0082, the 20-table revoke, stage F and item
+156.** Every one of those closes something open; this one catalogues. And item
+156 will read a good deal of this region anyway while scoping the `users` and
+`providers` grants, so starting the sweep first would duplicate it.
 
 ---
 
@@ -16328,6 +16411,7 @@ scoped, and queued behind 0081 and 0082.
 | 137 | ✅ **CLOSED 1 Oct.** A declined application vanished from both clients — the model's only trace was a notification she can delete. Fourth value this one allowlist has needed. Fixed on web; mobile's sessions.tsx still hides `declined` and `expired` | No while mobile is unreleased |
 | 139 | ✅ **CLOSED 2 Oct.** 0070's verify picked `ff06d568` with an unordered `limit 1` — a provider AND an admin — so the guard bypassed and the block reported a hole that did not exist. The inverse of 0027: a rule for everyone except admins, tested as an admin. Four blocks audited; every one whose actor matters now asserts its own premise | No |
 | 140 | ✅ **CLOSED AND VERIFIED LIVE 2 Oct.** 0067 gave `session_expiry_runs` RLS with no policy AND revoked the table grant, so the tile built to watch it could not read it. Three run-log tables, one contract, three access shapes. The tile reported *"could not read"* rather than *"Never"*, which is what made it diagnosable | No |
+| 158 | ⚠️ **RAISED 4 Oct. DO NOT START — pre-launch, behind everything queued.** Both of the oddest objects found on 4 Oct — `model_attributes`' duplicate policies and `patch_tests`' inconsistent predicate — were created by **no migration at all**, and the 8 Aug snapshot already carries a POLICY SPRAWL warning about that region. 82 migrations have had checksums, preflights and a ledger; **the schema predating them has never been read under that discipline.** Bounded sweep: every policy, trigger, function and constraint in `public` that no migration created | No |
 | 156 | ⚠️ **OPEN QUESTION, NOT A FINDING — raised 4 Oct, unmeasured.** Item 147 found `sessions` granting `authenticated` table-wide UPDATE on all 26 columns; 0079 narrowed that ONE table. **Nobody has asked whether it was unusual or typical.** If `providers`, `users`, `availability` and the rest are granted the same way, 147 was one instance of a schema-wide pattern and the fix reached one table. One read-only query settles it, in the item. ⚠️ A permissive policy is not automatically a hole — `sessions`' actor rule lived in a TRIGGER, so triggers get read before anything is called a finding | Unknown until measured |
 | 155 | ⚠️ **SWEPT 4 Oct. TWO void promises in 82 migrations.** A deferral naming a migration **number** points at nothing once the number is reused, and no check can catch it. (1) 0077's approval notice → 0078 became stage B; becomes **0082**. (2) 0031→0034→**0035** promised to drop `providers.status_text` and `status_expires_at`; 0035 became `admin_act_on_user` and **the columns are still in the live database**, inert but real. Rule: a deferral names a **condition**, and gets an item the moment it is deferred. A forward-number check would have caught both | No |
 | 154 | ⚠️ **RAISED 3 Oct, not started.** The eleven emailable types are hand-maintained in **three** places because the list has nowhere to live. One `stable` function could feed the trigger and the reconciler, leaving only `copyFor` a copy. ⚠️ Costs: it drops and recreates the trigger that sends **every** email, where a mistake stops all mail **silently** (item 153 just showed that is the hardest failure here to see); it moves a constant comparison to a per-row function call; and it cannot reach `copyFor` anyway. **Do 151's check first** — visible immediately, costs nothing live | No |
