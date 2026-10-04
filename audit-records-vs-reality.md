@@ -16465,14 +16465,50 @@ disciplined; the schema that predates it has never been revisited under that
 discipline. That is a better predictor of where more of this lives than table
 size is.
 
+### ✅ THE REVOKE HALF IS WRITTEN — 0084, 5 Oct 2026, NOT YET APPLIED
+
+`0084_a_silent_no_op_becomes_a_refusal`. Twenty tables lose UPDATE from
+`authenticated` and `anon`, plus the `COMMENT ON COLUMN` rider for
+`patch_tests.provider_id`.
+
+**⚠️ BOTH SEARCHES ARE IN THE GUARD, NOT ONLY THE PREFLIGHT.** A preflight
+informs whoever reads it; a guard refuses regardless of who read what. The
+project's own standing lesson is that mechanisms adopted to stop a trap get
+walked past on tasks that feel too small to need them — so the INVOKER query
+runs inside the transaction and aborts it.
+
+Four things the guard refuses on, each naming a decision rather than a fix:
+
+* **PUBLIC holds UPDATE on any of the twenty.** Then revoking from
+  `authenticated` changes nothing while reporting success. PUBLIC is
+  deliberately NOT revoked from instead — it could take `service_role` with it,
+  and that is a decision. Same shape as the preflight that once queried
+  `pg_roles` for `'public'`, found no row, and read an unasked question as an
+  answer.
+* **An UPDATE-capable policy exists** on one of them — the client sweep's
+  premise does not hold for that table, so the revoke would break a feature
+  rather than turn a silent no-op loud.
+* **An INVOKER function updates one of them** — the `_withdraw_stylist` class
+  that nearly broke 0079.
+* **`authenticated` already holds UPDATE on NONE of them** — then the migration
+  has nothing to do, and *a migration that commits having done nothing reads
+  identically to one that worked.*
+
+**The claim, at the width the evidence supports:** a silent no-op becomes a loud
+refusal. Not "behaviour-neutral by construction", which was my phrasing and was
+too wide.
+
 ### Still unread
 
 `terms_accepted_at`, `date_of_birth`, `providers.rating`/`review_count`, and
 **which `is_verified` the shop page and the verified badge actually read** —
 still the sharpest, because a displayed flag that is not the protected flag
-means a stylist can show a badge she was never given.
+means a stylist can show a badge she was never given. **These gate 156's OTHER
+half (the `users`/`providers` column grants, which close 157), not 0084.**
 
-Plus one live read, since no migration creates that table:
+✅ **The patch_tests FK read is ANSWERED** — `patch_tests_provider_id_fkey ->
+auth.users`, read by 0083's PREFLIGHT on 5 Oct 2026. ~~Plus one live read, since
+no migration creates that table:~~
 
 ```sql
 select conname, pg_get_constraintdef(oid)
@@ -16849,6 +16885,63 @@ they actually change:
 printed output read green on every line while the exit code was 1 and the build
 never ran. **Reading the output is not enough either — the thing that did not
 run prints nothing at all.**
+
+---
+
+## 162. A LIST RETYPED IN A VERIFY BLOCK IS CHECKED BY NOBODY
+### Found 5 Oct 2026, in my own file, by a throwaway script — which is the finding.
+
+0084's header claimed **"ONE LIST, ONE PLACE"**, and the array of twenty table
+names carried the comment **"THE ONLY COPY OF THIS LIST"**. Both were false when
+written. The file contains the twenty names **three times**:
+
+1. the executable array, shared by the guard and the revoke;
+2. the PREFLIGHT's `values (…)` list;
+3. the VERIFY block's own array.
+
+2 and 3 are unavoidable in this shape — they are pasted into the SQL editor
+separately and cannot reference a variable in a migration that has not run yet.
+**The claim was the problem, not the duplication.**
+
+### Why this is a class and not a slip
+
+The guard counts `array_length(v_tables, 1) <> 20`, which proves the
+**executable** list is whole and proves nothing about the other two. So:
+
+* a table dropped from the PREFLIGHT's list → it is never checked for an INVOKER
+  function or a PUBLIC grant, and the guard still passes, because the guard
+  checks its own list;
+* a table dropped from the VERIFY list → it is reported as revoked when nobody
+  looked.
+
+Both are **silent**. Neither shows up as a failure; they show up as a smaller
+denominator in a line of output nobody is diffing.
+
+⚠️ **AND THE SHAPE IS ALREADY FAMILIAR.** A `0\d{3}` in a comment pointing at a
+migration that does not exist is caught by `check-migration-forward-refs.mjs`. A
+retyped table list in a verify block is the same thing — a claim in a comment
+that the code cannot keep true — and it is caught by nobody.
+
+### How it was caught, which is the part that matters
+
+By a `node -e` one-liner run against the finished file, counting each name's
+occurrences and warning below three. **It found the fault immediately and then
+ceased to exist.** That is precisely the thing item 155 is about: the check
+worked once, for the person who happened to think of running it, and leaves
+nothing behind for the next revoke-shaped migration.
+
+### The mechanism it needs
+
+A check that, for any migration declaring a `text[] := array[…]` of identifiers
+in its executable body, compares that set against the identifiers in its
+PREFLIGHT and VERIFY comments and fails on a mismatch. **Named by that condition
+rather than by a migration number** (item 155).
+
+⚠️ **NOT BUILT, AND THAT IS A CHOICE NOT AN OVERSIGHT.** It was raised rather
+than built because 0084 and stage F were in flight, and opening a tooling task
+across them is how the queued work stops getting finished (156's own sequencing
+note). The claim in 0084's header has been corrected to say three copies, so the
+file no longer asserts something false while waiting.
 
 ---
 
