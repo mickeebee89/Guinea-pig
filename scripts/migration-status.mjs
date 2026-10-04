@@ -169,6 +169,36 @@
  *     The counting problem is removed rather than solved, which is the only
  *     version that survives someone adding a field later.
  *
+ *   ── ⚠️ ONE PASTEABLE BLOCK, NOT A NUMBERED SET. ADDED 4 Oct 2026 ───────
+ *
+ *     These are run in a web SQL editor. Five pastes is four too many, and a
+ *     set invites running three of five and reporting a pass.
+ *
+ *     SHAPE: one `begin; do $v$ … $v$; rollback;` — sections inside it, each in
+ *     its own `begin/exception` subtransaction so one failure does not lose the
+ *     others, every result accumulated into a variable, ONE `raise` at the end.
+ *
+ *     ⚠️ TWO HAZARDS THAT ONLY EXIST ONCE SECTIONS SHARE A TRANSACTION. Both
+ *     bit 0081's verify when it was merged from a numbered set:
+ *
+ *     1. **`created_at` DEFAULTS TO `now()`, WHICH IS CONSTANT FOR THE WHOLE
+ *        TRANSACTION.** Rows written by different sections therefore TIE, and
+ *        `order by created_at desc limit 1` picks between them arbitrarily. A
+ *        read-back must be disambiguated by something else — the type, or a set
+ *        of ids captured before the call. Note that `notifications.id` is a
+ *        `gen_random_uuid()`, so ordering by id is not a substitute: it is not
+ *        monotonic.
+ *
+ *     2. **A SECTION THAT READS A ROW BACK MUST PROVE THE ROW IS NEW.** Capture
+ *        what exists before the call and exclude it afterwards, or "the function
+ *        errored and an older row was already there" reads as a pass. This is
+ *        the same fault as a check that cannot fail, arriving through the data
+ *        rather than through the logic.
+ *
+ *     Roll back at the end regardless. `set local` and `set_config(…, true)` are
+ *     undone by a subtransaction abort, so a failing section resets its own
+ *     role — but a SUCCEEDING one must reset explicitly.
+ *
  *   ── ⚠️ A BLOCK HANDED OVER MUST BE COMPLETE. ADDED 3 Oct 2026 ───────────
  *
  *     Every variable declared in the `declare` section, not listed in a

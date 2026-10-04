@@ -177,106 +177,140 @@ commit;
 --   Expect all four true.
 -- ===========================================================================
 --
--- ── VERIFY ──────────────────────────────────────────────────────────────
+-- ── VERIFY — ONE BLOCK, FOUR SECTIONS ───────────────────────────────────
 --
---   Conventions: every variable in `declare`, one `%` fed one concatenated
---   string, scalar subqueries rather than `select ... into`.
+--   Conventions (scripts/migration-status.mjs): one paste, not a numbered set;
+--   each section in its own begin/exception subtransaction so one failure does
+--   not lose the others; every variable in `declare`; one `%` fed one
+--   concatenated string; scalar subqueries rather than `select ... into`.
 --
---   -- (a) the shapes
---   select p.proname, pg_get_function_identity_arguments(p.oid) as args, p.prosecdef
---     from pg_proc p join pg_namespace n on n.oid = p.pronamespace
---    where n.nspname = 'public'
---      and p.proname in ('invite_model','notify_as_admin')
---    order by p.proname;
+--   ⚠️ AND TWO HAZARDS THAT ONLY EXIST BECAUSE THE SECTIONS SHARE A
+--   TRANSACTION — neither applied when these were four separate pastes:
 --
---   Expect both prosecdef **t**.
+--     * `created_at` defaults to `now()`, which is CONSTANT for the whole
+--       transaction. Rows written by different sections TIE, so
+--       `order by created_at desc limit 1` picks arbitrarily. Section (c)
+--       therefore excludes a set of ids captured BEFORE the call, and never
+--       orders by time. `notifications.id` is a random uuid, so ordering by id
+--       is not a substitute either.
+--     * A read-back must prove the row is NEW. (c) captures what exists first
+--       and looks only outside that set, so "the function errored and an older
+--       invite was already there" cannot read as a pass.
 --
---   -- (b) A NON-STYLIST CANNOT INVITE, and the model's own copy is written.
---   --     Rolled back. The model account is used as the actor BECAUSE she is
---   --     not a stylist — that is the thing being tested, not a convenience.
---   begin;
---   do $v$
---   declare
---     v_model uuid := 'b0df9c2f-02c5-4fef-afb0-9b184c3b9130';
---     v_other uuid;
---     v_got   text := 'NO ERROR — THE GUARD DID NOT FIRE';
---   begin
---     v_other := (select u.id from public.users u
---                  where u.id is distinct from v_model limit 1);
---     perform set_config('request.jwt.claims',
---       json_build_object('sub', v_model::text, 'role', 'authenticated')::text, true);
---     execute 'set local role authenticated';
---     if auth.uid() is null then
---       raise exception '%', 'ROLLED BACK, TESTED NOTHING. auth.uid() is null.';
---     end if;
---     if exists (select 1 from public.providers p where p.user_id = auth.uid()) then
---       raise exception '%', 'ROLLED BACK, TESTED NOTHING. The chosen actor IS a stylist, so the guard is meant to let her through.';
---     end if;
---     begin
---       perform public.invite_model(v_other);
---     exception when others then v_got := sqlstate || ' ' || sqlerrm; end;
---     execute 'reset role';
---     raise exception '%', 'ROLLED BACK ON PURPOSE. as a non-stylist: ' || v_got;
---   end $v$;
---   rollback;
---
---   Expect "only a stylist can invite someone", 42501.
---
---   -- (c) A STYLIST CAN, with the one wording. Rolled back.
 --   begin;
 --   do $v$
 --   declare
 --     v_stylist uuid := 'ff06d568-8936-45fa-ad5f-0b88c150ec30';
 --     v_model   uuid := 'b0df9c2f-02c5-4fef-afb0-9b184c3b9130';
---     v_title text; v_body text; v_pid text;
+--     v_other   uuid;
+--     v_before  uuid[];
+--     v_new     uuid;
+--     v_title   text;
+--     v_body    text;
+--     v_pid     text;
+--     r_a text := 'not run';
+--     r_b text := 'not run';
+--     r_c text := 'not run';
+--     r_d text := 'not run';
 --   begin
---     perform set_config('request.jwt.claims',
---       json_build_object('sub', v_stylist::text, 'role', 'authenticated')::text, true);
---     execute 'set local role authenticated';
---     perform public.invite_model(v_model);
---     execute 'reset role';
---     v_title := (select title from public.notifications
---                  where user_id = v_model and type = 'stylist_invite'
---                  order by created_at desc limit 1);
---     v_body  := (select body from public.notifications
---                  where user_id = v_model and type = 'stylist_invite'
---                  order by created_at desc limit 1);
---     v_pid   := (select data->>'provider_id' from public.notifications
---                  where user_id = v_model and type = 'stylist_invite'
---                  order by created_at desc limit 1);
---     raise exception '%', 'ROLLED BACK ON PURPOSE.' || chr(10)
---       || 'title: ' || coalesce(v_title,'null') || chr(10)
---       || 'body:  ' || coalesce(v_body,'null')  || chr(10)
---       || 'data.provider_id: ' || coalesce(v_pid,'null')
---       || ' (expected 49d40aae-a830-41d1-bca8-0fbdb2695455)';
---   end $v$;
---   rollback;
---
---   Expect the title to end 'would like you as a model' — NOT 'wants you as
---   their model' — the body to be the sentence rather than 'Tap to view their
---   shop', and provider_id to MATCH, since routeForNotification deep-links on
---   it and a null there is item 143 again.
---
---   -- (d) A NON-ADMIN CANNOT SEND AN ADMIN MESSAGE. Rolled back.
---   begin;
---   do $v$
---   declare
---     v_model uuid := 'b0df9c2f-02c5-4fef-afb0-9b184c3b9130';
---     v_got   text := 'NO ERROR — THE GUARD DID NOT FIRE';
---   begin
---     perform set_config('request.jwt.claims',
---       json_build_object('sub', v_model::text, 'role', 'authenticated')::text, true);
---     execute 'set local role authenticated';
---     if public.is_admin() then
---       raise exception '%', 'ROLLED BACK, TESTED NOTHING. The chosen actor IS an admin.';
---     end if;
+--     -- (a) the shapes
 --     begin
---       perform public.notify_as_admin(v_model, 'Test', 'Test');
---     exception when others then v_got := sqlstate || ' ' || sqlerrm; end;
---     execute 'reset role';
---     raise exception '%', 'ROLLED BACK ON PURPOSE. as a non-admin: ' || v_got;
+--       r_a := coalesce((
+--         select string_agg(p.proname || '(' || pg_get_function_identity_arguments(p.oid)
+--                           || ') secdef=' || p.prosecdef, ' | ' order by p.proname)
+--           from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+--          where n.nspname = 'public'
+--            and p.proname in ('invite_model', 'notify_as_admin')
+--       ), 'NEITHER FUNCTION EXISTS');
+--     exception when others then r_a := 'SECTION ERRORED: ' || sqlerrm; end;
+--
+--     -- (b) a NON-STYLIST cannot invite. The model is the actor BECAUSE she is
+--     --     not a stylist — that is the subject, not a convenience.
+--     begin
+--       v_other := (select u.id from public.users u
+--                    where u.id is distinct from v_model limit 1);
+--       perform set_config('request.jwt.claims',
+--         json_build_object('sub', v_model::text, 'role', 'authenticated')::text, true);
+--       execute 'set local role authenticated';
+--       if auth.uid() is null then
+--         r_b := 'TESTED NOTHING: auth.uid() is null';
+--       elsif exists (select 1 from public.providers p where p.user_id = auth.uid()) then
+--         r_b := 'TESTED NOTHING: the chosen actor IS a stylist, so the guard should let her through';
+--       elsif v_other is null then
+--         r_b := 'TESTED NOTHING: no second user to invite';
+--       else
+--         begin
+--           perform public.invite_model(v_other);
+--           r_b := 'NO ERROR — THE GUARD DID NOT FIRE';
+--         exception when others then r_b := sqlstate || ' ' || sqlerrm; end;
+--       end if;
+--       execute 'reset role';
+--     exception when others then r_b := 'SECTION ERRORED: ' || sqlerrm; end;
+--
+--     -- (c) a STYLIST can, and the one wording is read back from a row proven NEW
+--     begin
+--       v_before := array(select n.id from public.notifications n
+--                          where n.user_id = v_model and n.type = 'stylist_invite');
+--       perform set_config('request.jwt.claims',
+--         json_build_object('sub', v_stylist::text, 'role', 'authenticated')::text, true);
+--       execute 'set local role authenticated';
+--       perform public.invite_model(v_model);
+--       execute 'reset role';
+--
+--       v_new := (select n.id from public.notifications n
+--                  where n.user_id = v_model and n.type = 'stylist_invite'
+--                    and not (n.id = any (v_before)));
+--       if v_new is null then
+--         r_c := 'NO NEW ROW — the function wrote nothing. Any older invite is NOT evidence.';
+--       else
+--         v_title := (select title from public.notifications where id = v_new);
+--         v_body  := (select body  from public.notifications where id = v_new);
+--         v_pid   := (select data->>'provider_id' from public.notifications where id = v_new);
+--         r_c := 'title=[' || coalesce(v_title, 'null') || '] body=[' || coalesce(v_body, 'null')
+--                || '] provider_id=' || coalesce(v_pid, 'null');
+--       end if;
+--     exception when others then r_c := 'SECTION ERRORED: ' || sqlerrm; end;
+--
+--     -- (d) a NON-ADMIN cannot send an admin message
+--     begin
+--       perform set_config('request.jwt.claims',
+--         json_build_object('sub', v_model::text, 'role', 'authenticated')::text, true);
+--       execute 'set local role authenticated';
+--       if public.is_admin() then
+--         r_d := 'TESTED NOTHING: the chosen actor IS an admin';
+--       else
+--         begin
+--           perform public.notify_as_admin(v_model, 'Test', 'Test');
+--           r_d := 'NO ERROR — THE GUARD DID NOT FIRE';
+--         exception when others then r_d := sqlstate || ' ' || sqlerrm; end;
+--       end if;
+--       execute 'reset role';
+--     exception when others then r_d := 'SECTION ERRORED: ' || sqlerrm; end;
+--
+--     raise exception '%', 'ROLLED BACK ON PURPOSE.' || chr(10)
+--       || '(a) shapes        : ' || r_a || chr(10)
+--       || '(b) non-stylist   : ' || r_b || chr(10)
+--       || '(c) stylist/copy  : ' || r_c || chr(10)
+--       || '(d) non-admin     : ' || r_d;
 --   end $v$;
 --   rollback;
 --
---   Expect "notify_as_admin: not an admin", 42501.
+--   EXPECT:
+--     (a) invite_model(uuid) secdef=true | notify_as_admin(uuid,text,text) secdef=true
+--     (b) 42501 … only a stylist can invite someone
+--     (c) title ending 'would like you as a model' — NOT 'wants you as their
+--         model'; body the sentence, NOT 'Tap to view their shop'; provider_id
+--         = 49d40aae-a830-41d1-bca8-0fbdb2695455. ⚠️ A null provider_id is item
+--         143 again: routeForNotification deep-links on it.
+--     (d) 42501 … notify_as_admin: not an admin
+--
+--   ⚠️ ANY "TESTED NOTHING" IS NOT A PASS. It means the premise failed and that
+--   section exercised nothing — report it rather than reading past it.
+--
+--   ⚠️ (c) WRITES A REAL stylist_invite AND ROLLS BACK, so it queues an email.
+--   Item 152 established that a rolled-back transaction cannot deliver one —
+--   net.wake() takes no arguments, so the queue row is the only channel and an
+--   uncommitted row is invisible to the worker. (c) is the first block to rely
+--   on that conclusion rather than on the mitigation alone. The recipient is
+--   Micky's own test account either way.
 -- ===========================================================================
