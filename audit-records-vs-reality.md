@@ -16172,6 +16172,74 @@ statuses. So a table appearing in 147's shape needs its triggers read before it
 is called a finding — which is the mistake this item is written to avoid making
 twice.
 
+### Reads answered 4 Oct 2026
+
+**Entitlement does NOT read the unguarded dates.** `model_may_apply` reads
+`users.subscription_waived` (guarded), `users.is_verified` (guarded), and the
+**`subscriptions` table** — not `users.subscription_status`. `subscriptions` is
+locked by 0040's `no_client_update … restrictive … using (false)`.
+`subscription_expires_at` exists as a column and is referenced by **nothing** in
+three apps or any migration. `subscription_next_billing` is display-only in
+mobile Settings, written solely by `apply_subscription_state`. **Closed.**
+
+**`profile_pic_reviewed_at` IS a hole** — item 157, confirmed in the trigger and
+in `admin/app/moderation/page.tsx:192`.
+
+### 156 IS 0040's DEFERRED SECOND HALF, AND ITS BLOCKER IS NOW CLEAR
+
+0040's header says so in its own words: *"THIS IS A STOPGAP, AND IT IS MEANT TO
+BECOME REDUNDANT… The correct fix is column-level: revoke update on public.users
+from authenticated, then grant update (profile_pic_url, date_of_birth,
+instagram_handle, latitude, longitude)… That cannot land yet, because a GRANT is
+role-wide: revoking table UPDATE from authenticated also blocks the admin
+console… Those must move to 0035/0039's SECURITY DEFINER functions first."*
+
+**Deferred by CONDITION rather than by a migration number** — item 155's rule,
+honoured in September, by the same file that named the correct fix.
+
+**And the condition is met.** Every `.update(` in the admin console writes
+`treatment_categories` or `portfolio_items`. **Not one writes `users`.** All six
+admin mutations go through `admin_*` definer RPCs. Checked 4 Oct, because nobody
+had.
+
+### The oddest shapes belong to objects no migration ever created
+
+* **`model_attributes` carries two identical ALL policies** —
+  `model_attrs_policy` and `"users can manage own attributes"`, both
+  `(auth.uid() = user_id)`. **Neither was created by a migration.** Both sit in
+  `schema-snapshot-2026-08-08-policies.sql`, which already flags *"POLICY
+  SPRAWL"* at line 82. So provenance cannot name the leftover — neither is the
+  original, and which to drop is arbitrary.
+* **`patch_tests` has a third answer, and the repo already knew it.**
+  `site/content/legal.ts:80` states **"NO CODE WRITES patch_tests. The table is
+  empty"**, repeated in `legal.ts` and in 0007. So whether `pt_update` matches is
+  moot: there is no feature to break.
+  ⚠️ **But the copying hazard is sharper than expected:** `pt_update` exists on
+  TWO tables with DIFFERENT predicates — `patch_tests` (`auth.uid() =
+  provider_id`) and `provider_treatments` (the standard `provider_id IN (select
+  providers.id …)`). Same name, same schema, opposite shapes. The next person
+  copying "pt_update" can pick either.
+
+**Both are pre-`0000` hand-made artifacts.** The migration framework has been
+disciplined; the schema that predates it has never been revisited under that
+discipline. That is a better predictor of where more of this lives than table
+size is.
+
+### Still unread
+
+`terms_accepted_at`, `date_of_birth`, `providers.rating`/`review_count`, and
+**which `is_verified` the shop page and the verified badge actually read** —
+still the sharpest, because a displayed flag that is not the protected flag
+means a stylist can show a badge she was never given.
+
+Plus one live read, since no migration creates that table:
+
+```sql
+select conname, pg_get_constraintdef(oid)
+  from pg_constraint
+ where conrelid = 'public.patch_tests'::regclass and contype = 'f';
+```
+
 ### Sequencing
 
 Micky runs it after 0081. **Not before**: 0081 is written and in flight, and
@@ -16185,6 +16253,53 @@ The **dead-column drop** from item 155 — `providers.status_text` and
 else. One statement. **It waits**, because it must not jump the 144 queue, and
 because this item may widen it: if `providers` turns out to carry 147's shape,
 the drop and the grant narrowing are one migration rather than two.
+
+---
+
+## 157. A MEMBER CAN MARK THEIR OWN PHOTO AS REVIEWED, WHICH TAKES IT OUT OF MODERATION
+### Confirmed 4 Oct 2026 by reading the trigger and the client. NOT FIXED.
+
+**Plainly:** an account can set its own `profile_pic_reviewed_at`, and the photo
+then disappears from the admin queue of pictures awaiting a look. Nobody ever
+looks at it, and nothing records that it was skipped.
+
+**This is Apple Guideline 1.2 — UGC moderation — not a tidiness point.** Items
+100 and 115 built a surface where a person reviews uploaded images. This lets
+the uploader tick their own box.
+
+### The mechanism, read rather than reasoned
+
+`mark_profile_pic_unreviewed` nulls those columns in three places: on INSERT
+with a picture, and on UPDATE where the url changed — to null, or to a new
+value. **Every UPDATE path sits inside
+`if new.profile_pic_url is distinct from old.profile_pic_url`.**
+
+So an UPDATE touching **only** `profile_pic_reviewed_at` and
+`profile_pic_reviewed_by`, leaving the url alone, falls through to `return new`
+and the member's values are accepted verbatim. No other guard names them:
+`guard_users_protected_columns` (0040) lists seven columns and these are not
+among them.
+
+### The consequence, confirmed in the client
+
+`admin/app/moderation/page.tsx:192` filters the queue with
+`.is('profile_pic_reviewed_at', null)`. **That is the queue.** Setting the
+column removes the row from it. `profile_pic_updated_at` is equally unguarded,
+though the queue does not filter on it.
+
+### Why the fix is the grant, not another trigger branch
+
+Adding these to the trigger's reset condition would close the instance and leave
+the class open — which is what 0040 said about itself: a trigger listing
+protected columns is an allowlist by omission. **These two columns were ADDED BY
+0060, three weeks after 0040 wrote its list**, and became unprotected by default
+with nothing to notice. The next column added will do the same.
+
+So it belongs inside item 156's column-scoped grant on `users` — which 0040
+already planned and whose blocker is now cleared. Not a separate fix.
+
+⚠️ **It is live now and the grant is not written.** The right fix is known,
+scoped, and queued behind 0081 and 0082.
 
 ---
 
