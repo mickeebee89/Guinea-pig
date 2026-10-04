@@ -16945,6 +16945,120 @@ file no longer asserts something false while waiting.
 
 ---
 
+## 163. THE CLASS WAS NEVER "UPDATE GRANTS WITHOUT POLICIES". IT IS "GRANTS WITHOUT POLICIES", AND 0084 CLOSED A THIRD OF IT
+### Raised 5 Oct 2026 by Micky, off 0084's own verify output. ⚠️ DO NOT WRITE BEFORE STAGE F.
+
+0084's verify section (d) reported, as a diagnostic rather than an assertion,
+that **`authenticated` holds DELETE on all twenty** of the tables it had just
+revoked UPDATE on. And section (a) reported **INSERT 20/20** in the same breath,
+as evidence the revoke was surgical.
+
+Micky read both as one finding, which is what they are:
+
+* **DELETE** — granted on all 20; only **`blocks`** and **`favourites`** carry a
+  DELETE policy. So roughly **eighteen latent DELETE grants**.
+* **INSERT** — granted on all 20; INSERT policies exist on only six:
+  `admin_audit_log`, `blocks`, `favourites`, `moderation_actions`, `reviews`,
+  `session_consents`. So roughly **fourteen latent INSERT grants**.
+
+**That is the exact shape 0084 just closed for UPDATE** — a grant with no
+policy, where the operation matches zero rows and raises nothing, so it fails
+silently and indistinguishably from succeeding.
+
+⚠️ **SO THE CLASS WAS MIS-NAMED FROM THE START, INCLUDING BY ME.** Item 156
+framed it as UPDATE because item 147 was about UPDATE. 0084's title says "a
+silent no-op becomes a refusal" and means it about one verb. **The verb was
+never the thing.** Of the three write verbs on these twenty tables, 0084 closed
+one.
+
+### The sweep, as Micky specified it
+
+**All 44 tables, not just these twenty. INSERT and DELETE. With `permissive` and
+the qual included**, because a RESTRICTIVE `false` policy is a *lock*, not a
+permission — counting policies without reading `permissive` would score a
+deliberately locked table as an open one, and a correctly locked table is the
+thing the sweep is looking for examples of.
+
+### ✅ TWO QUALS READ RATHER THAN TICKED, AS ASKED
+
+Micky: *"If either permits an ordinary member, that is not a bypass of the record
+of what admins did — it is the ability to write entries into it. I am not
+claiming it. Report the quals."*
+
+Both are gated on `is_admin()`, so **an ordinary member cannot write to either**:
+
+```sql
+create policy audit_insert_admin on public.admin_audit_log
+  as PERMISSIVE for INSERT to authenticated using (true) with check (is_admin());
+create policy ma_insert on public.moderation_actions
+  as PERMISSIVE for INSERT to authenticated using (true) with check (is_admin());
+```
+
+The `using (true)` on both is **inert**: USING is not consulted for INSERT, only
+WITH CHECK is. So it reads alarmingly and decides nothing — which is itself worth
+knowing, because it is the kind of clause someone later "tidies" into the WITH
+CHECK.
+
+⚠️ **SAMPLE NAMED:** read from `supabase/schema-snapshot-2026-08-08-policies.sql`
+lines 25 and 108 — a **repo file, two months old**. No migration creates or
+replaces a policy on either table (searched all 86), so the snapshot is the only
+provenance there is, and these are two more pre-`0000` hand-made artifacts
+(item 158). **This is not a live read**, and the standing rule here is to read
+the live definition. One line settles it:
+
+```sql
+select tablename, policyname, permissive, cmd, qual, with_check
+  from pg_policies
+ where schemaname = 'public'
+   and tablename in ('admin_audit_log', 'moderation_actions');
+```
+
+**So: not claimed as a hole, and not dismissed either.** The repo says gated;
+the database has not been asked.
+
+---
+
+## 164. A MIGRATION THAT TAKES SOMETHING AWAY NEEDS A CONTROL NAMING WHAT IT MUST NOT HAVE TOUCHED
+### Micky, 5 Oct 2026, on 0084. He wrote the missing section himself. ✅ MECHANISM BUILT.
+
+0084's verify had four sections. All four proved the twenty tables **were**
+revoked. **Not one proved anything outside the list was left alone.**
+
+He added a fifth: `users`, `providers` and `model_attributes` still updatable,
+and `sessions`' `status` column grant intact. His reasoning, which is the whole
+item:
+
+> *"A slip like `revoke update on all tables in schema public` produces an
+> identical result in every one of them while having undone 0079 and locked
+> members out of their own rows."*
+
+**Four green sections, a wrecked product, and nothing in the output to tell them
+apart.**
+
+### The general shape, which is worth more than the rule
+
+**A section that proves a change HAPPENED says nothing about whether it was
+BOUNDED.** Every revoke, drop, policy tightening and grant narrowing needs both
+halves — and the second half is the one that gets left out, *because the first
+half is what you set out to do*. The thing being tested is the intention; the
+thing that goes wrong is the blast radius.
+
+Same family as *a check that cannot fail*, approached from the other side: there
+the check could not go red at all; here it cannot go red **for the failure most
+worth catching**.
+
+✅ **Recorded in `scripts/migration-status.mjs`'s verify-block conventions**, so
+it is a rule the next verify block is written against rather than a thing Micky
+has to notice again.
+
+✅ **And applied immediately, in 0085** — stage F's verify has an explicit bounds
+section: members must still SELECT, UPDATE and DELETE their own notifications,
+and `service_role` must still INSERT. Without it, a migration that revoked ALL
+of `notifications` from `authenticated` would pass every "is the hole shut"
+check in that file while leaving the notifications tab permanently empty.
+
+---
+
 ## Dated
 
 * **8 October** — the diarised selfie-orphan check. The only unarranged end-to-end

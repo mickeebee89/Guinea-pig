@@ -102,6 +102,34 @@
  *   * `begin; ... rollback;` is fine — it is the multi-statement dependencies
  *     inside that break, not the transaction.
  *
+ *   * ⚠️⚠️ A MIGRATION THAT TAKES SOMETHING AWAY NEEDS A CONTROL NAMING WHAT IT
+ *     MUST **NOT** HAVE TOUCHED. Micky, 5 Oct 2026, on 0084 — he added the
+ *     section himself and it is the one the file was missing.
+ *
+ *     0084's verify had four sections and all four proved the twenty tables
+ *     WERE revoked. **Not one of them proved anything outside the list was
+ *     left alone.** A slip as small as
+ *
+ *         revoke update on all tables in schema public from authenticated
+ *
+ *     produces an IDENTICAL result in every one of those four sections, while
+ *     having undone 0079's column grant and locked members out of their own
+ *     rows. The verify would have read as a clean pass.
+ *
+ *     So: name the things that must still work, and assert them. For 0084 that
+ *     was `users`, `providers`, `model_attributes` still updatable and
+ *     `sessions`' `status` column grant intact.
+ *
+ *     ⚠️ THE GENERAL SHAPE, WHICH IS WORTH MORE THAN THE RULE: a section that
+ *     proves a change HAPPENED says nothing about whether it was BOUNDED. Every
+ *     revoke, drop, policy tightening and grant narrowing needs both halves,
+ *     and the second half is the one that gets left out, because the first half
+ *     is what you set out to do.
+ *
+ *     Same family as a check that cannot fail, approached from the other side:
+ *     there, the check could not go red; here, it cannot go red for the thing
+ *     most likely to go wrong.
+ *
  *   * ⚠️ PARENTHESISE A CONCATENATION BEFORE YOU CAST IT. `::` binds tighter
  *     than `||`, so this casts ONLY THE SECOND LITERAL:
  *

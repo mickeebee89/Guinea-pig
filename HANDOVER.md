@@ -56,7 +56,7 @@ additive and safely applicable alone, with the policy last:
 | C | `invite_model` — **three** sites, not two | ✅ **0081 applied + verified** |
 | D | `notify_as_admin` for the free-form admin message | ✅ **0081 applied; 0082 added it to all three email lists** |
 | E | the verification **approval** notice — `admin/app/verification/page.tsx:207` | ✅ **0083 applied + verified, 5 Oct** |
-| F | tighten the INSERT policy | **unblocked — see below. Still last, and it makes B irreversible** |
+| F | tighten the INSERT policy | **0085 WRITTEN, NOT APPLIED. ⚠️ Applying it makes B irreversible** |
 
 ⚠️ **TWO ENTRIES IN THIS TABLE USED TO SAY SOMETHING ELSE, AND THE CORRECTIONS
 ARE THE USEFUL PART.**
@@ -91,8 +91,19 @@ looks like, which is the exact failure this whole item exists to prevent.
 else. **Item 155's first instance was the thing blocking stage F for a week**,
 while the work itself took one migration.
 
-**Still ahead of F, in order:** the 20-table `revoke`, then F itself. F is a
-decision, not a step — it is what makes stage B irreversible.
+**The 20-table revoke is done** — 0084, applied and verified 5 Oct 2026.
+
+⚠⚠ **WHAT APPLYING 0085 COSTS, STATED BEFORE IT IS APPLIED.** Until now a
+Vercel revert restored a working product, because the old client's direct
+inserts still passed the policy. After 0085 they do not. **A revert past stage
+B's client half will stop accept, decline and complete from telling anyone
+anything.** That is why F went last.
+
+Its verify has a bounds section as well as a lock section (item 164): a direct
+insert as `authenticated` must be refused, AND `notify_as_admin` called *as
+`authenticated`* must still write — same role, both directions. Calling a DEFINER
+function as the owner would prove the function and not the path, and the path is
+what 0085 changes.
 
 ~~**Stage B's deploy order is the opposite of stage A's.** 0078 is inert —
 nothing calls it until the clients deploy — so applying it is free. The risk is
