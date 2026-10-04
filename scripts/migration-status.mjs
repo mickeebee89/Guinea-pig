@@ -102,6 +102,22 @@
  *   * `begin; ... rollback;` is fine — it is the multi-statement dependencies
  *     inside that break, not the transaction.
  *
+ *   * ⚠️ PARENTHESISE A CONCATENATION BEFORE YOU CAST IT. `::` binds tighter
+ *     than `||`, so this casts ONLY THE SECOND LITERAL:
+ *
+ *         '[{"a":1},' || ' {"b":2}]'::jsonb        -- casts ' {"b":2}]' alone
+ *         ('[{"a":1},' || ' {"b":2}]')::jsonb      -- what was meant
+ *
+ *     0083's verify block failed its first run on exactly that, with "invalid
+ *     input syntax for type json" — found by Micky, 5 Oct 2026. The fragment
+ *     being cast is not valid JSON on its own, so the error names the type and
+ *     not the precedence, which is what makes it read as a bug in the function
+ *     under test rather than in the test.
+ *
+ *     Same family as 0075's 42804, where a bare `null` typed itself as `text`
+ *     against a `uuid` column: an operator doing something defensible with the
+ *     wrong operand. Both are only visible by RUNNING the block.
+ *
  *   ── ⚠️ THE EDITOR SOMETIMES REWRITES A `do` BLOCK. CAUSE UNKNOWN ───────
  *
  *     OBSERVED ONCE, 3 Oct 2026, on 0079's verify block. The Supabase SQL

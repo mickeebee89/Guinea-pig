@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useLoader } from '@/lib/useLoader'
 import { adminErrorText, humanError, shopsNote } from '@/lib/adminActions'
-import type { ActionResult, ShopState } from '@/lib/adminActions'
+import type { ActionResult } from '@/lib/adminActions'
 import { reviewerNames } from '@/lib/reviewers'
 import { ReviewerLine } from '@/components/ReviewerLine'
 
@@ -39,46 +39,27 @@ interface VerificationRequest {
 }
 
 /**
- * ── THE STYLIST'S WORDS, WHICH ARE NOT THE ADMIN'S ───────────────────────
+ * ── THE STYLIST'S WORDS MOVED INTO THE DATABASE, 5 Oct 2026, 0083 ────────
  *
- * shopsNote() in lib is third person, for someone scanning a queue. This is
- * second person, for the person it happened to, and they say different things
- * on purpose.
+ * `stylistApprovalBody(role, shops)` lived here and is now
+ * `public.verification_approval_body(role, shops)`. It was the only
+ * notification copy in the system with real branching in it — role, shop
+ * publication, and which of two requirements is missing — which is why 0077
+ * left it behind when it moved the rejection notice, and why it got its own
+ * migration rather than being inlined.
  *
- * ⚠️ WORDED FROM `shops`, NEVER ASSUMED. The old message told every approved
- * provider "your verified badge and profile are now live" — untrue whenever the
- * shop could not publish. That is the same untruth the console was telling the
- * ADMIN until 0039, aimed at the stylist instead, and it is worse here: they
- * have no queue to check it against.
+ * Both reasons it existed here are gone: the words now travel in the same
+ * transaction as the decision, and they can be tested on invented input
+ * instead of by approving somebody.
  *
- * Since 0041 this names the half that is actually missing, from has_name and
- * has_categorised_treatment. It used to recite both requirements, which told a
- * stylist whose shop HAS a name to go and fix the name.
+ * ⚠️ IT IS NOT DUPLICATED HERE FOR REFERENCE. A second copy of a sentence is
+ * how `shopsNote` nearly became five copies and how the publish rule ended up
+ * written twice (0016). Read it with
+ * `select pg_get_functiondef('public.verification_approval_body(text,jsonb)'::regprocedure);`
+ *
+ * What stays here: shopsNote(), which is third person, for an admin scanning a
+ * queue. The two said different things on purpose and still do.
  */
-function stylistApprovalBody(role: string | undefined, shops: ShopState[]): string {
-  if (role === 'model' || shops.length === 0) {
-    return 'Your Cavy profile is now verified. Your badge is live!'
-  }
-  const hidden = shops.filter(sh => !sh.published)
-  if (hidden.length === 0) {
-    return 'Your identity check passed — your verified badge and your shop are now live.'
-  }
-
-  // The first hidden shop. Nearly every stylist has one; if that ever stops
-  // being true this under-reports rather than misreports, which is the right
-  // way round for a message going to a person.
-  const sh = hidden[0]
-  const missing = [
-    sh.has_name === false ? 'a name' : null,
-    sh.has_categorised_treatment === false ? 'at least one treatment with a category' : null,
-  ].filter(Boolean)
-
-  return 'Your identity check passed and your verified badge is live. '
-    + (missing.length > 0
-        ? `Your shop is not public yet — it still needs ${missing.join(' and ')}. `
-          + `Add ${missing.length > 1 ? 'those' : 'that'} from your dashboard and it will go live.`
-        : 'Your shop is not public yet — open your dashboard to check it.')
-}
 
 /**
  * Shown where the PROFILE PICTURE should be, and worded differently from
@@ -203,19 +184,17 @@ export default function VerificationQueuePage() {
       }
       if (said.length > 0) alert(said.join('\n\n'))
 
-      if (!result.user_id) return   // cannot notify someone the function did not name
-      const { error: notifyErr } = await supabase.from('notifications').insert({
-        user_id: result.user_id,
-        type:    'verification',
-        title:   result.role === 'model' ? 'You\'re verified! ✅' : 'You\'re verified! 🎉',
-        body:    stylistApprovalBody(result.role, shops),
-      })
-      // The decision STANDS. Only the message failed, and that distinction is
-      // exactly what the admin needs in order to act.
-      if (notifyErr) {
-        alert(`The decision is recorded, but they could not be notified: ${notifyErr.message}\n\n`
-          + 'Nothing needs re-approving. Tell them by hand if it matters.')
-      }
+      // ⚠️ THE APPROVAL NOTICE MOVED INTO THE RPC, 5 Oct 2026, 0083, item 144.
+      // This was the LAST client-side notifications INSERT in any of the three
+      // apps. admin_decide_verification now writes it from the same shops state
+      // it returns here, so the decision and the telling cannot half-fail apart
+      // from each other — and the alert that used to say "the decision is
+      // recorded, but they could not be notified" describes a state that can no
+      // longer happen, so it is deleted rather than reworded. 0077's header
+      // explains why a message describing an impossible state is worse than
+      // none.
+      //
+      // `shops` is still read above: it is what shopsNote() tells the ADMIN.
     } finally {
       setWorking(null)
       reload()
@@ -227,8 +206,8 @@ export default function VerificationQueuePage() {
     const note = notes[req.id] ?? ''
     try {
       // No `data` on this path since 0077: the RPC writes the rejection
-      // notice itself. The APPROVE path above still reads it, for the
-      // approval copy that moves in 0078.
+      // notice itself. The APPROVE path above still reads it — not for copy
+      // any more, but for shopsNote(), which is the admin's own report.
       const { error } = await supabase.rpc('admin_decide_verification', {
         p_request_id: req.id,
         p_decision:   'rejected',
@@ -248,10 +227,13 @@ export default function VerificationQueuePage() {
       // console exists to remove" was this block's own comment, and it is now
       // structurally impossible rather than carefully handled.
       //
-      // ⚠️ THE APPROVAL NOTICE IS STILL SENT FROM HERE, until 0078. Its body
-      // comes from stylistApprovalBody(role, shops), which branches on role,
-      // on publication and on which fields are missing. Do not assume this
-      // file no longer writes notifications — it writes exactly one.
+      // ⚠️ AND THE APPROVAL NOTICE FOLLOWED IT, 5 Oct 2026, 0083. THIS FILE NOW
+      // WRITES NO NOTIFICATIONS AT ALL. The note that used to sit here said the
+      // approval notice stays "until 0078" — 0078 became something else, and
+      // that stale promise is item 155's first instance. Said plainly because
+      // the comment was wrong for a week and nothing could have noticed:
+      // check-migration-forward-refs.mjs reads supabase/migrations only, so a
+      // promise naming a migration from a .tsx is outside its sample.
     } finally {
       setWorking(null)
       reload()

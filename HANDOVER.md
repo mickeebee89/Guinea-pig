@@ -37,7 +37,7 @@ is what it has left.
 
 ---
 
-## ⚠️ In flight, 3 October 2026 — read this before starting anything
+## ⚠️ In flight, 5 October 2026 — read this before starting anything
 
 **The one live hole: item 144.** `public.notifications`' INSERT policy is
 `with check (auth.uid() is not null)`. **Any signed-in account can write any
@@ -52,17 +52,61 @@ additive and safely applicable alone, with the policy last:
 | stage | what | state |
 |---|---|---|
 | A | fold notifications into the RPC that already decided — `create_session_with_consent`, `admin_decide_verification` (reject), `admin_decide_status_post` | ✅ **0077 applied, clients deployed** |
-| B | `transition_session` + `notify_session_transition` for accept / decline / complete | **0078 written, NOT applied. Client half NOT written — 8 sites** |
-| C | `invite_model_from_floor`, `notify_chat_counterparty` | not started |
-| D | `notify_as_admin` for the free-form admin message | not started |
-| E | `mobile/.../provider-dashboard.tsx:789` — unclassified, **needs reading not guessing** | not started |
-| F | tighten the INSERT policy | **last, and it makes B irreversible** |
+| B | `transition_session` + `notify_session_transition` for accept / decline / complete | ✅ **0078 applied + verified, client half deployed (7 sites → 1 RPC)** |
+| C | `invite_model` — **three** sites, not two | ✅ **0081 applied + verified** |
+| D | `notify_as_admin` for the free-form admin message | ✅ **0081 applied; 0082 added it to all three email lists** |
+| E | the verification **approval** notice — `admin/app/verification/page.tsx:207` | ✅ **0083 applied + verified, 5 Oct** |
+| F | tighten the INSERT policy | **unblocked — see below. Still last, and it makes B irreversible** |
 
-**Stage B's deploy order is the opposite of stage A's.** 0078 is inert — nothing
-calls it until the clients deploy — so applying it is free. The risk is all in
-the client deploy, and if it is wrong **no booking can be accepted, declined or
-completed.** Rollback is a Vercel revert, and that only works while stage F has
-not run.
+⚠️ **TWO ENTRIES IN THIS TABLE USED TO SAY SOMETHING ELSE, AND THE CORRECTIONS
+ARE THE USEFUL PART.**
+
+* **`notify_chat_counterparty` was never needed.** It was listed under C because
+  the plan was written from an inventory taken **before stage B shipped**; stage
+  B's client half had already replaced that site's status update and its
+  notification together. *A plan that is not re-measured describes the product
+  as it was when the plan was written.*
+* **Old stage E — `mobile/…/provider-dashboard.tsx:789` — was not a fourth
+  category.** Reading it showed `handleInvite` writing `stylist_invite`, which
+  made it stage C's third site. The letter E was then free, and the approval
+  notice took it.
+
+### ✅ STAGE F'S PRECONDITION IS MET, MEASURED ON 5 Oct 2026
+
+**No client in any of the three apps inserts a `notifications` row.** Every
+remaining `from('notifications')` in `admin/`, `site/` and `mobile/` is a
+`.select()` or an `.update()`. Searched for `from('notifications')`, the
+double-quoted and template-literal spellings, and raw `into notifications`.
+
+**One inserter remains and it cannot be affected:**
+`supabase/functions/stripe-webhook/index.ts:177` writes `payment_failed` using
+`SUPABASE_SERVICE_ROLE_KEY`, and service_role bypasses RLS.
+
+⚠️ **AND IN EVERY CASE THE TELLING MOVED RATHER THAN BEING DELETED** — checked,
+because "nobody inserts any more" is also what a silently removed notification
+looks like, which is the exact failure this whole item exists to prevent.
+
+⚠️ **WHAT HELD F UP WAS NOT TECHNICAL.** 0077 deferred the approval notice
+"until 0078"; 0078 became stage B; the promise pointed at a file about something
+else. **Item 155's first instance was the thing blocking stage F for a week**,
+while the work itself took one migration.
+
+**Still ahead of F, in order:** the 20-table `revoke`, then F itself. F is a
+decision, not a step — it is what makes stage B irreversible.
+
+~~**Stage B's deploy order is the opposite of stage A's.** 0078 is inert —
+nothing calls it until the clients deploy — so applying it is free. The risk is
+all in the client deploy, and if it is wrong **no booking can be accepted,
+declined or completed.** Rollback is a Vercel revert, and that only works while
+stage F has not run.~~ *Done 4 Oct 2026 and verified end to end; kept because
+the rollback sentence is still true and still the reason F goes last.*
+
+⚠️ **0083's deploy order was stage A's, not stage B's, and the two are
+opposite.** The migration had to be applied BEFORE the admin deploy: in that gap
+both the RPC and the console write, so a member is told twice — visible and
+self-correcting. The other order tells them **zero** times, silently. That is
+why 0083 was committed only after its verify passed, since pushing is what
+deploys the console.
 
 ⚠️ **Stage B's client half must add a `transition_session` case to
 `site/lib/demo/rpc.ts`.** `demoRpc`'s default throws, so without it accept and

@@ -15311,6 +15311,84 @@ Micky's call, 3 Oct: *"I want the inventory first… a hasty fix that silently
 stops notifications is worse than the hole."* Nothing has been written. This
 entry is the plan, and the fifteen rows above are the thing to work from.
 
+### ✅ STAGE E CLOSED, 5 Oct 2026 — AND WITH IT THE LAST CLIENT INSERT
+
+`0083_the_approval_notice_joins_the_decision`. The verification APPROVAL notice
+— the only notification copy in the system with real branching in it — moved out
+of `admin/app/verification/page.tsx` and into the database as
+`verification_approval_body(role, shops)` + `notify_verification_approved(...)`.
+
+**Measured, not assumed: no client in any of the three apps inserts a
+`notifications` row.** Every remaining `from('notifications')` across `admin/`,
+`site/` and `mobile/` is a `.select()` or an `.update()` (reads and
+mark-as-read). Searched for `from('notifications')`, the double-quoted and
+template-literal spellings, and raw `into notifications` — because naming the
+sample is the difference between a finding and a guess.
+
+**One inserter remains and it is the one that does not matter:**
+`supabase/functions/stripe-webhook/index.ts:177` writes `payment_failed`. It is
+constructed with `SUPABASE_SERVICE_ROLE_KEY`, and service_role bypasses RLS —
+so tightening the INSERT policy cannot break it. **That is stage F's
+precondition, and it is now met.**
+
+⚠️ **WHAT ACTUALLY BLOCKED IT FOR THE LAST STRETCH WAS NOT TECHNICAL.** 0077
+deferred this notice "until 0078", 0078 became stage B, and the promise pointed
+at a file about something else. **Item 155's first instance was the thing
+holding stage F**, for a week, while the work itself took one migration. A
+deferral that loses its referent does not merely go unkept — it stops being
+visible as outstanding, which is the whole cost.
+
+### ⚠️ THE LIVE BODY WAS OPERATED ON, NOT RETYPED
+
+0077 reproduced two live function bodies BY HAND. 0083 did not: it read
+`admin_decide_verification` with `pg_get_functiondef`, asserted the anchor
+appeared **exactly once in the code and never inside a comment**, spliced one
+line after it, executed the result, and then **re-read the live definition to
+prove the splice landed**.
+
+Retyping is safe exactly once. It is also precisely how an unrecorded live edit
+gets silently reverted by the next migration that touches the function — and
+this project has a standing rule to read `pg_get_functiondef` first *because
+that already happened twice in one day*. Surgery honours the rule instead of
+remembering it.
+
+The honest cost is stated in the file: **0083 cannot tell you what the function
+says.** So its PREFLIGHT records `md5(bare)` of the live body, which is a record
+rather than a verdict, so a future migration can tell whether it moved.
+
+### What the verify proved, and the one thing it did not
+
+All six sections passed. The part worth keeping is **(b): seven copy branches,
+exact, against invented jsonb** — possible only because the copy became a pure
+IMMUTABLE function, so the branches are testable without approving a real
+person. Two of the seven exist for specific past faults:
+
+* **case 6** — keys ABSENT must name *nothing* missing. `undefined` means "this
+  did not say", which is not "no"; `NULL = 'false'` is not true, which is what
+  makes the SQL faithful to the console's `=== false`.
+* **case 7** — the FIRST hidden shop, via `with ordinality … order by n`. Without
+  it the pick is arbitrary on any stylist with two hidden shops: the same
+  unordered-actor-pick shape that once made a verify block unable to fail.
+
+⚠️ **AND IT PROVED THE PARTS, NOT THE PATH.** That the spliced line *runs* on
+approval is established textually in (a) and nowhere else. One real approval in
+the console is the only thing that settles it.
+
+### ⚠️ (b) FAILED ITS FIRST RUN, AND THE FAULT WAS IN THE TEST
+
+`::` binds tighter than `||`, so case 7's
+`'[{…},' || ' {…}]'::jsonb` cast **only the second literal** — not valid JSON
+alone. The error said "invalid input syntax for type json", which reads as a bug
+in the function under test rather than in the test. Found by Micky; the
+convention is now in `scripts/migration-status.mjs`. Same family as 0075's
+42804, where a bare `null` typed itself `text` against a `uuid` column: an
+operator doing something defensible with the wrong operand, visible only by
+running it.
+
+**The section handler earned its keep.** It reported `SECTION ERRORED` rather
+than letting an unrun branch read as a pass — which is the entire difference
+between this and a check that cannot fail.
+
 ---
 
 ## 145. MY OWN 0075 RAISED ON EVERY CALL, AND THE CALLER WAS BUILT TO SWALLOW IT
@@ -16354,6 +16432,34 @@ query outright.
   its fix is a comment on the DEAD one saying which shape is correct — so the
   next person copying `pt_update` is told, rather than left to pick.
 
+  ✅ **SETTLED FROM THE DATABASE, 5 Oct 2026 — AND TWO CORRECTIONS.** 0083's
+  PREFLIGHT read the constraint:
+  **`patch_tests_provider_id_fkey -> auth.users`.**
+
+  ⚠️ **CORRECTION 1 — NEITHER SHAPE IS WRONG, AND THERE IS NO DEAD ONE.** The
+  sentence above says the fix is "a comment on the DEAD one". There isn't a dead
+  one. `auth.uid() = provider_id` is **correct** on `patch_tests`, because that
+  column genuinely holds an `auth.users` id; the subquery shape is correct on
+  `provider_treatments`, because that one holds a `providers.id`. Both policies
+  are right for their own table. So the comment went on **both**, attached with
+  `COMMENT ON POLICY` so it travels with the object rather than sitting in
+  whichever snapshot someone happens to open.
+
+  ⚠️ **CORRECTION 2 — ITEM 158 LISTED IT AS AN ODDITY, AND THE REPO ALREADY KNEW
+  BETTER.** 158 calls this "a shape used nowhere else", implying wrong.
+  `schema-snapshot-2026-08-08.sql:263` — written before 0000 — says plainly:
+  *"patch_tests.provider_id references auth.users, NOT providers.id — unlike
+  every other provider_id in this schema. Easy source of a silent wrong join."*
+  158 was written without that line in hand. **A finding assembled from the
+  objects alone can be wrong about provenance that the repo already recorded.**
+
+  **The hazard is the COLUMN NAME, not the policy** — Micky, 5 Oct: *"the next
+  person will read the name and not the constraint."* A `provider_id` that holds
+  a user id fails silently when joined, because the join is type-valid and
+  simply matches nothing. The comment belongs on the column itself as well as on
+  the policies, and that `COMMENT ON COLUMN` rides with the 20-table revoke
+  migration, which is the next one written.
+
 **Both are pre-`0000` hand-made artifacts.** The migration framework has been
 disciplined; the schema that predates it has never been revisited under that
 discipline. That is a better predictor of where more of this lives than table
@@ -16645,6 +16751,106 @@ Carried in from before the audit, unchanged by it:
 | Mobile member-area layout | 2 of 12 routes checked at 375px |
 | Admin approval at scale | One at a time; no bulk path |
 | Founding-provider manual grant | No per-user grant exists; mobile signup sends no `signup_source` |
+
+## 160. THE EMAIL'S COPY IS CHOSEN BY REGEX-MATCHING A NOTIFICATION TITLE
+### Raised 5 Oct 2026, while writing 0083. Not urgent; silent when it breaks.
+
+`copyFor()` in `supabase/functions/send-email/index.ts`, for type
+`'verification'`:
+
+```ts
+return /not approved/i.test(title) ? <rejection copy> : <approval copy>
+```
+
+**So the notification's TITLE is an interface, not a label.** The email's
+subject and heading are chosen by matching free text that lives somewhere else.
+
+Until 0077 the two titles came from two different places — the rejection from
+the console, the approval from the console too. 0077 moved the rejection into
+the database and 0083 moved the approval, so **both sides of that regex are now
+in migrations**, which is strictly better. **Nothing checks that they still
+agree.**
+
+### What breaks, in one sentence
+
+Retitle the approval notice to anything containing "not approved" — "Your ID
+check is done, you're not approved for nothing!" would do it — and every
+verified member gets an email saying their check **failed**, with a "Try again"
+button pointing at `/verify`. No type, test or constraint would notice, because
+the notification row is correct and only the email is wrong.
+
+### Why it is low, and what the real fix is
+
+The titles are now in checksum-locked migrations, so changing one is deliberate
+rather than incidental. That lowers the odds; it does not make the coupling
+visible to anyone changing it.
+
+0083's verify block pins today's titles to today's branches — reading the
+titles **from the rows the function wrote**, not from retyped literals, so it
+tests output rather than its own copy. ⚠️ **That is a stopgap and is labelled
+one in the file:** it is a copy of the predicate, and it goes stale silently if
+`copyFor`'s regex changes.
+
+**The mechanism it needs:** an axis in `check-email-type-coverage.mjs` that
+reads BOTH sides — every `'verification'` title literal in
+`supabase/migrations/*.sql` and the regex in `copyFor` — and asserts each title
+lands on the intended branch. **Named by that condition and not by a migration
+number** (item 155), so the promise cannot lose its referent.
+
+---
+
+## 161. AN ADVISORY CHECK IS GATING THE AUTHORITATIVE ONE, SO `next build` STOPPED RUNNING
+### Found 5 Oct 2026. Pre-existing at HEAD, not caused by the change that found it.
+
+`site/package.json`:
+
+```
+verify = npm run checks && npm run build
+```
+
+`npm run checks` ends with `check-types-freshness.mjs`. That check compares the
+generated types' `TYPES_STAMP` against the newest migration FILE, and it cannot
+know whether a migration was applied — its own header says so. **It is
+advisory.** `next build` is the authoritative one: it is what Vercel runs, so it
+is the only thing that answers "will this deploy".
+
+**Because `checks` comes first and the chain is `&&`, an advisory failure
+cancels the authoritative check.**
+
+### Measured, with the sample named
+
+At HEAD (`f6e8b9e`, 0082): `TYPES_STAMP: 0081`, newest migration file `0082`
+→ `check-types-freshness` fails → **`next build` had not run in `site/` since
+before 0082 landed.** Read from `git show HEAD:site/lib/database.types.ts` and
+the migrations directory, not from the working tree, so the working tree's own
+changes cannot be what produced it.
+
+Run directly, both were fine: `site` `next build` exit 0, `admin`
+`npm run build` exit 0. **So nothing was broken — which is the point. The gate
+had been down for a commit and the only symptom was a check failing for an
+unrelated reason.**
+
+### Why this is the shape and not the instance
+
+Regenerating the types fixes today's red. It does not stop the next advisory
+check from standing in front of the build. Candidate fixes, in order of how much
+they actually change:
+
+1. **Run the build first**, or run it regardless — `npm run build && npm run checks`,
+   or a `verify` that runs both and fails if either did. The authoritative check
+   stops being gated on anything.
+2. **Make the advisory one advisory in its exit code too** — warn, exit 0, and
+   let the chain continue. Cheapest, and it weakens a check that has caught real
+   staleness twice (items 84, 91).
+3. Leave it and regenerate promptly. Which is what has been happening, and it
+   lasted one commit.
+
+⚠️ This is the same family as *"exit zero is not the check"*, inverted: here the
+printed output read green on every line while the exit code was 1 and the build
+never ran. **Reading the output is not enough either — the thing that did not
+run prints nothing at all.**
+
+---
 
 ## Dated
 
