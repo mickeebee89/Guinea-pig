@@ -16115,6 +16115,79 @@ in 0035"* said, minus the part that can rot. **Not built yet** — it belongs wi
 
 ---
 
+## 156. WAS ITEM 147 ONE TABLE OR THE SCHEMA? NOBODY HAS ASKED
+### Raised 4 Oct 2026. ⚠️ THIS IS AN OPEN QUESTION, NOT A FINDING. Unmeasured by Micky and unmeasured by me.
+
+Item 147 established that `public.sessions` granted `authenticated` **table-wide
+UPDATE on all 26 columns**, narrowed only by a USING-only policy — so either
+party could rewrite a booking's date, price, owning stylist and either
+`not_held` timestamp. 0079 scoped that one table to `update (status)`.
+
+**Nobody has asked whether `sessions` was unusual or typical.**
+
+It surfaced sideways: item 155's dead columns —
+`providers.status_text`, `providers.status_expires_at` — are writable by anyone
+holding UPDATE on `providers`, and that observation has no basis beyond the
+assumption that `providers` is granted the way `sessions` was. **That assumption
+is exactly what is unmeasured.**
+
+If the same table-wide grants exist on `providers`, `users`, `availability`,
+`notifications` and the rest, then **147 was one instance of a schema-wide
+pattern and the fix reached exactly one table.** If `sessions` was the outlier,
+0079 closed the thing and this item closes with it.
+
+⚠️ **Both answers are worth having, and the worse one is not the obvious one.**
+A result showing `sessions` as the ONLY narrowed table would say that 0079 fixed
+the instance that happened to be found rather than the pattern — which is the
+shape this record keeps recording under other names: *a finding is only as wide
+as the check.*
+
+### The measurement — one read-only query
+
+```sql
+select c.relname as table_name,
+       count(distinct cp.column_name) as updatable_columns,
+       (select count(*) from pg_policies p
+         where p.schemaname = 'public' and p.tablename = c.relname and p.cmd = 'UPDATE')
+         as update_policies
+  from pg_class c
+  join pg_namespace n on n.oid = c.relnamespace
+  left join information_schema.column_privileges cp
+    on cp.table_schema = 'public' and cp.table_name = c.relname
+   and cp.grantee = 'authenticated' and cp.privilege_type = 'UPDATE'
+ where n.nspname = 'public' and c.relkind = 'r'
+ group by c.relname
+ having count(distinct cp.column_name) > 0
+ order by 2 desc;
+```
+
+**How to read it:** many updatable columns **plus** a permissive UPDATE policy is
+147's shape. Few columns, or column-scoped grants, is not. `sessions` should now
+show **1** updatable column — if it shows more, 0079 did not take and that is a
+separate and more urgent problem.
+
+⚠️ **A permissive policy is not automatically a hole.** `sessions`' policy
+allowed either participant and the *trigger* carried the actor rule for three
+statuses. So a table appearing in 147's shape needs its triggers read before it
+is called a finding — which is the mistake this item is written to avoid making
+twice.
+
+### Sequencing
+
+Micky runs it after 0081. **Not before**: 0081 is written and in flight, and
+opening a schema-wide question while a written migration waits is how the
+written one stops getting finished.
+
+### Also waiting, deliberately not done
+
+The **dead-column drop** from item 155 — `providers.status_text` and
+`providers.status_expires_at`, promised by 0034 to a 0035 that became something
+else. One statement. **It waits**, because it must not jump the 144 queue, and
+because this item may widen it: if `providers` turns out to carry 147's shape,
+the drop and the grant narrowing are one migration rather than two.
+
+---
+
 ## What is open
 
 | | Item | Blocking launch? |
@@ -16140,6 +16213,7 @@ in 0035"* said, minus the part that can rot. **Not built yet** — it belongs wi
 | 137 | ✅ **CLOSED 1 Oct.** A declined application vanished from both clients — the model's only trace was a notification she can delete. Fourth value this one allowlist has needed. Fixed on web; mobile's sessions.tsx still hides `declined` and `expired` | No while mobile is unreleased |
 | 139 | ✅ **CLOSED 2 Oct.** 0070's verify picked `ff06d568` with an unordered `limit 1` — a provider AND an admin — so the guard bypassed and the block reported a hole that did not exist. The inverse of 0027: a rule for everyone except admins, tested as an admin. Four blocks audited; every one whose actor matters now asserts its own premise | No |
 | 140 | ✅ **CLOSED AND VERIFIED LIVE 2 Oct.** 0067 gave `session_expiry_runs` RLS with no policy AND revoked the table grant, so the tile built to watch it could not read it. Three run-log tables, one contract, three access shapes. The tile reported *"could not read"* rather than *"Never"*, which is what made it diagnosable | No |
+| 156 | ⚠️ **OPEN QUESTION, NOT A FINDING — raised 4 Oct, unmeasured.** Item 147 found `sessions` granting `authenticated` table-wide UPDATE on all 26 columns; 0079 narrowed that ONE table. **Nobody has asked whether it was unusual or typical.** If `providers`, `users`, `availability` and the rest are granted the same way, 147 was one instance of a schema-wide pattern and the fix reached one table. One read-only query settles it, in the item. ⚠️ A permissive policy is not automatically a hole — `sessions`' actor rule lived in a TRIGGER, so triggers get read before anything is called a finding | Unknown until measured |
 | 155 | ⚠️ **SWEPT 4 Oct. TWO void promises in 82 migrations.** A deferral naming a migration **number** points at nothing once the number is reused, and no check can catch it. (1) 0077's approval notice → 0078 became stage B; becomes **0082**. (2) 0031→0034→**0035** promised to drop `providers.status_text` and `status_expires_at`; 0035 became `admin_act_on_user` and **the columns are still in the live database**, inert but real. Rule: a deferral names a **condition**, and gets an item the moment it is deferred. A forward-number check would have caught both | No |
 | 154 | ⚠️ **RAISED 3 Oct, not started.** The eleven emailable types are hand-maintained in **three** places because the list has nowhere to live. One `stable` function could feed the trigger and the reconciler, leaving only `copyFor` a copy. ⚠️ Costs: it drops and recreates the trigger that sends **every** email, where a mistake stops all mail **silently** (item 153 just showed that is the hardest failure here to see); it moves a constant comparison to a per-row function call; and it cannot reach `copyFor` anyway. **Do 151's check first** — visible immediately, costs nothing live | No |
 | 153 | ⚠️ **RAISED 3 Oct.** `net.http_request_queue` is **unlogged**, so a crash or restart **TRUNCATES it and silently discards queued email**. The notification row survives, so the member sees the in-app notice, never gets the mail, and no error exists anywhere. Item 136 from the other end: the only thing that would notice is `run_email_reconcile`, which had never completed since 22 Sep. ✅ Checked that it WOULD catch it — `no_attempt` counts notifications with ZERO `email_sends` rows, not failures. It reports and never resends | No, but mail is lost silently |
