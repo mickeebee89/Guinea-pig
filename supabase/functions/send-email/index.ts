@@ -119,6 +119,26 @@ function copyFor(
         : { subject, heading: subject, cta: 'Open Cavy', path: '/notifications' }
     }
 
+    // ⚠️ ADMIN MESSAGE NOW EMAILS (0082, 4 Oct 2026). It was in 0047's "not
+    // worth an interruption" list; that premise was already overturned for
+    // stylist_invite on the same list, and an admin writing deliberately to one
+    // person is a weaker candidate for it than an invitation was.
+    //
+    // ⚠️ THE HEADING MIRRORS admin_warning ON PURPOSE, restatement and all.
+    // These are the only two admin-to-member types, and admin_warning already
+    // uses the restating pair. Giving a message a differently-shaped heading
+    // would make it read as more or less serious than a warning for reasons of
+    // copy style rather than content. The admin's own words are the substance
+    // and they arrive in the body.
+    //
+    // ⚠️ AND THE HEADING IS FIXED, NOT THE ROW'S TITLE. For this type the title
+    // IS admin-authored — but until item 144's stage F, the open INSERT policy
+    // means a MEMBER can write an admin_message row too. Passing the title
+    // through would hand them the heading, which is the hole 0081 just closed.
+    case 'admin_message':
+      return { subject: 'A message from Cavy', heading: 'A message from Cavy',
+        cta: 'Read it in full', path: '/notifications' }
+
     // ── The three that used to fall through. Item 151, 3 Oct 2026. ─────────
     //
     // ⚠️ A HEADING SITS UNDER A FIXED SUBJECT AND ABOVE THE ROW'S BODY, so it

@@ -16431,6 +16431,59 @@ longer matches the product.
 
 ---
 
+## 159. THE ONLY REVIEW PROMPT IN THE PRODUCT REACHES ONLY PEOPLE WHO OPEN THE APP
+### Raised 4 Oct 2026. ⚠️ DECISION PENDING — Micky's. Nothing written.
+
+`session_completed` is not emailed, and its body is the one we spent a round
+trip deliberately keeping *"Leave a review?"* on (item 150, option 1).
+
+**So the actionable prompt was protected and then left on a channel that only
+reaches people who open the app.** Reviews are the trust mechanism this
+marketplace runs on, and `providers.rating` / `review_count` are the fields a
+stylist builds credibility with — a review prompt that never reaches an inbox is
+a weak version of the thing it is for.
+
+### Both sides, because this is genuinely two-sided
+
+**For emailing it:** it arrives at the moment a review is most likely — just
+after the treatment, while the member still remembers it. It is the only
+solicitation in the product. And the trainee-stylist premise depends on reviews
+accumulating, so the mechanism that produces them being the weakest-delivered
+notification is the wrong way round.
+
+**Against:** the member already knows the appointment happened — they were
+there. A completed treatment generating a second message is the shape of app
+that gets muted, and 0047's instinct was not stupid: this is the one type where
+the recipient has more context than the sender. An email that tells somebody
+something they know, to ask them for a favour, is the least welcome kind.
+
+**Not changed. Raised.** The argument against is real and it is not mine to
+settle.
+
+### ⚠️ AND 0047's GROUPING WAS THE WRONG AXIS
+
+Of 0047's four *"not worth an interruption"* types, **three have been questioned
+within six weeks**:
+
+| type | state |
+|---|---|
+| `stylist_invite` | **overturned** by 0073 — *"sits in a notifications tab the model may not open for days"* |
+| `admin_message` | **overturned** by 0082, on 0073's precedent |
+| `session_completed` | **contested**, this item, undecided |
+| `new_availability` | **stands**, on a different reason — a mass send, one per favouriter |
+
+**Three of four overturned or contested is a sign the grouping was the wrong
+axis, not that each case is special.** *"Worth an interruption"* is a judgement
+about one message to one person; it was applied to a list assembled from
+whatever happened to be unemailed at the time. The only member still standing
+stands on a reason — mass send — that has nothing to do with the others.
+
+That is the same shape as item 155's deferrals and item 151's three lists: **a
+decision recorded as a group, where the group was never the thing the decision
+was about.**
+
+---
+
 ## What is open
 
 | | Item | Blocking launch? |
@@ -16456,6 +16509,7 @@ longer matches the product.
 | 137 | ✅ **CLOSED 1 Oct.** A declined application vanished from both clients — the model's only trace was a notification she can delete. Fourth value this one allowlist has needed. Fixed on web; mobile's sessions.tsx still hides `declined` and `expired` | No while mobile is unreleased |
 | 139 | ✅ **CLOSED 2 Oct.** 0070's verify picked `ff06d568` with an unordered `limit 1` — a provider AND an admin — so the guard bypassed and the block reported a hole that did not exist. The inverse of 0027: a rule for everyone except admins, tested as an admin. Four blocks audited; every one whose actor matters now asserts its own premise | No |
 | 140 | ✅ **CLOSED AND VERIFIED LIVE 2 Oct.** 0067 gave `session_expiry_runs` RLS with no policy AND revoked the table grant, so the tile built to watch it could not read it. Three run-log tables, one contract, three access shapes. The tile reported *"could not read"* rather than *"Never"*, which is what made it diagnosable | No |
+| 159 | ⚠️ **DECISION PENDING, 4 Oct.** `session_completed` is not emailed, and its body carries the **only review prompt in the product** — the one item 150 deliberately kept. Reviews feed `providers.rating`/`review_count`, the fields a stylist builds credibility with, so a prompt reaching only people who open the app is a weak version of its own purpose. Both sides in the item; the case against is real. ⚠️ Also records that **three of 0047's four "not worth an interruption" types have been overturned or contested in six weeks** — the grouping was the wrong axis | No |
 | 158 | ⚠️ **RAISED 4 Oct. DO NOT START — pre-launch, behind everything queued.** Both of the oddest objects found on 4 Oct — `model_attributes`' duplicate policies and `patch_tests`' inconsistent predicate — were created by **no migration at all**, and the 8 Aug snapshot already carries a POLICY SPRAWL warning about that region. 82 migrations have had checksums, preflights and a ledger; **the schema predating them has never been read under that discipline.** Bounded sweep: every policy, trigger, function and constraint in `public` that no migration created | No |
 | 156 | ⚠️ **OPEN QUESTION, NOT A FINDING — raised 4 Oct, unmeasured.** Item 147 found `sessions` granting `authenticated` table-wide UPDATE on all 26 columns; 0079 narrowed that ONE table. **Nobody has asked whether it was unusual or typical.** If `providers`, `users`, `availability` and the rest are granted the same way, 147 was one instance of a schema-wide pattern and the fix reached one table. One read-only query settles it, in the item. ⚠️ A permissive policy is not automatically a hole — `sessions`' actor rule lived in a TRIGGER, so triggers get read before anything is called a finding | Unknown until measured |
 | 155 | ⚠️ **SWEPT 4 Oct. TWO void promises in 82 migrations.** A deferral naming a migration **number** points at nothing once the number is reused, and no check can catch it. (1) 0077's approval notice → 0078 became stage B; becomes **0082**. (2) 0031→0034→**0035** promised to drop `providers.status_text` and `status_expires_at`; 0035 became `admin_act_on_user` and **the columns are still in the live database**, inert but real. Rule: a deferral names a **condition**, and gets an item the moment it is deferred. A forward-number check would have caught both | No |

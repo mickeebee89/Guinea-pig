@@ -73,8 +73,7 @@ const stripTs = s =>
  */
 const NOT_EMAILED = {
   new_availability:  '0047: a mass send — one per favouriter — so an email each is an interruption per stylist post',
-  session_completed: '0047: "not worth an interruption". In-app only; the review prompt is the follow-up',
-  admin_message:     '0047: "not worth an interruption". ⚠️ CONTESTED — stylist_invite was on this same list and 0073 moved it INTO the allowlist because "a stylist\'s invitation sits in a notifications tab the model may not open for days", which is exactly the argument for an admin writing deliberately to one person. Item 151; Micky\'s call',
+  session_completed: '0047: "not worth an interruption". ⚠ CONTESTED — its body carries the ONLY review prompt in the product, and reviews feed providers.rating/review_count, the fields a stylist builds credibility with. A prompt that reaches only people who open the app is a weak version of the thing it is for. Item 159, UNDECIDED',
 }
 
 /**
