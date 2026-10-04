@@ -16101,6 +16101,66 @@ before stage B shipped. **A document cannot notice the world moved**, which is
 the same fault as the number deferral wearing different clothes: both are
 writing down a fact and then trusting the writing instead of the fact.
 
+### ⚠️ THIRD INSTANCE, 4 Oct — AND IT WAS MINE, ONE DAY AFTER WRITING THE RULE
+
+The forward-number check and the `-F` verification were both deferred **"with
+0082"**. 0082 then became the `admin_message` migration. **So the promise
+pointed at a file about something else — the identical failure to 0077 → 0078
+and 0034 → 0035, committed by the person who had just swept for them.**
+
+Caught by Micky asking whether either existed as a committed script or was
+still a sentence. Neither existed.
+
+**What makes it the third instance rather than a near-miss:** a deferral naming
+a number cannot be checked, so nothing distinguished "will be built with 0082"
+from "was built with 0082" except somebody remembering. One day of distance was
+enough.
+
+**Both are now built, and the rule is followed in the same breath as being
+broken:** this entry exists, and
+`scripts/check-migration-forward-refs.mjs` fails on the class.
+
+### The mechanism, built 4 Oct 2026
+
+**`scripts/check-migration-forward-refs.mjs`**, in site's check chain. It fails
+when a comment cites a migration number **that does not exist on disk** — which
+is the dangerous case and the whole of it. A reference to a migration that
+exists is harmless; a reference to an unallocated number is a promise about a
+file nobody has written.
+
+That rule needs no grandfathering: the repo has ~100 forward references and
+every one names a file that exists, so it passes history as written and bites
+only on new promises. **It would have caught all three instances at the moment
+they were typed.**
+
+⚠️ **Three faults in its one regex, every one found by RUNNING it:**
+
+1. `\b\d{4}\b` matched **years** — 2026, 1990, a date of birth in a verify
+   block. Migration numbers have a leading zero; that zero is the whole
+   distinction.
+2. `\b0\d{3}\b` then matched **data inside verify blocks** — a longitude
+   `0.0148`, a phone number `'0161 496 0000'` from 0072's digit-rule set.
+   Verify blocks are comments, so "prose only" does not exclude them.
+3. Excluding a following `.` to fix that **created a false NEGATIVE**:
+   `"deferred until 0099."` became invisible — the most natural way to write
+   the exact thing the check looks for. **The fix for two false positives was
+   worse than the positives.** Only a decimal point followed by a digit
+   excludes.
+
+The third was visible only because a drift test existed. *A check is not
+finished when it passes; it is finished when it has been made to fail.*
+
+**`scripts/git-commit-verified.mjs`** commits from a message file and compares
+`git log -1 --format=%B` back against it, failing on any difference. It exists
+because item 146's rule was broken three times by its author in two days, and
+the middle instance **succeeded silently** — the commit existed with two words
+missing and nothing to notice.
+
+⚠️ Its one detail is load-bearing: `--format=%B` appends a newline, so comparing
+raw reports a difference on **every** commit — a check that always fails, as
+useless as one that cannot. That was found by running the comparison by hand
+before building it.
+
 ### It can be mechanised, and should be
 
 **A check that rejects a forward migration-number reference in prose** — any
