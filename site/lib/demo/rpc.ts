@@ -30,6 +30,17 @@ export function demoRpc(name: string, args: Row, store: DemoStore, user: DemoUse
      * notifications a walkthrough needs. Not a second implementation of the
      * rule — nothing here is authoritative about anything.
      */
+    /**
+     * ⚠️ THE SALON FLOOR INVITE IS REACHABLE IN A WALKTHROUGH, and demoRpc's
+     * default THROWS — so without this a recording ends on an error the moment
+     * the stylist invites a model from the wall.
+     *
+     * Writes NO notification, matching every other case here: demo RPCs do not
+     * notify, and fixtures seed what a walkthrough needs.
+     */
+    case 'invite_model':
+      return null
+
     case 'transition_session': {
       const s = store.tables.sessions.find(r => r.id === args.p_session_id)
       if (!s) return { ok: false, changed: false, reason: 'not_found_or_not_yours' }

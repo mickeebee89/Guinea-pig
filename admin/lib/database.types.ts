@@ -1,8 +1,8 @@
 // GENERATED FILE — DO NOT EDIT BY HAND.
 //
 // Written by scripts/gen-supabase-types.mjs from the live database.
-// TYPES_STAMP: 0080
-// TYPES_FILES_AT_GEN: 0080
+// TYPES_STAMP: 0081
+// TYPES_FILES_AT_GEN: 0081
 //
 // TYPES_STAMP is the migration the DATABASE was at when these were generated,
 // stated by whoever ran it (--applied). TYPES_FILES_AT_GEN is the newest
@@ -2565,6 +2565,7 @@ export type Database = {
         Returns: boolean
       }
       install_email_hook_secret: { Args: { p_secret: string }; Returns: string }
+      invite_model: { Args: { p_model_user_id: string }; Returns: undefined }
       is_admin: { Args: never; Returns: boolean }
       is_blocked_pair: { Args: { a: string; b: string }; Returns: boolean }
       is_suspended: { Args: { uid: string }; Returns: boolean }
@@ -2594,6 +2595,10 @@ export type Database = {
           profile_pic_url: string
           skin_tone: string
         }[]
+      }
+      notify_as_admin: {
+        Args: { p_body: string; p_title: string; p_user_id: string }
+        Returns: undefined
       }
       notify_favourites_of_availability: { Args: never; Returns: number }
       notify_session_applied: {

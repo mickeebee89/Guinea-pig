@@ -64,11 +64,20 @@ export default function MessagesPage() {
     // The insert result was discarded, so a refused write cleared the form,
     // flipped the "sent" confirmation and wrote an audit row saying it went.
     // Audit item 27, on the one surface where silence is the entire failure.
-    const { error } = await supabase.from('notifications').insert({
-      user_id: selected.id,
-      type: 'admin_message',
-      title: title.trim(),
-      body: body.trim(),
+    // ⚠️ ONE RPC SINCE 0081 (item 144 stage D). The insert was addressed to
+    // another account and only worked because the notifications INSERT policy
+    // lets any signed-in session write to anyone. notify_as_admin gates on
+    // is_admin() in the database instead, and refuses an empty title or body —
+    // this screen already did, but it stops being the only caller the moment
+    // the function exists.
+    //
+    // The text stays free: event-only exists so a MEMBER cannot choose words
+    // shown to another member, and an admin writing deliberately is that
+    // rule's boundary rather than an exception to it.
+    const { error } = await supabase.rpc('notify_as_admin', {
+      p_user_id: selected.id,
+      p_title: title.trim(),
+      p_body: body.trim(),
     })
     if (error) {
       setSending(false)

@@ -335,20 +335,21 @@ export default function ModelProfileViewScreen() {
     if (!profile || !modelId || !viewerUserId) return
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
     setInviting(true)
-    const { data: provRow } = await supabase
-      .from('providers')
-      .select('id, name, shop_handle')
-      .eq('user_id', viewerUserId)
-      .single()
-    const prov = provRow as any
-    const { error } = await supabase.from('notifications').insert({
-      user_id:    modelId,
-      type:       'stylist_invite',
-      title:      `${prov?.name ?? 'A stylist'} wants you as their model`,
-      body:       'Tap to view their shop',
-      session_id: null,
-      data:       { provider_id: prov?.id ?? null, shop_handle: prov?.shop_handle ?? null },
-    })
+    // ⚠️ ONE RPC SINCE 0081 (item 144 stage C). The provider lookup went with
+    // it — invite_model derives the stylist from auth.uid(), so there is
+    // nothing to look up and nothing to pass wrongly.
+    //
+    // ⚠️ THIS SITE'S WORDING IS GONE, DELIBERATELY. It said 'wants you as
+    // their model' / 'Tap to view their shop'; the web said 'would like you as
+    // a model' and a sentence. Both reached inboxes, because stylist_invite is
+    // in notify_email's allowlist. The web wording won because copyFor's
+    // subject already says 'A stylist would like you as a model' — a lookup,
+    // not a judgement. And 'Tap' is a mobile verb on something read in email.
+    //
+    // data.shop_handle went too: nothing in any of the three apps reads it
+    // from a notification. data.provider_id stays, because
+    // routeForNotification deep-links on it.
+    const { error } = await supabase.rpc('invite_model', { p_model_user_id: modelId })
     if (error) {
       console.error('[handleInvite] insert error:', error.message)
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)

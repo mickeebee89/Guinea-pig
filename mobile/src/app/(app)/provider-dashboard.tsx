@@ -775,14 +775,11 @@ export default function ProviderDashboardScreen() {
 
   const handleInvite = async (m: ModelCard) => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
-    const { error } = await supabase.from('notifications').insert({
-      user_id:    m.id,
-      type:       'stylist_invite',
-      title:      `${provider?.name ?? 'A stylist'} wants you as their model`,
-      body:       'Tap to view their shop',
-      session_id: null,
-      data:       { provider_id: provider?.id ?? null, shop_handle: provider?.shop_handle ?? null },
-    })
+    // One RPC since 0081 (item 144 stage C) — see model/[id].tsx for why this
+    // site's wording went. This was the THIRD copy of the invite, and the one
+    // that sat in the plan as "unclassified, needs reading not guessing" until
+    // it was read: stage E was never a fourth category.
+    const { error } = await supabase.rpc('invite_model', { p_model_user_id: m.id })
     if (error) {
       console.error('[handleInvite] insert error:', error.message)
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)

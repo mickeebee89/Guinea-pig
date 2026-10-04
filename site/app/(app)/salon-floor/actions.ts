@@ -91,30 +91,29 @@ export async function removeFromFloor(postId: string): Promise<Result> {
  * accept/decline would give two ways to say yes and two things to keep in step.
  */
 export async function inviteFromFloor(modelUserId: string): Promise<Result> {
-  const user = await requireUser()
+  await requireUser()
   const supabase = await createSupabaseServerClient()
 
-  const { data: prov } = await supabase
-    .from('providers')
-    .select('id, name')
-    .eq('user_id', user.id)
-    .maybeSingle()
-
-  const p = prov as { id: string; name: string | null } | null
-  if (!p) return { ok: false, error: 'Only a stylist can invite someone.' }
-  if (modelUserId === user.id) return { ok: false, error: 'That is your own post.' }
-
-  const { error } = await supabase.from('notifications').insert({
-    user_id: modelUserId,
-    type: 'stylist_invite',
-    title: `${p.name ?? 'A stylist'} would like you as a model`,
-    body: 'Open their shop to see what they do and when they are free.',
-    session_id: null,
-    data: { provider_id: p.id },
+  // ⚠️ ONE RPC SINCE 0081 (item 144 stage C). The provider lookup, the
+  // self-invite check and the copy all moved into invite_model, which derives
+  // the inviting stylist from auth.uid() — so an invite cannot be sent AS
+  // somebody else, and the wording exists once rather than three times. Mobile
+  // had two other copies of it saying 'wants you as their model' and 'Tap to
+  // view their shop', both of which reached inboxes.
+  const { error } = await supabase.rpc('invite_model', {
+    p_model_user_id: modelUserId,
   })
 
   if (error) {
-    console.error('[salon-floor] invite failed', error)
+    // ⚠️ MAPPED ON SQLSTATE, NOT ON MESSAGE TEXT. The two refusals carry
+    // distinct codes on purpose — 42501 for "not a stylist" and 22023 for
+    // "your own account" — so this does not depend on wording that a later
+    // migration might reword. Matching on sqlerrm is what made 0079's test 5
+    // defensible and a sqlstate match wrong THERE; here it is the reverse,
+    // because here the codes differ and the messages are what might change.
+    console.error('[salon-floor] invite failed', { code: error.code, message: error.message })
+    if (error.code === '42501') return { ok: false, error: 'Only a stylist can invite someone.' }
+    if (error.code === '22023') return { ok: false, error: 'That is your own post.' }
     return { ok: false, error: 'That didn’t send. Nothing has changed.' }
   }
 
