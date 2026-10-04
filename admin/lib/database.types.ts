@@ -1,8 +1,8 @@
 // GENERATED FILE — DO NOT EDIT BY HAND.
 //
 // Written by scripts/gen-supabase-types.mjs from the live database.
-// TYPES_STAMP: 0081
-// TYPES_FILES_AT_GEN: 0081
+// TYPES_STAMP: 0083
+// TYPES_FILES_AT_GEN: 0083
 //
 // TYPES_STAMP is the migration the DATABASE was at when these were generated,
 // stated by whoever ran it (--applied). TYPES_FILES_AT_GEN is the newest
@@ -2609,6 +2609,10 @@ export type Database = {
         Args: { p_session_id: string; p_to: string }
         Returns: undefined
       }
+      notify_verification_approved: {
+        Args: { p_role: string; p_shops: Json; p_user_id: string }
+        Returns: undefined
+      }
       provider_fee_settled: { Args: { p_user_id: string }; Returns: boolean }
       provider_shop_is_publishable: {
         Args: { p_provider_id: string }
@@ -2698,6 +2702,10 @@ export type Database = {
         Returns: Json
       }
       unsubscribe_email: { Args: { p_token: string }; Returns: boolean }
+      verification_approval_body: {
+        Args: { p_role: string; p_shops: Json }
+        Returns: string
+      }
     }
     Enums: {
       moderation_action_type:
