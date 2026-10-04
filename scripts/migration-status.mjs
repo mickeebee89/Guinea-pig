@@ -190,10 +190,35 @@
  *        monotonic.
  *
  *     2. **A SECTION THAT READS A ROW BACK MUST PROVE THE ROW IS NEW.** Capture
- *        what exists before the call and exclude it afterwards, or "the function
- *        errored and an older row was already there" reads as a pass. This is
- *        the same fault as a check that cannot fail, arriving through the data
- *        rather than through the logic.
+ *        what exists before the call and exclude it afterwards, and SAY SO in
+ *        the output. Otherwise "the function errored and an older row was
+ *        already there" reads as a pass.
+ *
+ *        ⚠️ THIS IS NOT A PRECAUTION. IT FIRED, ON 0081, 4 Oct 2026.
+ *
+ *        Run against the database BEFORE 0081 was applied, section (c) printed
+ *        the exact expected title, the exact expected body and the exact
+ *        expected provider_id — **for a function that did not exist yet.** The
+ *        row was a pre-existing Salon Floor invite written by the web client.
+ *
+ *        And it looked right for the WORST possible reason: 0081 consolidates
+ *        the invite copy onto the WEB wording, and that stale row was written
+ *        by the web client. **The row most likely to be lying was also the row
+ *        most likely to look correct.**
+ *
+ *        The guard happened to be on section (e) and not on (c). (e) reported
+ *        NO NEW ROW immediately; (c) said nothing and read as a clean pass.
+ *
+ *        ⚠️ GENERAL FORM, worth more than the instance: **whenever a change
+ *        consolidates several existing variants onto one of them, every
+ *        pre-existing row already written in that variant becomes
+ *        indistinguishable from the change's own output.** Those are exactly
+ *        the migrations where a read-back without a new-row guard cannot fail.
+ *
+ *        It is the same fault as a check that cannot fail, arriving through the
+ *        DATA rather than through the logic — the third route to that outcome
+ *        this record has logged, after an unordered actor pick (0070) and a
+ *        no-op status write (0079).
  *
  *     Roll back at the end regardless. `set local` and `set_config(…, true)` are
  *     undone by a subtransaction abort, so a failing section resets its own

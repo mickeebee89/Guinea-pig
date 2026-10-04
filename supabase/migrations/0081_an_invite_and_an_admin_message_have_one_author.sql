@@ -212,6 +212,9 @@ commit;
 --     r_b text := 'not run';
 --     r_c text := 'not run';
 --     r_d text := 'not run';
+--     r_e text := 'not run';
+--     v_admin uuid := 'ff06d568-8936-45fa-ad5f-0b88c150ec30';
+--     v_is_admin boolean;
 --   begin
 --     -- (a) the shapes
 --     begin
@@ -287,11 +290,40 @@ commit;
 --       execute 'reset role';
 --     exception when others then r_d := 'SECTION ERRORED: ' || sqlerrm; end;
 --
+--     -- (e) an ADMIN CAN send, and the row is proven NEW.
+--     --     ⚠️ is_admin is REPORTED, not asserted away: for a POSITIVE test an
+--     --     admin is the point, so the premise is recorded rather than refused.
+--     begin
+--       v_before := array(select n.id from public.notifications n
+--                          where n.user_id = v_model and n.type = 'admin_message');
+--       perform set_config('request.jwt.claims',
+--         json_build_object('sub', v_admin::text, 'role', 'authenticated')::text, true);
+--       execute 'set local role authenticated';
+--       v_is_admin := public.is_admin();
+--       if not v_is_admin then
+--         r_e := 'TESTED NOTHING: the chosen actor is NOT an admin, so a refusal would prove nothing here';
+--       else
+--         perform public.notify_as_admin(v_model, 'Test title', 'Test body');
+--         v_new := (select n.id from public.notifications n
+--                    where n.user_id = v_model and n.type = 'admin_message'
+--                      and not (n.id = any (v_before)));
+--         if v_new is null then
+--           r_e := 'NO NEW ROW — notify_as_admin wrote nothing. An older admin_message is NOT evidence.';
+--         else
+--           r_e := 'new row: yes | is_admin=' || v_is_admin
+--                  || ' | title=[' || coalesce((select title from public.notifications where id = v_new), 'null')
+--                  || '] body=['  || coalesce((select body  from public.notifications where id = v_new), 'null') || ']';
+--         end if;
+--       end if;
+--       execute 'reset role';
+--     exception when others then r_e := 'SECTION ERRORED: ' || sqlerrm; end;
+--
 --     raise exception '%', 'ROLLED BACK ON PURPOSE.' || chr(10)
 --       || '(a) shapes        : ' || r_a || chr(10)
 --       || '(b) non-stylist   : ' || r_b || chr(10)
 --       || '(c) stylist/copy  : ' || r_c || chr(10)
---       || '(d) non-admin     : ' || r_d;
+--       || '(d) non-admin     : ' || r_d || chr(10)
+--       || '(e) admin sends   : ' || r_e;
 --   end $v$;
 --   rollback;
 --
@@ -303,6 +335,15 @@ commit;
 --         = 49d40aae-a830-41d1-bca8-0fbdb2695455. ⚠️ A null provider_id is item
 --         143 again: routeForNotification deep-links on it.
 --     (d) 42501 … notify_as_admin: not an admin
+--     (e) new row: yes | is_admin=true | title=[Test title] body=[Test body]
+--
+--   ⚠️ (c) AND (e) BOTH REPORT WHETHER THE ROW IS NEW, AND THAT GUARD FIRED.
+--   Run before 0081 was applied, (c) printed the exact expected title, body and
+--   provider_id — from a pre-existing Salon Floor invite, for a function that
+--   did not exist yet. It looked right BECAUSE this migration adopts the web
+--   wording and that row was written by the web client: **the row most likely
+--   to be lying was also the row most likely to look correct.** The guard was
+--   on (e) and not (c); (e) said NO NEW ROW at once and (c) said nothing.
 --
 --   ⚠️ ANY "TESTED NOTHING" IS NOT A PASS. It means the premise failed and that
 --   section exercised nothing — report it rather than reading past it.
