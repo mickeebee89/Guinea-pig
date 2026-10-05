@@ -16020,6 +16020,90 @@ does nothing about forging your own.
 record about themselves, where 148 lets one be created by omission — and it
 belongs behind it.
 
+### ✅✅ MEASURED 6 Oct 2026 — CONFIRMED IN BOTH HALVES, AND WIDER THAN ASSUMED
+
+Block B ran against the whole 26-column surface. **(a) 26 and 26, so the
+measurement covered the surface and named no blind spot.**
+
+**Fifteen columns took the caller's hostile value:**
+
+```
+id (caller-chosen)   status = ACCEPTED       model_id (someone else's)
+not_held_model_at    not_held_provider_at    completed_at
+cancelled_at         cancelled_by            cancellation_reason
+model_note           created_at (backdated)  materials_cost
+currency_code        duration_minutes        price_pence
+```
+
+**So: a member could create a booking already marked accepted, attributed to a
+different member, backdated ninety days, with both not-held timestamps already
+set, and no consent record.** The header's sentence is evidenced, not argued.
+
+`date`, `start_time`, `end_time` and `scheduled_at` were correctly forced back
+to the slot's real values — sent `2026-10-06 23:00-23:30`, stored
+`2026-11-14 10:00-11:00`. 0065 works, and it is the precedent the fix follows.
+
+**(d) the nine-column insert also stood, and (e) both hostile rows had
+`consents=0`.** The consentless half is measured too, not inferred.
+
+### ⚠️ `price_pence` WAS NEVER AMBIGUOUS — A CORRECTION TO BOTH OF US
+
+Both of us hedged on `price_pence = 0`, because a zero-priced treatment would
+look identical. **Reading the trigger settles it.**
+`tg_session_price_snapshot`'s own comment: *"Fills only a NULL."* So a caller's
+`0` is never overwritten, and **it stood.** Unguarded, making fifteen rather
+than fourteen.
+
+*The hedge was reasonable and it was also unnecessary — the answer was one
+function body away, and neither of us read it before writing "ambiguous" into a
+report.*
+
+### ✅ TWO RESIDUES, AND WHAT READS `model_id`
+
+`model_id` and `duration_minutes` survive a column grant on their own, because
+the RPC supplied both and so both had to stay granted. **What reads
+`sessions.model_id`, swept 6 Oct:**
+
+* `admin/app/users/page.tsx:117` — the console counts a member's bookings with
+  `.or('model_id.eq.' + u.id)`. **A hostile value inflates another member's
+  booking count in the admin console.**
+* `0004:356`, `0053:139` and `account-deletion-fix.sql:339` — account deletion
+  collects sessions with `or model_id = p_user`. **So a booking can be attached
+  to a stranger's deletion scope and vanish when they delete their account.**
+* `mobile/src/app/(app)/apply-session.tsx:543` sets it in a payload object — but
+  that object is passed to the RPC, so `model_id`, `model_user_id` and `status`
+  are **dead locals there.** Checked, because a direct client insert would have
+  broken the grant.
+
+**Micky's answer, adopted: extend `tg_session_slot_authority`** — the trigger
+that already exists to say the caller does not decide — rather than adding a
+fourth mechanism.
+
+### ✅ SEVEN COLUMNS, NOT NINE — A REFINEMENT OF THE AGREED SPEC
+
+The spec said the RPC names nine and the trigger overrides `model_id` and
+`duration_minutes`. **But once the trigger supplies them, the RPC need not name
+them at all** — both are NOT NULL with no default, and a BEFORE INSERT trigger
+fills them before the NOT NULL check, which is the same argument the spec
+already used for `scheduled_at`.
+
+So they come **off the grant entirely** rather than staying nameable-but-
+overridden. **Seven granted columns; nineteen of twenty-six off the grant,**
+including all fifteen the measurement found reachable.
+
+`model_id` is derived from `new.model_user_id`, **not** `auth.uid()`: the INSERT
+policy already constrains `model_user_id`, so this inherits that constraint
+exactly, and it keeps working for admin tooling and the service role where
+`auth.uid()` is null and would otherwise null a NOT NULL column.
+
+### ✅ THE delete_account_data PRE-CHECK, COMPLETED BY READING
+
+`0053` contains **no** insert into `sessions`. It is `delete from
+public.sessions where id = any(v_session_ids)` at `:65`; the only
+`insert into public.sessions` in that file is **commented-out verify-block
+text** at `:154`. A confirmed false positive, read rather than assumed — which
+matters because a deferred constraint fires for every role.
+
 ### ⚠️ ITEM 163 IS NOT A SUPERSET OF THIS, THOUGH IT LOOKS LIKE ONE
 
 163 sweeps for **grants without policies** — a write verb with no policy at all.
