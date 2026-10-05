@@ -15429,9 +15429,29 @@ person. Two of the seven exist for specific past faults:
   it the pick is arbitrary on any stylist with two hidden shops: the same
   unordered-actor-pick shape that once made a verify block unable to fail.
 
-⚠️ **AND IT PROVED THE PARTS, NOT THE PATH.** That the spliced line *runs* on
+~~⚠️ **AND IT PROVED THE PARTS, NOT THE PATH.** That the spliced line *runs* on
 approval is established textually in (a) and nowhere else. One real approval in
-the console is the only thing that settles it.
+the console is the only thing that settles it.~~
+
+### ✅ THE PATH IS PROVEN TOO — A REAL APPROVAL, 6 Oct 2026
+
+Micky approved a live verification. The email read **"your identity check passed
+— your verified badge and your shop are now live"**, which is
+`verification_approval_body`'s **case 3** — provider, no hidden shop.
+
+Confirmed against the database rather than from the email alone: **treatments 1,
+categorised 1, `is_published` true, `first_published_at` 00:35:44 UTC — the
+moment of approval.** So `enforce_publish_requires_complete_profile` was
+satisfied, `tg_user_verified_maybe_publish` published the shop, and the copy
+function read the shop's **real** state rather than asserting it.
+
+**The spliced line runs.** 0083 is proven end to end: the parts by the verify
+block, the path by a live approval.
+
+⚠️ **AND THE FIRST READING OF THAT RESULT WAS WRONG — see item 166.** It was
+reported as the copy naming a requirement the shop already met. It was not; the
+screenshot and the database read were 13 minutes apart and the list was filled
+in between them.
 
 ### ⚠️ (b) FAILED ITS FIRST RUN, AND THE FAULT WAS IN THE TEST
 
@@ -17343,6 +17363,103 @@ section: members must still SELECT, UPDATE and DELETE their own notifications,
 and `service_role` must still INSERT. Without it, a migration that revoked ALL
 of `notifications` from `authenticated` would pass every "is the hole shut"
 check in that file while leaving the notifications tab permanently empty.
+
+---
+
+## 165. THE SETUP CHECKLIST'S LINKS WERE WRITTEN FOR ONE OF THE TWO PAGES IT RENDERS ON
+### Read 6 Oct 2026. Both parts SMALL and deliberately behind 148, 156 and 149.
+
+### Part one — two links that cannot move the page, and it is not a scroll fault
+
+`StylistSetupPanel` renders in **two** places: `/dashboard`
+([dashboard/page.tsx:301](site/app/(app)/dashboard/page.tsx:301)) and `/shop`
+([shop/page.tsx:64](site/app/(app)/shop/page.tsx:64)). Two of its three steps
+carry `href="/shop"` — [StylistSetup.tsx:214](site/components/StylistSetup.tsx:214)
+and [:228](site/components/StylistSetup.tsx:228).
+
+So **from the dashboard they are correct** and navigate. **On `/shop` they point
+at the page you are already on**, with no fragment, so Next.js does nothing
+visible.
+
+⚠️ **IT READS AS A SCROLL-TO-SECTION THAT IS NOT FIRING, AND IT IS NOT THAT.**
+There is no section named: the hrefs are bare `/shop`, not `/shop#something`.
+Nothing is broken and nothing is unreachable — the controls are on that page —
+but the component was written for the dashboard case and renders unchanged in
+the one place where its own links are inert.
+
+**The pattern to copy already exists in the same tree.**
+[StylistSetup.tsx:137](site/components/StylistSetup.tsx:137) links
+`/shop#visibility`, and
+[ShopVisibility.tsx:48](site/app/(app)/shop/ShopVisibility.tsx:48) carries
+`id="visibility"` with `scroll-mt-6`. **That anchor is real and that link
+works.** The fix is either real anchors for the other two, or no link when the
+component knows it is already on `/shop`.
+
+### ✅ AND THE ANSWER TO "DOES check-links.mjs COVER ANCHORS": NO, AND IT DOES NOT CLAIM TO
+
+[check-links.mjs:141](site/scripts/check-links.mjs:141) is
+`href.split('?')[0].split('#')[0]`. **The fragment is stripped before anything is
+checked**, so `/shop#visibility` is tested as `/shop`, which exists, and passes.
+
+So the either/or in the question resolves to **neither**: it does not cover
+in-page anchors, and the "pass" is about the route only. ⚠️ **A dead anchor would
+be invisible to it** — worth knowing, because `scroll-mt-6` plus an `id` is a
+two-file agreement with nothing holding the halves together.
+
+This is a **stated limit, not a fault.** Its own header sets the standard it is
+keeping: *"A check that reports working code as broken gets switched off just as
+fast as one that misses things, so the standard is: prove it dead, or say you
+cannot."*
+
+### Part two — the photo prerequisite is not named, but the step it blocks is
+
+The profile photo is a prerequisite of the ID check — the reviewer compares the
+selfie against it, and the queue says so in red when it is missing (item 98). The
+checklist names **the ID check** and does not name **the photo**.
+
+So a stylist can work the list top to bottom, reach the ID check, and only then
+discover a step that was never on it.
+
+⚠️ **THE FIX IS A STEP OR A NOTE, NOT A PUBLISH CONDITION** — Micky, 6 Oct. The
+photo is **not** required to publish a shop; it is required to pass the ID check.
+Adding it to `provider_shop_is_publishable` would invent a requirement the
+product does not have, and that function already has three places agreeing with
+it (items 29, 41).
+
+---
+
+## 166. I TREATED A 13-MINUTE GAP BETWEEN A SCREENSHOT AND A DATABASE READ AS A DEFECT
+### Micky, correcting himself, 6 Oct 2026. Twice in one night, on the same walkthrough.
+
+Two findings were reported off the live 0083 walkthrough and **both were the same
+mistake**: a screenshot taken at 01:27 compared against a database read at 01:40,
+with the difference read as a bug rather than as **time passing**. The shop's
+treatment list was genuinely incomplete when the screenshot was taken and was
+filled in before the read.
+
+Micky's own words: *"That is the stale-sample mistake this record keeps logging,
+made by me, against a screenshot."*
+
+### Why it is recorded rather than quietly dropped
+
+**The record already carries this class repeatedly** — stale Metro bundles
+masking a mobile fix (`CLAUDE.md` has a standing rule about it), a types file
+describing an older schema, 0068's guard reading prose instead of code. Every one
+of those is a stale sample read as a live fault.
+
+What is new is the medium. **A screenshot is the easiest stale sample to trust,
+because it looks like evidence and carries no timestamp in the place you read
+it.** A database read states when it ran; an image does not say when it was
+taken, and the eye does not supply the caveat.
+
+⚠️ **AND THIS IS THE SAME RULE I WAS GIVEN ABOUT TIMESTAMPS, FROM THE OTHER
+SIDE.** *"A timestamp quoted as evidence carries its zone or it is not
+evidence"* — written after I printed a time without its zone. The general form is
+wider: **evidence carries when it was taken, or it is not evidence**, and a
+screenshot almost never does.
+
+**Both reported findings collapsed.** What survived is item 165, which is
+smaller than either.
 
 ---
 
