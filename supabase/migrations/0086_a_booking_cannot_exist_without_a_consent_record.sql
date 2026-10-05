@@ -104,6 +104,26 @@
 -- makes that sentence true — the same way 0079 made 0070's not-held comment
 -- true rather than narrowing it.
 --
+-- ⚠️⚠️ AND IT IS TRUE OF ROWS CREATED FROM 0086 ONWARD, NOT OF THE TABLE.
+-- **29 sessions already have no consent row**, counted 6 Oct 2026: accepted 1,
+-- cancelled 14, completed 11, declined 3, the newest created 25 July 2026 and
+-- none pending. They predate the consent RPC.
+--
+-- They are deliberately left alone. Backfilling a consent nobody gave would be
+-- fabrication — `cleanup-consentless-test-sessions.sql` settled that principle
+-- on 8 Aug 2026 in its own words — and this trigger is INSERT-only, so it never
+-- looks at them.
+--
+-- **The guarantee is scoped by naming the 29, not by weakening the sentence.**
+-- Anywhere this invariant is stated it reads *"a booking created from 0086
+-- onward"*. `site/content/legal.ts:833` already does the same thing for its own
+-- consent claim, scoping it to "only true from 8 Aug".
+--
+-- ⚠️ WHAT THE 29 SHOW AND WHAT THEY DO NOT. Nothing consentless has been
+-- inserted on this database since 25 July. That is evidence nobody has used
+-- this path — **not** evidence the path was closed. Block B demonstrated on
+-- 6 Oct that it was open the whole time.
+--
 -- ⚠️⚠️ THE CLAIM IS BOUNDED TO THE MECHANISM, AND THE WORDING IS DELIBERATE.
 -- This guarantees a consent **RECORD EXISTS**. It does NOT guarantee consent
 -- was given: a member can insert a session and a self-made consent row in the
@@ -248,12 +268,31 @@ begin
   -- a member set model_id to another member's id while model_user_id stayed
   -- their own, and claimed one minute against an hour-long slot.
   --
-  -- model_id follows model_user_id rather than auth.uid(), for two reasons:
-  -- the INSERT policy already constrains model_user_id to auth.uid(), so this
-  -- inherits that constraint exactly; and admin tooling and the service role
-  -- insert with a null auth.uid(), which would otherwise null a NOT NULL
-  -- column.
-  new.model_id         := coalesce(new.model_user_id, new.model_id);
+  -- model_id follows model_user_id rather than auth.uid(): the INSERT policy
+  -- already constrains model_user_id to auth.uid(), so this inherits that
+  -- constraint exactly, and it keeps working for admin tooling and the service
+  -- role, where auth.uid() is null.
+  --
+  -- ⚠️⚠️ BOTH ASSIGNMENTS ARE UNCONDITIONAL, AND THAT IS THE WHOLE POINT.
+  -- tg_session_price_snapshot "fills only a NULL" — which is exactly why
+  -- price_pence stayed caller-settable until it was measured on 6 Oct, three
+  -- months after 0052 was written to protect it. A fill-if-null here would
+  -- leave the column grant as the ONLY thing preventing an override, and a
+  -- grant is one `grant insert (…)` away from being widened by someone who has
+  -- not read this file.
+  --
+  -- ⚠️ model_user_id IS NULLABLE (read from the types generated live at 0083),
+  -- so an unconditional assignment could null a NOT NULL column on an insert
+  -- that names neither. It is refused explicitly rather than quietly falling
+  -- back: a booking with no member is not a thing to repair by guessing, and a
+  -- named refusal is better than a NOT NULL violation naming a column the
+  -- caller never mentioned.
+  if new.model_user_id is null then
+    raise exception 'A booking must say which member it is for.'
+      using errcode = 'CV003';
+  end if;
+
+  new.model_id         := new.model_user_id;
   new.duration_minutes := v_mins;
 
   return new;
@@ -328,10 +367,12 @@ begin
   -- above is rolled back with it.
   --
   -- ⚠️ SINCE 0086 THIS IS ALSO WHAT MAKES THE SESSION LEGAL. The deferred
-  -- constraint below refuses, at COMMIT, any session without a consent row —
-  -- so the sentence this function has carried since 0001, "there is no path to
-  -- a confirmed booking without a consent record", is now enforced rather than
-  -- asserted.
+  -- constraint refuses, at COMMIT, any session created from 0086 onward that
+  -- has no consent row — so the sentence this function has carried since 0001,
+  -- "there is no path to a confirmed booking without a consent record", is
+  -- enforced rather than asserted. ⚠️ For NEW rows: 29 sessions predating the
+  -- consent RPC have none and are left alone, because backfilling a consent
+  -- nobody gave would be fabrication.
   insert into public.session_consents (
     session_id, user_id, category_id,
     consent_document_id, consent_version, content_hash,
@@ -341,6 +382,19 @@ begin
     p_consent_document_id, p_consent_version, p_content_hash,
     p_acknowledgements, now()
   );
+
+  -- ⚠️ ADDED 0077 (item 144). The stylist is told HERE, in the transaction that
+  -- made the booking, instead of by a best-effort insert the client ran
+  -- afterwards and logged on failure. An application nobody is told about is
+  -- the same silence as a booking that never saved.
+  --
+  -- ⚠️⚠️ THIS LINE WAS MISSING FROM 0086's FIRST DRAFT AND THE PREFLIGHT DIFF
+  -- CAUGHT IT. Reproducing a live body by hand dropped it, which would have
+  -- silently reverted stage A of item 144: bookings would still be created and
+  -- no stylist would ever be told. Nothing would have failed. That is the third
+  -- time in this repo a hand-reproduced function body would have eaten a line,
+  -- and it is why the preflight dumps the running definition.
+  perform public.notify_session_applied(v_session_id);
 
   return v_session_id;
 end $function$;
@@ -394,6 +448,9 @@ begin
 end $$;
 
 comment on function public.tg_session_needs_consent_record() is
+  '⚠️ Scoped to rows created from 0086 onward, NOT to the table: 29 sessions already had no '
+  'consent row when this was added (newest 25 Jul 2026, none pending), and they are left alone '
+  'because backfilling a consent nobody gave would be fabrication. '
   '⚠️ Guarantees a consent RECORD EXISTS — NOT that consent was given. A member can insert a '
   'session and a self-made consent row in one transaction and satisfy this completely; making the '
   'row genuine is audit item 167, and column grants cannot help there because a forger names the '
@@ -457,7 +514,7 @@ end $$;
 
 -- MIGRATION FOOTER
 insert into public.schema_migrations (version, name, checksum)
-values ('0086', 'a_booking_cannot_exist_without_a_consent_record', '61efcd5f166385c4d2117d652797c182a5d0efc959aba752611e589534eb5a40');
+values ('0086', 'a_booking_cannot_exist_without_a_consent_record', 'fa08787f4a8a77189f41ea67cf8a863f5c7e9a23491a611955644d0101429b16');
 
 commit;
 
@@ -663,12 +720,19 @@ commit;
 --       execute 'set local role authenticated';
 --       v_ok := false;
 --       begin
---         insert into public.sessions (provider_id, model_user_id, model_id, availability_id,
---                                      duration_minutes, treatment_id, location_type, note, photo_urls)
---         values (v_prov, v_model, v_model, v_slot3, 60, v_treat, 'provider', 'nine-column', null);
+--         -- ⚠️ EXACTLY THE SEVEN COLUMNS THAT REMAIN GRANTED, AND THAT IS WHY.
+--         -- An earlier draft named nine, including model_id and
+--         -- duration_minutes — which 0086 revokes. Post-fix that insert is
+--         -- refused by the GRANT, so the CONSENT CONSTRAINT is never reached
+--         -- and the one section that proves part 4 proves nothing while
+--         -- looking like a pass. Seven works pre-fix AND post-fix, which is
+--         -- what makes this the same text with different expectations.
+--         insert into public.sessions (provider_id, model_user_id, availability_id,
+--                                      treatment_id, location_type, note, photo_urls)
+--         values (v_prov, v_model, v_slot3, v_treat, 'provider', 'seven-column', null);
 --         v_ok := true;
 --         execute 'set constraints all immediate';
---         r_d := 'THE NINE-COLUMN INSERT STOOD — a consentless booking is creatable.';
+--         r_d := 'THE SEVEN-COLUMN INSERT STOOD — a consentless booking is creatable.';
 --       exception when others then
 --         r_d := case
 --           when sqlerrm ilike '%consent%'           then 'refused by the CONSENT CONSTRAINT: ' || sqlerrm
@@ -724,7 +788,7 @@ commit;
 --       || '(a) coverage        : ' || r_a || chr(10)
 --       || '(b) 26-column insert: ' || r_b || chr(10)
 --       || '(c) which columns   : ' || r_c || chr(10)
---       || '(d) 9-column insert : ' || r_d || chr(10)
+--       || '(d) 7-column insert : ' || r_d || chr(10)
 --       || '(e) consent records : ' || r_e || chr(10)
 --       || '(f) bounds          : ' || r_f;
 --   end $v$;
@@ -737,7 +801,7 @@ commit;
 --                                                           [THE INSERT STOOD]
 --     (c) no row references slot 1.                         [15 columns UNGUARDED]
 --     (d) refused by the CONSENT CONSTRAINT: A booking cannot exist without a
---         consent record ...                                [THE NINE-COLUMN
+--         consent record ...                                [THE SEVEN-COLUMN
 --                                                            INSERT STOOD]
 --     (e) slot1 none, slot3 none.                           [both consents=0]
 --     (f) REAL BOOKING SURVIVES BOTH HALVES, consent rows 1, duration 60,
