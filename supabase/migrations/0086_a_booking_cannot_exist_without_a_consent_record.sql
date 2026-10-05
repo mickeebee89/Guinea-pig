@@ -840,6 +840,15 @@ commit;
 --           v_treat, 'provider', '148 bounds — rolled back', '{}',
 --           v_doc_id, v_doc_ver, v_doc_hash, v_doc_ack);
 --         execute 'set constraints all immediate';
+--         -- ⚠⚠ BACK TO THE MIGRATION ROLE BEFORE THE READS BELOW, NOT AFTER THEM.
+--         -- This used to sit at the end of the section, so v_qadd and v_owner were
+--         -- read while still impersonating the model: net.http_request_queue is not
+--         -- readable by `authenticated` and would have reported UNREADABLE, and RLS
+--         -- hides another user's public.users row so the owner would have come back
+--         -- unresolvable. Both additions would have returned blank and looked like
+--         -- facts about pg_net and the schema. Constraint mode is transaction-scoped
+--         -- and the RPC has already returned, so moving this changes nothing else.
+--         execute 'reset role';
 --         begin
 --           v_qadd := case when v_qbase is null then 'UNREADABLE'
 --                          else (select count(*)::text from net.http_request_queue
@@ -847,14 +856,18 @@ commit;
 --         exception when others then v_qadd := 'UNREADABLE (' || sqlerrm || ')'; end;
 --         -- ⚠️ WHOSE FIXTURE THIS USED. v_prov is whoever sorts first, so the block
 --         -- states it rather than leaving it to be guessed.
---         v_owner := coalesce((select case
+--         -- ⚠️ THE ADDRESS, NOT JUST A CLASSIFICATION. notify_session_applied tells
+--         -- the STYLIST, so the email that must not arrive goes to the provider
+--         -- owner. An earlier version of this section told the reader to check the
+--         -- MODEL's inbox — the wrong party entirely, and an inbox this block never
+--         -- established was involved.
+--         v_owner := coalesce((select u.email || '  (' || case
 --               when u.email like '%@seed.guineapig.invalid' then 'a SEED account'
 --               when u.email like '%@besteya.com' or u.email like '%@bevriz.com'
 --                    or u.email like 'micky.buckfield@%' then 'a cleanup-script test account'
---               else 'an account NEITHER seeded NOR in the cleanup test set' end
+--               else 'NEITHER seeded NOR in the cleanup test set' end || ')'
 --             from public.providers p join public.users u on u.id = p.user_id
 --            where p.id = v_prov), 'an owner this block could not resolve');
---         execute 'reset role';
 --         r_f := 'REAL BOOKING SURVIVES BOTH HALVES: session ' || v_rpc::text
 --             || ', consent rows ' || (select count(*)::text from public.session_consents c
 --                                       where c.session_id = v_rpc)
@@ -876,7 +889,7 @@ commit;
 --             || chr(10) || '      A NON-ZERO count above does NOT refute it: the row is written and then'
 --             || chr(10) || '      dies with the rollback, which is exactly what is claimed. The only'
 --             || chr(10) || '      thing that refutes it is an email ARRIVING. CHECK THE INBOX: nothing'
---             || chr(10) || '      should reach micky.buckfield@hotmail.co.uk from this run.';
+--             || chr(10) || '      should reach the stylist address printed above.';
 --       end if;
 --     exception when others then
 --       r_f := 'BOUNDS HALF FAILED — real booking is broken: ' || sqlstate || ' ' || sqlerrm;
