@@ -673,7 +673,7 @@ commit;
 --           values (
 --             v_sent_id, v_prov, v_other, v_model, v_slot, v_treat,
 --             current_date + 1, '23:00', '23:30', now(), 1, 'provider',
---             'accepted', 'HOSTILE', 'HOSTILE', array['hostile'], 0, 0,
+--             'accepted', 'HOSTILE', 'HOSTILE', array['hostile'], 424242, 9999,
 --             'XXX', v_back, now(), v_other, 'HOSTILE',
 --             now(), now(), now());
 --           v_ok := true;
@@ -693,8 +693,14 @@ commit;
 --
 --     begin
 --       v_id := (select s.id from public.sessions s where s.availability_id = v_slot);
---       if v_id is null then
---         r_c := 'no row references slot 1 — nothing was inserted, so there is nothing to compare.';
+--         ⚠⚠ FIXTURE GUARD FIRST. Without it a fixture failure leaves v_slot null,
+--         the lookup matches nothing, and this prints "no row references slot 1" —
+--         WORD FOR WORD THE EXPECTED POST-FIX PASS. The block would report the
+--         hole as closed having never attempted it.
+-- if r_b like 'FIXTURES FAILED%' or v_slot is null then
+--   r_c := '*** NOT RUN — THE FIXTURES FAILED. No insert was attempted. This is NOT a pass. ***';
+-- elsif v_id is null then
+--   r_c := 'no row references slot 1 — the insert WAS attempted and refused. See (b) for by what.';
 --       else
 --         v_row := (select s from public.sessions s where s.id = v_id);
 --         if v_row.id = v_sent_id                   then v_free := v_free || ' id(caller-chosen)'; end if;
@@ -708,7 +714,20 @@ commit;
 --         if v_row.cancellation_reason = 'HOSTILE'  then v_free := v_free || ' cancellation_reason'; end if;
 --         if v_row.model_note = 'HOSTILE'           then v_free := v_free || ' model_note'; end if;
 --         if v_row.created_at < now() - interval '30 days' then v_free := v_free || ' created_at(backdated)'; end if;
---         if v_row.materials_cost = 0               then v_free := v_free || ' materials_cost'; end if;
+--         ⚠️ 9999, NOT 0. materials_cost DEFAULTS to 0, so sending 0 and testing
+--         for 0 passed whether the column was reachable or not — the one case
+--         that matters, a standing insert, proved nothing. Every sentinel here is
+--         now a value no default can produce: status 'accepted' (default
+--         'pending'), currency_code 'XXX' (default 'GBP'), created_at now()-90d
+--         (default now()), materials_cost 9999 (default 0), price_pence 424242
+--         (no default, and the fixture slot carries no price so the snapshot
+--         cannot produce it), id a fixed uuid (default gen_random_uuid()),
+--         duration_minutes 1 against a 60-minute slot.
+-- if v_row.materials_cost = 9999            then v_free := v_free || ' materials_cost'; end if;
+--         ⚠️ THE FIFTEENTH COLUMN. tg_session_price_snapshot "fills only a NULL",
+--         so a sent value STANDS. Without this (c) would report fourteen and
+--         silently contradict the correction that made it fifteen.
+-- if v_row.price_pence = 424242             then v_free := v_free || ' price_pence'; end if;
 --         if v_row.currency_code = 'XXX'            then v_free := v_free || ' currency_code'; end if;
 --         if v_row.duration_minutes = 1             then v_free := v_free || ' duration_minutes'; end if;
 --         r_c := 'UNGUARDED:' || coalesce(nullif(v_free, ''), ' none')
@@ -716,11 +735,10 @@ commit;
 --             || ' start=' || coalesce(v_row.start_time::text, 'null')
 --             || ' end=' || coalesce(v_row.end_time::text, 'null')
 --             || ' scheduled_at=' || coalesce(v_row.scheduled_at::text, 'null')
---             || ' price_pence=' || coalesce(v_row.price_pence::text, 'null')
 --             || ' duration=' || coalesce(v_row.duration_minutes::text, 'null')
 --             || ' model_id=' || coalesce(v_row.model_id::text, 'null')
 --             || ' (slot was ' || v_day::text || ' 10:00-11:00; SENT '
---             || (current_date + 1)::text || ' 23:00-23:30, price 0, duration 1)';
+--             || (current_date + 1)::text || ' 23:00-23:30, duration 1)';
 --       end if;
 --     exception when others then r_c := 'SECTION ERRORED: ' || sqlerrm; end;
 --
@@ -730,6 +748,13 @@ commit;
 --       execute 'set local role authenticated';
 --       v_ok := false;
 --       begin
+--         ⚠⚠ FIXTURE GUARD. With v_slot3 null this inserts a null availability_id
+--         and reports "refused by something else: CV003" — a refusal it did not
+--         earn, from the slot guard rather than the consent constraint, reading
+--         as though part 4 had been exercised.
+-- if r_b like 'FIXTURES FAILED%' or v_slot3 is null then
+--   raise exception 'NOFIXTURE';
+-- end if;
 --         -- ⚠️ EXACTLY THE SEVEN COLUMNS THAT REMAIN GRANTED, AND THAT IS WHY.
 --         -- An earlier draft named nine, including model_id and
 --         -- duration_minutes — which 0086 revokes. Post-fix that insert is
@@ -745,6 +770,7 @@ commit;
 --         r_d := 'THE SEVEN-COLUMN INSERT STOOD — a consentless booking is creatable.';
 --       exception when others then
 --         r_d := case
+-- when sqlerrm = 'NOFIXTURE' then '*** NOT RUN — THE FIXTURES FAILED. This is NOT a pass. ***'
 --           when sqlerrm ilike '%consent%'           then 'refused by the CONSENT CONSTRAINT: ' || sqlerrm
 --           when sqlerrm ilike '%permission denied%' then 'refused by the GRANT: ' || sqlerrm
 --           else 'refused by something else: ' || sqlstate || ' ' || sqlerrm end
@@ -756,11 +782,19 @@ commit;
 --     begin
 --       v_id2 := (select s.id from public.sessions s where s.availability_id = v_slot3);
 --       r_e := 'slot1 row: ' || coalesce(v_id::text, 'none')
---           || ' consents=' || coalesce((select count(*)::text from public.session_consents c
---                                         where c.session_id = v_id), 'n/a')
+--           ⚠⚠ case, NOT coalesce. count(*) over zero rows is 0, never NULL, so
+--           `coalesce(count, 'n/a')` COULD NOT FIRE — a null session_id printed
+--           "consents=0" directly above a sentence calling consents=0 an
+--           unbackfillable six-year record. Same class as position(a) > position(b)
+--           treating "below" and "absent" as one answer: a guard with no reachable
+--           branch.
+-- || ' consents=' || case when v_id is null then 'n/a (no row)'
+--                         else (select count(*)::text from public.session_consents c
+--                                where c.session_id = v_id) end
 --           || ' | slot3 row: ' || coalesce(v_id2::text, 'none')
---           || ' consents=' || coalesce((select count(*)::text from public.session_consents c
---                                         where c.session_id = v_id2), 'n/a')
+-- || ' consents=' || case when v_id2 is null then 'n/a (no row)'
+--                         else (select count(*)::text from public.session_consents c
+--                                where c.session_id = v_id2) end
 --           || ' — any row above with consents=0 is a six-year record that cannot be backfilled.';
 --     exception when others then r_e := 'SECTION ERRORED: ' || sqlerrm; end;
 --
