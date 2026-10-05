@@ -17860,6 +17860,103 @@ Raised, not built — it sits in front of 0086's verify and the order is Micky's
 
 ---
 
+## 170. cleanup-consentless-test-sessions.sql NEVER COMPLETED, AND ITS OWN FINAL CHECK PROVES IT
+### Settled 6 Oct 2026 from the cohort query. ⚠️ 0086's header is frozen and carries the weaker sentence.
+
+The 29 consentless sessions, by cohort:
+
+```
+cleanup script's known test set | accepted  |  1 | 2026-07-08 | 2026-07-08
+cleanup script's known test set | cancelled | 14 | 2026-07-06 | 2026-07-25
+cleanup script's known test set | completed | 11 | 2026-06-20 | 2026-07-14
+cleanup script's known test set | declined  |  3 | 2026-06-21 | 2026-07-06
+```
+
+**No SEED FIXTURE rows, no OTHER, no missing users row.** So **no real account
+has a consentless booking** — the result that actually matters.
+
+### ✅ TWO THEORIES DIED, BOTH MINE, AND BOTH BY THE SAME QUERY
+
+* **Micky's seed theory**: disproved — none of the 29 is seeded. He raised it and
+  the data refuted it.
+* **My abort theory**: disproved — it required seeded rows *outside* the
+  three-domain guard to have aborted the script. Every one of the 29 is
+  **inside** the guard, so the guard cannot be why they survived.
+* ⚠️ **And a third I nearly published**: that the `create temp table _doomed`
+  broke it in the Supabase editor. **`scripts/migration-status.mjs` already
+  records that rule as FALSE** — 0034 applied end to end with temp tables in one
+  transaction, proven by its `migration_findings` rows sharing a timestamp to
+  the microsecond, and `begin;` IS atomic in that editor. This script is wrapped
+  in `begin; … commit;`. **Caught by reading the file that warns against exactly
+  this — "a rule written from an error message plus an assumption".**
+
+### What IS provable, and the line that proves it
+
+**Option 3 is out.** The delete predicate matches the name exactly:
+
+```sql
+create temp table _doomed on commit drop as
+select s.id from public.sessions s
+where not exists (select 1 from public.session_consents c where c.session_id = s.id);
+…
+delete from public.sessions where id in (select id from _doomed);
+```
+
+**And section 4 is the line that decides the whole question:**
+
+```sql
+if v_left > 0 then
+  raise exception 'ABORT: % consent-less session(s) still present after cleanup', v_left;
+end if;
+```
+
+**Completion and zero survivors are the same event.** 29 survive, therefore
+**the script never completed** — it either never ran, or ran and aborted. That
+is as far as the repo can take it: nothing in the audit record, the commit
+history or the file claims a run, and nothing records an abort.
+
+⚠️ **AND IT WOULD SUCCEED IF RUN TODAY.** Every one of the 29 is inside the
+guard's allowlist, so the guard passes. Whatever stopped it is historical. It
+deletes the `notifications`, `messages` and `reviews` attached to those
+sessions too — 11 of them are completed sessions with reviews — all on test
+accounts.
+
+### ❌ check-handrun-drift.mjs cannot speak to this, and was never meant to
+
+The file **is** in its input domain (`supabase/*.sql`, not `migrations/`), so it
+is scanned. But its patterns are `create function`, `create trigger` and
+`create policy`, and this script contains **none** — only DO blocks, a temp
+table, an UPDATE and four DELETEs. It is scanned and contributes nothing.
+
+It answers *"does a hand-run file hold a stale copy of an object a migration
+also defines"*. **Nothing anywhere answers "was a one-off script ever run"**,
+and that is the gap this exposes — the same shape as item 168's *nothing checks
+that a committed verify block would run*.
+
+### ⚠⚠ THE HEADER SENTENCE CANNOT BE CORRECTED, AND THIS IS THE RULE BITING ITS AUTHOR
+
+0086 is **applied**, checksum `fa08787f…`. Its header prose is above the footer
+and therefore checksum-locked — the rule this series has cited repeatedly. **The
+narrower true sentence cannot go in the file.**
+
+What 0086's header says: *"They predate the consent RPC."* — which is **true**
+(consent capture went live 8 Aug 2026; the newest of the 29 is 25 July) but is
+**not the useful fact**.
+
+The sentence it should have carried: **29 consentless sessions remain, all on
+test accounts, which the 8 August cleanup script was written to remove and did
+not.**
+
+⚠️ **Micky's framing of his own correction was itself slightly too strong** — he
+said the data does not support "they predate the consent requirement". It does;
+it just is not the point. Both are true and only one is load-bearing.
+
+Recorded here because here is the only place it can be. The trigger's own
+COMMENT can be replaced by a later migration, since a database comment is not
+checksum-locked, and that is the copy anyone reads from the database.
+
+---
+
 ## Dated
 
 * **8 October** — the diarised selfie-orphan check. The only unarranged end-to-end
