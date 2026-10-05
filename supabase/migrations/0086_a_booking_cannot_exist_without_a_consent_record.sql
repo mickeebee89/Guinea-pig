@@ -603,6 +603,8 @@ commit;
 --     v_ok      boolean;
 --     v_rpc     uuid;
 --     v_doc_id  uuid; v_doc_ver integer; v_doc_hash text; v_doc_ack jsonb;
+--     v_qbase   bigint;  v_qadd text := 'not measured';
+--     v_owner   text;
 --     v_set     text[] := array[
 --       'id','provider_id','model_id','model_user_id','availability_id','treatment_id',
 --       'date','start_time','end_time','scheduled_at','duration_minutes','location_type',
@@ -822,6 +824,12 @@ commit;
 --         -- when nothing is wrong. Whether a subtransaction abort reverts the
 --         -- mode is not something to assume, so it is set explicitly.
 --         execute 'set constraints all deferred';
+--       -- ⚠️ BASELINE THE pg_net QUEUE BEFORE THE RPC. Attributing queue
+--       -- rows to THIS transaction needs a before-mark; a bare count would
+--       -- include every row anything else left behind.
+--       begin
+--         v_qbase := (select coalesce(max(id), 0) from net.http_request_queue);
+--       exception when others then v_qbase := null; end;
 --         perform set_config('request.jwt.claims',
 --           json_build_object('sub', v_model::text, 'role', 'authenticated')::text, true);
 --         execute 'set local role authenticated';
@@ -831,6 +839,18 @@ commit;
 --           v_treat, 'provider', '148 bounds — rolled back', '{}',
 --           v_doc_id, v_doc_ver, v_doc_hash, v_doc_ack);
 --         execute 'set constraints all immediate';
+--       begin
+--         v_qadd := case when v_qbase is null then 'UNREADABLE'
+--                        else (select count(*)::text from net.http_request_queue
+--                               where id > v_qbase) end;
+--       exception when others then v_qadd := 'UNREADABLE (' || sqlerrm || ')'; end;
+--       v_owner := coalesce((select case
+--             when u.email like '%@seed.guineapig.invalid' then 'a SEED account'
+--             when u.email like '%@besteya.com' or u.email like '%@bevriz.com'
+--                  or u.email like 'micky.buckfield@%' then 'a cleanup-script test account'
+--             else 'an account that is NEITHER seeded NOR in the cleanup test set' end
+--           from public.providers p join public.users u on u.id = p.user_id
+--          where p.id = v_prov), 'an owner this block could not resolve');
 --         execute 'reset role';
 --         r_f := 'REAL BOOKING SURVIVES BOTH HALVES: session ' || v_rpc::text
 --             || ', consent rows ' || (select count(*)::text from public.session_consents c
@@ -840,7 +860,20 @@ commit;
 --                                                  from public.sessions where id = v_rpc)
 --             || ', stylist notified ' || (select count(*)::text from public.notifications n
 --                                           where n.session_id = v_rpc and n.type = 'session_applied')
---             || ', and its deferred checks were forced immediate rather than left pending.';
+-- || ', and its deferred checks were forced immediate rather than left pending.'
+-- || chr(10) || '      fixture provider : ' || v_prov::text || ', owned by ' || v_owner
+-- || chr(10) || '      pg_net queue rows added by THIS transaction: ' || v_qadd
+-- || chr(10) || '      ⚠️ EXPECTED: a notification row exists and NO EMAIL IS DELIVERED.'
+-- || chr(10) || '      Since 0047 a notification is emailed from notifications@cavybeauty.com,'
+-- || chr(10) || '      so the RPC genuinely queues one. It cannot arrive because net.http_post'
+-- || chr(10) || '      only QUEUES a row and net.wake() takes NO ARGUMENTS, so the queue row is'
+-- || chr(10) || '      the only channel and an uncommitted row is invisible to the worker under'
+-- || chr(10) || '      MVCC. This rolls back, so the row never becomes visible.'
+-- || chr(10) || '      ⚠️ THAT IS A DEDUCTION FROM SIGNATURES, NEVER ONCE OBSERVED (item 152).'
+-- || chr(10) || '      A NON-ZERO queue count above does NOT refute it — the row is written and'
+-- || chr(10) || '      then dies with the rollback, which is exactly what is claimed. The only'
+-- || chr(10) || '      thing that REFUTES it is an email actually arriving. CHECK THE INBOX:'
+-- || chr(10) || '      nothing should reach micky.buckfield@hotmail.co.uk from this run.';
 --       end if;
 --     exception when others then
 --       r_f := 'BOUNDS HALF FAILED — real booking is broken: ' || sqlstate || ' ' || sqlerrm;
