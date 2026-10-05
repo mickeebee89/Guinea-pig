@@ -17717,6 +17717,83 @@ smaller than either.
 
 ---
 
+## 168. TEN COMMITTED VERIFY BLOCKS CANNOT RUN, AND EACH ONE WAS REPAIRED BY HAND AND NEVER WRITTEN BACK
+### Found 6 Oct 2026, by making the same mistake and being told by the database.
+
+0086's verify block failed every fixture on:
+
+```
+column "active_treatments" is of type uuid[] but expression is of type text[]
+```
+
+The cast was `array[v_treat::text]`. **I copied it from 0049's Block C.** The
+same expression appears in **ten places across five other migrations** —
+`0049` (×2), `0052` (×4), `0053`, `0065` (×2), `0066` — and **every one of them
+would fail today.**
+
+### The part that matters is not the cast
+
+**Those blocks were run and their results were reported at the time.** 0049's
+Block C even carries a correction dated 23 Sep 2026 made *after its first run*.
+So each of them was **repaired by hand on the way into the SQL editor, and the
+repair was never written back to the file.**
+
+⚠️ **So the committed verify blocks are drafts, and the thing that actually ran
+exists nowhere.** The repo's record of *what was verified* is not a record of
+*what was executed*. Anyone re-running one to re-establish a property meets the
+draft, hits a type error, and has to re-derive the fix — which is the cost, and
+it is paid once per reader rather than once ever.
+
+### 0065 states the lesson and contains the fault
+
+0065's own verify header, written 1 Oct 2026 after that block had to be
+repaired before it would run:
+
+> *"A verify block that has to be repaired before it runs is not a verify block
+> — it is a draft, and the next person meets the draft rather than the check."*
+
+**0065's verify block contains two of the ten.** The rule was written, in that
+file, about that file, and the file still carries the fault the rule describes.
+Which is item 155's shape again — *rules I wrote get walked past* — in the one
+place best positioned to catch it.
+
+### \u26a0\ufe0f AND THE SOURCE I TRUSTED COULD NOT HAVE TOLD ME
+
+I took the column list from `site/lib/database.types.ts`, regenerated against
+the live database at 0083 — a deliberately live-derived source, chosen over
+parsing a repo file because my parse of `sessions` had already missed
+`cancelled_at` in 0079.
+
+**It renders both `text[]` and `uuid[]` as `string[]`.** The generated types
+erase exactly the distinction that mattered. *A live-derived source is still the
+wrong source for a question it does not represent*, and "I used the live
+artifact" is not the same as "I asked the database".
+
+`information_schema.columns.data_type` or `pg_attribute`/`format_type` would
+have answered it. The error message eventually did.
+
+### What this cost, measured
+
+The failed run produced an output that **looked like findings and was not**:
+all three slots were NULL, so (b) never inserted, and (d) and (f) failed on
+`A booking must say which slot it is for` — a null `availability_id`, not the
+grant and not the consent constraint. **(f) read "real booking is broken",
+which was an artefact of the fixture rather than evidence about 0086.**
+
+A fixture failure that leaves later sections reporting *plausible-looking
+refusals for the wrong reason* is worse than one that aborts, because the
+sections still print.
+
+### Not fixed in the other five
+
+0086's copies are corrected. **The other ten are left**, deliberately: an
+applied migration's body is checksum-locked, and while the verify blocks sit
+below `commit;` and could be edited, doing it as a drive-by across five files
+is how the 148 queue stops moving. Raised, not done, and behind 148, 156 and
+149.
+
+---
+
 ## Dated
 
 * **8 October** — the diarised selfie-orphan check. The only unarranged end-to-end

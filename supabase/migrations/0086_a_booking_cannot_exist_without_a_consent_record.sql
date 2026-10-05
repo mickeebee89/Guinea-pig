@@ -624,6 +624,16 @@ commit;
 --     exception when others then r_a := 'SECTION ERRORED: ' || sqlerrm; end;
 --
 --     begin
+--       -- ⚠️ array[v_treat], NOT array[v_treat::text]. availability.active_treatments
+--       -- is uuid[], and the first run of this block failed every fixture on
+--       -- `is of type uuid[] but expression is of type text[]` — which left all
+--       -- three slots NULL, so (b) never inserted and (d) and (f) failed on a
+--       -- null availability_id rather than on the grant or the constraint.
+--       -- (f) then read "real booking is broken", which was an artefact.
+--       --
+--       -- ⚠️ THE GENERATED TYPES COULD NOT HAVE TOLD ME: they render both
+--       -- text[] and uuid[] as string[]. A live-derived source that erases the
+--       -- distinction you need is not a source for that question.
 --       if not public.model_may_apply(v_model) then
 --         raise exception 'INELIGIBLE: model_may_apply(%) is false, so the apply gate refuses every insert below with CV003 and the whole block proves nothing. Re-verify the account first.', v_model;
 --       end if;
@@ -636,11 +646,11 @@ commit;
 --         raise exception 'NO FIXTURE: no provider with a treatment exists.';
 --       end if;
 --       insert into public.availability (provider_id, date, start_time, end_time, active_treatments, is_taken)
---       values (v_prov, v_day,     '10:00', '11:00', array[v_treat::text], false) returning id into v_slot;
+--       values (v_prov, v_day,     '10:00', '11:00', array[v_treat], false) returning id into v_slot;
 --       insert into public.availability (provider_id, date, start_time, end_time, active_treatments, is_taken)
---       values (v_prov, v_day + 1, '10:00', '11:00', array[v_treat::text], false) returning id into v_slot2;
+--       values (v_prov, v_day + 1, '10:00', '11:00', array[v_treat], false) returning id into v_slot2;
 --       insert into public.availability (provider_id, date, start_time, end_time, active_treatments, is_taken)
---       values (v_prov, v_day + 2, '10:00', '11:00', array[v_treat::text], false) returning id into v_slot3;
+--       values (v_prov, v_day + 2, '10:00', '11:00', array[v_treat], false) returning id into v_slot3;
 --     exception when others then
 --       r_b := 'FIXTURES FAILED: ' || sqlerrm;
 --     end;
