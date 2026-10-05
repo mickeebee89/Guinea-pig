@@ -15650,11 +15650,26 @@ and in chat**, while being referred to by a number as though it were written
 down. Had the ordering been decided without checking, it would have been decided
 against a record that did not exist.
 
-**This is item 155's class with the direction reversed.** 155 was a *promise*
-naming a migration number that became something else. This is a *finding* being
-prioritised by an item number that was never allocated. Both fail the same way:
-a number is treated as a referent, and nobody checks that it refers.
-`check-migration-forward-refs.mjs` catches the first and is blind to the second.
+**⚠️ AND IT IS WORSE THAN ITEM 155'S CLASS, NOT A VARIANT OF IT** — Micky's
+correction, 5 Oct, owning it: *"I have been calling it 148 for days."*
+
+155's fault is a promise pointing at a number that **became something else**.
+That is at least **discoverable**: search the number and you find the migration
+that took it, and the mismatch is visible. **A finding filed under a number that
+was never allocated is invisible to every search anyone would run** — including
+the sweep that found the other two instances, because that sweep looks for
+numbers that appear in files.
+
+⚠️ **`check-migration-forward-refs.mjs` cannot see this one, and not because of a
+gap in its regex: the number was never written into a file at all.** It lived in
+conversation. A checker that reads the repo can only ever find referents that
+were committed, so this class has no mechanism and cannot be given one by
+widening that script.
+
+Both still fail the same way at root — a number treated as a referent with
+nobody checking that it refers — but the blast radius differs: one is a
+discoverable mismatch, the other is an absence, and an absence is what nobody
+searches for.
 
 **The number is claimed here**, so from now on it refers.
 
@@ -15713,6 +15728,22 @@ row, which reads like proof the hole has been exploited. **It is not.** Its own
 header says those rows are bookings made *before consent capture existed* on
 8 Aug 2026. Consentless sessions have existed; none of them came from this path.
 
+### ✅ ORDERED FIRST, 5 Oct 2026 — AND THE DECIDING ARGUMENT IS RECOVERABILITY
+
+**Ranked above item 157 by Micky, adopting the reasoning below.** 157 is a
+*confirmed* live UGC moderation bypass; 148 is not yet confirmed. So this is an
+**override of "confirmed beats probable", and it is recorded as an override
+rather than dressed up as agreement** — the gap in certainty is one string wide,
+and the gap in severity is not.
+
+> *"An unmoderated photo can be moderated later because the content and the
+> decision both still exist. A consent that was never given cannot be recorded
+> later, and the cleanup script already says why — backfilling would be
+> fabrication."* — Micky, 5 Oct 2026
+
+**Recoverability is the right tie-breaker when both holes are live.** 157's
+damage is a decision not yet made; 148's is a record that can never be made.
+
 ### Why the damage is worse than item 147's and worse than 157's
 
 Not because the mechanism is cleverer — because of what cannot be undone.
@@ -15733,16 +15764,71 @@ it requires an active £4.99 membership AND a passed ID check (0049's gate still
 binds), so the act is tied to a verified identity and a paying account, and it
 needs a direct API call rather than the UI.
 
-### The measurement, which is cheap and settles it
+### ⚠⚠ THE MEASUREMENT IS NOT ONE COLUMN — IT IS THE WHOLE INSERTABLE SURFACE
 
-One rolled-back block: as the model test account under `set local role
-authenticated`, insert into `public.sessions` with `status = 'accepted'` and
-write no consent row. **`'accepted'` is the only variable** — everything else in
-that insert is copied from 0049's Block C, which already works.
+Micky, 5 Oct, correcting the scope I had written:
 
-⚠️ **AND IT NEEDS THE BOUNDS HALF TOO** (item 164): the same block must show
-that `create_session_with_consent` still succeeds, or a fix that breaks real
-booking would read as a pass.
+> *"The question that mattered in 147 was never 'can she write status' — it was
+> which columns the path leaves unguarded."*
+
+**`sessions` has 26 insertable columns**, read from `site/lib/database.types.ts`
+as regenerated against the live database at 0083 — a live-derived source rather
+than a parse of a repo file, which matters because my regex parse of that table
+missed `cancelled_at` in 0079 by sharing a line with `status`.
+
+What the BEFORE INSERT triggers cover:
+
+* `tg_session_slot_authority` (0065) — `date`, `start_time`, `end_time`,
+  `scheduled_at`, filled from the availability row.
+* `tg_session_price_snapshot` (0052) — the price.
+* `tg_session_apply_gate` (0049) — membership and ID check. **No column.**
+
+⚠️ **What nothing covers**, per Micky: `not_held_model_at`,
+`not_held_provider_at`, `completed_at`, `cancelled_by`. So:
+
+> *"A row could be born already claiming the appointment did not happen, by one
+> party, with no notification and no way for the other to have disputed it."*
+
+That is strictly worse than the `status` question, and it is the same shape 0070
+existed to fix on the UPDATE path — *who said it did not happen* — arriving
+instead at birth, where no guard looks.
+
+Candidates the surface read adds to his four: `cancelled_at`,
+`cancellation_reason`, `created_at` (backdating — the same member-writable
+`created_at` class as 0040's open list), `price_pence`, `materials_cost`,
+`currency_code`, `id` (a caller-chosen primary key), and **`model_id`** — which
+the permissive policy does **not** check, since it checks `model_user_id`.
+
+**So the block measures all 26 at once** — one insert with a hostile sentinel in
+every settable column, read back by the returned id, reporting per column
+whether the sentinel survived. It also compares the columns it set against
+`information_schema.columns` and **names any column it did not set**, so the
+measurement states its own blind spot rather than leaving one.
+
+⚠️ **AND IT NEEDS THE BOUNDS HALF** (item 164): the same block must show that
+`create_session_with_consent` still succeeds, or a fix that breaks real booking
+would read as a pass.
+
+### ⚠⚠ THE FIX SHAPE, AND THE CONSTRAINT 0079 ALREADY FOUND
+
+The deny-by-default answer is a **column-scoped INSERT grant**, matching 0079
+(`grant update (status)`) and 0084. But Micky named the constraint that stops it
+being a copy of 0079:
+
+> *"0079 deliberately left INSERT alone because `create_session_with_consent` is
+> INVOKER, so the model's own grant is what lets her book at all. The narrowed
+> grant has to keep exactly the columns that RPC supplies and nothing else."*
+
+**That is the whole difficulty.** On UPDATE, 0079 could revoke everything and
+hand back one column, because every legitimate writer was a DEFINER function.
+Here the legitimate writer runs **as the member**, so the member's grant is
+load-bearing and the list cannot be shortened past what the RPC needs.
+
+⚠️ **AND THE LIST MUST COME FROM THE LIVE BODY, NOT THE REPO COPY.** Micky's
+instruction, and it is the standing rule for exactly this reason — twice in one
+day a repo file was trusted over the database. 0077 reproduced that function by
+hand, which is a second reason the repo text is not authoritative about what is
+running. **No column list is proposed until `pg_get_functiondef` has been read.**
 
 ### ⚠️ ITEM 163 IS NOT A SUPERSET OF THIS, THOUGH IT LOOKS LIKE ONE
 
@@ -15758,7 +15844,21 @@ and do not read a clean 163 sweep as covering it.
 ---
 
 ## 149. FOUR ADMIN RPCs ARE DEFINER AND EXECUTABLE BY ANY MEMBER, AND NOBODY HAS READ THEIR GUARDS
-### Raised 3 Oct 2026 while closing item 147. NOT STARTED, deliberately.
+### Raised 3 Oct 2026 while closing item 147. NOT STARTED. ⬆ Moved to THIRD on 5 Oct 2026.
+
+**⚠️ Why it moved up, and the reasoning is worth more than the position.** It was
+ranked low *because it is unmeasured*. That is the wrong way round:
+
+> *"I ranked it low because it is unmeasured; you raised it because if 148
+> confirms, 'the guard is assumed' has a demonstrated failure rate in this
+> schema, which makes an unmeasured guard MORE likely to be hiding something
+> rather than less. That inverts my reason rather than outweighing it."*
+> — Micky, 5 Oct 2026
+
+**An unread guard is not low-risk because it is unread.** If 148 confirms, this
+schema has a measured rate at which assumed guards turn out not to exist, and
+every remaining assumed guard inherits it. It is also a **reading** task, not a
+building one, so it is cheap relative to its position.
 
 **Plainly:** `revoke_verification`, `admin_act_on_provider`, `admin_act_on_report`
 and `admin_act_on_user` are all `SECURITY DEFINER` and all have EXECUTE granted
