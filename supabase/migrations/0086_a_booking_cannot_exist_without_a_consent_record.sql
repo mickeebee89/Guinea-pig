@@ -683,7 +683,7 @@ commit;
 --           r_b := case
 --             when sqlerrm ilike '%permission denied%' then 'refused by the GRANT: ' || sqlerrm
 --             when sqlerrm ilike '%consent%'           then 'refused by the CONSENT CONSTRAINT: ' || sqlerrm
---             when sqlstate = 'CV003'                  then 'refused by the APPLY GATE (so nothing was measured): ' || sqlerrm
+--             when sqlstate = 'CV003'                  then 'refused by a CV003 GATE — READ IT, it may not be the one you want (apply gate, slot authority and the new null-member guard all raise CV003): ' || sqlerrm
 --             else 'refused by something else: ' || sqlstate || ' ' || sqlerrm end
 --             || ' | insert had succeeded first: ' || coalesce(v_ok::text, 'false');
 --         end;
@@ -771,7 +771,23 @@ commit;
 --       v_doc_ack  := (select d.acknowledgements from public.consent_documents d where d.id = v_doc_id);
 --       if v_doc_id is null then
 --         r_f := 'NO ACTIVE CONSENT DOCUMENT — the bounds half cannot run.';
+--       elsif v_slot2 is null then
+--         -- ⚠️ SAY SO RATHER THAN FAILING. On 6 Oct a fixture failure left this
+--         -- null and the section reported "real booking is broken", which was an
+--         -- artefact. A section that cannot run must say that, not report the
+--         -- worst outcome it knows how to print.
+--         r_f := 'NOT RUN — no slot, so this would have failed for a reason unrelated to 0086.';
 --       else
+--         -- ⚠⚠ BACK TO DEFERRED FIRST, AND THIS IS NOT BELT-AND-BRACES.
+--         -- `set constraints all immediate` PERSISTS for the rest of the
+--         -- transaction, and section (d) issues one. Post-fix, (d)'s insert
+--         -- SUCCEEDS at statement level and the refusal comes from its own
+--         -- `set constraints` — so the mode may still be IMMEDIATE here. The RPC
+--         -- inserts the session BEFORE the consent row, so an immediate check
+--         -- fires in that gap and this section reports "real booking is broken"
+--         -- when nothing is wrong. Whether a subtransaction abort reverts the
+--         -- mode is not something to assume, so it is set explicitly.
+--         execute 'set constraints all deferred';
 --         perform set_config('request.jwt.claims',
 --           json_build_object('sub', v_model::text, 'role', 'authenticated')::text, true);
 --         execute 'set local role authenticated';
@@ -788,6 +804,8 @@ commit;
 --             || ', duration ' || (select duration_minutes::text from public.sessions where id = v_rpc)
 --             || ', model_id=model_user_id ' || (select (model_id = model_user_id)::text
 --                                                  from public.sessions where id = v_rpc)
+--             || ', stylist notified ' || (select count(*)::text from public.notifications n
+--                                           where n.session_id = v_rpc and n.type = 'session_applied')
 --             || ', and its deferred checks were forced immediate rather than left pending.';
 --       end if;
 --     exception when others then

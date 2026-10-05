@@ -17794,6 +17794,72 @@ is how the 148 queue stops moving. Raised, not done, and behind 148, 156 and
 
 ---
 
+## 169. 0086 BROKE seed/seed.mjs, AND MY PRE-CHECK SAID NOTHING OUTSIDE migrations/ INSERTS A SESSION
+### Found 6 Oct 2026, by Micky asking for EVERY insert in the ENTIRE repo. ⚠️ LIVE SINCE 21:52 UTC 5 Oct.
+
+`seed/seed.mjs` inserts into `public.sessions` **twice** — a completed session
+with a review at `:411`, and an accepted session with a chat thread at `:443`.
+**Neither writes a `session_consents` row**, and the script runs on
+`SUPABASE_SERVICE_ROLE_KEY`.
+
+**A constraint trigger fires for every role, `service_role` included.** So
+0086's part 4 refuses both inserts at COMMIT with CV005. **The seed is broken
+right now.**
+
+### ⚠⚠ AND I REPORTED THE OPPOSITE, IN THE PRE-CHECK MICKY WIDENED FOR THIS
+
+His instruction, before 0086 was written: *"the risk is not only DEFINER
+functions — it is seeds, fixtures, demo data and any script that creates a
+session … A fixture that breaks at commit after this ships is the same class as
+the webhook that would have broken on 0084."*
+
+I ran that sweep and reported: *"Nothing outside `supabase/migrations/` inserts
+into `sessions`. No seeds, no fixtures, no demo SQL, no teardown, no scripts."*
+**That was wrong, and 0086 shipped on it.**
+
+### Why it was wrong, which is not the obvious reason
+
+**It was not a missing directory.** Two sweeps ran, and each was complete in one
+dimension and narrow in the other:
+
+| sweep | spellings matched | directories covered |
+|---|---|---|
+| SQL | `insert into [public.]sessions` **only** | **whole repo** |
+| client | `.from('sessions').insert` and variants | **`site/`, `admin/`, `mobile/`, `supabase/functions/` only** |
+
+`seed/seed.mjs` is a **client-style call** (`db.from('sessions').insert({…})`)
+in a **fifth directory**. It fell through the *intersection*: the SQL pattern
+could not match a JS call, and the JS pattern was never pointed at `seed/`.
+
+⚠️ **TWO OVERLAPPING CHECKS CAN EACH BE COMPLETE AND STILL LEAVE A HOLE WHERE
+THEY MEET.** Neither sweep was lazy and each had a stated scope — **the union
+was reported as though it were total.** *A finding is only as wide as the
+check*, and with two checks it is only as wide as their **intersection**, which
+is narrower than either.
+
+The correct form is one pass over every extension matching **both** spellings.
+That found 23 SQL sites and 2 client sites.
+
+### ✅ What the correct sweep also settled, cleanly
+
+**All 23 SQL sites name `model_user_id`, and so do both seed sites.** The new
+CV003 null-member guard breaks nothing — which was the question actually asked,
+and its answer is clean. The breakage is the consent constraint: a different
+mechanism, not asked about, found anyway because the sweep was finally the right
+shape.
+
+### The fix, and why not the other one
+
+**The seed writes a consent row for each session it creates.** Not an exemption
+for `service_role`: a seeded "completed session" with no consent record is
+exactly the fabricated data `cleanup-consentless-test-sessions.sql` deleted on
+8 Aug 2026, and exempting the most privileged role would put the hole back for
+the one caller that can do most with it.
+
+Raised, not built — it sits in front of 0086's verify and the order is Micky's.
+
+---
+
 ## Dated
 
 * **8 October** — the diarised selfie-orphan check. The only unarranged end-to-end
