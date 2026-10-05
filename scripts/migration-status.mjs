@@ -102,6 +102,26 @@
  *   * `begin; ... rollback;` is fine — it is the multi-statement dependencies
  *     inside that break, not the transaction.
  *
+ *   * ⚠️ A DEFERRED CONSTRAINT CANNOT BE TESTED BY INSERT-THEN-ROLLBACK.
+ *     `CREATE CONSTRAINT TRIGGER ... DEFERRABLE INITIALLY DEFERRED` fires at
+ *     COMMIT. A verify block ends in `raise exception` and `rollback`, so the
+ *     commit never happens and **the trigger never fires** — the block reports
+ *     the insert as having SUCCEEDED, which is exactly the refusal it was
+ *     written to catch.
+ *
+ *     That is a check that cannot fail, arrived at from a new direction: not a
+ *     bad predicate, but a guard whose moment never comes.
+ *
+ *     THE FIX: force the pending check inside the transaction.
+ *
+ *         insert into ... ;                 -- succeeds, check now pending
+ *         set constraints all immediate;    -- <- the violation fires HERE
+ *
+ *     Wrap that line in its own begin/exception and match on it, not on the
+ *     insert. Found 6 Oct 2026 while designing item 148's fix, from the fact
+ *     that eight existing verify blocks insert a bare session and roll back —
+ *     which is also why none of them will break when that trigger ships.
+ *
  *   * ⚠️⚠️ A MIGRATION THAT TAKES SOMETHING AWAY NEEDS A CONTROL NAMING WHAT IT
  *     MUST **NOT** HAVE TOUCHED. Micky, 5 Oct 2026, on 0084 — he added the
  *     section himself and it is the one the file was missing.

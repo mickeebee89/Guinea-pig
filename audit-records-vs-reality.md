@@ -15850,6 +15850,176 @@ day a repo file was trusted over the database. 0077 reproduced that function by
 hand, which is a second reason the repo text is not authoritative about what is
 running. **No column list is proposed until `pg_get_functiondef` has been read.**
 
+### ✅ THE FIX, DESIGNED 6 Oct 2026 FROM THE LIVE BODY — TWO PARTS, ONE MIGRATION
+
+**The trap, found by reading it:** a column-scoped INSERT grant cannot close this
+on its own, because `create_session_with_consent` **names `status`** in its
+insert with the literal `'pending'`. It is INVOKER, so revoking INSERT on
+`status` from `authenticated` breaks the RPC's own insert — and keeping `status`
+granted leaves the direct path open. **That is the constraint 0079 half-saw when
+it left INSERT alone.**
+
+**The way out is in the same body.** It already inserts NULL into `date`,
+`start_time`, `end_time` and `scheduled_at`, with a comment calling them dead
+arguments that `session_slot_authority` fills. So it need not name those — and it
+need not name `status` either:
+
+* `status` is **NOT NULL DEFAULT 'pending'** — omitting it yields exactly what
+  the RPC sets today.
+* `date`, `start_time`, `end_time` are nullable — omitting them is identical to
+  inserting null.
+* `scheduled_at` is **NOT NULL with no default**, but `session_slot_authority` is
+  BEFORE INSERT, so it fills the value before the NOT NULL check. **The current
+  code proves this**: it inserts explicit null there and succeeds.
+
+**So: recreate the RPC naming only the NINE columns it genuinely supplies** —
+`provider_id`, `model_user_id`, `model_id`, `availability_id`,
+`duration_minutes`, `treatment_id`, `location_type`, `note`, `photo_urls` — and
+grant INSERT on exactly those. **Signature unchanged**, so no client breaks; the
+four dead parameters stay accepted and stay unused, as they already are.
+
+**Seventeen of the twenty-six columns come off the grant:** `status`, `date`,
+`start_time`, `end_time`, `scheduled_at`, `price_pence`, `materials_cost`,
+`currency_code`, `completed_at`, `cancelled_at`, `cancelled_by`,
+`cancellation_reason`, `not_held_model_at`, `not_held_provider_at`,
+`model_note`, `id`, `created_at`. **Column privileges are checked against the
+statement's target list, not against what triggers write**, so
+`session_slot_authority` and `session_price_snapshot` keep working untouched.
+
+`model_user_id` stays in the grant despite looking like a column a caller should
+not choose: **the policy `auth.uid() = model_user_id` constrains it, not the
+grant.**
+
+**Column defaults, read live:** `id gen_random_uuid()`, `status 'pending'`,
+`materials_cost 0`, `currency_code 'GBP'`, `created_at now()`,
+`photo_urls '{}'`. Everything else has none.
+
+### ⚠⚠ CORRECTION — THE GRANT ALONE CLOSED THE WRONG HALF
+
+**The nine granted columns are precisely sufficient to create a consentless
+booking.** A member can still run an insert naming only those nine: all four
+INSERT policies pass, all three triggers fire, `status` defaults to `'pending'`,
+and the result is **a real application in a stylist's diary with no
+`session_consents` row.** Accepted, it becomes a confirmed appointment with the
+six-year record permanently absent.
+
+So the narrowed grant closes the **fabrication** half completely —
+accepted-on-arrival, `not_held_*`, `completed_at`, `cancelled_by`, backdated
+`created_at`, caller-chosen `id`, zeroed price — **and leaves the consent half
+open, which is the half that made 148 outrank 157 in the first place.**
+
+Micky, accepting the correction: *"my design closed the fabrication half and left
+the half that made 148 outrank 157."* Recorded as a correction rather than
+folded into the design, because the ranking argument depended on the half the
+first design missed.
+
+### ✅ SO ALSO: A DEFERRED CONSTRAINT TRIGGER. Decided 6 Oct 2026.
+
+`AFTER INSERT ... DEFERRABLE INITIALLY DEFERRED` on `sessions`, refusing at
+COMMIT any session with no `session_consents` row. The RPC writes consent in the
+same transaction, so it passes; a bare direct insert fails at commit.
+
+**Why this and not the alternatives:**
+
+* It makes the invariant **structural rather than a property of one code path**,
+  which is the reasoning that has held all week.
+* **There is an exact precedent, and it is the RPC's own comment:** *"There is no
+  path to a confirmed booking without a consent record."* A deferred constraint
+  trigger **makes that sentence true** — the same way 0079 made 0070's not-held
+  comment true instead of weakening it. The alternative is to narrow the
+  sentence, and this series has spent a week finding sentences wider than their
+  mechanisms.
+* **Rejected: making the RPC SECURITY DEFINER and revoking INSERT entirely.** It
+  closes more, but it re-expresses `sessions_insert_not_blocked`,
+  `sessions_not_suspended` and `sessions_applicant_is_eligible` as function
+  code — *the anti-pattern the last three days have been undoing.* 0077's warning
+  against DEFINER-ising this function stands for that reason as well as its own.
+
+### ✅ THE PRE-CHECK, WIDENED AS MICKY REQUIRED — AND IT PASSES
+
+**A deferred constraint trigger fires for EVERY role, including `service_role`
+and `postgres`.** So the risk is not only DEFINER functions: it is seeds,
+fixtures, demo data and any script that creates a session. *"A fixture that
+breaks at commit after this ships is the same class as the webhook that would
+have broken on 0084."*
+
+Swept 6 Oct 2026 across every `.sql`, `.mjs`, `.js`, `.ts` and `.tsx` in the
+repo:
+
+* **Nothing outside `supabase/migrations/` inserts into `sessions`.** No seeds,
+  no fixtures, no demo SQL, no teardown, no scripts.
+* ✅ **`delete_account_data` does NOT insert a session** — read, as required
+  rather than assumed. It is `delete from public.sessions` at `0053:65`; the body
+  search matched a **commented-out** `insert into public.sessions` in its verify
+  block at `0053:154`. A confirmed false positive.
+* Eight migrations have verify blocks that insert a bare session. **All roll
+  back, so the trigger never fires for them** — which is why none of them breaks.
+
+### ⚠⚠ AND THAT LAST POINT WOULD HAVE MADE THE FIX'S OWN VERIFY UNABLE TO FAIL
+
+A deferred constraint fires at **COMMIT**. A verify block ends in
+`raise exception` and `rollback`, so **the commit never happens and the trigger
+never fires** — the block would report the hostile insert as having SUCCEEDED,
+which is precisely the refusal it exists to prove.
+
+*A check that cannot fail, arrived at from a new direction: not a bad predicate,
+but a guard whose moment never comes.*
+
+**The fix is one line**, and it belongs in the verify:
+
+```sql
+insert into ... ;                 -- succeeds; the check is now PENDING
+set constraints all immediate;    -- <- the violation fires HERE, catchably
+```
+
+⚠️ **Block B therefore remains valid as the PRE-fix measurement and must not be
+reused as the post-fix verify without that line.** Recorded in
+`scripts/migration-status.mjs`'s verify-block conventions.
+
+### ⚠️ THE CLAIM IS BOUNDED TO THE MECHANISM — AND THE HEADER MUST SAY IT
+
+The trigger guarantees a `session_consents` **row exists**. It does **not**
+guarantee consent was given: a member can insert a session and a self-made
+consent row in the same transaction and satisfy it.
+
+**So the header says "cannot exist without a consent RECORD" and never "without
+consent".** Micky's instruction, and the reason is the whole series: *"otherwise
+we have written another sentence wider than its mechanism into a file that gets
+applied and frozen, which is the exact fault this migration series keeps finding
+in its predecessors."* An applied migration's prose is checksum-locked and
+cannot be corrected in place.
+
+The successor is **item 167**, deliberately behind this.
+
+---
+
+## 167. A CONSENT ROW CAN BE SELF-MADE, SO "A RECORD EXISTS" IS NOT "CONSENT WAS GIVEN"
+### Raised 6 Oct 2026, by Micky, as the bounded successor to 148's fix. Behind 148.
+
+148's deferred constraint trigger guarantees a session has a `session_consents`
+row. **It cannot guarantee the row is genuine.** A member inserting a session and
+a hand-made consent row in the same transaction satisfies it completely.
+
+What a genuine row would have to satisfy:
+
+* `content_hash` matching a real `consent_documents` row;
+* `acknowledgements` matching that document's version;
+* `agreed_at` not in the future.
+
+⚠️ **COLUMN GRANTS CANNOT HELP HERE, which is why it is a different problem
+rather than more of 148.** A forger names *the same columns* a legitimate consent
+names. 148's fix works by taking columns away; this one cannot, because there is
+no column whose presence is the fault — only values that must agree with another
+table.
+
+`sc_insert` on `session_consents` is `with check (user_id = auth.uid())`, so the
+row must be the member's own. That stops forging *someone else's* consent and
+does nothing about forging your own.
+
+**Smaller than 148** — it requires a member to go out of their way to fabricate a
+record about themselves, where 148 lets one be created by omission — and it
+belongs behind it.
+
 ### ⚠️ ITEM 163 IS NOT A SUPERSET OF THIS, THOUGH IT LOOKS LIKE ONE
 
 163 sweeps for **grants without policies** — a write verb with no policy at all.
