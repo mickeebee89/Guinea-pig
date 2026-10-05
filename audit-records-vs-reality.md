@@ -14987,7 +14987,7 @@ nothing.
 
 ---
 
-## 144. ANY SIGNED-IN ACCOUNT CAN SEND ANY NOTIFICATION TO ANYONE — AND CAVY WILL EMAIL IT
+## 144. ✅ CLOSED 5 Oct 2026 — ANY SIGNED-IN ACCOUNT COULD SEND ANY NOTIFICATION TO ANYONE, AND CAVY WOULD EMAIL IT
 ### Found 3 Oct 2026 while collapsing item 143's duplication. VERIFIED from pg_policies. NOT FIXED. Plan only.
 
 **Plainly:** the only condition on writing a notification is *being logged in*.
@@ -15311,6 +15311,65 @@ Micky's call, 3 Oct: *"I want the inventory first… a hasty fix that silently
 stops notifications is worse than the hole."* Nothing has been written. This
 entry is the plan, and the fifteen rows above are the thing to work from.
 
+### ✅✅ CLOSED, 5 Oct 2026 — STAGE F APPLIED AND VERIFIED
+
+`0085_only_a_definer_function_may_tell_anyone_anything`. `authenticated` and
+`anon` can no longer write a `notifications` row at all — by policy AND by
+grant. **The phishing vector is shut:** nobody can put arbitrary text in front
+of a member under Cavy's verified sender any more.
+
+Verified live, and the two halves that matter were proven **from the same
+role**:
+
+```
+(c) direct insert   : refused on the GRANT: permission denied for table notifications
+(d) definer route   : new row via notify_as_admin called AS authenticated: yes
+(e) bounds          : the member still reads 125 of their own and marked 2 as read
+```
+
+(c) and (d) together are the whole of stage F. (d) was deliberately run with
+`set local role authenticated` rather than as `postgres`, because **calling a
+DEFINER function as the owner proves the function and not the path**, and the
+path is the only thing 0085 changed.
+
+(c) reports on the **grant**, not the policy, which is correct: grants are
+checked before policies, so the restrictive policy is belt to the grant's
+braces and will never be what speaks. Both exist so neither is load-bearing
+alone.
+
+### What it took
+
+**Six stages. 0077 through 0085 is nine migration files, and seven of them are
+this item's:** 0077 (A), 0078 (B), 0080 (one rendering of an appointment, which
+only became visible once the copy moved into the database), 0081 (C and D),
+0082 (`admin_message` into all three email lists), 0083 (E), 0085 (F). The other
+two in that stretch — **0079 and 0084 — belong to items 147 and 156**, and are
+named here only because they landed inside the same run. *Said precisely because
+"nine migrations" would be a wider claim than the work supports.*
+
+Fifteen client-side notification inserts became zero. Everything is now written
+by a SECURITY DEFINER function inside the transaction that made the decision, so
+a state change and the telling of it can no longer half-fail apart from each
+other.
+
+### ⚠⚠ AND THE LAST BLOCKER WAS NOT TECHNICAL
+
+Stage F's precondition — no client writes a cross-user notification — was held
+up for a week by **one sentence**. 0077's header said the verification approval
+notice *"stays in the client until 0078"*. 0078 became stage B. The promise
+pointed at a file about something else, and **nothing noticed, because the plan
+tracked stages while the promise tracked a filename.**
+
+The work itself was one migration (0083) and took an afternoon.
+
+It was found only because Micky asked whether the deferrals from item 155's
+sweep existed as committed scripts or were still sentences pointing at numbers.
+**That question found a third instance of the class — and the thing it was
+blocking was the final stage of the largest open security item in the
+project.** A deferral that loses its referent does not merely go unkept; it
+stops being visible as outstanding, which is the whole cost and the reason
+`check-migration-forward-refs.mjs` now exists.
+
 ### ✅ STAGE E CLOSED, 5 Oct 2026 — AND WITH IT THE LAST CLIENT INSERT
 
 `0083_the_approval_notice_joins_the_decision`. The verification APPROVAL notice
@@ -15573,6 +15632,128 @@ evidence.*
 not somebody else's machine.* I checked the user's terminal, the Supabase API and
 a timestamp conversion before checking the thing I had typed thirty seconds
 earlier.
+
+---
+
+## 148. A MODEL MAY BE ABLE TO INSERT A CONFIRMED BOOKING WITH NO CONSENT RECORD
+### Written up 5 Oct 2026. ⚠️ THE NUMBER WAS IN USE FOR DAYS WITH NO ENTRY BEHIND IT.
+
+### ⚠️ FIRST, THE RECORD-KEEPING FAULT, BECAUSE IT IS THE SAME CLASS WE SPENT THE WEEK CLOSING
+
+Micky ranked "item 148" as the largest open thing in the project on 5 Oct, in
+accurate detail. **There was no item 148.** The numbering ran 147 → 149, and
+nothing about the sessions INSERT path appeared anywhere in this file — searched
+for the number, for "INSERT path", for "consentless", and for the substance.
+
+So the most severe open finding in the project existed **only in Micky's head
+and in chat**, while being referred to by a number as though it were written
+down. Had the ordering been decided without checking, it would have been decided
+against a record that did not exist.
+
+**This is item 155's class with the direction reversed.** 155 was a *promise*
+naming a migration number that became something else. This is a *finding* being
+prioritised by an item number that was never allocated. Both fail the same way:
+a number is treated as a referent, and nobody checks that it refers.
+`check-migration-forward-refs.mjs` catches the first and is blind to the second.
+
+**The number is claimed here**, so from now on it refers.
+
+### What might be possible, stated as the claim it is
+
+A model with an active membership and a passed ID check writes **directly** to
+`public.sessions` — not through `create_session_with_consent` — with
+`status = 'accepted'` and no `session_consents` row.
+
+If it works: **a confirmed appointment appears in a stylist's diary that the
+stylist never accepted, and the consent record that should exist for it does
+not.** It needs no existing booking, so it is not a tampering attack; it is
+fabrication from nothing.
+
+### ✅ SIX READS, AND THE PATH IS ALREADY PROVEN — ONLY THE STATUS VALUE IS NOT
+
+Read from the repo 5 Oct 2026:
+
+1. **`"model can create session"`** — PERMISSIVE INSERT to `authenticated`,
+   `with check (auth.uid() = model_user_id)`. A member may insert their own
+   session row. **No reference to `status`.**
+2. **Three RESTRICTIVE INSERT policies** — `sessions_insert_not_blocked`,
+   `sessions_not_suspended`, and `sessions_applicant_is_eligible` (0049,
+   `with check (public.model_may_apply())`). **None references `status`.**
+3. **Three BEFORE INSERT triggers** — `session_apply_gate`,
+   `session_price_snapshot`, `session_slot_authority`.
+4. **`tg_session_apply_gate`'s body, read in full** (0049). It checks
+   `auth.uid() is null`, `model_may_apply`, then subscription and verification,
+   and raises `CV003` naming which half is missing. **It does not mention
+   `new.status`. It does not mention consent.**
+5. **`trg_enforce_session_status` is `BEFORE UPDATE OF status`** — so the status
+   guard does not fire on INSERT at all. 0079 narrowed the UPDATE path and
+   deliberately did not touch INSERT.
+6. **Nothing anywhere requires a `session_consents` row.** No constraint, no
+   trigger. The consent write exists in exactly one place —
+   `create_session_with_consent` — which is a SECURITY INVOKER function and one
+   path of two.
+
+⚠️⚠️ **AND 0049's OWN VERIFY BLOCK ALREADY RAN THE ATTACK SHAPE.** Block C,
+step 2, inserts straight into `public.sessions` as `set local role
+authenticated` with the model test account's claims, supplying `status` **as a
+caller parameter**, and its expected result is `accepted (correct), session
+<id>`. It ran — the block carries a correction dated 23 Sep 2026 made *after* its
+first run.
+
+**So a member-originated direct INSERT into `sessions`, with a caller-supplied
+status and no consent row, is not a theory. It is a path this project has
+already executed and recorded as working.** The only untested variable is
+whether the supplied string may be `'accepted'` instead of `'pending'` — and six
+independent reads say nothing looks at it.
+
+### What is NOT evidence, said because it looked like it was
+
+`supabase/cleanup-consentless-test-sessions.sql` finds sessions with no consent
+row, which reads like proof the hole has been exploited. **It is not.** Its own
+header says those rows are bookings made *before consent capture existed* on
+8 Aug 2026. Consentless sessions have existed; none of them came from this path.
+
+### Why the damage is worse than item 147's and worse than 157's
+
+Not because the mechanism is cleverer — because of what cannot be undone.
+
+* **A consent that was never given cannot be recorded later.** The cleanup
+  script states the principle in its own words: *"nobody actually agreed to
+  anything, so there is nothing to backfill and backfilling would be
+  fabrication."* `session_consents` is a **six-year legal record** (0006, purged
+  by `run_retention_purge`), and `cavybeauty.com/privacy` describes it. A
+  missing row is a published claim made false, permanently.
+* **A real person may turn up.** An accepted booking is an appointment. 147's
+  worst case rewrote an existing one; this creates one the stylist never agreed
+  to.
+* **It needs no precondition** — no existing booking, no stylist action.
+
+⚠️ **The exploit is not free, and that is worth stating against the severity:**
+it requires an active £4.99 membership AND a passed ID check (0049's gate still
+binds), so the act is tied to a verified identity and a paying account, and it
+needs a direct API call rather than the UI.
+
+### The measurement, which is cheap and settles it
+
+One rolled-back block: as the model test account under `set local role
+authenticated`, insert into `public.sessions` with `status = 'accepted'` and
+write no consent row. **`'accepted'` is the only variable** — everything else in
+that insert is copied from 0049's Block C, which already works.
+
+⚠️ **AND IT NEEDS THE BOUNDS HALF TOO** (item 164): the same block must show
+that `create_session_with_consent` still succeeds, or a fix that breaks real
+booking would read as a pass.
+
+### ⚠️ ITEM 163 IS NOT A SUPERSET OF THIS, THOUGH IT LOOKS LIKE ONE
+
+163 sweeps for **grants without policies** — a write verb with no policy at all.
+`sessions` HAS an INSERT policy, four of them, so 163's sweep as specified would
+score it **covered** and move on.
+
+**This item is about what a policy OMITS, not whether one exists.** Different
+axis. A table can be fully policied on every verb and still let a member write
+any value into any column the policies do not name. Do not let 163 absorb it,
+and do not read a clean 163 sweep as covering it.
 
 ---
 
@@ -16999,22 +17180,28 @@ WITH CHECK is. So it reads alarmingly and decides nothing — which is itself wo
 knowing, because it is the kind of clause someone later "tidies" into the WITH
 CHECK.
 
-⚠️ **SAMPLE NAMED:** read from `supabase/schema-snapshot-2026-08-08-policies.sql`
-lines 25 and 108 — a **repo file, two months old**. No migration creates or
-replaces a policy on either table (searched all 86), so the snapshot is the only
-provenance there is, and these are two more pre-`0000` hand-made artifacts
-(item 158). **This is not a live read**, and the standing rule here is to read
-the live definition. One line settles it:
+✅ **READ LIVE, 5 Oct 2026, AND IT AGREES WITH THE SNAPSHOT.** Micky added it as
+section (f) of 0085's verify:
 
-```sql
-select tablename, policyname, permissive, cmd, qual, with_check
-  from pg_policies
- where schemaname = 'public'
-   and tablename in ('admin_audit_log', 'moderation_actions');
+```
+admin_audit_log.audit_insert_admin   [PERMISSIVE/INSERT] check: is_admin()
+moderation_actions.ma_insert         [PERMISSIVE/INSERT] check: is_admin()
 ```
 
-**So: not claimed as a hole, and not dismissed either.** The repo says gated;
-the database has not been asked.
+**So this is now a live read, not a repo read.** Both gate on `is_admin()`; a
+member cannot write to either. ~~The repo says gated; the database has not been
+asked.~~ *Asked and answered 5 Oct 2026.*
+
+Worth keeping the provenance anyway, because it is the only reason the question
+was open: these policies are created by **no migration** (searched all 86), so
+before (f) the only record of them was a two-month-old snapshot — two more
+pre-`0000` hand-made artifacts (item 158).
+
+⚠️ **AND THE INERT CLAUSE STANDS AS A HAZARD.** The `using (true)` on both is
+not consulted for INSERT — only WITH CHECK is. So it reads alarmingly and
+decides nothing, which matters because it is exactly the kind of clause someone
+later "tidies" into the WITH CHECK, and `using (true)` moved into a WITH CHECK
+would open both tables to any member.
 
 ---
 

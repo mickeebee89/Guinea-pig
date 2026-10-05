@@ -39,15 +39,43 @@ is what it has left.
 
 ## ⚠️ In flight, 5 October 2026 — read this before starting anything
 
-**The one live hole: item 144.** `public.notifications`' INSERT policy is
-`with check (auth.uid() is not null)`. **Any signed-in account can write any
-notification to anyone**, and `notify_email` then sends that text as Cavy for
-eleven types — a phishing vector using the product's own verified sender.
-Verified from `pg_policies`, not inferred.
+### ✅ ITEM 144 IS CLOSED — 0085 applied and verified, 5 Oct 2026
 
-It cannot be closed by tightening the policy, because **every client-side
-notification insert is cross-user**. It is being closed in stages, each one
-additive and safely applicable alone, with the policy last:
+`authenticated` and `anon` can no longer write a `notifications` row at all, by
+policy and by grant. Six stages; 0077–0085 spans nine migration files and seven
+of them are 144's. Fifteen client-side notification inserts became zero.
+
+⚠⚠ **The last blocker was not technical.** 0077 deferred the approval notice
+"until 0078"; 0078 became stage B; the promise pointed at a file about something
+else and held stage F up for a week, while the work itself took one migration.
+
+### ⚠⚠ THE TOP TWO OPEN ITEMS NOW — BOTH LIVE, BOTH ON SHIPPED CODE
+
+**Item 148 — a model may be able to INSERT a confirmed booking with no consent
+record.** Written up 5 Oct 2026. Six repo reads say nothing on the INSERT path
+checks `status`, and **0049's own Block C already proved a member can direct-
+insert a session with a caller-supplied status and no consent row** — so only
+the string `'accepted'` is unverified. If it works it fabricates an appointment
+in a stylist's diary she never accepted, with a six-year legal record missing
+that **cannot be backfilled**. One rolled-back block settles it.
+
+⚠️ **The number was in use for days with nothing behind it.** 148 did not exist
+in the audit record — the numbering ran 147 → 149 — while being referred to as
+the largest open thing. Item 155's class, reversed: a *finding* prioritised by a
+number that was never allocated.
+
+**Item 157 — a member can mark their own photo as reviewed**, taking it out of
+moderation. Confirmed, not merely suspected. Apple Guideline 1.2 / Play UGC. Its
+fix is item 156's second half (the `users`/`providers` column grants), whose
+plan is written and whose precondition is met, but which still needs four reads
+— the sharpest being **which `is_verified` the shop page and the badge actually
+read**.
+
+### How 144 was closed, kept because the sequencing is the reusable part
+
+It could not be closed by tightening the policy, because **every client-side
+notification insert was cross-user**. So it went in stages, each additive and
+safely applicable alone, with the policy last:
 
 | stage | what | state |
 |---|---|---|
