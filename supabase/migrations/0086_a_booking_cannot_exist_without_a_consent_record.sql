@@ -695,14 +695,14 @@ commit;
 --
 --     begin
 --       v_id := (select s.id from public.sessions s where s.availability_id = v_slot);
---         ⚠⚠ FIXTURE GUARD FIRST. Without it a fixture failure leaves v_slot null,
---         the lookup matches nothing, and this prints "no row references slot 1" —
---         WORD FOR WORD THE EXPECTED POST-FIX PASS. The block would report the
---         hole as closed having never attempted it.
--- if r_b like 'FIXTURES FAILED%' or v_slot is null then
---   r_c := '*** NOT RUN — THE FIXTURES FAILED. No insert was attempted. This is NOT a pass. ***';
--- elsif v_id is null then
---   r_c := 'no row references slot 1 — the insert WAS attempted and refused. See (b) for by what.';
+--       -- ⚠⚠ FIXTURE GUARD FIRST. Without it a fixture failure leaves v_slot
+--       -- null, the lookup matches nothing, and this prints "no row references
+--       -- slot 1" — WORD FOR WORD THE EXPECTED POST-FIX PASS. The block would
+--       -- report the hole as closed having never attempted it.
+--       if r_b like 'FIXTURES FAILED%' or v_slot is null then
+--         r_c := '*** NOT RUN — THE FIXTURES FAILED. No insert was attempted. This is NOT a pass. ***';
+--       elsif v_id is null then
+--         r_c := 'no row references slot 1 — the insert WAS attempted and refused. See (b) for by what.';
 --       else
 --         v_row := (select s from public.sessions s where s.id = v_id);
 --         if v_row.id = v_sent_id                   then v_free := v_free || ' id(caller-chosen)'; end if;
@@ -716,20 +716,18 @@ commit;
 --         if v_row.cancellation_reason = 'HOSTILE'  then v_free := v_free || ' cancellation_reason'; end if;
 --         if v_row.model_note = 'HOSTILE'           then v_free := v_free || ' model_note'; end if;
 --         if v_row.created_at < now() - interval '30 days' then v_free := v_free || ' created_at(backdated)'; end if;
---         ⚠️ 9999, NOT 0. materials_cost DEFAULTS to 0, so sending 0 and testing
---         for 0 passed whether the column was reachable or not — the one case
---         that matters, a standing insert, proved nothing. Every sentinel here is
---         now a value no default can produce: status 'accepted' (default
---         'pending'), currency_code 'XXX' (default 'GBP'), created_at now()-90d
---         (default now()), materials_cost 9999 (default 0), price_pence 424242
---         (no default, and the fixture slot carries no price so the snapshot
---         cannot produce it), id a fixed uuid (default gen_random_uuid()),
---         duration_minutes 1 against a 60-minute slot.
--- if v_row.materials_cost = 9999            then v_free := v_free || ' materials_cost'; end if;
---         ⚠️ THE FIFTEENTH COLUMN. tg_session_price_snapshot "fills only a NULL",
---         so a sent value STANDS. Without this (c) would report fourteen and
---         silently contradict the correction that made it fifteen.
--- if v_row.price_pence = 424242             then v_free := v_free || ' price_pence'; end if;
+--         -- ⚠️ 9999, NOT 0. materials_cost DEFAULTS to 0, so sending 0 and testing for
+--         -- 0 passed whether the column was reachable or not — and a standing insert
+--         -- is the only case that matters. Every sentinel here is now a value no
+--         -- default can produce: status 'accepted' (default 'pending'), currency_code
+--         -- 'XXX' (default 'GBP'), created_at now()-90d (default now()), id a fixed
+--         -- uuid (default gen_random_uuid()), duration_minutes 1 against a 60-minute
+--         -- slot, materials_cost 9999, price_pence 424242.
+--         if v_row.materials_cost = 9999            then v_free := v_free || ' materials_cost'; end if;
+--         -- ⚠️ THE FIFTEENTH COLUMN. tg_session_price_snapshot "fills only a NULL",
+--         -- so a sent value STANDS. Without this (c) reports fourteen and silently
+--         -- contradicts the correction that made it fifteen.
+--         if v_row.price_pence = 424242             then v_free := v_free || ' price_pence'; end if;
 --         if v_row.currency_code = 'XXX'            then v_free := v_free || ' currency_code'; end if;
 --         if v_row.duration_minutes = 1             then v_free := v_free || ' duration_minutes'; end if;
 --         r_c := 'UNGUARDED:' || coalesce(nullif(v_free, ''), ' none')
@@ -750,13 +748,6 @@ commit;
 --       execute 'set local role authenticated';
 --       v_ok := false;
 --       begin
---         ⚠⚠ FIXTURE GUARD. With v_slot3 null this inserts a null availability_id
---         and reports "refused by something else: CV003" — a refusal it did not
---         earn, from the slot guard rather than the consent constraint, reading
---         as though part 4 had been exercised.
--- if r_b like 'FIXTURES FAILED%' or v_slot3 is null then
---   raise exception 'NOFIXTURE';
--- end if;
 --         -- ⚠️ EXACTLY THE SEVEN COLUMNS THAT REMAIN GRANTED, AND THAT IS WHY.
 --         -- An earlier draft named nine, including model_id and
 --         -- duration_minutes — which 0086 revokes. Post-fix that insert is
@@ -764,6 +755,17 @@ commit;
 --         -- and the one section that proves part 4 proves nothing while
 --         -- looking like a pass. Seven works pre-fix AND post-fix, which is
 --         -- what makes this the same text with different expectations.
+--         -- ⚠⚠ FIXTURE GUARD. With v_slot3 null this inserts a null availability_id
+--         -- and reports "refused by something else: CV003" — a refusal it did not
+--         -- earn, from the slot guard rather than the consent constraint, reading as
+--         -- though part 4 had been exercised.
+--         if r_b like 'FIXTURES FAILED%' or v_slot3 is null then
+--           raise exception 'NOFIXTURE';
+--         end if;
+--         -- ⚠️ EXACTLY THE SEVEN COLUMNS THAT REMAIN GRANTED. An earlier draft named
+--         -- nine, including model_id and duration_minutes, which 0086 revokes — so
+--         -- post-fix it is refused by the GRANT, the CONSENT CONSTRAINT is never
+--         -- reached, and the one section proving part 4 proves nothing.
 --         insert into public.sessions (provider_id, model_user_id, availability_id,
 --                                      treatment_id, location_type, note, photo_urls)
 --         values (v_prov, v_model, v_slot3, v_treat, 'provider', 'seven-column', null);
@@ -772,7 +774,7 @@ commit;
 --         r_d := 'THE SEVEN-COLUMN INSERT STOOD — a consentless booking is creatable.';
 --       exception when others then
 --         r_d := case
--- when sqlerrm = 'NOFIXTURE' then '*** NOT RUN — THE FIXTURES FAILED. This is NOT a pass. ***'
+--           when sqlerrm = 'NOFIXTURE' then '*** NOT RUN — THE FIXTURES FAILED. This is NOT a pass. ***'
 --           when sqlerrm ilike '%consent%'           then 'refused by the CONSENT CONSTRAINT: ' || sqlerrm
 --           when sqlerrm ilike '%permission denied%' then 'refused by the GRANT: ' || sqlerrm
 --           else 'refused by something else: ' || sqlstate || ' ' || sqlerrm end
@@ -784,19 +786,18 @@ commit;
 --     begin
 --       v_id2 := (select s.id from public.sessions s where s.availability_id = v_slot3);
 --       r_e := 'slot1 row: ' || coalesce(v_id::text, 'none')
---           ⚠⚠ case, NOT coalesce. count(*) over zero rows is 0, never NULL, so
---           `coalesce(count, 'n/a')` COULD NOT FIRE — a null session_id printed
---           "consents=0" directly above a sentence calling consents=0 an
---           unbackfillable six-year record. Same class as position(a) > position(b)
---           treating "below" and "absent" as one answer: a guard with no reachable
---           branch.
--- || ' consents=' || case when v_id is null then 'n/a (no row)'
---                         else (select count(*)::text from public.session_consents c
---                                where c.session_id = v_id) end
+--           -- ⚠⚠ case, NOT coalesce. count(*) over zero rows is 0, never NULL, so
+--           -- coalesce(count, 'n/a') COULD NOT FIRE — a null session_id printed
+--           -- "consents=0" directly above a sentence calling consents=0 an
+--           -- unbackfillable six-year record. Same class as position(a) > position(b):
+--           -- a guard with no reachable branch.
+--           || ' consents=' || case when v_id is null then 'n/a (no row)'
+--                                   else (select count(*)::text from public.session_consents c
+--                                          where c.session_id = v_id) end
 --           || ' | slot3 row: ' || coalesce(v_id2::text, 'none')
--- || ' consents=' || case when v_id2 is null then 'n/a (no row)'
---                         else (select count(*)::text from public.session_consents c
---                                where c.session_id = v_id2) end
+--           || ' consents=' || case when v_id2 is null then 'n/a (no row)'
+--                                   else (select count(*)::text from public.session_consents c
+--                                          where c.session_id = v_id2) end
 --           || ' — any row above with consents=0 is a six-year record that cannot be backfilled.';
 --     exception when others then r_e := 'SECTION ERRORED: ' || sqlerrm; end;
 --
@@ -824,12 +825,12 @@ commit;
 --         -- when nothing is wrong. Whether a subtransaction abort reverts the
 --         -- mode is not something to assume, so it is set explicitly.
 --         execute 'set constraints all deferred';
---       -- ⚠️ BASELINE THE pg_net QUEUE BEFORE THE RPC. Attributing queue
---       -- rows to THIS transaction needs a before-mark; a bare count would
---       -- include every row anything else left behind.
---       begin
---         v_qbase := (select coalesce(max(id), 0) from net.http_request_queue);
---       exception when others then v_qbase := null; end;
+--         -- ⚠️ BASELINE THE pg_net QUEUE BEFORE THE RPC. Attributing queue rows to
+--         -- THIS transaction needs a before-mark; a bare count would include every
+--         -- row anything else left behind.
+--         begin
+--           v_qbase := (select coalesce(max(id), 0) from net.http_request_queue);
+--         exception when others then v_qbase := null; end;
 --         perform set_config('request.jwt.claims',
 --           json_build_object('sub', v_model::text, 'role', 'authenticated')::text, true);
 --         execute 'set local role authenticated';
@@ -839,18 +840,20 @@ commit;
 --           v_treat, 'provider', '148 bounds — rolled back', '{}',
 --           v_doc_id, v_doc_ver, v_doc_hash, v_doc_ack);
 --         execute 'set constraints all immediate';
---       begin
---         v_qadd := case when v_qbase is null then 'UNREADABLE'
---                        else (select count(*)::text from net.http_request_queue
---                               where id > v_qbase) end;
---       exception when others then v_qadd := 'UNREADABLE (' || sqlerrm || ')'; end;
---       v_owner := coalesce((select case
---             when u.email like '%@seed.guineapig.invalid' then 'a SEED account'
---             when u.email like '%@besteya.com' or u.email like '%@bevriz.com'
---                  or u.email like 'micky.buckfield@%' then 'a cleanup-script test account'
---             else 'an account that is NEITHER seeded NOR in the cleanup test set' end
---           from public.providers p join public.users u on u.id = p.user_id
---          where p.id = v_prov), 'an owner this block could not resolve');
+--         begin
+--           v_qadd := case when v_qbase is null then 'UNREADABLE'
+--                          else (select count(*)::text from net.http_request_queue
+--                                 where id > v_qbase) end;
+--         exception when others then v_qadd := 'UNREADABLE (' || sqlerrm || ')'; end;
+--         -- ⚠️ WHOSE FIXTURE THIS USED. v_prov is whoever sorts first, so the block
+--         -- states it rather than leaving it to be guessed.
+--         v_owner := coalesce((select case
+--               when u.email like '%@seed.guineapig.invalid' then 'a SEED account'
+--               when u.email like '%@besteya.com' or u.email like '%@bevriz.com'
+--                    or u.email like 'micky.buckfield@%' then 'a cleanup-script test account'
+--               else 'an account NEITHER seeded NOR in the cleanup test set' end
+--             from public.providers p join public.users u on u.id = p.user_id
+--            where p.id = v_prov), 'an owner this block could not resolve');
 --         execute 'reset role';
 --         r_f := 'REAL BOOKING SURVIVES BOTH HALVES: session ' || v_rpc::text
 --             || ', consent rows ' || (select count(*)::text from public.session_consents c
@@ -860,20 +863,20 @@ commit;
 --                                                  from public.sessions where id = v_rpc)
 --             || ', stylist notified ' || (select count(*)::text from public.notifications n
 --                                           where n.session_id = v_rpc and n.type = 'session_applied')
--- || ', and its deferred checks were forced immediate rather than left pending.'
--- || chr(10) || '      fixture provider : ' || v_prov::text || ', owned by ' || v_owner
--- || chr(10) || '      pg_net queue rows added by THIS transaction: ' || v_qadd
--- || chr(10) || '      ⚠️ EXPECTED: a notification row exists and NO EMAIL IS DELIVERED.'
--- || chr(10) || '      Since 0047 a notification is emailed from notifications@cavybeauty.com,'
--- || chr(10) || '      so the RPC genuinely queues one. It cannot arrive because net.http_post'
--- || chr(10) || '      only QUEUES a row and net.wake() takes NO ARGUMENTS, so the queue row is'
--- || chr(10) || '      the only channel and an uncommitted row is invisible to the worker under'
--- || chr(10) || '      MVCC. This rolls back, so the row never becomes visible.'
--- || chr(10) || '      ⚠️ THAT IS A DEDUCTION FROM SIGNATURES, NEVER ONCE OBSERVED (item 152).'
--- || chr(10) || '      A NON-ZERO queue count above does NOT refute it — the row is written and'
--- || chr(10) || '      then dies with the rollback, which is exactly what is claimed. The only'
--- || chr(10) || '      thing that REFUTES it is an email actually arriving. CHECK THE INBOX:'
--- || chr(10) || '      nothing should reach micky.buckfield@hotmail.co.uk from this run.';
+--             || ', and its deferred checks were forced immediate rather than left pending.'
+--             || chr(10) || '      fixture provider : ' || v_prov::text || ', owned by ' || v_owner
+--             || chr(10) || '      pg_net queue rows added by THIS transaction: ' || v_qadd
+--             || chr(10) || '      EXPECTED: a notification row exists and NO EMAIL IS DELIVERED.'
+--             || chr(10) || '      Since 0047 a notification is emailed from notifications@cavybeauty.com,'
+--             || chr(10) || '      so the RPC genuinely queues one. It cannot arrive because net.http_post'
+--             || chr(10) || '      only QUEUES a row and net.wake() takes NO ARGUMENTS, so the queue row is'
+--             || chr(10) || '      the only channel and an uncommitted row is invisible to the worker'
+--             || chr(10) || '      under MVCC. This rolls back, so the row never becomes visible.'
+--             || chr(10) || '      THAT IS A DEDUCTION FROM SIGNATURES, NEVER ONCE OBSERVED (item 152).'
+--             || chr(10) || '      A NON-ZERO count above does NOT refute it: the row is written and then'
+--             || chr(10) || '      dies with the rollback, which is exactly what is claimed. The only'
+--             || chr(10) || '      thing that refutes it is an email ARRIVING. CHECK THE INBOX: nothing'
+--             || chr(10) || '      should reach micky.buckfield@hotmail.co.uk from this run.';
 --       end if;
 --     exception when others then
 --       r_f := 'BOUNDS HALF FAILED — real booking is broken: ' || sqlstate || ' ' || sqlerrm;
