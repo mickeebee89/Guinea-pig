@@ -328,14 +328,33 @@ notify pgrst, 'reload schema';
 -- ===========================================================================
 -- ⚠️ PREFLIGHT — RUN BEFORE THIS MIGRATION. Read-only, one block.
 --
+--   ⚠⚠ THE `with ix as (...)` LOOKUP IS NOT STYLE. `'…'::regclass` RAISES when
+--   the relation does not exist — it does not return null — so a first version of
+--   this block, which wrote
+--
+--       coalesce(pg_get_indexdef('public.sessions_active_slot_uniq'::regclass), '(MISSING)')
+--
+--   could NEVER reach its own fallback: the case it was written for produced a
+--   bare "relation does not exist" and took rows (b) to (f) down with it. The
+--   reader would get a Postgres error about an object they have never heard of,
+--   in the one situation where they most need the sentence. Item 188's class, in
+--   the row that outranks every other row here. Micky's catch, 6 Oct 2026.
+--
+--   Looking the oid up in pg_class yields NULL for a missing index, which is what
+--   makes the fallback reachable.
+--
+--   with ix as (
+--     select c.oid from pg_class c join pg_namespace n on n.oid = c.relnamespace
+--      where n.nspname = 'public' and c.relname = 'sessions_active_slot_uniq'
+--   )
 --   select 'a. the constraint' as part, 'pg_get_indexdef, verbatim' as name,
---          coalesce(pg_get_indexdef('public.sessions_active_slot_uniq'::regclass),
+--          coalesce((select pg_get_indexdef(oid) from ix),
 --                   '(MISSING - it is hand-run, see booking-guard.sql)') as detail
 --   union all
 --   select 'b. the constraint', 'statuses parsed as a set (expect accepted,pending)',
 --          coalesce((select array_to_string(array_agg(distinct m[1] order by m[1]), ',')
 --                      from regexp_matches(
---                             pg_get_indexdef('public.sessions_active_slot_uniq'::regclass),
+--                             (select pg_get_indexdef(oid) from ix),
 --                             '''([a-z_]+)''', 'g') as m), '(none)')
 --   union all
 --   select 'c. the defect, measured',
@@ -351,6 +370,12 @@ notify pgrst, 'reload schema';
 --   union all
 --   select 'd. the key mismatch, measured',
 --          'is the key mismatch live on today''s data, or only possible? (rows = pairs found)',
+--          -- ⚠️ THIS coalesce IS DEAD CODE, kept and labelled rather than removed:
+--          -- count(*) over a subquery returns 0, never null, so the fallback is
+--          -- unreachable. It gives the right answer either way, which is exactly
+--          -- why it is worth labelling — TWO unreachable coalesces were written
+--          -- into this block, the one in (a) mattered and this one did not, and
+--          -- the difference is not visible from the shape.
 --          coalesce((select count(*)::text from (
 --            select a.provider_id, a.date, a.start_time
 --              from public.availability a where a.date >= current_date
