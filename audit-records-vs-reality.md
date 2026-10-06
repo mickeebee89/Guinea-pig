@@ -20688,6 +20688,135 @@ redundant.
 
 ---
 
+## 196. A SLOT WITH NO TREATMENT IS OFFERED AND CANNOT BE FULFILLED
+### Found by Micky, 7 Oct 2026, while 186 was being planned. ⚠️ FOLDED INTO 186 rather than planned around.
+
+**Plainly:** a stylist can publish an availability slot without saying what
+treatment it is for. A model browses to it, works through the wizard, and meets a
+dead end at the treatment step — *"the stylist hasn't put a treatment, message
+them to find out"*. **The marketplace offered an appointment it cannot sell.**
+
+### ✅ (1) WHERE IT IS CREATED, AND WHAT IT REQUIRES — OPTIONAL IN BOTH PLACES, AND THE SCHEMA CANNOT SAY OTHERWISE
+
+| layer | what it requires |
+|---|---|
+| **the form** — `site/app/(app)/availability/DayEditor.tsx:45` | **nothing.** A new slot is created with `treatmentIds: []`. No `required`, and Save is not disabled on an empty list |
+| **the save path** — `site/lib/availability.ts:110` | **nothing.** `active_treatments: s.treatmentIds` is written through unvalidated |
+| **the action** — `availability/actions.ts:25` | only that the caller is a stylist |
+| **the schema** | `active_treatments` is **NOT NULL** … ⚠️ **and an EMPTY ARRAY satisfies NOT NULL.** The constraint that would be needed is `cardinality(active_treatments) >= 1`, which does not exist |
+
+⚠⚠ **So NOT NULL is doing the work of looking like a constraint while permitting
+the only value that breaks the product** — item 188's class in a column definition,
+and the same shape as item 195's unique index that does not hold.
+
+### ⚠️ AND THERE ARE TWO CAUSES, NOT ONE. ONLY ONE REACHES A MODEL.
+
+* **(a) a stylist WITH treatments who ticks none.** `DayEditor:156` renders the
+  picker only `{treatments.length > 0 && !s.isBooked &&`, so she sees it, and
+  ticking is optional.
+* **(b) a stylist with ZERO treatments.** The picker does not render at all, so
+  **every slot she creates is necessarily treatment-less and nothing tells her
+  why.**
+
+✅ **(b) cannot reach a model, and the reason is worth keeping:**
+`provider_shop_is_publishable` requires at least one CATEGORISED treatment, so a
+published stylist always has one. (b) therefore affects only unpublished stylists,
+whose availability is visible to the owner alone. **The live dead end is (a).**
+
+⚠️ But (b) is the worse experience for the stylist: she can fill a diary that can
+never be booked, and the surface that would explain it is the surface that is
+hidden from her.
+
+### ✅ (2) THE FIX IS THREE PARTS, AND THE ORDER IS THE POINT
+
+**Excluding them from what models see is primary**, because it is the only part
+that works on rows that already exist — *a form gate does not clean up history*.
+
+1. **The model-facing loader excludes them.** A fourth filter beside `is_taken`,
+   `withoutStartedSlots` and `slot_contention`: `active_treatments` must be
+   non-empty. It belongs there because it is the same question those three answer
+   — *is this slot bookable* — and 186's shared loader is where that question is
+   answered once.
+2. **The form requires one.** Save is refused with a message, which prevents new
+   ones. ⚠️ For cause (b) the refusal must carry a route out — *"add a treatment
+   to your shop first"* with a link — because a stylist with no treatments would
+   otherwise be told to pick from an empty list.
+3. **The stylist is TOLD about the ones she already has.** ⚠⚠ **Without this,
+   part 1 is item 183 again**: a slot that quietly is not offered, on a page that
+   shows it as set. `/availability` must mark such a slot and say it will not be
+   offered until a treatment is chosen.
+
+⚠⚠ **EXISTING ROWS ARE NOT BACKFILLED AND NOT DELETED.** Choosing a treatment for
+her would be guessing what she meant — the same reasoning
+`cleanup-consentless-test-sessions.sql` used about consent rows: *"backfilling
+would be fabrication"*. They stop being offered (1) and she is told (3), so the
+only person who can say what the slot was for is the one who fixes it.
+
+**A `CHECK (cardinality(active_treatments) >= 1)` is the eventual end state, NOT
+this change.** It would make every existing treatment-less row unsavable —
+including through `saveDay`'s upsert, which rewrites a whole day — so it can only
+follow the history being cleared by their owners. Adding it first would break the
+page that is meant to fix them.
+
+### ✅ (3) WHAT THE PANEL RENDERS FOR SUCH A SLOT: NOTHING
+
+It is **not listed**. 186's panel has three columns — time, treatment, price — and
+one of them does not exist for this slot, so a blank is not an option: it would
+show the model a row she cannot act on, which is the dead end moved earlier rather
+than removed.
+
+**And the calendar follows the panel.** If a date's only slots are treatment-less,
+that date is **not marked**, because a marked date that opens to "nothing here" is
+the same broken promise one level up. The already-designed empty-day text
+— *"Nothing free on this day"* — covers the mixed case.
+
+### ⚠️ (4) HOW MANY EXIST — PREDICTION BEFORE MEASUREMENT
+
+```sql
+select a.provider_id,
+       count(*)                                                        as future_slots,
+       count(*) filter (where coalesce(cardinality(a.active_treatments), 0) = 0)
+                                                                       as treatmentless,
+       count(*) filter (where a.is_taken is not true
+                          and coalesce(cardinality(a.active_treatments), 0) = 0)
+                                                                       as treatmentless_and_free
+  from public.availability a
+ where a.date >= current_date
+ group by a.provider_id
+ order by treatmentless desc;
+```
+
+**Predicted: at least one, and most likely exactly the two slots created by hand
+on 6 Oct 2026 to make 0090's verify runnable.** The mechanism for the prediction,
+rather than a guess: those slots were created to satisfy a resolver that needed a
+free future slot, by someone solving that problem; `DayEditor` defaults
+`treatmentIds: []` and never asks; so nothing in the task or the form would have
+prompted ticking a treatment.
+
+⚠️ **A ZERO WOULD BE THE INFORMATIVE ANSWER** — it would mean every slot on this
+database was created with a treatment despite nothing requiring it, and the dead
+end Micky hit came from a row that has since been changed or is in the past.
+
+### ⚠⚠ AND 0090's VERIFY HAS THE SAME GAP AS THE PRODUCT
+
+Micky, 7 Oct 2026: *"0090's verify resolved a treatment via provider_treatments
+and raised if none existed. It passed only because that provider happened to have
+one, which means the test set has the same gap as the product."*
+
+**Worse than described, and it is worth being precise:** the verify resolves
+`v_treat` from `provider_treatments` **at the PROVIDER level** and attaches it to a
+fixture session on a slot **whose `active_treatments` it never reads.** So it can
+create a session for a treatment that slot does not offer — a row the product
+could never produce.
+
+✅ It does not invalidate 0090's result: the assertions are about `date`,
+`start_time` and `provider_id` collision, and `treatment_id` is not part of any of
+them. **But the fixture is less realistic than it looks**, and when 196's filter
+lands that verify should resolve the slot and the treatment together, so the test
+set stops containing a shape the product forbids.
+
+---
+
 ## Dated
 
 * **8 October** — the diarised selfie-orphan check. The only unarranged end-to-end
