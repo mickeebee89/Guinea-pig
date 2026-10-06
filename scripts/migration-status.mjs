@@ -166,56 +166,48 @@
  *     against a `uuid` column: an operator doing something defensible with the
  *     wrong operand. Both are only visible by RUNNING the block.
  *
- *   ── ⚠️ THE EDITOR SOMETIMES REWRITES A `do` BLOCK. CAUSE UNKNOWN ───────
+ *   ── ✅ THE EDITOR APPENDS `ALTER TABLE … ENABLE ROW LEVEL SECURITY` ───
  *
- *     OBSERVED ONCE, 3 Oct 2026, on 0079's verify block. The Supabase SQL
- *     editor spliced `ALTER TABLE <name> ENABLE ROW LEVEL SECURITY` lines into
- *     the middle of the block, breaking the dollar quoting. The names it used
- *     were the three variables assigned by `select ... into`.
+ *     **CAUSE FOUND 6 Oct 2026, IN THE POSTGRES LOG. Two earlier explanations
+ *     in this file were wrong and are withdrawn.**
  *
- *     THE WORKAROUND THAT WORKED: assign from a scalar subquery instead.
+ *     The Supabase SQL editor appends, to the end of a paste it believes
+ *     created a table:
  *
- *         v_other := (select p.id from public.providers p limit 1);
+ *         -- Added by Supabase: enable Row Level Security on newly created tables
+ *         ALTER TABLE <name> ENABLE ROW LEVEL SECURITY;
  *
- *     ⚠️⚠️ `into` IS **NOT** ESTABLISHED AS THE CAUSE, AND THIS FILE SAID IT
- *     WAS FOR ONE COMMIT. The same editor session ran THREE other `do` blocks
- *     containing `select ... into` without incident — one of them with five
- *     such statements, including a five-target
- *     `select date, start_time, price_pence, provider_id, not_held_provider_at
- *     into v_d0, v_t0, v_p0, v_prov0, v_nh0`.
+ *     That is a statement NEITHER AUTHOR WROTE, and it is the source of both
+ *     behaviours this file previously blamed on the author's own SQL:
  *
- *     And the counter-example is exact rather than approximate:
+ *       1. 0079's verify block "being rewritten" with
+ *          `ALTER TABLE v_other ENABLE ROW LEVEL SECURITY` spliced in, breaking
+ *          the dollar quoting. Blamed first on `record` declarations, then on
+ *          `select … into`. **Both wrong.** The append matched a NAME it should
+ *          not have matched.
+ *       2. On 6 Oct, a block using `create temp table _target on commit drop`
+ *          reported `relation _target does not exist` — because the append ran
+ *          AFTER `commit;`, by which point `on commit drop` had dropped the
+ *          table. The editor showed that 42P01 **in place of the trailing
+ *          select's result**, and a correct, fully-guarded delete looked as
+ *          though it had run without its guard.
  *
- *         select p.id into v_other_prov from public.providers p where ...   RAN
- *         select p.id into v_other      from public.providers p where ...   REWRITTEN
+ *     ⚠️ THE SCALAR-SUBQUERY WORKAROUND WAS AIMED AT THE WRONG THING. It does
+ *     no harm and is fine to keep using, but it is NOT a rule with a reason
+ *     behind it. `select … into` never caused anything.
  *
- *     Same shape. `into` is present in both, so it cannot be what separates
- *     them. **Do not repeat the claim that it is.**
+ *     ✅ THE RULE THAT SURVIVES, AND IT IS THE ONE THAT FOUND THIS:
  *
- *     THE TRIGGER IS UNIDENTIFIED. Candidates that the available evidence
- *     cannot separate: something else in that particular block's text, a
- *     non-deterministic heuristic on the editor's side, or an interaction with
- *     block length or structure. **Do not pick one.** If a block gets
- *     rewritten, reach for the scalar-subquery form; do not reason about why.
+ *         AN ERROR SHOWN BY THE SQL EDITOR MAY COME FROM A STATEMENT THE
+ *         EDITOR ADDED. DIAGNOSE FROM THE LOGGED STATEMENT TEXT, NOT FROM THE
+ *         ERROR.
  *
- *     ── THE HISTORY, WHICH IS WORTH MORE THAN THE RULE ──
- *
- *     This is the THIRD attempt at a causal rule for this one behaviour:
- *
- *       1. `record` declarations cause it. FALSE. Inferred from an error
- *          message. The `$blk$` tag rename that appeared to fix it was
- *          coincidental — 0059 to 0062 still carry that tag and **it records no
- *          established reason.** Leave them; do not copy the tag expecting it
- *          to help.
- *       2. The `into` keyword causes it. FALSE, disproved within a day by the
- *          blocks that worked, above.
- *       3. Not attempted. This entry.
- *
- *     Two causal rules, both wrong, both written from a single failure plus an
- *     assumption, both into this file. **The editor's behaviour here is not
- *     understood.** That sentence is the useful one: it tells you to work
- *     around a rewritten block rather than design every block around a cause
- *     nobody has pinned down.
+ *     Three hypotheses were built on 6 Oct from an error message belonging to
+ *     somebody else's statement — pooled connections, `begin;` not holding,
+ *     and a "guard and action in one statement" rule that was briefly wired
+ *     into CI before the log retracted it. `pg_stat_statements` could not
+ *     settle it: it carries neither timestamps nor session identity. **The log
+ *     did, in one line.**
  *
  *   ── ⚠️ ONE `%` FED ONE CONCATENATED STRING. ADDED 3 Oct 2026 ────────────
  *

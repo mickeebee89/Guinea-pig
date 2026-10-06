@@ -18505,7 +18505,71 @@ open web. Smaller audience than the stylist listing, same invention.
 
 ---
 
-## 178. A DESTRUCTIVE STATEMENT RAN WITHOUT ITS GUARD. THE GUARD-ACT-PROVE SHAPE IS THEATRE IN THIS EDITOR.
+## 178. ❌ RETRACTED 6 Oct 2026 — THE GUARD RAN, THE DELETE WAS CORRECT, AND THE ERROR BELONGED TO A STATEMENT NEITHER OF US WROTE
+
+### ✅ THE CAUSE, FROM THE POSTGRES LOG
+
+The full logged statement for 01:51:23 ends, **after** the author's `commit;`
+and after the trailing select, with:
+
+```sql
+-- Added by Supabase: enable Row Level Security on newly created tables
+ALTER TABLE _target ENABLE ROW LEVEL SECURITY;
+```
+
+**The editor appends that whenever it thinks the paste created a table.** By the
+time it ran, `on commit drop` had already dropped `_target` at `commit;` — so it
+raised 42P01, **and the editor displayed that error in place of the select's
+result.**
+
+**The real sequence was ordinary:** create temp table → guard ran and **PASSED**
+on nine reviews with no outsiders → delete took nine → survivor check passed →
+`commit;` committed. **No second connection, no continuing past an error, no
+non-atomic paste, and the guard was never bypassed. It worked.**
+
+### ❌ WHAT IS WITHDRAWN
+
+* **The rule "guard and action in one statement, or the guard is theatre" is
+  withdrawn.** It was inferred from a statement neither author wrote.
+* **`scripts/check-guard-statement-separation.mjs` and its baseline are
+  DELETED**, and unwired from `npm run checks`. A checker enforcing a withdrawn
+  rule is this series' own fossil-rule class, and it would have constrained
+  every future file for a reason that turned out not to exist. **Deleting it is
+  the point, not tidying it.**
+* **The 74 files are not defective.**
+  `cleanup-consentless-test-sessions.sql`'s section-4 abort works as written.
+* **Item 180 is closed** — the log answered it.
+
+ℹ️ The Python-to-Node port was right on its own terms — `npm run checks` runs
+in three GitHub Actions workflows where `python` is not a command on Ubuntu
+runners — and is now moot. Noted so the departure does not read as a mistake.
+
+### ⚠⚠ THE RULE THAT SURVIVES, AND IT IS THE ONE THAT FOUND THIS
+
+> **An error shown by the SQL editor may come from a statement the editor
+> added. Diagnose from the logged statement text, not from the error.**
+
+**Three hypotheses were built tonight on an error message belonging to somebody
+else's statement** — pooled connections (Micky), `begin;` not holding (Micky),
+and a guard-separation rule that reached CI before the log retracted it (mine).
+Two probes refuted the first two; **neither could have found the cause, because
+both interrogated the author's SQL and the fault was in SQL neither author
+could see.**
+
+`pg_stat_statements` could not settle it either: it shows `calls` and `rows`
+but carries **no timestamps and no session identity**, so three statements that
+all ran looked compatible with any ordering. **The log settled it in one line.**
+
+### What this cost, recorded honestly
+
+A rule wired into CI, a baseline of 74 files, a Python implementation ported to
+Node, and an entry in this record calling 73 migrations defective — all built
+in about an hour, all from an error message. **Every step of that was careful.
+The care was applied to the wrong statement.**
+
+---
+
+## 178b. THE ORIGINAL INCIDENT REPORT, KEPT BECAUSE THE REASONING IS THE RECORD
 ### 6 Oct 2026. ⚠⚠ THE MOST IMPORTANT FINDING IN THIS RECORD. It applies to 73 migrations.
 
 Nine reviews were deleted from production **without the guard that was supposed
@@ -18744,7 +18808,7 @@ select tp.table_name,
 
 ---
 
-## 180. THE POSTGRES LOG IS THE LAST PRIMARY SOURCE ON ITEM 178
+## 180. ✅ CLOSED 6 Oct 2026 — THE POSTGRES LOG ANSWERED IT IN ONE LINE
 ### Raised 6 Oct 2026. Not blocking — Micky will look when next in the dashboard.
 
 `pg_stat_statements` establishes **what ran and how many rows it touched**. It
@@ -18756,9 +18820,121 @@ backend*.
 source that could separate the refuted hypotheses from whatever actually
 happened.
 
-⚠️ **Item 178's rule does not wait on this**, and that is deliberate: the rule
-rests on the observation, not the mechanism. This is for the cause, which is
-worth knowing and is not worth blocking on.
+⚠️ **Item 178's rule did not wait on this, and that was the error.** The rule
+was adopted on the observation and wired into CI; the log then showed the
+observation had been of a statement neither author wrote, and the rule was
+withdrawn. **Not blocking on the cause was right when the cause looked
+unknowable and wrong once a primary source existed and had not been read.**
+
+✅ **Answered**: the editor appends
+`ALTER TABLE <name> ENABLE ROW LEVEL SECURITY` after a paste it thinks created
+a table. See item 178.
+
+---
+
+## 181. IF THE EDITOR ENABLES RLS ON TABLES IT THINKS A PASTE CREATED, WHICH TABLES DID IT TOUCH?
+### Raised by Micky, 6 Oct 2026, from item 178's cause. ⚠️ REPORT ONLY — change nothing.
+
+The editor appends `ALTER TABLE <name> ENABLE ROW LEVEL SECURITY` for tables it
+believes a paste created. **Every migration in this project is applied by
+pasting into that editor.** So RLS may be enabled on tables no migration
+enables it on — an unrecorded live edit, in the area this series has been most
+careful about.
+
+### ✅ THE REPO SIDE, EXTRACTED — AND IT IS REASSURING
+
+**Tables a MIGRATION enables RLS on (11):** `drift_check_runs`,
+`email_reconcile_runs`, `email_sends`, `email_unsubscribe_tokens`,
+`migration_findings`, `name_changes`, `retention_runs`, `schema_migrations`,
+`session_expiry_runs`, `status_posts`, `stripe_webhook_events`.
+
+**Tables a MIGRATION creates (11):** *the same eleven.*
+
+✅ **An exact match. Every table created under the migration framework enables
+its own RLS in the same file**, so for those the editor's append was a no-op
+rather than an unrecorded edit. The framework did not leave this to the editor
+even once.
+
+**Hand-run files enable RLS on 13 more** — `admin_audit_log`, `availability`,
+`favourites`, `founding_providers`, `model_photos`, `portfolio_categories`,
+`portfolio_items`, `provider_availability`, `push_tokens`, `settings`,
+`suspensions`, `treatment_categories`, `treatments` — and create one
+(`push_tokens`). **Snapshots contribute none**, checked, so the list is not
+contaminated by a record of state being mistaken for a cause of it.
+
+### ⚠️ WHAT THE REPO CANNOT SEE, AND WHY THE QUERY IS STILL WORTH RUNNING
+
+* a table the editor enabled RLS on that **no file mentions at all**;
+* a table a file enables where **the database says off** — the opposite drift,
+  and the more dangerous one, since policies on an RLS-off table do nothing;
+* every **pre-`0000`** table (`sessions`, `users`, `providers`, `notifications`,
+  `reviews`, `messages`, `session_consents`, …), whose RLS state is recorded
+  nowhere in the repo. **Those will dominate the output and they are item 158's
+  territory, not the editor's.** The query labels them so the two populations
+  are not read as one.
+
+```sql
+with repo_enables (t) as (values
+  ('admin_audit_log'),('availability'),('drift_check_runs'),('email_reconcile_runs'),
+  ('email_sends'),('email_unsubscribe_tokens'),('favourites'),('founding_providers'),
+  ('migration_findings'),('model_photos'),('name_changes'),('portfolio_categories'),
+  ('portfolio_items'),('provider_availability'),('push_tokens'),('retention_runs'),
+  ('schema_migrations'),('session_expiry_runs'),('settings'),('status_posts'),
+  ('stripe_webhook_events'),('suspensions'),('treatment_categories'),('treatments')),
+repo_creates (t) as (values
+  ('drift_check_runs'),('email_reconcile_runs'),('email_sends'),('email_unsubscribe_tokens'),
+  ('migration_findings'),('name_changes'),('retention_runs'),('schema_migrations'),
+  ('session_expiry_runs'),('status_posts'),('stripe_webhook_events'),('push_tokens'))
+select c.relname                as table_name,
+       c.relrowsecurity         as rls_live,
+       c.relforcerowsecurity    as rls_forced,
+       (e.t is not null)        as a_file_enables_it,
+       (k.t is not null)        as a_file_creates_it,
+       case
+         when c.relrowsecurity and e.t is null and k.t is not null
+           then 'ENABLED LIVE, NO FILE ENABLES IT, BUT A FILE CREATED IT - the editor append is the candidate'
+         when c.relrowsecurity and e.t is null
+           then 'enabled live, unaccounted - pre-0000, item 158 territory, not the editor'
+         when not c.relrowsecurity and e.t is not null
+           then 'A FILE ENABLES IT AND THE DATABASE SAYS OFF - the opposite drift, and policies on it do nothing'
+         when c.relrowsecurity then 'accounted for'
+         else 'off, and no file enables it'
+       end                      as verdict
+  from pg_class c
+  join pg_namespace n on n.oid = c.relnamespace
+  left join repo_enables e on e.t = c.relname
+  left join repo_creates k on k.t = c.relname
+ where n.nspname = 'public' and c.relkind = 'r'
+ order by (case
+             when c.relrowsecurity and e.t is null and k.t is not null then 0
+             when not c.relrowsecurity and e.t is not null             then 1
+             when c.relrowsecurity and e.t is null                     then 2
+             else 3 end), c.relname;
+```
+
+**The first two verdicts are the findings. The third is item 158's backlog. The
+rest is the answer being boring, which is the outcome to hope for.**
+
+---
+
+## 182. A COMMIT MESSAGE THAT DOES NOT DESCRIBE ITS CONTENTS — `git add -A` SWEPT IN SOMEONE ELSE'S WORK
+### 6 Oct 2026. Recorded, not reverted, by Micky's decision.
+
+Commit `b2a2126` carries four lines of `scripts/promo-record.js` — Micky's own
+fix replacing a hardcoded `'Wednesday'` with today's weekday in the promo
+recorder — under a message about audit item 178, which says nothing about it.
+
+**Cause: `git add -A` after twenty commits of staging exact paths.** The
+discipline held all night and was dropped on the convenience step at the end.
+*Rules I wrote get walked past* — and this one was not even written down, which
+is why it is here now.
+
+**Micky's call: leave it.** *"The code is correct and it is mine; only the
+commit message is wrong. Reverting it so I can re-commit it means handling a
+correct fix twice to buy a tidy log."*
+
+⚠️ **So the record of what `b2a2126` contains lives here and nowhere else**,
+which is the actual cost and is worth naming: `git log` will never mention it.
 
 ---
 
