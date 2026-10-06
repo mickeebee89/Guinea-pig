@@ -19850,6 +19850,68 @@ author is a habit; one that catches both is a property of the work.
 
 ---
 
+## 189. `is_suspended()` IS IN EXACTLY THE POSITION `is_admin()` WAS
+### Raised 6 Oct 2026 out of 0089. ⚠️ NOT STARTED. Same shape, same leverage, same treatment owed.
+
+0089 adopted `public.is_admin()` into the migration framework because nothing in
+the repo asserted the shape of the function every admin entry point depends on.
+**`public.is_suspended()` is the same case and was raised rather than folded in**,
+so that a failure in 0089 names which object it was about.
+
+### Where it lives, and what depends on it
+
+Defined in `schema-snapshot-2026-08-08.sql` and in the hand-run
+`supabase/suspension-enforcement.sql`. **No migration has ever created or
+replaced it.** So it is repo-present but NOT framework-owned: not
+checksum-locked, no migration asserts its body, and the hand-run file can be
+re-run by anyone against a live database.
+
+It is the guard behind **four RESTRICTIVE policies**:
+
+* `providers_not_suspended` — RESTRICTIVE **UPDATE** on `public.providers`
+* `messages_not_suspended` — RESTRICTIVE INSERT on `public.messages`
+* `reviews_not_suspended` — RESTRICTIVE INSERT on `public.reviews`
+* `sessions_not_suspended` — RESTRICTIVE INSERT on `public.sessions`
+
+⚠⚠ **RESTRICTIVE policies AND with the permissive ones, so this function is the
+only thing standing between a suspended account and writing.** A body that
+silently returned false would not break anything visibly — it would let every
+suspended account post, review, book and edit its shop, and nothing would look
+wrong. That is a higher-consequence silent failure than `is_admin()`'s, because
+an `is_admin()` returning false too often is loud (admins locked out) while an
+`is_suspended()` returning false is loud for nobody.
+
+### The treatment, which is 0089's exactly
+
+1. **Read the live body** — `pg_get_functiondef`, and `prosrc` specifically,
+   which is the only text stored verbatim.
+2. **Cross-check both repo copies against it**, and against each other.
+   ⚠️ **There are TWO repo copies here where `is_admin()` had one**, so they can
+   disagree with each other as well as with the database. If they do, that
+   disagreement is the finding and the adoption waits — and it is sharper than
+   `is_admin()`'s was, because someone may have re-run the hand-run file.
+3. **Adopt verbatim from the LIVE body**, never from either file, with a
+   before/after `prosrc` comparison as a hard refusal.
+4. **Ownership in a read-only preflight**, `pg_get_userbyid(proowner)` against
+   `current_user`, so a replace that cannot succeed fails before anything else.
+5. Check the `search_path`. `is_admin()` pins `public` without `pg_temp`, which
+   is safe there **only because its one relation reference is schema-qualified**.
+   ⚠️ `is_suspended()` must be read for the same thing, and it reads
+   `suspensions` — an unqualified reference with no `pg_temp` in the path would
+   let a caller shadow it with a temp table **in the function that decides
+   whether they are suspended.** Do not assume; read it.
+
+### ⚠️ AND ONE QUESTION 0089 DID NOT HAVE TO ASK
+
+`supabase/suspension-enforcement.sql` is hand-run and creates the function. **If
+0090 adopts it into the framework, that file now has a second owner.** Either it
+gets a `FILE-OWNS` marker pointing at the migration, or the next person re-runs
+it and silently replaces a framework-owned object with a file copy that nobody
+checksums. Same class as `public-web-views.sql` owning `public_stylists`, which
+0087 had to work around by hand.
+
+---
+
 ## Dated
 
 * **8 October** — the diarised selfie-orphan check. The only unarranged end-to-end
