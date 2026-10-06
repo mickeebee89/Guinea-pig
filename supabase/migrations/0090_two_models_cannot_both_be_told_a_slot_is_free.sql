@@ -67,6 +67,20 @@
 --
 -- So the contested test keys exactly as the constraint does.
 --
+-- ⚠⚠ WHICH MEANS THIS FUNCTION REPORTS A SLOT AS CONTESTED WHEN A SESSION
+-- COLLIDES ON (provider_id, date, start_time) EVEN THOUGH THAT SESSION SITS ON A
+-- DIFFERENT availability ROW. **That is correct and it is not a bug.** It reports
+-- what the CONSTRAINT WILL DO, not what a person would call "the same slot": a
+-- 10:00–11:00 slot and a 10:00–10:30 slot are two availability rows and one
+-- collision, because `sessions_active_slot_uniq` does not include end_time.
+--
+-- It will therefore look wrong to anyone who meets it cold — a free-looking slot
+-- reported as taken — and the obvious "fix" is to narrow the test back to
+-- availability_id, which reintroduces exactly the defect above. **Do not.** If
+-- this behaviour is ever genuinely unwanted, the thing to change is the INDEX
+-- (to include end_time), and then this function follows it, not the other way
+-- round.
+--
 -- ⚠️ AND apply.ts HAS THE SAME MISMATCH TODAY: its `booked` set keys on
 -- availability_id, so even with the RLS problem fixed it would still miss
 -- same-start-time collisions. That is why the shared loader must call THIS
@@ -138,7 +152,14 @@ begin
   end if;
 
   if to_regclass('public.sessions_active_slot_uniq') is null then
-    raise exception '0090: sessions_active_slot_uniq does not exist. It is the constraint this function must agree with, and it lives in the hand-run supabase/booking-guard.sql (item 189). Run that first. Nothing changed.';
+    raise exception '%', '0090: STOP. sessions_active_slot_uniq DOES NOT EXIST, WHICH MEANS '
+      || 'THE ONLY THING PREVENTING A DOUBLE BOOKING DOES NOT EXIST. That outranks everything in '
+      || 'this migration: right now two models can both be ACCEPTED for the same slot, and nothing '
+      || 'in the database refuses the second insert. It is created by the hand-run '
+      || 'supabase/booking-guard.sql, which no migration owns (item 189) — so it can be absent on a '
+      || 'database nobody ran it against. Run booking-guard.sql, confirm the index exists, and '
+      || 'investigate whether any double booking already happened, BEFORE applying this. '
+      || 'Nothing changed.';
   end if;
 
   v_idx := pg_get_indexdef('public.sessions_active_slot_uniq'::regclass);
@@ -225,6 +246,10 @@ comment on function public.slot_contention(uuid) is
   '⚠️ KEYED ON (provider_id, date, start_time) TO MATCH sessions_active_slot_uniq '
   '(supabase/booking-guard.sql) — NOT on availability_id, because two availability rows may share a '
   'start_time with different end_times and the constraint collides on the former. 0090, item 192. '
+  '⚠️ SO IT REPORTS A SLOT AS CONTESTED WHEN A SESSION COLLIDES ON provider+date+start_time EVEN ON '
+  'A DIFFERENT availability ROW. That is correct — it reports what the constraint will do, not what a '
+  'person would call "the same slot". Narrowing it back to availability_id reintroduces item 192. If '
+  'the behaviour is unwanted, change the INDEX to include end_time and let this follow. '
   '⚠️ It answers ONE question: it does NOT filter is_taken or started slots, and must not start to. '
   'The caller composes those; folding them in here would make this a second implementation of '
   '"bookable". current_date is UTC and deliberately over-inclusive — see 0090''s header.';
@@ -293,7 +318,7 @@ end $mig$;
 
 -- MIGRATION FOOTER
 insert into public.schema_migrations (version, name, checksum)
-values ('0090', 'two_models_cannot_both_be_told_a_slot_is_free', '25fd3cbcaffcdebd98edab9a50c4824f12a24d4aaf363114f3c909dc349ecd50');
+values ('0090', 'two_models_cannot_both_be_told_a_slot_is_free', '7e92c977f4505ceb4775bd0633a55878050105f4f1fa4e986b6449d7bf5b5822');
 
 commit;
 
@@ -313,7 +338,8 @@ notify pgrst, 'reload schema';
 --                             pg_get_indexdef('public.sessions_active_slot_uniq'::regclass),
 --                             '''([a-z_]+)''', 'g') as m), '(none)')
 --   union all
---   select 'c. the defect, measured', 'future slots that are contested right now',
+--   select 'c. the defect, measured',
+--          'future slots offered as FREE while already contested',
 --          (select count(*)::text from public.availability a
 --            where a.date >= current_date
 --              and exists (select 1 from public.sessions s
@@ -323,7 +349,8 @@ notify pgrst, 'reload schema';
 --       || ' of '
 --       || (select count(*)::text from public.availability where date >= current_date)
 --   union all
---   select 'd. the key mismatch, measured', 'future slots sharing provider+date+start_time',
+--   select 'd. the key mismatch, measured',
+--          'is the key mismatch live on today''s data, or only possible? (rows = pairs found)',
 --          coalesce((select count(*)::text from (
 --            select a.provider_id, a.date, a.start_time
 --              from public.availability a where a.date >= current_date
@@ -345,10 +372,14 @@ notify pgrst, 'reload schema';
 --   offered to somebody as free right now.
 --
 --   ⚠️ (d) IS WHETHER THE KEY MISMATCH IS LIVE OR ONLY POSSIBLE. A non-zero
---   answer means availability rows already share a start_time, so a function
---   keyed on availability_id would be wrong about real data today, not just in
---   principle. A zero answer does NOT make the key choice optional — nothing
---   stops a stylist creating such a pair tomorrow.
+--   answer means availability rows already share a provider, date and start_time
+--   with different end times, so a function keyed on availability_id would be
+--   wrong about REAL DATA TODAY rather than in principle.
+--
+--   ⚠️ A ZERO ON (d) DOES NOT MAKE THE KEY CHOICE OPTIONAL. Nothing stops a
+--   stylist creating such a pair tomorrow — availability's own unique index
+--   permits it, by including end_time where sessions_active_slot_uniq does not.
+--   Zero means "not yet", not "cannot".
 -- ===========================================================================
 --
 -- ===========================================================================

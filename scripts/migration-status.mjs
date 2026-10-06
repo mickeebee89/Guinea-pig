@@ -101,6 +101,21 @@
  *
  *   * `begin; ... rollback;` is fine — it is the multi-statement dependencies
  *     inside that break, not the transaction.
+ *   * ⚠⚠ A BLOCK IS PRINTED, NEVER DESCRIBED. Micky, 6 Oct 2026, on the third
+ *     occurrence: *"the third time a block has been described rather than
+ *     printed — worth noticing as a habit rather than as three separate
+ *     omissions."*
+ *
+ *     A preflight or verify summarised as "it reads the ownership, the body and
+ *     the status list, expect all true" cannot be run, cannot be checked against
+ *     the file, and silently invites a retyped approximation of itself — which is
+ *     the two-copies fault (item 190) arriving through prose. The block is the
+ *     deliverable; the description is at best a caption for it.
+ *
+ *     So: print it from the FILE, in full, in one fence, every time it is
+ *     handed over — including when it has already been handed over once and
+ *     changed since, because that is exactly when a reader uses the older copy.
+ *
  *   * ⚠⚠ AN ID A BLOCK DEPENDS ON IS RESOLVED AND PRINTED, NEVER PASTED IN.
  *     Micky, 6 Oct 2026, after 0089's verify:
  *
