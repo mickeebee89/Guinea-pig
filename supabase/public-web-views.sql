@@ -136,7 +136,43 @@ select
     '[^a-z0-9]+', '-', 'g'), '-'), '')                                  as location_slug,
 
   p.profile_pic_url,
-  p.is_verified,
+
+  -- ⚠️⚠️ users.is_verified, NOT providers.is_verified. CHANGED 6 Oct 2026, item 176.
+  --
+  -- `providers.is_verified` defaults to false and NOTHING HAS EVER WRITTEN IT.
+  -- `admin_decide_verification` writes `users.is_verified`;
+  -- `guard_users_protected_columns` protects that one; it is true for exactly
+  -- the accounts that were approved. So the badge this view published was
+  -- false for every stylist who ever passed an ID check. **The verified badge
+  -- had never worked** — measured: 3 providers, 3 approved, 0 badges.
+  --
+  -- ⚠️ A SCALAR SUBQUERY, NOT A JOIN, AND THE REASON IS CARDINALITY. A LEFT
+  -- JOIN on users would be correct today because users.id is a primary key, so
+  -- it cannot duplicate or drop a row — but that safety is a property of the
+  -- key rather than of the query. A correlated scalar subquery CANNOT change
+  -- the row count at all, by construction. The risk being avoided is a badge
+  -- fix that quietly removes stylists from the directory, and this form makes
+  -- that impossible instead of merely unlikely.
+  --
+  -- It is also the pattern this view already uses twice: `has_open_slots` is a
+  -- correlated EXISTS, and the seed-email exclusion in the WHERE is a
+  -- correlated NOT EXISTS on this very table. So the view already reaches
+  -- `users`; this is the same relationship, not a new one.
+  --
+  -- ⚠️ And it avoids an alias collision: the seed exclusion below already
+  -- binds `u`. A LEFT JOIN aliased `u` would be shadowed inside that subquery
+  -- — legal, and the kind of legal that is read wrong later.
+  --
+  -- ⚠️ `create or replace view` CANNOT drop, rename, reorder or retype an
+  -- output column — it is only the EXPRESSION that changes here. The column
+  -- stays `is_verified`, boolean, at ordinal 10, so the column set is
+  -- unchanged, this view does NOT need the drop-first dance `p.level` and
+  -- `banner_url` both needed (items 105, 0063), and the anon/authenticated
+  -- SELECT grants survive untouched. Said here because that constraint is one
+  -- people rediscover by hitting it.
+  coalesce((select vu.is_verified
+              from public.users vu
+             where vu.id = p.user_id), false)                          as is_verified,
   -- `p.level` stood here until 24 Sep 2026 (item 105). It was published to
   -- anon even though no public page ever rendered it, and what it held was
   -- NULL for every stylist the signup trigger created and 'beginner' only for

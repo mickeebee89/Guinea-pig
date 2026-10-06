@@ -225,7 +225,12 @@ function ModelHomeContent() {
       const [{ data: provData }, { data: favData }, blockedIds, { data: statusData }] = await Promise.all([
         supabase
           .from('providers')
-          .select('id, user_id, name, profile_pic_url, is_verified, rating, location_text, latitude, longitude, provider_treatments(category)')
+          // ⚠️ users!user_id(is_verified), NOT providers.is_verified — item 176,
+          // 6 Oct 2026. providers.is_verified defaults to false and nothing has
+          // ever written it, so no stylist in this directory has ever shown a
+          // badge, and the "verified only" filter below could never match.
+          // admin_decide_verification writes users.is_verified.
+          .select('id, user_id, name, profile_pic_url, rating, location_text, latitude, longitude, provider_treatments(category), users!user_id(is_verified)')
           .eq('is_published', true),
         supabase
           .from('favourites')
@@ -255,7 +260,15 @@ function ModelHomeContent() {
           id:                  p.id,
           name:                (p.name as string) || 'Stylist',
           location:            (p.location_text as string | null) || null,
-          is_verified:         !!(p.is_verified),
+          // The embed is a many-to-one FK and PostgREST returns an object,
+          // but the generated types model it as an array. Reading the wrong
+          // one gives undefined, which is falsy, which is the silent
+          // no-badge this change exists to end — so neither is assumed.
+          is_verified:         (() => {
+                                 const e: unknown = (p as { users?: unknown }).users
+                                 const row = Array.isArray(e) ? e[0] : e
+                                 return !!(row as { is_verified?: boolean | null } | null)?.is_verified
+                               })(),
           rating:              (p.rating as number | null) ?? null,
           profile_pic_url:     (p.profile_pic_url as string | null) ?? null,
           provider_treatments: Array.isArray(p.provider_treatments) ? p.provider_treatments : [],

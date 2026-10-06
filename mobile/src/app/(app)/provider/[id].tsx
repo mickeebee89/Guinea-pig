@@ -161,7 +161,12 @@ export default function ProviderShopScreen() {
       ] = await Promise.all([
         supabase
           .from('providers')
-          .select('id, name, location, bio, is_verified, rating, review_count, profile_pic_url, user_id')
+          // ⚠️ users!user_id(is_verified), NOT providers.is_verified — item 176,
+          // 6 Oct 2026. providers.is_verified defaults to false and nothing
+          // has ever written it, so the three badges on this screen have never
+          // shown for a stylist who passed her ID check.
+          // admin_decide_verification writes users.is_verified.
+          .select('id, name, location, bio, rating, review_count, profile_pic_url, user_id, users!user_id(is_verified)')
           .eq('id', id)
           .single(),
         // APPROVED and unexpired only. A held post is invisible here even to a
@@ -200,7 +205,18 @@ export default function ProviderShopScreen() {
         supabase.rpc('has_open_availability', { p_provider_id: id }),
       ])
 
-      if (provData)  setProvider(provData as Provider)
+      if (provData) {
+        // The embed is many-to-one so PostgREST returns an object, but the
+        // generated types model it as an array. Reading the wrong one gives
+        // undefined, which is falsy, which is the silent no-badge this change
+        // exists to end — so neither shape is assumed.
+        const embed: unknown = (provData as { users?: unknown }).users
+        const urow = Array.isArray(embed) ? embed[0] : embed
+        setProvider({
+          ...(provData as unknown as Provider),
+          is_verified: !!(urow as { is_verified?: boolean | null } | null)?.is_verified,
+        })
+      }
       setStatusPost((statusData as { body: string; expires_at: string } | null) ?? null)
       // Log the failure. Discarding it is what let a bad column name masquerade
       // as "this stylist hasn't listed any treatments" for every shop.

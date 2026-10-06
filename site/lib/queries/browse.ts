@@ -39,6 +39,23 @@ import { withoutStartedSlots } from '@/lib/slots'
  * more to it is not something a member-area feature should ever motivate.
  */
 
+/**
+ * ⚠️ THE EMBED'S SHAPE IS NOT AGREED, SO BOTH ARE HANDLED. Item 176.
+ *
+ * `users!user_id(is_verified)` is a many-to-one FK, and PostgREST returns a
+ * single object for it at runtime — admin/app/providers/page.tsx types it that
+ * way and has worked in production. But the GENERATED TYPES model it as an
+ * ARRAY, so TypeScript and the runtime disagree about which it is.
+ *
+ * Reading `.is_verified` off the wrong one yields `undefined`, which is falsy,
+ * which is a badge that silently does not show — the exact failure this change
+ * exists to end. So neither shape is assumed.
+ */
+function embeddedVerified(u: unknown): boolean {
+  const row = Array.isArray(u) ? u[0] : u
+  return !!(row as { is_verified?: boolean | null } | null | undefined)?.is_verified
+}
+
 export interface BrowseStylist {
   id: string
   name: string
@@ -82,7 +99,17 @@ export async function getBrowseStylists(
 ): Promise<BrowseResult> {
   let q = supabase
     .from('providers')
-    .select('id, user_id, name, bio, location_text, location, is_verified, rating, review_count, profile_pic_url, latitude, longitude')
+    // ⚠️ users!user_id(is_verified), NOT providers.is_verified — item 176,
+    // 6 Oct 2026. providers.is_verified defaults to false and nothing has ever
+    // written it, so every card in this listing showed an unverified stylist.
+    //
+    // This listing cannot read public_stylists instead, and the reason is not
+    // convenience: that view withholds latitude/longitude (the distance
+    // filter), is_published, and user_id — and user_id is what the block
+    // filter on the next line uses. Routing through the view would silently
+    // show blocked stylists again, which is an Apple 1.2 regression arriving
+    // from a change about a badge.
+    .select('id, user_id, name, bio, location_text, location, rating, review_count, profile_pic_url, latitude, longitude, users!user_id(is_verified)')
     .eq('is_published', true)
 
   if (filters.place?.trim()) {
@@ -102,9 +129,10 @@ export async function getBrowseStylists(
   const rows = (provRes.data ?? []) as {
     id: string; user_id: string | null; name: string | null; bio: string | null
     location_text: string | null; location: string | null
-    is_verified: boolean | null; rating: number | null; review_count: number | null
+    rating: number | null; review_count: number | null
     profile_pic_url: string | null
     latitude: number | null; longitude: number | null
+    users: unknown
   }[]
   const visible = rows
     .filter(r => !(r.user_id && blocked.has(r.user_id)))
@@ -170,7 +198,7 @@ export async function getBrowseStylists(
       name: r.name ?? 'Stylist',
       bio: r.bio,
       location: r.location_text ?? r.location ?? null,
-      isVerified: !!r.is_verified,
+      isVerified: embeddedVerified(r.users),
       rating: r.rating,
       reviewCount: r.review_count ?? 0,
       avatarUrl: r.profile_pic_url,

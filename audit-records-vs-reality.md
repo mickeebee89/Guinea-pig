@@ -19048,6 +19048,66 @@ which is the actual cost and is worth naming: `git log` will never mention it.
 
 ---
 
+## 183. A STYLIST IS PUBLISHED AND APPEARS IN NO PUBLIC LISTING, AND NOTHING TELLS HER
+### Found 6 Oct 2026 in item 176's preflight. ⚠️ Worse than the badge it was found beside.
+
+```
+09c6d70c  p.is_verified=false  u.is_verified=true  is_published=true  in_view=FALSE
+```
+
+`is_published = true`, approved, and **absent from `public_stylists`**. The
+other two published stylists are in it.
+
+The view's WHERE has five conditions; `is_published` passes, so one of the
+other four excludes her:
+
+* `coalesce(btrim(p.name), '') <> ''`
+* `public.bio_is_publishable(p.bio)`
+* `cardinality(cats.categories) >= 1`
+* `not exists (… users.email like '%@seed.guineapig.invalid')` — **this one she
+  passes**: her address is `nahitih259@bevriz.com`.
+
+### ⚠⚠ WHY THIS IS WORSE THAN THE BADGE IT WAS FOUND BESIDE
+
+Both are silent false negatives. **The badge is cosmetic; this is her entire
+visibility.** Her dashboard says the shop is live — `is_published` is the column
+the setup panel reads — and she appears on no public page, with nothing
+anywhere telling her why.
+
+And the product already has the machinery to tell her: `bio_publish_problem`
+exists precisely to name which rule a bio failed, and 0064 built a boolean
+wrapper so the view could filter while the dashboard explained. **If the bio is
+the cause, the explanation exists and is not being shown. If it is the
+categories, there is no explanation at all.**
+
+### The read that says which
+
+```sql
+select p.id,
+       coalesce(btrim(p.name), '') <> ''            as has_name,
+       public.bio_is_publishable(p.bio)             as bio_ok,
+       public.bio_publish_problem(p.bio)            as bio_says,
+       (select count(*) from public.provider_treatments pt
+         where pt.provider_id = p.id and pt.category is not null) as categorised_treatments,
+       p.is_published
+  from public.providers p
+ where p.id = '09c6d70c-8178-4923-80f2-8cf8e8102e21';
+```
+
+⚠️ **`provider_shop_is_publishable` is NOT the same rule** — it gates
+publication (name + one categorised treatment) and the view gates *visibility*
+(those two plus a publishable bio). **A shop can satisfy the publish rule and
+fail the listing rule**, which is exactly how a stylist ends up published and
+invisible. That gap is the finding; 09c6d70c is one instance of it.
+
+### Not fixed here
+
+Raised rather than folded into 176, because the fix is a product decision —
+whether to tell her, where, and whether the two rules should be one — and 176
+was a column.
+
+---
+
 ## Dated
 
 * **8 October** — the diarised selfie-orphan check. The only unarranged end-to-end
