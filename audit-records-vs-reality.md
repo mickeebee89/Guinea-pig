@@ -19134,6 +19134,51 @@ other mobile interaction. Web gets none — that rule is for `mobile/` only.
 
 ---
 
+## 184. MOBILE IS MOTHBALLED, AND AN UNDIFFERENTIATED COUNT HID IT
+### Micky, 6 Oct 2026: web only. ⚠️ Recorded as a reasoning rule, not a status note.
+
+> *"Tonight's 'nine readers' was really five live and four dormant, and that
+> distinction would have changed how I read it."*
+
+**It would have.** A nine-site live change is a deploy risk that wants
+sequencing; a five-site one is not. The number was accurate and the framing was
+not, because `mobile/` was counted as though it shipped.
+
+### The rule
+
+**Every sweep and count states `live / dormant`, both numbers.** Not a footnote
+afterwards — in the figure itself, because the figure is what gets reasoned
+from. And the converse: **a defect only in `mobile/` is not a live defect**, and
+calling it one spends attention `site/` and `admin/` have a claim on.
+
+Recorded in `CLAUDE.md` rather than only here, because it changes how every
+future sweep is reported and `CLAUDE.md` is the file read at the start of a
+session.
+
+### ✅ AND IT ANSWERS 0087's LAST PRECONDITION
+
+**No build has ever been published or submitted to either store.** From the
+repo:
+
+* `HANDOVER.md:207` — IAP and the CSAE wording *"stop a mobile build going
+  out"*, present tense, as open blockers.
+* IAP is still an undecided question, recorded as Apple's #1 rejection risk.
+* `app.json`: `version 1.0.0`, `android.versionCode 1`, `ios.buildNumber "1"` —
+  never incremented.
+* `eas.json`: only `development` and `preview` carry env, both
+  `distribution: internal`. A `production` profile exists and nothing records
+  it being run.
+* A Play Console **entry** exists — the CSAE declaration was filed against it —
+  **which is a console record, not a build.**
+
+⚠️ **What the repo cannot establish:** whether a standalone preview APK sits on
+Micky's own phone. A Metro dev-client session reads current code and is
+unaffected; a preview APK carries the old `select` and, after 0087, returns a
+**PostgREST error** rather than merely losing a badge — its directory and
+provider pages break. One device, his, and his call.
+
+---
+
 ## Dated
 
 * **8 October** — the diarised selfie-orphan check. The only unarranged end-to-end

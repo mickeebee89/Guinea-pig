@@ -29,7 +29,24 @@ _This file is read automatically at the start of every Claude Code session. It h
 
 ## Stack & paths
 
-- **Mobile:** React Native / Expo (Android-first, iOS planned), Expo Router, EAS. Runs via Metro tunnel on my phone.
+- **⚠️ MOBILE IS MOTHBALLED — WEB ONLY (6 Oct 2026).** React Native / Expo
+  (Android-first, iOS planned), Expo Router, EAS. Runs via Metro tunnel on my
+  phone. **Never published or submitted to either store**: `HANDOVER.md`'s
+  "Blocking a store submission" says IAP and the CSAE wording "stop a mobile
+  build going out", `versionCode`/`buildNumber` are still 1, and only the
+  `development` and `preview` profiles (both `distribution: internal`) are
+  configured. A Play Console *entry* exists — the CSAE declaration was filed
+  against it — which is a console record, not a build.
+
+  **⚠⚠ SO SWEEPS AND COUNTS MUST SAY WHICH HITS ARE MOTHBALLED, NOT INCLUDE
+  THEM SILENTLY.** "Nine readers of `providers.is_verified`" on 6 Oct was
+  really **five live and four dormant**, and the undifferentiated number
+  changed how the work read: a live nine-site change is a deploy risk, a live
+  five is not. Report `live / dormant`, both numbers, every time.
+
+  The same applies in reverse: a defect only in `mobile/` is **not a live
+  defect**, and calling it one spends attention that `site/` and `admin/` have
+  a claim on.
 - **Backend:** Supabase (Postgres / auth / storage / realtime), project `ptluekkhiopowuyvkgnd`.
 - **Admin:** Next.js 16.2.7 / Vercel (App Router, Turbopack).
 - **Payments:** Stripe — **LIVE since 17 Jul 2026, not TEST.** Real cards are
