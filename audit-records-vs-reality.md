@@ -19192,6 +19192,99 @@ already separates the two carefully; `is_published` is called "live" elsewhere.
 That is a copy decision worth taking on its own, and it is cheaper than either
 rule change.
 
+### ✅ THE FIX, AS AGREED 6 Oct 2026 — THREE PARTS, NO GATE CHANGES
+
+**1. `websiteBlockers` reads the view instead of mirroring its rule.**
+`exists (select 1 from public.public_stylists v where v.id = prov.id)` is the
+truth; `bio_publish_problem` is kept **only to explain why not**. *The rule
+decides, the mirror narrates.* Same shape as `providers.is_verified`: a second
+copy of a rule that drifts **toward reassurance**.
+
+**2. Neither gate changes. Both arguments recorded, not just the conclusion:**
+
+* **(a) make publication require what listing requires** — **un-publishes
+  working shops.** A thin-bio stylist is bookable inside Cavy today; this would
+  stop her being bookable at all. **It trades a visibility gap for a revenue
+  gap**, which is worse for her than the problem it solves.
+* **(b) make listing accept what publication accepts** — **puts thin bios on
+  the open web.** 0060 exists for exactly that: the thin/doorway pattern
+  **risks a site-wide manual action rather than one page.**
+
+**3. The vocabulary fix is PART of the fix, not an alternative to it.** Micky,
+6 Oct: *"Wherever the dashboard says live, it should distinguish bookable
+inside Cavy from findable on the open web — they are two different states and
+she has a right to know which one she's in."*
+
+### ⚠⚠ AND THE BIO RULE IS INVISIBLE AT THE POINT SHE WRITES IT
+
+Asked: does `bio_is_publishable` give feedback where the bio is written, or
+only after publishing? **Neither, quite — it is worse than "only after".**
+
+`site/app/(app)/shop/ShopDetailsForm.tsx:82` labels the field:
+
+> **About you** *(optional)*
+
+with helper copy that is writing advice — *"A few honest lines beat a paragraph
+of adjectives"* — and a 500-character counter. **It names no rule.** No
+40-character minimum, nothing about the three description tests, and
+`saveShopDetails` surfaces no `bio_publish_problem`.
+
+**So the sequence a stylist experiences is:**
+
+1. write a bio the form calls **optional**;
+2. publish;
+3. clear name and treatments as well, because `websiteBlockers` only renders
+   once `publishBlockers` is empty;
+4. **then** learn on the dashboard that the optional field had rules and she is
+   not on the public website.
+
+⚠️ **Micky's reading is right: the notice is a consolation rather than a
+guide.** And `(optional)` is the same vocabulary fault in miniature — optional
+*for what?* Optional to publish, **required to be findable**. The two states she
+has a right to distinguish, collapsed into one word on the field that decides
+between them.
+
+**Moving it earlier is the cheapest thing here.** `bio_publish_problem` is
+already an RPC the signed-in client calls (`shop.ts`), so the editor can show
+the sentence live or on save.
+
+⚠️ **IT MUST STAY ADVISORY, NEVER A SAVE BLOCKER.** The bio *is* optional for
+publishing, and refusing a short one at the editor would be fix (a) through the
+back door — it would stop her publishing. The shape is *"saved — it won't
+appear on cavybeauty.com until …"*, never *"you cannot save this"*.
+
+### ⚠️ STILL DEDUCED, NOT MEASURED — AND I CANNOT MEASURE IT
+
+Which predicate excludes 09c6d70c is **still an inference**. I have no database
+access; the query is below and the answer is Micky's to read. The specific
+thing that would falsify the deduction is **a deleted categorised treatment
+leaving `is_published` true**, which nothing un-publishes.
+
+```sql
+select p.id,
+       coalesce(btrim(p.name), '') <> ''                     as passes_name,
+       (select count(*) from public.provider_treatments pt
+         where pt.provider_id = p.id and pt.category is not null) >= 1
+                                                             as passes_categories,
+       public.bio_is_publishable(p.bio)                      as passes_bio,
+       p.is_published                                        as passes_published,
+       not exists (select 1 from public.users u
+                    where u.id = p.user_id
+                      and u.email like '%@seed.guineapig.invalid')
+                                                             as passes_seed,
+       public.bio_publish_problem(p.bio)                     as what_the_db_would_tell_her,
+       length(coalesce(btrim(p.bio), ''))                    as bio_length
+  from public.providers p
+ where p.id = '09c6d70c-8178-4923-80f2-8cf8e8102e21';
+```
+
+**Exactly one column should be false.** If `passes_bio` is the one, the
+deduction held and `what_the_db_would_tell_her` is the sentence her dashboard
+is already showing. **If `passes_categories` is false instead, the deduction was
+wrong** and the finding is larger: a shop can lose its last categorised
+treatment, drop out of the public site, and keep saying published — which no
+notice covers, because `websiteBlockers` only ever carries the bio sentence.
+
 ### Not fixed here
 
 Raised rather than folded into 176, because the fix is a product decision —
@@ -19351,6 +19444,47 @@ gap visible to a stylist.
   form is `min(price_pence)` over future slots. ⚠️ It is a **new read on
   `availability`** for the browse listing, which today fetches none, so it is a
   per-card cost on a list page rather than a free addition.
+
+---
+
+## 187. provider_treatments.price — A COLUMN BUILT FOR A MODEL THAT WAS NEVER WIRED
+### Raised by Micky, 6 Oct 2026, out of item 186's scoping. Unfinished, not abandoned.
+
+`provider_treatments` carries `price` and `duration`. **Nothing writes either.**
+0052's own note: they *"are never written at all"*, and a sweep of every client
+write payload across `site/`, `admin/`, `mobile/` and `seed/` confirms it — the
+only column any client fills is `category`, with `name` holding a copy of it.
+
+The price that exists is **`availability.price_pence`, per SLOT**. So a slot
+listing three treatments has one price, and which treatment the model picks
+does not change it.
+
+### ⚠️ SAME CLASS AS THE is_verified FOSSIL, AND DIFFERENT IN THE WAY THAT MATTERS
+
+`providers.is_verified` was **abandoned**: a column with a working replacement
+elsewhere, read by nine surfaces, actively producing a wrong answer. It was
+dropped.
+
+`provider_treatments.price` is **unfinished**: a column with no replacement, read
+by nothing, producing no answer at all. **It is not currently wrong — it is
+undecided.** Dropping it would foreclose per-treatment pricing; keeping it
+leaves a column that looks like an answer to anyone who finds it.
+
+⚠️ **And the two are only distinguishable by asking what was intended**, which
+is exactly what makes this class hard: from the database both look identical —
+a column nothing writes. The difference is whether something else already does
+the job.
+
+### Why it is not decidable here
+
+**If treatments are meant to be priced separately, this is the column built for
+it**, and item 186's slot panel is the first surface that would make the gap
+visible to a stylist — she would see one price offered for three different
+treatments. **If pricing is per-slot by design, the column is a fossil and
+should go the way `providers.is_verified` went.**
+
+Held with 186 until the price model is decided. ⚠️ **Not to be "tidied" in the
+meantime**: dropping it is a decision about the product, not about the schema.
 
 ---
 
