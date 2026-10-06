@@ -539,7 +539,10 @@ const CUTS = {
     // re-opening the day lands on the calendar and the payoff is off-screen.
     // The first cut did exactly that: it saved a slot and then showed a grid.
     mark('4c saved - three slots where there were two')
-    await glide(page, 'Wednesday', { ms: 800 })
+    // TODAY'S weekday, for the same reason as the date above: this read
+    // 'Wednesday' because the cut was written on 30 Sep, and threw on any
+    // other day. The editor heading is "Saturday 3 October 2026".
+    await glide(page, d.toLocaleDateString('en-GB', { weekday: 'long' }), { ms: 800 })
     await dwell(page, 2600, 3000)                       // 10:00, 14:00 and 16:00
 
     // ── 5. The application waiting. ───────────────────────────────────────

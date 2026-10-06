@@ -18539,7 +18539,67 @@ ignored, each statement its own transaction) does **not** explain it, because
 on one connection the DO *would* have seen `_target`. **The temp-table error is
 the evidence that points specifically at more than one connection.**
 
-### ✅ THE PROBE THAT CONFIRMS OR REFUTES IT
+### ❌❌ BOTH HYPOTHESES REFUTED. NO CAUSE IS KNOWN, AND NO THIRD IS OFFERED.
+
+**Probe 1** — inserts recording `pg_backend_pid()` and `txid_current()` either
+side of a deliberate `raise exception`, into a real table. **Returned no rows
+after the error.** The paste was atomic: the error stopped everything.
+**Pooled connections: refuted.**
+
+**Probe 2** — the same, with `begin;` and `commit;` restored. **Identical
+result.** **Explicit transaction control not taking effect: refuted.**
+
+**Neither probe reproduces the incident.**
+
+And `pg_stat_statements`, which is a primary source rather than inference:
+
+```
+calls=1  rows=9  delete from public.reviews r using _target t where r.reviewee_id = t.user_id
+calls=1  rows=1  create temp table _target on commit drop as select ... where p.id = $1
+calls=1  rows=0  do $$ declare v_n int; ... begin if (select count(*) from _target) <> 1 then ...
+```
+
+**All three statements executed. The delete took nine rows. They committed. And
+the editor reported `relation _target does not exist` — against the guard, for
+a relation the delete in the same paste used successfully.**
+
+⚠⚠ **THOSE FACTS ARE NOT RECONCILED, AND THIS ENTRY DOES NOT RECONCILE THEM.**
+Two explanations have been refuted; a third built from the same evidence would
+be a guess wearing the clothes of a finding. Recorded the way
+`scripts/migration-status.mjs` records the temp-table rule as false: **the
+observation, the refuted explanations, and no cause.**
+
+### ✅ THE RULE IS ADOPTED ON THE OBSERVATION ALONE
+
+> **Guard and action in one statement, or the guard is theatre.**
+
+Micky, adopting it: *"A separated guard has been observed, once, failing to stop
+a delete on production. That is sufficient grounds without knowing why, and
+waiting for a mechanism before adopting it would be the same error as writing a
+rule from one error message plus an assumption — just in the other direction."*
+
+✅ **MECHANISED THE SAME NIGHT**, which is item 155's rule honoured rather than
+cited: `scripts/check-guard-statement-separation.mjs`, wired into site's
+`npm run checks` chain, with
+`scripts/check-guard-statement-separation.baseline` listing the 74 known
+instances **by SHA-256**. A new file fails immediately; **a grandfathered file
+that is edited loses its exemption**, because its hash stops matching.
+
+⚠️ **It was made to fail before being trusted** — appending one comment line to
+`cleanup-consentless-test-sessions.sql` produced
+`NO LONGER EXEMPT (edited since the baseline)` and exit 1.
+
+⚠️ **Written in Python first and ported to Node before wiring.**
+`npm run checks` runs in three GitHub Actions workflows, where `python` is not
+a command on Ubuntu runners (`python3` is) while Windows wants `python`. A
+check that reds the build for a reason unrelated to the check is one that gets
+switched off. One implementation, not two — a second copy would be item 162's
+class.
+
+### The probes, kept because a refutation is evidence
+
+### The probe, as run
+
 
 ```sql
 create table if not exists public._conn_probe
@@ -18620,6 +18680,85 @@ would have refused.
 The stored `rating` of 3.78 **did** have nine real review rows behind it, so it
 was **not** a direct write to `review_count`. **Item 156's forged-social-proof
 vector is still open; it is not what happened here.**
+
+---
+
+## 179. anon HOLDS TRUNCATE — THE ONE WRITE PRIVILEGE RLS CANNOT RESTRAIN
+### Raised by Micky, 6 Oct 2026, from the `providers` grant line. ⚠️ Changes what item 163 is about.
+
+`public.reviews` grants `anon`: **TRUNCATE**, alongside DELETE, INSERT,
+REFERENCES, SELECT and TRIGGER.
+
+⚠⚠ **ROW LEVEL SECURITY DOES NOT APPLY TO TRUNCATE.** RLS governs SELECT,
+INSERT, UPDATE and DELETE. TRUNCATE is not a row operation and is controlled by
+the TRUNCATE privilege alone. **So the two policies on `reviews` are no defence
+against it**, and neither is any policy anywhere else.
+
+That makes it categorically different from the latent INSERT and DELETE grants
+163 was about. Those are restrained by the absence of a matching policy —
+silently, which is the fault, but restrained. **A TRUNCATE grant is restrained
+by nothing in the policy system at all.**
+
+### What item 163 becomes
+
+Not *"INSERT and DELETE latent grants across 44 tables"*, but **that plus a
+privilege every RLS policy in the schema is silent about**.
+
+### ⚠️ WHAT IS AND IS NOT CLAIMED ABOUT REACHABILITY
+
+**Expected, not measured:** Supabase's default setup grants `all` on tables in
+`public` to `anon` and `authenticated`, and `all` includes TRUNCATE — so the
+expectation is that this holds across nearly the whole schema. **Expectation is
+not measurement**, and the query below is the measurement.
+
+**And it is latent rather than live, for a reason worth stating precisely:**
+PostgREST maps HTTP verbs to SELECT, INSERT, UPDATE and DELETE. **There is no
+TRUNCATE endpoint**, so an anonymous HTTP caller cannot issue one directly. It
+becomes reachable through a SECURITY INVOKER function callable by `anon` that
+truncates — **none exists today**, and that is 0079's call-graph class again:
+*the exemption is a property of the call graph, not of the privilege.*
+
+So the honest statement is **not** "anon can wipe the tables over HTTP". It is:
+**the one privilege RLS can never backstop is granted to the anonymous role,
+and the only thing between it and use is that nothing currently exposes a
+path.**
+
+### The measurement
+
+```sql
+select tp.table_name,
+       bool_or(tp.grantee = 'anon')          as anon_can_truncate,
+       bool_or(tp.grantee = 'authenticated') as authenticated_can_truncate,
+       count(*) over ()                      as tables_listed,
+       (select count(*) from information_schema.tables
+         where table_schema = 'public' and table_type = 'BASE TABLE') as tables_in_public
+  from information_schema.table_privileges tp
+ where tp.table_schema = 'public'
+   and tp.privilege_type = 'TRUNCATE'
+   and tp.grantee in ('anon', 'authenticated')
+ group by tp.table_name
+ order by tp.table_name;
+```
+
+`tables_listed` against `tables_in_public` is the count; the rows are the list.
+
+---
+
+## 180. THE POSTGRES LOG IS THE LAST PRIMARY SOURCE ON ITEM 178
+### Raised 6 Oct 2026. Not blocking — Micky will look when next in the dashboard.
+
+`pg_stat_statements` establishes **what ran and how many rows it touched**. It
+carries **no timestamps and no session identity**, so it cannot say *when* the
+three statements ran relative to each other, or *whether they shared a
+backend*.
+
+**The Supabase Postgres log carries both.** It is the only remaining primary
+source that could separate the refuted hypotheses from whatever actually
+happened.
+
+⚠️ **Item 178's rule does not wait on this**, and that is deliberate: the rule
+rests on the observation, not the mechanism. This is for the cause, which is
+worth knowing and is not worth blocking on.
 
 ---
 
