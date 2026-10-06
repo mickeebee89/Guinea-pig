@@ -98,11 +98,18 @@ export function ShopDetailsForm({
           {/* ⚠️ "(optional)" WAS HERE AND HAD TO GO. Optional for WHAT? Optional
               to publish, required to be findable — the two states a stylist has
               a right to tell apart, collapsed into the one word on the field
-              that decides between them. Item 183. */}
+              that decides between them. Item 183.
+              ⚠️ AND THE SENTENCE BELOW NEEDS AN EXPLICIT "but". It read
+              "…still take bookings in Cavy — it is what the public pages need",
+              where an em dash between two clauses parses as apposition: it made
+              the two states equivalent again, one sentence after "(optional)"
+              was removed for doing exactly that. On copy whose whole job is
+              telling two states apart, the contrast has to be carried by a
+              word, never by punctuation that reads either way. */}
           <p className="mt-0.5 text-xs text-muted">
             What you do, what you’re training in, what your space is like. A few honest lines
             beat a paragraph of adjectives. You can leave it empty and still take bookings in
-            Cavy — it is what the public cavybeauty.com pages need.
+            Cavy, but the public cavybeauty.com pages won’t list you without one.
           </p>
           <textarea
             id="shop-bio"
