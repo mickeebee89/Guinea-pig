@@ -19100,6 +19100,98 @@ publication (name + one categorised treatment) and the view gates *visibility*
 fail the listing rule**, which is exactly how a stylist ends up published and
 invisible. That gap is the finding; 09c6d70c is one instance of it.
 
+### ✅ SCOPED 6 Oct 2026 — THE TWO GATES, SIDE BY SIDE
+
+| predicate | **publish gate** `provider_shop_is_publishable` | **listing gate** `public_stylists` WHERE |
+|---|---|---|
+| name non-empty | ✅ `coalesce(btrim(p.name), '') <> ''` | ✅ identical |
+| ≥ 1 categorised treatment | ✅ `exists(… pt.category is not null)` | ✅ `cardinality(cats.categories) >= 1` |
+| `is_published` | — *this gate is what grants it* | ✅ required |
+| **`bio_is_publishable(bio)`** | ❌ **not required** | ✅ **required** |
+| not a seed email | ❌ | ✅ required |
+
+**The listing gate is the publish gate PLUS three.** Two of the three cannot
+bite a real published stylist: `is_published` is true by definition of her
+being published, and the seed rule only matches `@seed.guineapig.invalid`.
+
+⚠️ **So `bio_is_publishable` is the only predicate that can separate the two
+for a real stylist.** The gates differ by exactly one rule, and that rule is the
+whole of item 183.
+
+`bio_is_publishable(bio)` is `bio_publish_problem(bio) is null`, and that
+function names five failures: no bio at all, under ~40 characters, and three
+"this does not look like a description" tests (0060, items 93 and 115 — written
+because keyboard mash cleared a plain length check and sat on all six
+indexable treatment pages).
+
+### ✅ WHICH PREDICATE EXCLUDES 09c6d70c — THE BIO. Deduced, not measured.
+
+She is `is_published = true`, so
+`enforce_publish_requires_complete_profile` required **a name and a categorised
+treatment** at the moment she published. Her address is `nahitih259@bevriz.com`,
+so the seed rule passes. That leaves one predicate.
+
+⚠️ **THE DEDUCTION ASSUMES NOTHING CHANGED SINCE SHE PUBLISHED**, and that
+assumption is not free: deleting her last categorised treatment would fail the
+view's `cardinality >= 1` today while `is_published` stayed true, because
+nothing un-publishes a shop when its treatments go. One query settles it rather
+than leaving a deduction standing where a measurement belongs — it is in the
+item's "read that says which".
+
+### ❌ AND THE PREMISE "NOTHING TELLS HER" IS WRONG — A CORRECTION
+
+Something does. `site/components/StylistSetup.tsx:100-109` renders, on her own
+dashboard:
+
+> **Want to show up on Google too?** You're live and bookable in Cavy either
+> way. To also appear on the public cavybeauty.com pages, where people who
+> aren't members yet can find you, you'd need *…the database's own sentence…*
+
+It uses `bio_publish_problem`'s wording rather than a second opinion about it,
+stays silent on error rather than guessing, and waits until she is otherwise
+live so it does not answer a question she has not reached. **That is the
+mechanism 183 asked for, already built.**
+
+### ⚠⚠ THE REAL DEFECT IS SMALLER AND OF A FAMILIAR SHAPE
+
+`websiteBlockers` **mirrors the view's rule instead of reading the view.** It
+asks `bio_publish_problem` and infers presence; it never asks
+`public_stylists` whether she is in it.
+
+So it is correct only while the mirror and the rule agree — and it fails
+**toward reassurance**: a stylist excluded for any reason the dashboard does
+not model is told she is fine. Exactly what `shopsNote` and 0041 warn about,
+and what `_provider_shops_state` was restructured to avoid.
+
+**The fix is one predicate:**
+`exists (select 1 from public.public_stylists v where v.id = prov.id)` as the
+truth, with `bio_publish_problem` kept only to explain *why not*. The rule
+decides; the mirror narrates.
+
+### ✅ WHICH OF THE THREE FIXES — NOT (a), NOT (b), AND (c) IS ALREADY HALF-BUILT
+
+Micky's instinct: *"a shop that cannot be seen should not be able to call
+itself live."* **The rules do differ for a reason, and it is in the dashboard's
+own copy: "You're live and bookable in Cavy either way."**
+
+* **(a) make publication require what listing requires** — ❌ **it would
+  un-publish working shops.** A stylist with a thin bio is *bookable inside
+  Cavy today*: members browse, apply and book her. Requiring a publishable bio
+  to publish would stop her being bookable at all — trading a visibility gap
+  for a revenue gap, which is strictly worse for her.
+* **(b) make listing accept what publication accepts** — ❌ **it puts thin and
+  gibberish bios on the open web.** That is precisely what 0060 exists to
+  prevent: *"the thin/doorway pattern that earns a site-wide manual action."*
+  The risk is a Google penalty across the whole site, not one page.
+* **(c) tell her** — ✅ **already the design, and nearly right.** The gap is the
+  mirror above, not the absence of a mechanism.
+
+⚠️ **Steelmanning the instinct, because it is not wrong about everything:** if
+"live" reads as "visible", the fault is **vocabulary, not rules**. The dashboard
+already separates the two carefully; `is_published` is called "live" elsewhere.
+That is a copy decision worth taking on its own, and it is cheaper than either
+rule change.
+
 ### Not fixed here
 
 Raised rather than folded into 176, because the fix is a product decision —
@@ -19176,6 +19268,89 @@ Micky's own phone. A Metro dev-client session reads current code and is
 unaffected; a preview APK carries the old `select` and, after 0087, returns a
 **PostgREST error** rather than merely losing a badge — its directory and
 provider pages break. One device, his, and his call.
+
+---
+
+## 185. THE 24-HOUR CANCELLATION ACKNOWLEDGEMENT COMES OUT OF THE BOOKING FLOW
+### Decided by Micky, 6 Oct 2026. ⚠️ RECORDED, NOT ACTED ON.
+
+> *"A box with no consequence attached trains people to tick without reading,
+> which devalues the acknowledgements that carry legal weight."*
+
+**And after 0086 the quality of a consent record matters, not just its
+existence.** 0086 made "a booking cannot exist without a consent record" true;
+item 167 is the open question of whether the record means anything. **An
+acknowledgement nobody reads is that question arriving from the other
+direction** — not a forged record, a genuine one that records nothing.
+
+**No-show policy is a separate decision**, to be made when there are real
+bookings to reason from. ⚠️ **Do not invent a penalty to justify keeping the
+box.**
+
+### ⚠⚠ THE CONSTRAINT THAT MUST TRAVEL WITH THE DECISION
+
+**Removing it is a NEW `consent_documents` version, never an edit.**
+
+`session_consents` rows carry `consent_version` and `content_hash`, and they
+are **append-only for six years** (`guard_session_consents`). Editing a document
+in place would **retroactively misrepresent what past models agreed to**: the
+stored hash would no longer match the text it names, and every historical
+consent would silently point at wording nobody ever saw.
+
+Recorded here so nobody later "just removes a line". The same reasoning
+`cleanup-consentless-test-sessions.sql` used about backfilling — *"backfilling
+would be fabrication"* — applies to editing, and more sharply, because editing
+leaves no gap to notice.
+
+---
+
+## 186. PRICE VISIBILITY — THE PAYWALL IS ALREADY WHERE IT SHOULD BE
+### Scoped 6 Oct 2026. ⚠️ RECORDED, NOT ACTED ON. Next after 183.
+
+### ✅ THE QUESTION ASKED FIRST, AND THE ANSWER IS "IT DOES NOT NEED MOVING"
+
+**`site/app/(app)/stylist/[id]/page.tsx` contains no subscription check at
+all.** The gate is `apply/page.tsx:77` — `if (!ctx.subscribed)` → `/subscribe`.
+
+**So the paywall already sits at Apply, and everything up to it is free.** The
+work is entirely *"the slot panel does not exist"*, not *"the wall is in the
+wrong place"* — which was the possibility Micky asked to test rather than
+assume, and it is the true one.
+
+### ⚠⚠ AND ONE SHAPING FACT IS WRONG, IN A WAY THAT CHANGES THE DESIGN
+
+> *"availability.active_treatments is an array, so one slot can carry several
+> treatments at different prices and the panel needs treatment selection
+> inside the slot."*
+
+**Treatment selection: yes** — the booking records `treatment_id`, so the panel
+must capture which one.
+
+**At different prices: no.** `price_pence` is a column on **`availability`** —
+**one price per SLOT**, whatever `active_treatments` holds.
+`provider_treatments` does have a `price` column, and **nothing writes it**:
+0052's own note says `duration`/`price` "are never written at all", and a sweep
+of every client write confirms it.
+
+**So a slot with three treatments on it has one price, and picking a different
+treatment does not change the number.** The panel shows one price per slot and
+a treatment chooser that does not affect it.
+
+⚠️ **That is either the intended model or an unfinished one, and it is a
+product decision rather than a fact:** if treatments are meant to be priced
+differently, `provider_treatments.price` is the column that was built for it
+and never wired, and the slot panel is the first surface that would make the
+gap visible to a stylist.
+
+### The other two, confirmed
+
+* **`has_open_slots` is one boolean for the whole stylist** — correct, it is an
+  `exists(… a.date >= current_date)` in the view. **Per-date availability is a
+  new read**, and it cannot come from `public_stylists`.
+* **"from £X" on the browse card and shop header** — agreed, and the cheap
+  form is `min(price_pence)` over future slots. ⚠️ It is a **new read on
+  `availability`** for the browse listing, which today fetches none, so it is a
+  per-card cost on a list page rather than a free addition.
 
 ---
 
