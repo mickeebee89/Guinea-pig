@@ -97,6 +97,34 @@
 -- Raised separately rather than bundled; this migration simply must not rely on
 -- v3 staying put by luck, and the post-condition below is what does not.
 --
+-- ── ⚠⚠ ENTRY AND TICK COUNTS ARE NOT AN IDENTITY FOR THESE DOCUMENTS ─────
+-- Measured 6 Oct 2026: **v2 and v4 agree on title, body, entry count (8) and tick
+-- count (5), and their acknowledgements are NOT equal.** So two consent documents
+-- can match on every cheap property and still say different things. Any check that
+-- identifies one of these documents by its counts is the check-that-cannot-fail
+-- class (item 188).
+--
+-- ✅ Nothing in the clients does that, checked: `ConsentGate` PARTITIONS the array
+-- for rendering, `actions.ts:213` and `consent.ts:289` DERIVE the required keys
+-- from the fetched document, and `consent.ts:198` is a non-emptiness guard. The
+-- required set is built FROM the document, never compared to an expected count
+-- (item 84b). **The only count-as-identity in the system is this migration's own**,
+-- which is why the hash assertion below matters more than the counts above it.
+--
+-- ⚠️ AND THE REASON v2 ≠ v4 IS ARITHMETIC, NOT A HIDDEN THIRD DIFFERENCE. It was
+-- read as evidence that v3 departs from v2 in more than one entry; it is not.
+-- 0051's own header says *"Everything else is v2 VERBATIM — the same title, the
+-- same body, the same five ticks, the same three notices"*, and 0001 shows v2's
+-- five ticks include `attendance`. So:
+--
+--     v3 = v2 + patch_test
+--     v4 = v3 − attendance = v2 + patch_test − attendance
+--
+-- v4 therefore has `patch_test` exactly where v2 has `attendance`, and the counts
+-- match because −1 + 1 = 0. **The swap fully accounts for the inequality; there is
+-- nothing unexplained.** The general lesson survives the specific inference being
+-- wrong, which is why both are written down.
+--
 -- ── ⚠️ THERE IS NO UNIQUE CONSTRAINT ON `version`, AND THIS FILE ASSUMES NONE ─
 -- Not in any migration, and `consent_documents`' DDL is in no migration and no
 -- snapshot — the same pre-0000 population as `public.sessions` (item 189). So
@@ -275,6 +303,9 @@ declare
   v_a3        jsonb;
   v_a4        jsonb;
   v_expected  text := '0a04dd74a9313f384822bfbfa60a59bf264e4a6c5795d3bba58424b2a5696085';
+  -- Computed in the SQL editor from the live v3 row with `attendance` filtered
+  -- out, 6 Oct 2026. Independent of the literal in this file — see below.
+  v_predicted text := '6f10cfd58a515cc265084c6694f64559dda192990f6f2c98b39ed640d4eee6be';
 begin
   -- ⚠️⚠️ THE ONE THAT IS LOAD-BEARING. If the is_active UPDATE moved v3's hash,
   -- every model mid-wizard gets reason 'moved' from reReadConsentDocument and is
@@ -363,6 +394,28 @@ begin
   if v_v4_hash = v_expected then
     raise exception '0091: v4''s hash equals v3''s, which is impossible if an acknowledgement was removed — so the acknowledgements did not change. Rolled back.';
   end if;
+  -- ⚠⚠⚠ THE PASTE-FIDELITY CHECK, AND IT IS THE STRONGEST ASSERTION IN THIS
+  -- MIGRATION. v_predicted was computed IN THE SQL EDITOR, 6 Oct 2026, from the
+  -- LIVE v3 row with the attendance entry filtered out, through the same
+  -- title || body || acknowledgements::text concatenation set_consent_hash uses.
+  --
+  -- **So it is independent of the literal pasted above.** The header argues this
+  -- migration is paste-safe for two specific reasons — single-line title and body,
+  -- and jsonb normalising whitespace. ⚠️ THIS CHECKS THAT CONCLUSION INSTEAD OF
+  -- TRUSTING THE ARGUMENT: if the paste alters the text in ANY way the argument
+  -- did not anticipate, the hash differs and the migration refuses itself.
+  --
+  -- Micky's addition, and it is the right shape — item 190 was found by predicting
+  -- four signatures and measuring one, and this is the same method pointed at the
+  -- thing being written rather than at the transport.
+  if v_v4_hash <> v_predicted then
+    raise exception '%', '0091: v4''s content_hash is ' || v_v4_hash
+      || ' but the value computed from the LIVE v3 row minus `attendance` is ' || v_predicted
+      || '. The acknowledgements, title or body in this migration are not byte-identical to v3''s '
+      || 'after that one removal — most likely the paste altered them, which is exactly what this '
+      || 'check exists to catch rather than reason about. Rolled back.';
+  end if;
+
   if v_v4_hash is null or v_v4_hash !~ '^[0-9a-f]{64}$' then
     raise exception '%', '0091: v4''s content_hash is ' || coalesce(v_v4_hash, 'null')
       || ', not 64 hex characters. trg_consent_hash did not run, or is not on this table. Rolled back.';
@@ -389,7 +442,7 @@ end $mig$;
 
 -- MIGRATION FOOTER
 insert into public.schema_migrations (version, name, checksum)
-values ('0091', 'an_unenforced_promise_leaves_the_consent_document', 'ddff66f6cb8e5d9bf6394b28945f8742fb6ad99c158e9e61b0b6d94907d3ce91');
+values ('0091', 'an_unenforced_promise_leaves_the_consent_document', '9a465dd02b8f183ab58add783ba63118e7e21c81b3c7aaea602a40b83a029363');
 
 commit;
 
