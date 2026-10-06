@@ -19912,6 +19912,137 @@ checksums. Same class as `public-web-views.sql` owning `public_stylists`, which
 
 ---
 
+## 190. THE SQL EDITOR CONVERTS LF TO CRLF ON PASTE, AND IT IS MEASURED, NOT INFERRED
+### Found 6 Oct 2026 when migration 0089 refused itself. ✅ MEASURED BY PREDICTION. Mitigated in 0089; the general exposure is recorded below.
+
+**Plainly:** text pasted into the Supabase SQL editor arrives with Windows line
+endings. A migration that builds a string with `chr(10)` and compares it against
+a string written as literal multi-line SQL in the same file is comparing LF
+against CRLF, and the two render identically in every error message.
+
+### ✅ THE STRENGTH OF THIS EVIDENCE, STATED BECAUSE IT IS UNUSUAL HERE
+
+⚠️ **This is not "we found CRLF". It is "four possible signatures were written
+down in advance and the second one was measured."** Micky, 6 Oct 2026:
+*"'we found CRLF' and 'we predicted four signatures and measured the second' are
+different strengths of evidence and the item should say which it has."*
+
+Before any probe was run, the four candidate outcomes were enumerated with their
+exact lengths and md5s:
+
+| what could have happened to the paste | len | md5 |
+|---|---|---|
+| nothing — clean LF, six trailing spaces preserved | 85 | `3b280038467ba98d64988b17e381dfe9` |
+| **LF → CRLF** | **87** | **`6b4cc289609a6980482dfe0ce537ef79`** |
+| trailing whitespace stripped | 79 | `c13e5411228f4943c608ac218c070490` |
+| both | 81 | `0af61e678d4b0a8958e156d1627d3783` |
+
+**Measured:** `len 87`, `md5 6b4cc289609a6980482dfe0ce537ef79`, and the hex
+begins `0d0a` and carries `0d0a` again before the six trailing spaces.
+
+So the prediction matched to the character, **and the competing hypothesis was
+ruled out by the same measurement** — the six trailing spaces survived, so nothing
+is stripping trailing whitespace. A single number distinguished four worlds
+because the four were named first.
+
+### The probe, which tests the clipboard rather than the history
+
+```sql
+select length(x) as len, md5(x) as md5, encode(convert_to(x, 'UTF8'), 'hex') as hex
+  from (select $f$
+      select exists (select 1 from public.admins where user_id = auth.uid());
+      $f$ as x) t;
+```
+
+A dollar-quoted literal is preserved byte for byte by Postgres, so what comes
+back is what the clipboard delivered. ⚠️ **This tests the editor in use today,
+which is the thing that matters** — an inference from existing function bodies
+would be an inference about months of different editors and clipboards.
+
+### ✅ THE HISTORICAL EXPOSURE, SWEPT: NONE. The shape that would have been bitten
+
+A CRLF body breaks any textual match on a function body **whose pattern spans a
+line break**. A single-line anchor is unaffected, because the CR sits at the end
+of the line and outside the pattern.
+
+**Swept 6 Oct 2026 — every migration that calls `pg_get_functiondef`: 29 files,
+241 anchors, ZERO spanning a line break.** So the surgery in 0044, 0045, 0061,
+0083 and the rest was never exposed, by habit rather than by rule: anchors in
+this project have always been single statements.
+
+⚠️ **That habit is now a rule, because it was luck.** An anchor spanning two
+lines would have failed to match and, depending on the guard, either refused a
+correct migration or — worse — reported a substitution as already applied.
+
+### ⚠️ THE OPEN QUESTION, AND IT IS A REAL ONE
+
+**`is_admin()`'s live body has NO CR.** 0089's preflight compared it against a
+pure-LF literal and returned true. So the editor converts today, and yet the one
+function examined closely was not created with a conversion.
+
+**Something has been creating functions without it** — a different editor, an
+older version of this one, `psql`, a dump restore, or the dashboard's own
+function UI — and which is not established. The read that answers whether
+`is_admin()` is unusual or typical:
+
+```sql
+select count(*) filter (where p.prosrc like '%' || chr(13) || '%') as bodies_with_cr,
+       count(*)                                                    as functions_examined,
+       coalesce(string_agg(p.proname::text, ', ' order by p.proname)
+                filter (where p.prosrc like '%' || chr(13) || '%'), '(none)') as which
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+ where n.nspname = 'public' and p.prolang <> 'c'::regtype::oid;
+```
+
+⚠️ **A NON-ZERO ANSWER IS THE BIGGER FINDING.** It would mean pastes have been
+converting all along, that every function body in the schema is a mix of line
+endings depending on how it was last created, and that the sweep above was a
+near miss rather than a clean bill. **A zero answer is stranger**, because the
+editor demonstrably converts today, and then the question is what changed and
+when.
+
+### ✅ THE MITIGATION, AND IT COVERS BOTH CANDIDATE CAUSES
+
+0089 builds the DDL **from** the expected literal via `format()`, so the body
+exists once and is never written as literal multi-line SQL:
+
+```sql
+execute format(
+  'create or replace function public.is_admin() returns boolean '
+  'language sql stable security definer set search_path to %L '
+  'as $f$%s$f$',
+  'public', v_want);
+```
+
+`v_want` is `chr(10) || '      select …' || chr(10) || '      '`. The newlines are
+function calls and the six spaces sit inside a quoted literal, so **neither a
+line-ending conversion nor a trailing-space strip can reach them.** The fix was
+chosen before the cause was known and is correct for either.
+
+**The standing rule:** any migration creating a function whose body must match an
+exact string builds that body from `chr(10)` and passes it through `format()`.
+Never write it as literal multi-line SQL and then compare it against a
+constructed string — that is two sources of truth for one value, and only one of
+them survives a clipboard.
+
+### ✅ AND THE REFUSAL THAT CAUGHT IT WAS WORKING — WITH ONE FAULT OF ITS OWN
+
+0089's before/after `prosrc` comparison fired on a difference neither of us would
+have seen by reading, on the one object in the schema where a silent change
+propagates to every RLS policy at once. **The design was right and the
+implementation had the flaw the design exists to catch** — two copies of one
+string, which is what the comparison was built to detect.
+
+⚠️ But its first message printed only the two delimited bodies, **which rendered
+identically**, so it fired correctly and reported unactionably: item 188's class
+one step along — not a check that passes wrongly, but one that **fails
+informatively to itself and opaquely to its reader.** Every refusal in 0089 now
+prints `length` and `md5`, and the two body comparisons also print hex, because
+for a stray `0d` or a missing `0a` the hex is the only form anyone can act on.
+
+---
+
 ## Dated
 
 * **8 October** — the diarised selfie-orphan check. The only unarranged end-to-end
