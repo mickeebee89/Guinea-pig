@@ -20013,6 +20013,25 @@ found the same day and belong on the same list:
 * **`sessions_active_slot_uniq`** — `supabase/booking-guard.sql`, hand-run. The
   partial unique index that is the ONLY thing preventing a double booking
   (item 192). Not checksum-locked, and the file can be re-run by anyone.
+* **`consent_documents`' ENTIRE constraint and index set** — in no migration and
+  not in the snapshot. Read 6 Oct 2026 only because 0091 rolled back on one of
+  them, which is the point: **nothing in the repo would have revealed them.**
+
+  ```
+  consent_documents_pkey                     PRIMARY KEY (id)
+  consent_documents_category_id_version_key  UNIQUE (category_id, version)
+  consent_documents_one_active               UNIQUE INDEX on
+      coalesce(category_id, '00000000-0000-0000-0000-000000000000'::uuid)
+      WHERE is_active
+  trg_consent_hash                           BEFORE INSERT OR UPDATE
+  ```
+
+  ⚠️ `consent_documents_one_active` is the one that enforces "exactly one active
+  document", which the client's `.eq('is_active', true).maybeSingle()` depends on
+  entirely — and it is a hand-made object no migration owns. ⚠️ And
+  `consent_documents_category_id_version_key` is inert on every existing row
+  (item 195). **Two indexes, one load-bearing and one decorative, neither
+  versioned.**
 
 ⚠️ **So the pattern is not two leftovers, it is a population**, and the two found
 on 6 Oct are both load-bearing for correctness rather than merely present. Adopt
@@ -20576,52 +20595,96 @@ a record that cites it.
 
 ---
 
-## 195. NOTHING PREVENTS TWO CONSENT DOCUMENTS AT THE SAME VERSION
-### Raised 6 Oct 2026 out of 0091. ⚠️ BACKLOG — and the right KEY is a design question, which is why it is not in 0091.
+## 195. THE UNIQUE CONSTRAINT EXISTS, IS KEYED CORRECTLY, AND DOES NOT HOLD
+### Raised 6 Oct 2026 out of 0091, then REWRITTEN the same day when the live objects were read. ⚠️ BACKLOG.
 
-**No unique constraint on `consent_documents.version` exists in this repo**, and
-the table's DDL is in no migration and no snapshot — the same pre-0000 population
-as `public.sessions` (item 189). So whether one exists live is unknown from the
-repo and needs a read:
+**This item was raised on a false premise and the truth is more interesting than
+the premise was.** It originally read *"nothing prevents two consent documents at
+the same version"* and treated the missing constraint as the finding. **The
+constraint is not missing. It is present, correctly keyed, and inert.**
 
-```sql
-select c.conname, c.contype, pg_get_constraintdef(c.oid)
-  from pg_constraint c
- where c.conrelid = 'public.consent_documents'::regclass
-union all
-select i.relname, 'i', pg_get_indexdef(i.oid)
-  from pg_class i
-  join pg_index x on x.indexrelid = i.oid
- where x.indrelid = 'public.consent_documents'::regclass;
+### What is actually on the table — read 6 Oct 2026, after 0091 rolled back on one of them
+
+```
+consent_documents_pkey                     PRIMARY KEY (id)
+consent_documents_category_id_version_key  UNIQUE (category_id, version)
+consent_documents_one_active               UNIQUE INDEX on
+    coalesce(category_id, '00000000-0000-0000-0000-000000000000'::uuid)
+    WHERE is_active
+trg_consent_hash                           BEFORE INSERT OR UPDATE
 ```
 
-### Why it matters, narrowly
+✅ **`UNIQUE (category_id, version)` exists, keyed exactly as this item reasoned
+it should be** — which also answers the question it said had to be answered first:
+`category_id` is there because **per-category consent documents are the intended
+design.** That part needed no investigation after all; it needed a read.
 
-**No client reads a document by version** — `site/lib/queries/consent.ts` selects
-by `is_active` or by `id`, and only ever reads `version` OUT of a fetched row. So
-the product is not exposed.
+### ⚠⚠ AND IT IS INERT FOR EVERY ROW THAT EXISTS
 
-⚠️ **Migrations and hand-SQL are.** `select … into … where version = N` in
-plpgsql takes the FIRST of several rows **silently** — no error, no warning. 0091
-originally did exactly that in four places and would have asserted things about
-whichever duplicate Postgres returned. It now counts first and refuses by name,
-which is a workaround for a missing constraint rather than a substitute for one.
+`category_id` is **NULL on all three documents**. NULLs are DISTINCT in a unique
+constraint, so two rows at `(NULL, 4)` do not collide. **Nothing prevents a
+duplicate version today.** The constraint looks like it closes the question and
+closes nothing.
 
-### ⚠⚠ AND THE CORRECT KEY IS NOT OBVIOUSLY `(version)`
+### ⚠⚠⚠ THE ASYMMETRY IS THE FINDING, AND IT IS ITEM 188's CLASS WEARING A CONSTRAINT
 
-`consent_documents` carries a **`category_id`** column. If per-category consent
-documents are intended — and that column exists for some reason — then the key is
-`(category_id, version)` and a global unique on `version` would be **WRONG** and
-would have to be dropped again.
+Two unique indexes on the same table, on the same nullable column:
 
-**That is the whole reason this is its own item rather than a line in 0091.**
-Adding the wrong constraint inside a data migration is worse than adding none:
-the data migration gets blamed for the rollback, and the constraint gets re-added
-by someone who assumes the first attempt was merely unlucky.
+| index | treats a NULL `category_id` as |
+|---|---|
+| `consent_documents_one_active` | **a value** — `coalesce(category_id, '0000…')`, so a NULL cannot escape it |
+| `consent_documents_category_id_version_key` | **distinct from every other NULL** — so every row escapes it |
 
-**So the question to answer first is what `category_id` is for** — nothing in the
-repo writes it, and `session_consents` carries one too. Until that is known,
-`(version)` is a guess dressed as hygiene.
+**One was written by someone who thought about NULL. One was generated from a
+table definition that did not.** They sit beside each other and look equally like
+protection.
+
+⚠️ **So "a unique constraint exists" is not the same claim as "duplicates are
+prevented"**, and the gap between those two sentences is invisible in any listing
+of constraints. A reader checking whether versions are unique would find
+`UNIQUE (category_id, version)`, stop, and be wrong.
+
+✅ **And it proves the fix for the other index is already in the same table**: the
+`coalesce` to a zero uuid is not a trick, it is the established local idiom, used
+by the index that works.
+
+### What this made load-bearing
+
+0091 guards four `where version = N` reads by counting first and refusing by name,
+because plpgsql's `select … into` takes the first of several rows **silently**.
+That was written as defence against a constraint believed MISSING. **It turns out
+to be defence against one that exists and does not hold** — the same protection,
+needed for a different reason, and needed more than when it was written.
+
+### The candidate fix — ⚠️ NOT written on 6 Oct 2026, deliberately
+
+A second unique index, in the shape the working index already uses:
+
+```sql
+create unique index consent_documents_version_key_notnull
+  on public.consent_documents
+     (coalesce(category_id, '00000000-0000-0000-0000-000000000000'::uuid), version);
+```
+
+⚠️ **Preconditions, and the first is not optional:** no duplicate
+`(coalesce(category_id, zero), version)` pairs may already exist, or the index
+cannot be created. That read comes first:
+
+```sql
+select coalesce(category_id, '00000000-0000-0000-0000-000000000000'::uuid) as cat,
+       version, count(*)
+  from public.consent_documents
+ group by 1, 2 having count(*) > 1;
+```
+
+**Zero rows is the licence.** Any row means duplicates already exist and the
+question becomes which is authoritative — a data decision, not a schema one.
+
+⚠️ **Whether to also drop `consent_documents_category_id_version_key` is a
+separate call.** It is redundant once the above exists, but it is also what
+PostgREST and any tooling may have been introspecting, and a pre-framework object
+with no migration behind it is not safely dropped on the strength of looking
+redundant.
 
 ---
 

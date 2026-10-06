@@ -125,22 +125,39 @@
 -- nothing unexplained.** The general lesson survives the specific inference being
 -- wrong, which is why both are written down.
 --
--- ── ⚠️ THERE IS NO UNIQUE CONSTRAINT ON `version`, AND THIS FILE ASSUMES NONE ─
--- Not in any migration, and `consent_documents`' DDL is in no migration and no
--- snapshot — the same pre-0000 population as `public.sessions` (item 189). So
--- whether one exists live is unknown from here.
+-- ── ⚠⚠ THE LIVE OBJECTS ON THIS TABLE, WHICH THE REPO DOES NOT CONTAIN ────
+-- Read 6 Oct 2026, after this migration rolled back on one of them. None is in
+-- any migration or in the snapshot — item 189's population:
 --
--- Every assertion in this migration that reads "where version = N" therefore
--- COUNTS FIRST and refuses by name on anything but one row, because plpgsql's
--- `select … into` takes the first row of several SILENTLY.
+--   consent_documents_pkey                     PRIMARY KEY (id)
+--   consent_documents_category_id_version_key  UNIQUE (category_id, version)
+--   consent_documents_one_active               UNIQUE INDEX on
+--       coalesce(category_id, '00000000-0000-0000-0000-000000000000'::uuid)
+--       WHERE is_active
+--   trg_consent_hash                           BEFORE INSERT OR UPDATE
 --
--- ⚠️ THE CONSTRAINT ITSELF IS ITEM 195, NOT THIS MIGRATION, and the reason is
--- that the correct key is a design question rather than hygiene:
--- `consent_documents` carries a `category_id`. If per-category documents are
--- intended — and the column exists for some reason — then the key is
--- `(category_id, version)` and a global unique on `version` would be WRONG and
--- would have to be dropped again. Adding the wrong constraint inside a data
--- migration is worse than adding none.
+-- ✅ So a unique key on `(category_id, version)` ALREADY EXISTS, keyed exactly as
+-- item 195 reasoned it should be — which also answers what `category_id` is for:
+-- **per-category documents are the intended design.**
+--
+-- ⚠⚠ AND IT IS INERT FOR EVERY ROW THAT EXISTS. `category_id` is NULL on all
+-- three documents, and NULLs are DISTINCT in a unique constraint, so two rows at
+-- `(NULL, 4)` do not collide. **Nothing prevents a duplicate version today.** The
+-- constraint looks like it closes the question and closes nothing.
+--
+-- ⚠⚠⚠ WHICH MAKES THE FOUR GUARDED READS IN THIS FILE LOAD-BEARING, NOT
+-- BELT-AND-BRACES. Every "where version = N" here counts first and refuses by
+-- name on anything but one row, because plpgsql's `select … into` takes the first
+-- of several SILENTLY. That was written as defence against a constraint believed
+-- missing; it turns out to be defence against one that exists and does not hold.
+--
+-- ⚠️ AND THE ASYMMETRY IS THE REAL FINDING, recorded as item 195.
+-- `consent_documents_one_active` COALESCES `category_id` to a zero uuid precisely
+-- so a NULL cannot escape it. `consent_documents_category_id_version_key` does
+-- not. **Same table, same nullable column — one index written by someone who
+-- thought about NULL, one generated from a table definition that did not.** So
+-- "a unique constraint exists" is not the same claim as "duplicates are
+-- prevented", which is item 188's class wearing a constraint.
 --
 -- ── DEPLOY ─────────────────────────────────────────────────────────────────
 --   1. Preflight.
@@ -228,6 +245,34 @@ begin
 end $mig$;
 
 -- ---------------------------------------------------------------------------
+-- DEACTIVATE v3 FIRST. ⚠️⚠️ THE ORDER IS NOT ARBITRARY AND MUST NOT BE TIDIED.
+--
+-- `consent_documents_one_active` is a UNIQUE INDEX on
+-- `coalesce(category_id, '00000000-0000-0000-0000-000000000000') WHERE is_active`.
+-- **A unique index is checked PER STATEMENT, not at COMMIT** — it is not a
+-- deferrable constraint — so inserting v4 as active while v3 is still active
+-- fails immediately with
+--
+--     23505: duplicate key value violates unique constraint "consent_documents_one_active"
+--
+-- which is exactly how a first version of this migration rolled back. Insert then
+-- flip CANNOT work, however natural it reads.
+--
+-- ⚠️ AND THE INDEX IS IN NO MIGRATION AND NOT IN THE SNAPSHOT (item 189's
+-- population), so nothing in this repo would have told you it exists. It was
+-- found by applying.
+--
+-- ✅ The window between these two statements, in which NO document is active, is
+-- not a hazard: both are in one transaction, so no other session ever observes
+-- it — a concurrent reader sees v3 active until COMMIT and v4 active after.
+--
+-- ⚠️ THIS IS AN UPDATE TO v3 AND IT IS THE ONE THAT IS ALLOWED. It touches
+-- neither title, body nor acknowledgements, so `trg_consent_hash` recomputes the
+-- same value. The post-condition proves that rather than trusting it.
+-- ---------------------------------------------------------------------------
+update public.consent_documents set is_active = false where version = 3;
+
+-- ---------------------------------------------------------------------------
 -- VERSION 4
 --
 -- ⚠️ content_hash IS NOT SUPPLIED, AND MUST NOT BE. `trg_consent_hash` computes
@@ -271,11 +316,6 @@ values (
   ]$json$::jsonb,
   true
 );
-
--- ⚠️ THIS IS AN UPDATE TO v3 AND IT IS THE ONE THAT IS ALLOWED. It touches
--- neither title, body nor acknowledgements, so `trg_consent_hash` recomputes the
--- same value. The post-condition proves that rather than trusting it.
-update public.consent_documents set is_active = false where version = 3;
 
 comment on table public.consent_documents is
   'Versioned consent documents. ⚠️ A WORDING CHANGE IS ALWAYS A NEW VERSION, NEVER AN EDIT: '
@@ -442,7 +482,7 @@ end $mig$;
 
 -- MIGRATION FOOTER
 insert into public.schema_migrations (version, name, checksum)
-values ('0091', 'an_unenforced_promise_leaves_the_consent_document', '9a465dd02b8f183ab58add783ba63118e7e21c81b3c7aaea602a40b83a029363');
+values ('0091', 'an_unenforced_promise_leaves_the_consent_document', '4b38d2b47c923e1d73f538beb5148d9bb9857fa9a3a69738411cdace95d6dce6');
 
 commit;
 
