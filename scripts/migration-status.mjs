@@ -101,6 +101,27 @@
  *
  *   * `begin; ... rollback;` is fine — it is the multi-statement dependencies
  *     inside that break, not the transaction.
+ *   * ⚠⚠ STATE THE EXPECTED ANSWER BEFORE RUNNING A LOOKUP, AND NAME THE
+ *     MECHANISM FOR EACH PART OF IT. Twice on 6 Oct 2026 this is what turned a
+ *     read into evidence:
+ *
+ *       item 190 — four candidate signatures written down with their lengths and
+ *         md5s; the second was measured, so one number distinguished four worlds
+ *         and killed the competing hypothesis in the same breath.
+ *       item 193 — ELEVEN NOT NULL columns predicted with a named setter each;
+ *         SEVEN returned. The GAP was the finding: four columns nullable that
+ *         three separate guards assume are not.
+ *
+ *     ⚠️ THE POINT IS NOT THAT PREDICTIONS ARE USUALLY RIGHT. A wrong prediction
+ *     LOCALISES THE SURPRISE — it says which rows to look at. A lookup with no
+ *     stated expectation has nothing to be surprised against, so it gets read,
+ *     accepted, and quoted later as though it had been checked.
+ *
+ *     And an enumeration says what EXISTS, never what MAINTAINS it: a NOT NULL
+ *     column filled by a BEFORE trigger is indistinguishable in
+ *     information_schema from one filled by the insert. The attribution is the
+ *     finding; the list is just the prompt for it.
+ *
  *   * ⚠⚠ NEVER `type <file> | clip` FOR SQL ON THIS MACHINE. Measured 6 Oct
  *     2026, on a file verified clean beforehand (no BOM, no CR, LF only):
  *

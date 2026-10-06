@@ -20357,6 +20357,145 @@ rather than raised again.
 
 ---
 
+## 193. THREE GUARDS DEPEND ON ONE BEFORE TRIGGER, AND THE SCHEMA WOULD NOT NOTICE IF IT WENT
+### Found 6 Oct 2026 by enumerating public.sessions. ⚠️ BACKLOG — ASSESSED, NOT REACHABLE TODAY, DELIBERATELY NOT FIXED THAT NIGHT.
+
+**Plainly:** `public.sessions` permits a NULL `date`, `start_time`, `end_time` and
+`model_user_id`. A session with a NULL date or start_time would be invisible to
+the only thing preventing a double booking, and invisible to the function that
+tells a model whether a slot is free. Both fail together, from one cause.
+
+### The measurement
+
+`information_schema.columns` for NOT NULL with no default returned **SEVEN**:
+`provider_id`, `model_id`, `treatment_id`, `availability_id`, `scheduled_at`,
+`duration_minutes`, `location_type`.
+
+**Absent, therefore nullable or defaulted:** `model_user_id`, `date`,
+`start_time`, `end_time`.
+
+### ⚠⚠ WHAT THAT BREAKS, IF A NULL EVER ARRIVES
+
+* **`sessions_active_slot_uniq`** is keyed on `(provider_id, date, start_time)`.
+  **A btree unique index treats NULLs as distinct**, so a session with a NULL
+  date or start_time collides with nothing. 0090's header calls that index *the
+  only thing preventing a double booking* — and it does not apply to such a row at
+  all.
+* **`slot_contention`** (0090) joins `s.date = a.date and s.start_time =
+  a.start_time`. A NULL-dated session matches no slot, so **every slot would read
+  free** — item 192's defect, restored, by a different route.
+* **`sessions.model_id` is NOT NULL and is set ONLY by the trigger**, from
+  `model_user_id`, which the database permits to be null. **So a NOT NULL
+  column's value depends on a `raise` inside a BEFORE trigger rather than on the
+  schema.** 0086 saw this half and guarded it — CV003, *"A booking must say which
+  member it is for"* — with its own note at :284 that `model_user_id` IS NULLABLE.
+  What is new is the generalisation: the guard is the trigger, not the column.
+
+⚠⚠ **ALL THREE DEPEND ON `tg_session_slot_authority` RUNNING.** Drop that trigger
+and the schema raises nothing, accepts a NULL-dated session, and both booking
+guards stop applying to it. **Three independent-looking protections, one point of
+failure.**
+
+### ✅ (1) NOT REACHABLE TODAY BY A CLIENT — Micky's read, confirmed, with one correction and one caveat
+
+**CORRECTION: the column-scoped INSERT grant is 0086, not 0088.** 0088 narrowed
+UPDATE on `users` and `providers`; 0086:416-421 is the one that matters here:
+
+```sql
+revoke insert on public.sessions from authenticated;
+revoke insert on public.sessions from anon;
+grant insert (provider_id, model_user_id, availability_id,
+              treatment_id, location_type, note, photo_urls)
+  on public.sessions to authenticated;
+```
+
+`date`, `start_time`, `end_time`, `scheduled_at`, `duration_minutes` and
+`model_id` are **not grantable**, so `authenticated` cannot name them and the
+trigger always fills them. ✅ **And `create_session_with_consent` is SECURITY
+INVOKER**, so the column grant binds the sanctioned path too rather than
+exempting it.
+
+⚠️ **CAVEAT: `service_role` is not constrained by any of that, and one path uses
+it.** `seed/seed.mjs:411` and `:443` insert sessions directly with explicit
+`date`, `start_time`, `end_time`, `scheduled_at` and `duration_minutes`. So the
+seed is safe **by habit, not by constraint** — a future column omission there
+would produce exactly the row this item describes, on a live database.
+
+⚠️ Repo-derived. The live grant is the authority:
+
+```sql
+select column_name, privilege_type, grantee
+  from information_schema.column_privileges
+ where table_schema = 'public' and table_name = 'sessions'
+   and privilege_type = 'INSERT' and grantee in ('authenticated','anon')
+ order by grantee, column_name;
+```
+
+### ✅ (3) MAKING THEM NOT NULL: SAFE IN PRINCIPLE, AND ACCOUNT DELETION DOES NOT BLOCK IT
+
+The obvious objection — that a NULL `model_user_id` is the de-identified state of
+a deleted member, as `reports` uses — **does not hold here, and that was worth
+checking before proposing anything.**
+
+* **`sessions.model_user_id` → `auth.users` is `ON DELETE NO ACTION`**, not SET
+  NULL (`supabase/account-deletion-fix.sql:13-14`).
+* **`delete_account_data` DELETES the sessions** (`:382`) rather than orphaning
+  them.
+
+So deletion never produces a NULL `model_user_id`, and NOT NULL would not break
+it. ⚠️ Unlike `reports`, where de-identification by SET NULL is deliberate and
+NOT NULL would be wrong — the two tables look similar and only one tolerates it.
+
+**What must be true of existing rows first, and it is one read:**
+
+```sql
+select count(*)                                            as rows_total,
+       count(*) filter (where date is null)                as null_date,
+       count(*) filter (where start_time is null)          as null_start_time,
+       count(*) filter (where end_time is null)            as null_end_time,
+       count(*) filter (where model_user_id is null)        as null_model_user_id
+  from public.sessions;
+```
+
+**Every count must be 0.** A non-zero one is its own finding before it is a
+blocker: a row that already evades both booking guards.
+
+⚠️ **`end_time` is the fourth column and is a weaker case.** Neither
+`sessions_active_slot_uniq` nor `slot_contention` uses it, so a NULL there evades
+nothing — but `availability`'s own unique index DOES include it, and 0090's header
+turns on exactly that difference. Worth the same treatment for consistency, not
+for safety.
+
+**Also true, and it narrows the risk:** 0079 scoped `authenticated`'s UPDATE on
+`sessions` to `(status)` alone, so no client can null these columns after the
+fact either. The exposure is entirely at insert, entirely via `service_role`.
+
+### ⚠⚠ (2) AND THE ENUMERATION QUERY CANNOT SEE ANY OF THIS
+
+`information_schema.columns` lists columns that **need** a value. It says nothing
+about which get one, or from where. **A NOT NULL column filled by a BEFORE
+trigger is indistinguishable from one filled by the insert**, and a nullable
+column filled by a trigger looks like a column nobody thought about.
+
+So if `tg_session_slot_authority` were dropped tomorrow, this query would return
+the same seven rows and nothing anywhere would flag that six columns had lost
+their only setter. **The attribution has to be done by reading the trigger, and
+it is the attribution rather than the list that is the finding.**
+
+### ✅ AND THE METHOD IS WHAT CAUGHT IT, WHICH IS WORTH RECORDING SEPARATELY
+
+Eleven columns were predicted, with a stated setter for each. Seven returned. The
+GAP was the finding. Micky, 6 Oct 2026: *"Your prediction was wrong in the
+informative direction, and it is worth recording that the method is what caught
+it — a lookup with no stated expectation would have been read and accepted."*
+
+Same method as item 190, where four signatures were written down and the second
+measured. ⚠️ **The point is not that predictions are usually right. It is that a
+WRONG prediction localises the surprise**, and a lookup with no expectation
+attached has nothing to be surprised against.
+
+---
+
 ## Dated
 
 * **8 October** — the diarised selfie-orphan check. The only unarranged end-to-end
