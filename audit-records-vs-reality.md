@@ -19998,6 +19998,27 @@ an `is_admin()` returning false too often is loud (admins locked out) while an
    let a caller shadow it with a temp table **in the function that decides
    whether they are suspended.** Do not assume; read it.
 
+### ⚠️ THE POPULATION IS FOUR, NOT TWO — UPDATED 6 Oct 2026
+
+`is_admin()` was adopted by 0089. `is_suspended()` is this item. Two more were
+found the same day and belong on the same list:
+
+* **`set_consent_hash()`** — snapshot only, no migration. A BEFORE INSERT OR
+  UPDATE trigger on `consent_documents` computing
+  `sha256(title || body || acknowledgements::text)`. ⚠️ **It is the function that
+  makes a consent record mean anything**: `session_consents` stores the hash, and
+  if the formula moved, every stored hash would stop matching the document it
+  names. Item 167 asks whether consent records mean anything; this is the object
+  that decides it, and nothing in the repo asserts its shape.
+* **`sessions_active_slot_uniq`** — `supabase/booking-guard.sql`, hand-run. The
+  partial unique index that is the ONLY thing preventing a double booking
+  (item 192). Not checksum-locked, and the file can be re-run by anyone.
+
+⚠️ **So the pattern is not two leftovers, it is a population**, and the two found
+on 6 Oct are both load-bearing for correctness rather than merely present. Adopt
+them the way 0089 adopted `is_admin()`: read live, compare `prosrc` (or the index
+definition) before and after, refuse on any difference.
+
 ### ⚠️ AND ONE QUESTION 0089 DID NOT HAVE TO ASK
 
 `supabase/suspension-enforcement.sql` is hand-run and creates the function. **If
@@ -20202,6 +20223,110 @@ the output says what it tested. That is now a verify-shape convention in
 `scripts/migration-status.mjs`. **A good change can arrive with a bad reason**, and
 keeping the change while discarding the reason is the correct resolution rather
 than a compromise.
+
+---
+
+## 192. TWO MODELS BOTH SEE THE SAME SLOT AS FREE, AND THE SECOND FINDS OUT AFTER PAYING
+### Found 6 Oct 2026 while measuring item 186. ⚠️ LIVE DEFECT. Raised SEPARATELY and fixed FIRST, on its own merits.
+
+**Plainly:** a model picks a time, works through seven steps, and is refused at
+the last one because another model applied for that slot first. She cannot see
+the clash at any point before submitting, and if she subscribed to get there, she
+paid £4.99 for the journey.
+
+### ✅ SEVERITY, STATED PRECISELY — NEITHER MORE NOR LESS
+
+**This cannot produce a double booking.** `sessions_active_slot_uniq`, a partial
+unique index (`supabase/booking-guard.sql:31`), rejects the second insert, and the
+web client catches 23505 at `site/app/(app)/stylist/[id]/apply/actions.ts:306`
+with *"That slot has just been taken. Pick another time."*
+
+**The harm is a wasted journey, not a data-integrity failure.** Worth fixing
+because of where it lands — at the end, after payment and seven steps — not
+because anything becomes corrupt.
+
+### ⚠⚠ THE MECHANISM: A FAIL-CLOSED ARM THAT CANNOT FIRE. ITEM 188's SHARPEST INSTANCE.
+
+`site/lib/queries/apply.ts:118` builds the bookable set from three sources, and
+the third is a read of `sessions`:
+
+```
+booked = error
+  ? new Set(rawSlots.map(s => s.id))     -- treat everything as taken
+  : new Set(…rows…)
+```
+
+with the comment:
+
+> *"a failure here treats everything as taken rather than risk offering a slot
+> that is gone"*
+
+**The intention is right and the guard is blind to its actual failure mode.**
+`"participants can read sessions"` is
+`using (auth.uid() = model_user_id OR <provider owner>)`, so a model's read
+returns **only her own** sessions. Another model's pending application is removed
+by RLS — **silently, with no error** — so `booked` is systematically incomplete
+and the fail-closed arm never runs.
+
+⚠️ **RLS DOES NOT RAISE, IT FILTERS.** A guard written for `error` cannot see a
+guard written by a policy. This is item 188's class in live product code, in the
+booking path, since whenever that read was written — and it is the sharpest
+instance found so far, because every previous one was in a check and this one is
+in the feature.
+
+### ⚠️ WHY IT IS NOT PART OF 186, THOUGH 186 FOUND IT
+
+Micky, 6 Oct 2026: *"it is wrong today whether or not the panel is ever built, it
+is a correctness fix rather than a feature, and bundling a migration into a UI
+change means the fix only ships if the feature does. If 186 stalls, that defect
+must not stall with it."*
+
+✅ **And finding it argues FOR 186's option 2 rather than against it.** Option 1 (a
+price range only) would have left this exactly where it is — behind the wall,
+where the disappointment costs £4.99 and a filled-in wizard. Option 2 forces the
+fix, because a pre-wall panel that shows a contested slot as free would make its
+own central promise false.
+
+### THE FIX, AS DESIGNED 6 Oct 2026
+
+A `SECURITY DEFINER` function is the only sound way to know a slot is contested,
+because the thing that must stay hidden — **whose** application it is — is exactly
+what the RLS policy is right to hide. A model needs "unavailable", not "booked by
+Sarah".
+
+* **SECURITY DEFINER, STABLE, `set search_path = public, pg_temp`**, created by a
+  MIGRATION. It is a new object and has no reason to join the pre-framework
+  population that items 189 and 0089 exist to clean up.
+* **Returns, per `availability_id`, whether a pending or accepted session exists.
+  Never whose, never how many.** It discloses existence, not identity, which is
+  the minimum needed to avoid offering an unavailable slot. ⚠️ It must not become
+  the way round `"participants can read sessions"`.
+* **One call per STYLIST, not per day and not per slot.** It takes a provider id
+  and returns every contested future slot for that provider in one scan, so a page
+  rendering a month makes one round trip and clicking a day makes none. A per-slot
+  call on a month view is the wrong shape.
+* **EXECUTE granted to `authenticated` only**; revoked from `public` and `anon`.
+  The public pages show no slots and have no use for it.
+
+### ⚠️ ITEM 190 APPLIES TO ITS FUTURE, NOT TO ITS CREATION — SAID SO IT IS NOT MISAPPLIED
+
+Nothing compares this function's body when it is created, so the migration does
+**not** need `format()` and `chr(10)`. **The rule binds the day someone replaces,
+adopts or asserts it**, because a paste delivers CRLF and a hand-written
+comparison string does not. The migration's header must say that, so the next
+person meets the rule before the trap rather than after — and so nobody applies
+`format()` superstitiously to a case that does not need it.
+
+Its VERIFY must likewise assert BEHAVIOUR, never body text.
+
+### ⚠️ AND A FOURTH UNOWNED OBJECT, FOUND IN THE SAME READ
+
+`sessions_active_slot_uniq` — the partial unique index that is the only thing
+preventing a double booking — lives in **`supabase/booking-guard.sql`, a hand-run
+file. No migration creates it.** Same population as `is_suspended()` (item 189)
+and `set_consent_hash()`, and the same exposure: not checksum-locked, and the file
+can be re-run by anyone against a live database. Folded into item 189's list
+rather than raised again.
 
 ---
 
