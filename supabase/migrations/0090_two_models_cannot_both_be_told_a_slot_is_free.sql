@@ -472,6 +472,8 @@ notify pgrst, 'reload schema';
 --     v_holder  uuid;   -- the model whose fixture session contests the slot
 --     v_caller  uuid;   -- a SECOND model: the one who must see nothing directly
 --     v_slot    uuid;   -- the slot to contest
+--     v_date    date;   -- v_slot's date and start_time, kept so v_free can
+--     v_start   time;   --   exclude a SIBLING row that shares them
 --     v_free    uuid;   -- a slot with NO colliding session, confirmed as owner
 --     v_sess    uuid;
 --     v_treat   uuid;
@@ -486,30 +488,70 @@ notify pgrst, 'reload schema';
 --   begin
 --     -- ── Resolve, as the owner, so every "is there a session" question below
 --     --    is answered by somebody who can actually see them ─────────────
---     select a.provider_id, a.id into v_prov, v_slot
---       from public.availability a
---      where a.date >= current_date and a.is_taken is not true
---        and not exists (select 1 from public.sessions s
---                         where s.provider_id = a.provider_id and s.date = a.date
---                           and s.start_time = a.start_time
---                           and s.status in ('pending','accepted'))
---      order by a.date, a.start_time limit 1;
+--     --
+--     -- ⚠⚠ ONE QUERY, AND THE PROVIDER IS CHOSEN BEFORE THE SLOT. Two faults
+--     -- lived in the two-resolver version this replaces, both Micky's, 6 Oct 2026:
+--     --
+--     -- (a) v_free only excluded `a.id <> v_slot`, NOT a SIBLING row sharing
+--     --     v_slot's (date, start_time) with a different end_time. On such a pair
+--     --     the fixture session on v_slot makes slot_contention report v_free as
+--     --     contested — CORRECTLY, by the key this migration's header documents at
+--     --     length — and line 3 would print "FAIL - an uncontested slot reads
+--     --     contested". **The block would report FAIL for the one behaviour its own
+--     --     header insists is right, and the obvious response to that FAIL is to
+--     --     narrow the function back to availability_id, which is item 192
+--     --     reintroduced by its own test.** And it was the FIRST candidate reached,
+--     --     not a remote case: both resolvers ordered by date, start_time.
+--     --
+--     -- (b) v_slot was chosen across every provider with no regard to whether that
+--     --     provider had a second usable slot. With three published providers it
+--     --     could land on one that has exactly one, report NOT TESTED, and leave
+--     --     line 3 as no evidence while a provider that would have worked sat one
+--     --     row below in the same ordering.
+--     --
+--     -- So: `usable` defines "free" ONCE; the ORDER BY prefers a row that HAS a
+--     -- non-sharing sibling on the same provider; and v_free is that sibling, or
+--     -- null only when NO provider anywhere has such a pair.
+--     with usable as (
+--       select a.id, a.provider_id, a.date, a.start_time
+--         from public.availability a
+--        where a.date >= current_date
+--          and a.is_taken is not true
+--          and not exists (select 1 from public.sessions s
+--                           where s.provider_id = a.provider_id
+--                             and s.date = a.date
+--                             and s.start_time = a.start_time
+--                             and s.status in ('pending','accepted'))
+--     )
+--     select u1.provider_id, u1.id, u1.date, u1.start_time,
+--            (select u2.id from usable u2
+--              where u2.provider_id = u1.provider_id
+--                and not (u2.date = u1.date and u2.start_time = u1.start_time)
+--              order by u2.date, u2.start_time limit 1)
+--       into v_prov, v_slot, v_date, v_start, v_free
+--       from usable u1
+--      order by (select count(*) from usable u3
+--                 where u3.provider_id = u1.provider_id
+--                   and not (u3.date = u1.date and u3.start_time = u1.start_time)) desc,
+--               u1.date, u1.start_time
+--      limit 1;
+--
 --     if v_slot is null then
---       raise exception 'VERIFY: no free future slot exists to contest. Nothing was tested.';
+--       raise exception 'VERIFY: no free future slot exists on any provider to contest. Nothing was tested.';
 --     end if;
 --
---     -- A SECOND free slot, on the same provider, to leave alone. Line 3 needs a
---     -- slot whose freedom was established by someone who can see sessions — NOT
---     -- by the caller, who sees none and would call everything free.
---     select a.id into v_free
---       from public.availability a
---      where a.provider_id = v_prov and a.id <> v_slot
---        and a.date >= current_date and a.is_taken is not true
---        and not exists (select 1 from public.sessions s
---                         where s.provider_id = a.provider_id and s.date = a.date
---                           and s.start_time = a.start_time
---                           and s.status in ('pending','accepted'))
---      order by a.date, a.start_time limit 1;
+--     -- ⚠⚠ ASSERT WHAT THE RESOLVER CLAIMS, rather than trusting it. v_date and
+--     -- v_start exist for this: if a future edit to the query above ever lets
+--     -- v_free share v_slot's (date, start_time), the fixture makes v_free
+--     -- contested CORRECTLY and line 3 prints FAIL for the behaviour this
+--     -- migration defends — fault (a), silently reintroduced by a change to the
+--     -- resolver rather than to the function. A refusal here is cheap; a FAIL that
+--     -- invites narrowing slot_contention back to availability_id is not.
+--     if v_free is not null and exists (
+--          select 1 from public.availability a
+--           where a.id = v_free and a.date = v_date and a.start_time = v_start) then
+--       raise exception 'VERIFY: the resolver picked a free slot (%) sharing the contested slot''s date % and start_time %. slot_contention would call it contested, CORRECTLY, and line 3 would print FAIL for behaviour 0090 defends. The resolver is wrong, not the function. Nothing was tested.', v_free, v_date, v_start;
+--     end if;
 --
 --     select p.user_id into v_owner from public.providers p where p.id = v_prov;
 --     -- ⚠️ ITS OWN MESSAGE, BECAUSE A NULL HERE POISONS EVERY TEST BELOW. With
@@ -594,10 +636,13 @@ notify pgrst, 'reload schema';
 --     --    ⚠️ "NOT TESTED" IS NOT "pass". A first version used
 --     --    bool_or(...) over a set that could be empty: bool_or of nothing is
 --     --    NULL, coalesce(NULL, false) is false, and the line reported a pass it
---     --    had not earned — on today's data, where there may be no second free
---     --    slot at all. Micky's catch.
+--     --    had not earned. Micky's catch.
+--     --
+--     --    ⚠️ v_free CANNOT BE A SIBLING OF v_slot — see the resolver. If it
+--     --    were, the fixture would make it contested CORRECTLY and this line
+--     --    would print FAIL for the behaviour the header defends.
 --     if v_free is null then
---       r_free := 'NOT TESTED - no second free slot existed; this line is not evidence';
+--       r_free := 'NOT TESTED - no provider anywhere had two usable slots that do not share a (date, start_time); this line is not evidence';
 --     else
 --       select c.contested into v_flag
 --         from public.slot_contention(v_prov) c where c.availability_id = v_free;
@@ -637,8 +682,15 @@ notify pgrst, 'reload schema';
 --   stopped proving anything — the caller can see the session directly and the
 --   function is no longer the only way to know.
 --
---   ⚠️ A "NOT TESTED" ON LINE 3 IS NOT A PASS. It means no second free slot
---   existed, so nothing established that the function can say "false". Lines 1,
---   2 and 4 still stand on their own, but the block has proved the fix fires
---   without proving it discriminates.
+--   ⚠️ A "NOT TESTED" ON LINE 3 IS NOT A PASS. It means nothing established
+--   that the function can say "false": the block has proved the fix FIRES
+--   without proving it DISCRIMINATES. Lines 1, 2 and 4 still stand on their own.
+--
+--   ⚠️ AND IT NOW MEANS A GENUINE DATA SHORTAGE RATHER THAN A RESOLVER ARTEFACT
+--   — no provider anywhere has two usable slots that do not share a
+--   (date, start_time). Before the provider-first resolver above, a NOT TESTED
+--   proved only which provider the resolver happened to land on, so it was NOT a
+--   finding; a claim to the contrary was made in conversation on 6 Oct and was
+--   wrong. With the resolver fixed, a NOT TESTED is worth acting on: add a second
+--   future slot at a different start_time to any provider.
 -- ===========================================================================
