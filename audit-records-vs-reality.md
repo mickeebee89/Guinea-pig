@@ -15655,7 +15655,42 @@ earlier.
 
 ---
 
-## 148. A MODEL MAY BE ABLE TO INSERT A CONFIRMED BOOKING WITH NO CONSENT RECORD
+## 148. ✅ CLOSED 6 Oct 2026 — A MODEL COULD INSERT A CONFIRMED BOOKING WITH NO CONSENT RECORD
+
+### ✅✅ CLOSED BY 0086, VERIFIED 6 Oct 2026. All six sections pass.
+
+```
+(a) 26 and 26
+(b) refused by the GRANT: permission denied for table sessions | insert had succeeded first: false
+(c) no row references slot 1 — attempted and refused
+(d) refused by the CONSENT CONSTRAINT | insert had succeeded first: true
+(e) slot1 none, slot3 none, both n/a (no row)
+(f) REAL BOOKING SURVIVES BOTH HALVES: consent rows 1, duration 60,
+    model_id=model_user_id true, stylist notified 1, deferred checks forced immediate
+    fixture provider 09c6d70c…, owned by nahitih259@bevriz.com (a cleanup-script test account)
+    pg_net queue rows added by THIS transaction: 2
+```
+
+⚠️ **(b) AND (d) TOGETHER ARE THE PROOF; EITHER ALONE IS WEAKER** — Micky's
+reading, and it is right. 26 columns denied by the grant, and **the same insert
+at seven columns allowed THROUGH the grant and then refused by the constraint.**
+One shows the narrowing works; the other shows the thing the narrowing cannot
+reach is covered.
+
+⚠️ **AND (d) REPORTS `insert had succeeded first: true`**, which is the
+mechanism working as designed rather than a statement-time refusal wearing the
+constraint's name. The row was written, `set constraints all immediate` forced
+the pending check, and the deferred trigger refused it. Without that flag the
+two would be indistinguishable in the output.
+
+**(f) proves the bounds**: real booking still works, the trigger supplies
+`duration 60` and `model_id = model_user_id`, and the stylist is still told —
+that last being the regression test for the line the preflight diff caught the
+reproduction dropping.
+
+---
+
+## 148 — THE ORIGINAL ENTRY, KEPT FOR THE REASONING
 ### Written up 5 Oct 2026. ⚠️ THE NUMBER WAS IN USE FOR DAYS WITH NO ENTRY BEHIND IT.
 
 ### ⚠️ FIRST, THE RECORD-KEEPING FAULT, BECAUSE IT IS THE SAME CLASS WE SPENT THE WEEK CLOSING
@@ -17954,6 +17989,68 @@ it just is not the point. Both are true and only one is load-bearing.
 Recorded here because here is the only place it can be. The trigger's own
 COMMENT can be replaced by a later migration, since a database comment is not
 checksum-locked, and that is the copy anyone reads from the database.
+
+---
+
+## 171. THE EMAIL LIST WAS CURATED ACROSS SIX MIGRATIONS. THE PUSH LIST DOES NOT EXIST.
+### Found 6 Oct 2026, from 0086's verify reporting TWO pg_net queue rows for one notification.
+
+(f) reported `pg_net queue rows added by THIS transaction: 2`. Micky: *"Either
+that's push plus email, or every notification fires two outbound requests —
+which in production would mean two emails per notification."*
+
+✅ **It is push plus email.** Read rather than inferred — there are **two**
+AFTER INSERT triggers on `public.notifications`:
+
+| trigger | source | gate | `net.http_post` |
+|---|---|---|---|
+| `notify_email` | 0047, last redefined by 0082 | `when (new.type = any(array[…12 types…]))` | **1** → `send-email` |
+| `notify_push` | `supabase/push-setup.sql` (hand-run) | **none at all** | **1** → `send-push` |
+
+`tg_notify_push()` makes exactly one call and carries no internal guard;
+`tg_notify_email()` likewise. The other four `net.http_post` sites in the repo
+belong to `tg_message_push`, which is on `messages`. **No double email, and no
+live defect.**
+
+### ⚠️ BUT THE READ FOUND THE ACTUAL FINDING
+
+**`notify_push` has no WHEN clause.** Its own comment reads *"every notification
+row -> push (covers all 10 existing types)"* — written when there were ten.
+**There are now fourteen** (`check-email-type-coverage.mjs`: 12 emailed, 2
+declared not-emailed, 14 written).
+
+So:
+
+* The **email** list has been decided and re-decided across **six migrations** —
+  0047, 0061, 0067, 0070, 0073, 0082 — each a deliberate judgement about what is
+  worth interrupting somebody for. Item 151 exists because getting that list
+  wrong is a trap.
+* The **push** list **does not exist**. Every type pushes, by omission rather
+  than decision.
+
+⚠⚠ **AND THE TWO TYPES DELIBERATELY KEPT OUT OF EMAIL STILL PUSH.**
+`new_availability` was excluded from email **because it is a mass send — one per
+favouriter** (0047, reaffirmed 0082). **It sends one PUSH per favouriter.** The
+exact concern that kept it out of one channel is unexamined on the other.
+`session_completed` is the second, and item 159 is still undecided about its
+email while its push has been going out all along.
+
+### Why this is the same shape as item 151, one channel over
+
+151: *the email template's default branch is a trap for every future type.*
+This: **there is no push branch to be a trap, because there is no list.** A new
+notification type is pushed to everyone the moment it exists, and nothing
+records that as a decision.
+
+**No push equivalent of `check-email-type-coverage.mjs` exists.** That checker
+holds three lists in agreement — trigger WHEN, reconciler allowlist, `copyFor`.
+Push has one list, implied, and it is "all of them".
+
+### Not started
+
+Behind 169, 156, 149. **It is a decision before it is a fix**: whether every
+type should push is a product question, and `new_availability`'s mass send is
+the one that forces it.
 
 ---
 

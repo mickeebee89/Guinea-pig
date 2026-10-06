@@ -51,18 +51,18 @@ else and held stage F up for a week, while the work itself took one migration.
 
 ### ⚠⚠ THE TOP TWO OPEN ITEMS NOW — BOTH LIVE, BOTH ON SHIPPED CODE
 
-**Item 148 — a model may be able to INSERT a confirmed booking with no consent
-record.** Written up 5 Oct 2026. Six repo reads say nothing on the INSERT path
-checks `status`, and **0049's own Block C already proved a member can direct-
-insert a session with a caller-supplied status and no consent row** — so only
-the string `'accepted'` is unverified. If it works it fabricates an appointment
-in a stylist's diary she never accepted, with a six-year legal record missing
-that **cannot be backfilled**. One rolled-back block settles it.
+✅ **Item 148 — CLOSED 6 Oct 2026 by 0086**, verified in six sections. A member
+could have created a booking already marked accepted, attributed to a different
+member, backdated ninety days, with both not-held timestamps set, and no consent
+record — fifteen columns reachable, measured. Now: seven granted columns, two
+more taken over by the slot-authority trigger, and a deferred constraint making
+"a booking cannot exist without a consent record" true of every row created from
+0086 onward.
 
-⚠️ **The number was in use for days with nothing behind it.** 148 did not exist
-in the audit record — the numbering ran 147 → 149 — while being referred to as
-the largest open thing. Item 155's class, reversed: a *finding* prioritised by a
-number that was never allocated.
+⚠️ **29 pre-existing consentless sessions remain, all on test accounts** — item
+170. The 8 August cleanup script was written to remove exactly them and never
+completed; its own final check proves that, since completion and zero survivors
+are the same event.
 
 **Item 157 — a member can mark their own photo as reviewed**, taking it out of
 moderation. Confirmed, not merely suspected. Apple Guideline 1.2 / Play UGC. Its
