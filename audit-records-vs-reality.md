@@ -17090,11 +17090,37 @@ too wide.
 
 ### Still unread
 
-`terms_accepted_at`, `date_of_birth`, `providers.rating`/`review_count`, and
-**which `is_verified` the shop page and the verified badge actually read** —
-still the sharpest, because a displayed flag that is not the protected flag
-means a stylist can show a badge she was never given. **These gate 156's OTHER
-half (the `users`/`providers` column grants, which close 157), not 0084.**
+`terms_accepted_at`, `date_of_birth`, and **which `is_verified` the shop page
+and the verified badge actually read** — still the sharpest, because a displayed
+flag that is not the protected flag means a stylist can show a badge she was
+never given. **These gate 156's OTHER half (the `users`/`providers` column
+grants, which close 157), not 0084.**
+
+✅ **`providers.rating` / `review_count` — ANSWERED 6 Oct 2026, AND IT MOVES THIS
+ITEM UP.** They are **DERIVED, not stored independently**:
+`recompute_provider_rating()` runs on
+`trg_recompute_provider_rating AFTER INSERT OR DELETE OR UPDATE ON public.reviews`
+(snapshot:427) and recomputes `avg(overall_rating)` and `count(*)` onto
+`providers`.
+
+⚠⚠ **So an open UPDATE grant on those two columns is a forged-social-proof
+vector, not a tidiness question.** A stylist who can write `providers.rating`
+directly sets her own star rating without a single review existing, bypassing
+the trigger entirely — and under the same law the demo layer cites for refusing
+fake reviews. **That is a sharper reason to do 156's second half than "one more
+read is done", and it is why the item moves up rather than merely becoming
+actionable.**
+
+The read that settles whether it is live:
+
+```sql
+select cp.column_name, cp.privilege_type, cp.grantee
+  from information_schema.column_privileges cp
+ where cp.table_schema = 'public' and cp.table_name = 'providers'
+   and cp.grantee in ('authenticated', 'anon')
+   and cp.column_name in ('rating', 'review_count', 'is_verified', 'is_published')
+ order by cp.grantee, cp.column_name;
+```
 
 ✅ **The patch_tests FK read is ANSWERED** — `patch_tests_provider_id_fkey ->
 auth.users`, read by 0083's PREFLIGHT on 5 Oct 2026. ~~Plus one live read, since
@@ -18093,6 +18119,139 @@ whether or not 169, 156 and 149 are done.
 
 **It is also a decision before it is a fix**: whether every type should push is
 a product question, and `new_availability`'s mass send is what forces it.
+
+---
+
+## 172. TWO FIXTURE SYSTEMS, OPPOSITE RULES — ONE REFUSES FAKE REVIEWS BY LAW, THE OTHER WRITES SIXTEEN TO PRODUCTION
+### Found 6 Oct 2026 while costing option 2 of item 169. ⚠️ Read the count before acting — see below.
+
+`site/lib/demo/README.md`, on its own fixture rules:
+
+> **No reviews, ratings or testimonials.** UK law bans fake reviews, and these
+> screenshots are for advertising.
+
+`site/lib/demo/fixtures.ts:418` is `reviews: []`, deliberately empty, and the
+whole layer is in-memory with three separate guards against ever reaching
+production.
+
+**`seed/seed.mjs` creates sixteen reviews** — one per entry in its `REVIEWS`
+table — each attached to a completed session, on accounts it also publishes as
+**genuinely bookable stylists on the live database**. Its own header says so:
+*"Seeded stylists are publishable and genuinely bookable."*
+
+### ⚠⚠ AND THE RATINGS ARE DERIVED, SO THEY REACH THE LISTING
+
+`recompute_provider_rating()` fires on
+`trg_recompute_provider_rating AFTER INSERT OR DELETE OR UPDATE ON public.reviews`
+and writes `avg(overall_rating)` and `count(*)` onto `providers`.
+`public_stylists` then serves `coalesce(p.review_count, 0)` to the public site
+(`0034:243`).
+
+**So a seeded review is not a fixture sitting in a table. It is a star rating on
+a live, bookable listing.** Micky's framing, and it is the right one: *"not a
+fixture concern, it is invented social proof on a live listing."*
+
+### The two systems were built to opposite standards by the same project
+
+* `site/lib/demo/` — in-memory, cannot run in production (three guards),
+  **refuses reviews by rule, with the legal reason written down**.
+* `seed/seed.mjs` — writes to production, hardcoded URL, no staging project,
+  **sixteen reviews**.
+
+The demo layer's rule was written for exactly this hazard. **Nobody applied it
+to the other fixture system.**
+
+### ⚠️ WHETHER IT IS CURRENTLY LIVE IS NOT ESTABLISHED
+
+Item 170's cohort query found **no `@seed.guineapig.invalid` rows** among the 29
+consentless sessions, which suggests the seed has either never been run against
+this database or was torn down successfully. **That is an inference from a query
+about something else**, and it must be checked directly before anyone relaxes:
+
+```sql
+select count(*) filter (where u.email like '%@seed.guineapig.invalid') as seeded_reviewers,
+       count(*)                                                        as all_reviews
+  from public.reviews r
+  left join public.users u on u.id = r.reviewer_id;
+```
+
+**Non-zero `seeded_reviewers` means fake reviews are live on the public site**,
+and that outranks everything currently queued.
+
+### What this does to item 169
+
+It makes **option 2 (the seed stops creating sessions) nearly free and
+positively desirable**: the review requires a completed session, so dropping the
+sessions drops the reviews, and the legal exposure goes with them.
+
+Of the two seeded fixtures:
+
+* **accepted session with a chat** — could move into demo mode by adding
+  `sessions` and `messages` fixtures. In memory, no production, no exposure.
+  Modest work.
+* **completed session with a review** — **should not exist in either system.**
+  The demo layer forbids it by rule; the seed does it on production, which is
+  the worse of the two.
+
+---
+
+## 173. PRODUCTION HOLDS UNDELETABLE CONSENT RECORDS FOR TEST ACCOUNTS, AND GAINS MORE ON EVERY TEST BOOKING
+### Raised by Micky, 6 Oct 2026, from the item 169 reads. Not seed-specific.
+
+`guard_session_consents()` refuses every UPDATE outright and refuses DELETE
+while `agreed_at > now() - interval '6 years'`. It is a **trigger**, so it binds
+`service_role` too — there is no role that can step around it.
+
+**Every booking made through the real RPC writes one.** That includes every
+walkthrough Micky has done on production. So:
+
+* `teardown.mjs` cannot remove them — its own header says so: *"their rows are
+  immutable by design and CANNOT be removed here … the right outcome is usually
+  to ban the auth user … not to disable a safety mechanism someone added
+  deliberately."*
+* **Item 169's option 1 exemption would not cover them either**, because it
+  would be keyed to the reserved seed document and these reference the real one.
+
+**Production will gain one more every time the booking flow is tested, and each
+is immovable for six years.**
+
+### What clears them, and what does not
+
+**Nothing short of time or disabling the trigger deletes the row.** But deleting
+the row is probably the wrong goal:
+
+`session_consents` carries `user_id` (nullable), `subject_name` and
+`subject_email_hash` — the 0004 de-identification shape. `delete_account_data`
+*"deliberately does NOT touch session_consents. Those survive by design, are now
+self-contained."* **So if `user_id` is ON DELETE SET NULL, the account can be
+deleted and the consent survives naming nobody** — which is the designed
+outcome, and banning would not be needed.
+
+⚠️ **That FK rule is NOT established and decides the answer.** `teardown.mjs`
+lists `['session_consents', 'user_id']` among the FKs that can block a user
+delete, which points the other way. One read settles it:
+
+```sql
+select c.conname, pg_get_constraintdef(c.oid)
+  from pg_constraint c
+ where c.conrelid = 'public.session_consents'::regclass and c.contype = 'f';
+```
+
+And the count, which Micky asked for:
+
+```sql
+select count(*)                                             as consent_rows,
+       count(*) filter (where c.agreed_at > now() - interval '6 years') as immovable,
+       min(c.agreed_at)::date                               as oldest,
+       max(c.agreed_at)::date                               as newest
+  from public.session_consents c;
+```
+
+**If the FK is SET NULL, nothing needs clearing** — the rows are already
+designed to outlive the people, and the right action is none. **If it is NO
+ACTION or RESTRICT**, every test account that has ever booked is undeletable
+without disabling a guard, and that is a real constraint on cleaning up before
+launch.
 
 ---
 
