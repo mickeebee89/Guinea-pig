@@ -605,12 +605,54 @@ notify pgrst, 'reload schema';
 --           || ' free_slot=' || coalesce(v_free::text, '(none - line 3 cannot run)');
 --
 --     -- ── The fixture: a pending session held by the HOLDER ─────────────
+--     --
+--     -- ⚠⚠ THE COLUMN LIST IS 0086's SEVEN, DELIBERATELY AND EXACTLY. A first
+--     -- version wrote the OLD fourteen-column shape — provider_id, model_user_id,
+--     -- model_id, availability_id, treatment_id, date, start_time, end_time,
+--     -- status — and failed with
+--     --
+--     --     23502: null value in column "location_type" violates not-null
+--     --
+--     -- 0086 cut `create_session_with_consent`'s insert from fourteen columns to
+--     -- SEVEN because `tg_session_slot_authority` fills date, start_time, end_time,
+--     -- scheduled_at, duration_minutes and model_id FROM THE SLOT, unconditionally.
+--     -- So naming them is redundant, and naming the old set while OMITTING
+--     -- location_type, note and photo_urls is how this failed.
+--     --
+--     -- ✅ AND THE SANCTIONED PATH WAS NEVER AT FAULT: create_session_with_consent
+--     -- DOES set location_type (it is the 5th of its seven, from p_location_type).
+--     -- This was a defect in the verify alone — checked before changing anything,
+--     -- because "sessions requires a column the RPC does not set" would have been a
+--     -- finding about bookings rather than about a test.
+--     --
+--     -- ⚠️ THE LIST NOW MIRRORS THE SANCTIONED PATH'S OWN LIST, so the two cannot
+--     -- drift. 0065 hit this same wall, patched it by adding the columns it
+--     -- happened to need, and wrote: "A verify block that has to be repaired before
+--     -- it runs is not a verify block — it is a draft, and the next person meets
+--     -- the draft rather than the check." I inherited the patch and repeated the
+--     -- fault, which is the warning working exactly as predicted on whoever reads
+--     -- it next.
+--     --
+--     -- 'provider' is READ, NOT GUESSED: it is what the live web sends at
+--     -- site/app/(app)/stylist/[id]/apply/actions.ts:260. (Mobile sends 'either',
+--     -- and mobile is mothballed.)
+--     --
+--     -- ⚠️ IF THIS STILL FAILS 23502 ON SOME OTHER COLUMN, DO NOT ADD IT BLIND.
+--     -- public.sessions predates 0000 so its DDL is in no migration and no
+--     -- snapshot. Enumerate the real set first:
+--     --
+--     --   select c.column_name, c.is_nullable, c.column_default
+--     --     from information_schema.columns c
+--     --    where c.table_schema = 'public' and c.table_name = 'sessions'
+--     --      and c.is_nullable = 'NO' and c.column_default is null
+--     --    order by c.ordinal_position;
+--     --
+--     -- Every column it returns must be set by SOMETHING — this insert, a default,
+--     -- or a BEFORE trigger. A column in that list which
+--     -- create_session_with_consent also does not set IS a finding about bookings.
 --     insert into public.sessions
---       (provider_id, model_user_id, model_id, availability_id, treatment_id,
---        date, start_time, end_time, status)
---     select v_prov, v_holder, v_holder, a.id, v_treat,
---            a.date, a.start_time, a.end_time, 'pending'
---       from public.availability a where a.id = v_slot
+--       (provider_id, model_user_id, availability_id, treatment_id, location_type)
+--     values (v_prov, v_holder, v_slot, v_treat, 'provider')
 --     returning id into v_sess;
 --     r_fix := case when v_sess is null then 'FAIL  - fixture session not created'
 --                   else 'pending session ' || v_sess::text || ' held by ' || v_holder::text end;
