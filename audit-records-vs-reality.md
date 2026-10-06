@@ -16210,7 +16210,24 @@ CRLF on paste.
 ⚠️ **Re-run it after any future adoption of this kind.** One pass proves the
 mitigation held once; it does not prove the next paste will behave.
 
-### ⚠️ A CONTRADICTION THIS SURFACED, NOT YET SETTLED
+### ✅ A CONTRADICTION THIS SURFACED, SETTLED THE SAME DAY — THERE WAS NONE
+
+**Read 6 Oct 2026:** `ff06d568-8936-45fa-ad5f-0b88c150ec30` **IS** in
+`public.admins`. `CLAUDE.md` is correct, the break-glass admin is intact, and
+there is no single point of failure on the moderation surface. **Nothing in the
+durable record needed changing.** The premise was wrong; see item 191 for the
+mechanism, which is the part worth keeping.
+
+⚠️ **AND DO NOT READ THE DECISION COUNTS AS A SECOND CONTRADICTION.** The same
+read returned `decisions=0` for the console admin and `decisions=3` for Micky B,
+counting `moderation_actions` — which is where `revoke_verification` writes.
+**Verification approvals go through `admin_decide_verification`, which writes
+`admin_audit_log`.** So those numbers say nothing whatever about item 35's "28 of
+30 verification decisions": different table, different act. Re-checking item 35
+needs `admin_audit_log` or `verification_requests.reviewed_by`. Reading them as a
+contradiction would stack a second false finding on the first.
+
+### ── WHAT WAS ASKED, KEPT BECAUSE THE ANSWER IS THE POINT ─────────────
 
 The verify's `v_admin` was written as `ff06d568-8936-45fa-ad5f-0b88c150ec30`,
 carried from 0057's own block, which calls it *"must be in public.admins"*. Micky,
@@ -20120,6 +20137,71 @@ one step along — not a check that passes wrongly, but one that **fails
 informatively to itself and opaquely to its reader.** Every refusal in 0089 now
 prints `length` and `md5`, and the two body comparisons also print hex, because
 for a stray `0d` or a missing `0a` the hex is the only form anyone can act on.
+
+---
+
+## 191. A CLAIM IN A MESSAGE IS NOT EVIDENCE, INCLUDING MICKY'S
+### 6 Oct 2026. ✅ CAUGHT BEFORE IT PROPAGATED. Recorded as the mechanism, not as a courtesy.
+
+Micky, 6 Oct 2026, in the message that corrected it:
+
+> *"My claim was wrong and I want it recorded as wrong rather than quietly
+> dropped. I knew ff06d568 was a provider's user_id from the 176 read and I
+> asserted it was not an admin, which does not follow — admin status is
+> independent of role, and this query proves it: one admin has role model, the
+> other provider."*
+
+### What happened
+
+0089's verify hardcoded `v_admin := 'ff06d568…'`, carried from 0057's own block,
+which labels it *"must be in public.admins"*. Micky replaced it with an id
+resolved from the table and reported, in passing, that `ff06d568` *"is the
+user_id of provider 49d40aae, not an admin."*
+
+**It is both.** `public.admins` is keyed to `auth.users.id` and says nothing about
+`public.users.role`. The read proves the independence twice over: the console
+admin has `role = 'model'` and Micky B has `role = 'provider'`. **Being a
+provider's user_id is not evidence of not being an admin, and the inference ran
+the wrong way down a FK.**
+
+### ⚠⚠ WHY IT MATTERS MORE THAN AN ORDINARY SLIP: IT BECAME AN INPUT
+
+The claim arrived in a message, and a message is what this agent treats as
+instruction. It would have gone on to:
+
+* **correct `CLAUDE.md`**, which is read at the start of every session — so the
+  error would have been re-asserted as durable context indefinitely;
+* **rewrite items 34 and 35**, both of which depend on `ff06d568` being an admin;
+* **raise a false operational finding** — "the only remaining admin made 2 of 30
+  decisions and last signed in 26 Jul" — which reads as urgent and would have
+  pulled work toward a problem that does not exist.
+
+### ✅ THE MECHANISM THAT STOPPED IT, WHICH IS THE POINT OF THIS ENTRY
+
+**A durable record was not edited on an assertion alone, because the record
+disagreed with the assertion.** The response was to name the disagreement, give
+the one query that settles it, and carry on with the work — not to comply and not
+to stall.
+
+⚠️ **The rule, stated so it survives this instance:** when a message contradicts
+`CLAUDE.md`, the audit record, or a measured figure, the contradiction is
+SURFACED and MEASURED before either side is written down. The author being Micky
+does not convert a claim into a measurement. **This record exists because
+assumed facts in this schema have a demonstrated failure rate; a message is not
+exempt from that just because it is upstream.**
+
+And the inverse failure is real too: a stated correction that turns out to be
+right must not be argued with once the read lands. The test is the read, not who
+said it.
+
+### ✅ WHAT SURVIVES ANYWAY, ON ITS OWN MERITS
+
+**The change to resolve `v_admin` from `public.admins` and print it stands** — an
+id a block depends on should be resolved and printed rather than pasted in, so
+the output says what it tested. That is now a verify-shape convention in
+`scripts/migration-status.mjs`. **A good change can arrive with a bad reason**, and
+keeping the change while discarding the reason is the correct resolution rather
+than a compromise.
 
 ---
 
