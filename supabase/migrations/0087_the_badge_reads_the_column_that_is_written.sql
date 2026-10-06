@@ -165,7 +165,7 @@ commit;
 --       || ' badge=' || coalesce((select s.is_verified::text from public.public_stylists s where s.id = v.id), 'n/a')
 --       || ' users.is_verified=' || coalesce(u.is_verified::text, 'null')
 --     from (values ('49d40aae-a830-41d1-bca8-0fbdb2695455'::uuid),
---                  ('b604a402-0000-0000-0000-000000000000'::uuid)) as v(id)
+--                  ('b604a402-91b7-448a-91de-4aedff94521c'::uuid)) as v(id)
 --     left join public.providers p on p.id = v.id
 --     left join public.users u on u.id = p.user_id
 --   order by 1, 2;
@@ -176,9 +176,10 @@ commit;
 --     · 2 rows, 2 with a badge. ⚠️ If it says 2 rows and 0 badges, the view has
 --       NOT been re-run and applying this will be refused by the post-condition.
 --
---   ⚠️ b604a402's full uuid is truncated in the audit record — substitute the
---   real one before running, or drop that row from the VALUES list. A probe
---   that silently matches nothing is worse than one that is not there.
+--   ⚠️ BOTH UUIDS ARE REAL, SUPPLIED 6 Oct 2026. An earlier draft carried a
+--   placeholder for b604a402 because the audit record held it truncated — a
+--   probe that silently matches nothing is worse than one that is not there,
+--   which is why it was marked rather than guessed at.
 -- ===========================================================================
 --
 -- ── VERIFY — ONE BLOCK, after applying ──────────────────────────────

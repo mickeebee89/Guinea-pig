@@ -19106,6 +19106,32 @@ Raised rather than folded into 176, because the fix is a product decision —
 whether to tell her, where, and whether the two rules should be one — and 176
 was a column.
 
+### 183b. A SMALL ONE IN THE SAME NEIGHBOURHOOD — THE EMPTY STATE GIVES IRRELEVANT ADVICE
+#### Micky, 6 Oct 2026: *"worth a change rather than a note, but not in this push."*
+
+`mobile/src/app/(app)/index.tsx:943`, when the filters match nothing:
+
+> *"No stylists match your search or filters. Try widening the distance or
+> clearing them."*
+
+⚠️ **"Try widening the distance" is irrelevant advice when `verifiedOnly` is
+the only active filter.** The member has not set a distance; she has asked to
+see only checked stylists and been shown an empty screen with a suggestion that
+does not apply to anything she did.
+
+It has never mattered until now, for the reason item 176 records: the filter
+could never match, so nobody reached a state where the copy was the problem.
+**Fixing 176 is what makes this reachable.**
+
+The fix is to name the filters that are actually on — the component already
+computes `hasActiveFilter` from the same three at `:451`, so it knows. Not in
+the 176 push; small, and sits here with 183 because both are "the product knows
+why and does not say".
+
+⚠️ And mobile means **haptics**: if that empty state gains a "clear filters"
+control rather than only words, it wants `expo-haptics` on the tap like every
+other mobile interaction. Web gets none — that rule is for `mobile/` only.
+
 ---
 
 ## Dated
