@@ -111,6 +111,39 @@
 -- Anyone editing this body to say `admins` instead of `public.admins` opens
 -- exactly that, and the body is two lines long, which is how it would happen.
 --
+-- ── ⚠⚠ THIS MIGRATION REFUSED ITSELF ON ITS FIRST RUN, 6 Oct 2026 ──────
+-- `0089: ADOPTION CHANGED THE BODY. Rolled back.` Nothing applied. **The guard
+-- was right and the implementation had the flaw the guard exists to catch.**
+--
+-- The body was written TWICE: once as the expected literal, once as literal SQL
+-- inside the DDL. Preflight (c) returned true, so live prosrc DID equal the
+-- expected literal — therefore the DDL was producing something else, and the two
+-- copies had diverged in whitespace.
+--
+-- ⚠⚠ AND THE LIKELY CAUSE IS NOT IN THE FILE. The file is LF-only on disk and a
+-- byte comparison of the two copies there MATCHED. What differs is what reaches
+-- the DATABASE: `v_want` is built from `chr(10)` and is LF whatever happens to
+-- the paste, while a literal multi-line body carries whatever newlines the
+-- clipboard and the SQL editor deliver. **A paste that converts LF to CRLF makes
+-- the two copies differ even though the file is correct.** Stated as the probable
+-- cause rather than the proven one — the first refusal printed no lengths, no
+-- md5 and no hex, so it could not say. It can now.
+--
+-- ⚠⚠ THE GENERAL FORM, WHICH OUTLIVES THIS MIGRATION: ANY migration that
+-- creates a function whose body must match an exact string is exposed to
+-- paste-time line-ending conversion. Build the body from `chr(10)` and pass it
+-- through `format()`. Never write it as literal multi-line SQL and then compare
+-- it against a constructed string — that is two sources of truth for one value,
+-- and only one of them survives a clipboard.
+--
+-- ⚠️ THE BODY TEXT APPEARS THREE TIMES IN THIS FILE AND THAT IS CORRECT: once
+-- in `v_want`, which is the only LIVE copy and the one the DDL is built from,
+-- and once each in the PREFLIGHT and VERIFY blocks below. Those two are separate
+-- pasteable blocks that cannot reference `v_want`, so a copy there is
+-- unavoidable — but all three are built with `chr(10)`, so none of them carries
+-- a literal newline, and a drift between them surfaces as a LOUD false mismatch
+-- in the preflight rather than as a silent pass.
+--
 -- ── ⚠⚠ ONE FAULT CAUGHT IN THIS MIGRATION'S OWN DRAFT — IT IS ITEM 188's ──
 -- Three property checks below were written `not (v_cfg @> array['search_path=
 -- public'])`. **`NULL @> x` IS NULL AND `not NULL` IS NULL, SO THE `if` NEVER
@@ -319,10 +352,12 @@ begin
     raise exception '%', '0089: the live public.is_admin() body is NOT what this migration was written '
       || 'from, so adopting it would CHANGE the function every RLS policy and all four admin RPCs '
       || 'depend on. THE ADOPTION WAITS AND THE DIFFERENCE IS THE FINDING.'
-      || chr(10) || chr(10) || 'live prosrc, between the markers:'
+      || chr(10) || chr(10) || 'live     len=' || length(v_before) || ' md5=' || md5(v_before)
       || chr(10) || '>>>' || v_before || '<<<'
-      || chr(10) || chr(10) || 'expected:'
-      || chr(10) || '>>>' || v_want || '<<<';
+      || chr(10) || 'hex: ' || encode(convert_to(v_before, 'UTF8'), 'hex')
+      || chr(10) || chr(10) || 'expected len=' || length(v_want) || ' md5=' || md5(v_want)
+      || chr(10) || '>>>' || v_want || '<<<'
+      || chr(10) || 'hex: ' || encode(convert_to(v_want, 'UTF8'), 'hex');
   end if;
 
   if not v_sec or v_vol <> 's' or not (coalesce(v_cfg, '{}'::text[]) @> array['search_path=public']) then
@@ -332,18 +367,20 @@ begin
       || '. Expected definer, stable, search_path=public. Nothing changed.';
   end if;
 
-  -- ⚠️ THE SIX SPACES BELOW ARE THE ADOPTED BODY'S OWN INDENTATION. Changing
-  -- them changes prosrc and this block refuses itself three statements later.
-  execute $ddl$
-create or replace function public.is_admin()
-returns boolean
-language sql
-stable security definer
-set search_path to 'public'
-as $function$
-      select exists (select 1 from public.admins where user_id = auth.uid());
-      $function$
-  $ddl$;
+  -- ⚠️⚠️ THE DDL IS BUILT FROM v_want, SO THE BODY EXISTS ONCE IN THIS FILE.
+  -- An earlier version wrote the body a second time as literal SQL and compared
+  -- it against v_want. THEY DIVERGED AND THE MIGRATION REFUSED ITSELF — see the
+  -- header. The single-copy argument was already written four lines above this
+  -- one, applied to the COMPARISON and not to the DDL, and the gap between them
+  -- is exactly where it failed.
+  --
+  -- %L quotes 'public' as a literal; %s inserts the body raw. The body contains
+  -- no dollar-quote sequence, so $f$ cannot collide with it.
+  execute format(
+    'create or replace function public.is_admin() returns boolean '
+    'language sql stable security definer set search_path to %L '
+    'as $f$%s$f$',
+    'public', v_want);
 
   select p.prosrc, pg_get_functiondef(p.oid), p.prosecdef, p.provolatile, p.proconfig
     into v_after, v_dafter, v_sec, v_vol, v_cfg
@@ -352,15 +389,28 @@ as $function$
 
   -- BEFORE vs AFTER, same normaliser on both sides. prosrc is the stored text;
   -- pg_get_functiondef also catches a header change the body comparison cannot.
+  -- ⚠️⚠️ THE DIAGNOSTICS ARE THE POINT OF THIS MESSAGE, NOT THE STRINGS.
+  -- The first version printed only the two delimited bodies. It fired correctly
+  -- on a real difference and then RENDERED THE TWO AS IDENTICAL, because the
+  -- difference was invisible whitespace — unactionable, and item 188's class one
+  -- step along: a check that fails informatively to itself and opaquely to its
+  -- reader. length and md5 say THAT they differ; the hex says HOW, which for a
+  -- stray 0d or a missing 0a is the only form anyone can act on.
   if v_after <> v_before then
     raise exception '%', '0089: ADOPTION CHANGED THE BODY. Rolled back.'
-      || chr(10) || 'before: >>>' || v_before || '<<<'
-      || chr(10) || 'after:  >>>' || v_after  || '<<<';
+      || chr(10) || 'before len=' || length(v_before) || ' md5=' || md5(v_before)
+      || chr(10) || '>>>' || v_before || '<<<'
+      || chr(10) || 'hex: ' || encode(convert_to(v_before, 'UTF8'), 'hex')
+      || chr(10) || chr(10) || 'after  len=' || length(v_after) || ' md5=' || md5(v_after)
+      || chr(10) || '>>>' || v_after || '<<<'
+      || chr(10) || 'hex: ' || encode(convert_to(v_after, 'UTF8'), 'hex');
   end if;
   if v_dafter <> v_dbefore then
     raise exception '%', '0089: prosrc matches but the full definition changed. Rolled back.'
-      || chr(10) || 'before:' || chr(10) || v_dbefore
-      || chr(10) || 'after:'  || chr(10) || v_dafter;
+      || chr(10) || 'before len=' || length(v_dbefore) || ' md5=' || md5(v_dbefore)
+      || chr(10) || v_dbefore
+      || chr(10) || chr(10) || 'after  len=' || length(v_dafter) || ' md5=' || md5(v_dafter)
+      || chr(10) || v_dafter;
   end if;
   if not v_sec or v_vol <> 's' or not (coalesce(v_cfg, '{}'::text[]) @> array['search_path=public']) then
     raise exception '%', '0089: is_admin() lost a property in the replace — definer=' || v_sec::text
@@ -466,7 +516,7 @@ end $mig$;
 
 -- MIGRATION FOOTER
 insert into public.schema_migrations (version, name, checksum)
-values ('0089', 'the_framework_adopts_the_function_every_guard_depends_on', '3b54afce23f3db3e944d6c96140e24249aebe6b8572a167c9a0471e41e16c9a8');
+values ('0089', 'the_framework_adopts_the_function_every_guard_depends_on', '7465ac3eeba8ae46e02c2538301403bd7bc5dd9e1ea4b8b00357bb9e1e3f676d');
 
 commit;
 
