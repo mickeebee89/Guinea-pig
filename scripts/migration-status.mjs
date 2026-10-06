@@ -101,6 +101,34 @@
  *
  *   * `begin; ... rollback;` is fine — it is the multi-statement dependencies
  *     inside that break, not the transaction.
+ *   * ⚠⚠ WHEN A REPO READ AND A LIVE READ DISAGREE, THE LIVE READ IS RIGHT,
+ *     AND THE USUAL CAUSE IS A BOUNDARY THE PARSER GOT WRONG RATHER THAN A
+ *     STALE FILE. Three times on 6 Oct 2026 a repo read contradicted a live
+ *     one and was wrong every time. The mechanism, recorded because the
+ *     instances keep differing and the mechanism does not:
+ *
+ *       A FUNCTION BODY IS NOT RELIABLY DELIMITED BY `$$`. Postgres writes
+ *       `as $function$` when it round-trips a definition, so migrations
+ *       written against pg_get_functiondef() output carry a mix of `$$` and
+ *       `$function$` — sometimes in the same file. A matcher that ends a body
+ *       at `$$;` RUNS PAST THE END of any `$function$` body and reads the NEXT
+ *       function's header. That is how _admin_apply_user_action was reported
+ *       SECURITY DEFINER on 6 Oct when all seven of its definitions declare no
+ *       mode at all and the live catalogue said INVOKER.
+ *
+ *     The failure is silent and it is confident: the match succeeds, it is
+ *     just a match against the wrong object. So —
+ *
+ *       - Delimit a body by the NEXT `create ... function` boundary, never by
+ *         a closing dollar-quote tag you guessed.
+ *       - Take security mode, volatility and the argument list from pg_proc
+ *         (`prosecdef`, `provolatile`, `pg_get_function_identity_arguments`),
+ *         never by grepping the source text for them.
+ *       - A repo-derived claim about a live object is a HYPOTHESIS. Put it in
+ *         the migration's GUARD so the database refuses it if it is wrong,
+ *         rather than in the header where it merely reads as true. 0088 does
+ *         this for the two cleared INVOKER writers.
+ *
  *
  *   * ⚠️ A DEFERRED CONSTRAINT CANNOT BE TESTED BY INSERT-THEN-ROLLBACK.
  *     `CREATE CONSTRAINT TRIGGER ... DEFERRABLE INITIALLY DEFERRED` fires at
