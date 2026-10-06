@@ -66,7 +66,7 @@ export default async function ShopPage() {
           <ShopVisibility
             isPublished={setup.isPublished}
             refusal={refusal}
-            onPublicSite={setup.isPublished && setup.websiteBlockers.length === 0}
+            onPublicSite={setup.inPublicView}
           />
         )}
         {/* ⚠️ HERS LIVES HERE, NOT ON /profile — that page is the MODEL's.

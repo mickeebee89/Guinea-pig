@@ -86,7 +86,15 @@ export function StylistSetupPanel({ setup }: { setup: StylistSetup }) {
   if (setup.isPublished) {
     return (
       <section className="rounded-lg border border-hairline bg-white p-5 shadow-card">
-        <h2 className="font-display text-xl text-warm-dark">Your shop is live</h2>
+        {/* ⚠️ WHICH LIVE. Item 183. "Live" means published and bookable inside
+            Cavy, consistently across this codebase — the word is not wrong. The
+            fault was that it stood alone while the panel below might be about
+            to say she is missing from the public website, so a stylist had no
+            way to tell which of two states she was in from the sentence that
+            announced it. */}
+        <h2 className="font-display text-xl text-warm-dark">
+          {setup.inPublicView ? 'Your shop is live' : 'Your shop is live in Cavy'}
+        </h2>
         <p className="mt-1 text-sm text-muted">
           Models can find you and apply for your open slots.
           {setup.treatmentCount === 0 &&
@@ -97,14 +105,35 @@ export function StylistSetupPanel({ setup }: { setup: StylistSetup }) {
             saying so is the whole point: this stylist is bookable right now.
             Framed as an opportunity, never as a problem — nothing is broken and
             nothing is blocked. */}
-        {setup.websiteBlockers.length > 0 && (
+        {/* ⚠⚠ DRIVEN BY THE VIEW, NOT BY THE BLOCKER LIST. Item 183.
+            This used to render when websiteBlockers was non-empty, which meant
+            the panel appeared only for reasons the dashboard already modelled —
+            and stayed silent for any other, telling her nothing while she was
+            missing from the public site. Now absence from public_stylists is
+            what shows it, and the sentence is the explanation when there is
+            one. */}
+        {setup.isPublished && !setup.inPublicView && (
           <div className="mt-3 rounded-md bg-input-bg px-3 py-2">
             <p className="text-sm font-bold text-warm-dark">Want to show up on Google too?</p>
             <p className="mt-1 text-sm text-muted">
-              You’re live and bookable in Cavy either way. To also appear on the public
-              cavybeauty.com pages, where people who aren’t members yet can find you, you’d
-              need {setup.websiteBlockers.join(' and ')}.
+              You’re bookable in Cavy either way — models can find you, apply and book.
+              This is about the public cavybeauty.com pages, where people who aren’t
+              members yet can find you.
             </p>
+            {/* ⚠️ The database's own sentence when we have one, and an honest
+                shrug when we do not. Guessing a reason here would be the
+                mirror defect returning: the view already told us she is not
+                listed, and not knowing why is better said than invented. */}
+            {setup.websiteBlockers.length > 0 ? (
+              <p className="mt-1 text-sm text-muted">
+                You’d need {setup.websiteBlockers.join(' and ')}.
+              </p>
+            ) : (
+              <p className="mt-1 text-sm text-muted">
+                We can’t tell from here what’s holding it up — check your shop name,
+                your treatments and your about, or get in touch.
+              </p>
+            )}
           </div>
         )}
         <p className="mt-3 flex flex-wrap gap-4">

@@ -19285,6 +19285,51 @@ wrong** and the finding is larger: a shop can lose its last categorised
 treatment, drop out of the public site, and keep saying published — which no
 notice covers, because `websiteBlockers` only ever carries the bio sentence.
 
+### ✅ MEASURED, THEN BUILT — 6 Oct 2026
+
+```
+passes_bio=false  bio_length=12  everything else true
+what_the_db_would_tell_her: "Your "about" is a little short for the public
+site — around 40 characters or more does it."
+```
+
+**The deduction held.** 183 is exactly the bio rule, and the database already
+writes the sentence she needs — it was only ever shown after she had published,
+cleared name and treatments, and reached a dashboard panel.
+
+**Built in three parts, no migration.** Confirmed rather than assumed:
+`bio_publish_problem` is already granted to `authenticated` (0060:294) and
+`public_stylists` already grants `authenticated SELECT`.
+
+**1. The bio field, first — because it is what every recruited stylist walks
+into.** `(optional)` is gone; a new `bioWebsiteProblem` server action returns
+`bio_publish_problem`'s sentence and the field shows it **verbatim** on blur.
+⚠️ Advisory, never a save blocker — refusing a short bio there would be fix (a)
+through the back door. The pass case says *"Nothing in your about would keep
+you off cavybeauty.com"* — what it knows — and **never that she will appear**,
+which also needs a name, a treatment and publishing. Silence would have been
+ambiguous between "fine" and "not checked".
+
+**2. `websiteBlockers` reads the view.** `inPublicView` is
+`public_stylists` returning her row; the panel renders on `isPublished &&
+!inPublicView`, and the sentence only explains. ⚠️ On a read error it stays
+**false** — claiming she is listed when the check failed is the over-claim
+being removed. When there is no sentence it says so rather than guessing:
+*"We can't tell from here what's holding it up."*
+
+**3. The vocabulary.** The sweep found `live` means *published and bookable in
+Cavy* **consistently** — the word was not wrong. The fault was that the heading
+*"Your shop is live"* stood alone while the panel beneath it might be about to
+say she is missing from the public site. It now reads **"Your shop is live in
+Cavy"** when she is not in the view. `ShopVisibility` already distinguished the
+two properly, and now does so **by measurement** rather than inference.
+
+⚠️ **And one comment had to be corrected, not just added to.** `shop.ts` said
+the bio RPC must be **"LAST, BECAUSE THE DESTRUCTURING NAMES IT LAST"** (item
+128's scar). Adding the view read made that false. The invariant was never
+"last" — it was **alignment**, position for position — and the comment now says
+so. A rule stated by its incidental form breaks the moment the form changes.
+
 ### Not fixed here
 
 Raised rather than folded into 176, because the fix is a product decision —
@@ -19475,7 +19520,30 @@ is exactly what makes this class hard: from the database both look identical —
 a column nothing writes. The difference is whether something else already does
 the job.
 
-### Why it is not decidable here
+### ✅ DECIDED 6 Oct 2026 — PER-SLOT PRICING, SO THE COLUMN IS A FOSSIL
+
+Micky: **price model is per-slot.** `availability.price_pence` is the price,
+one number per slot. Treatment selection stays because the booking records
+`treatment_id`, **but it is not a price choice and the UI must not imply it
+is.**
+
+**So `provider_treatments.price` is a fossil in the strict sense** — built for
+a model that was never wired, holding no data, able to cause harm only by being
+wired later into a second price source. **Same answer as
+`providers.is_verified`: drop it rather than leave it.**
+
+✅ **Confirmed nothing reads it**, the way the nine `is_verified` readers were
+confirmed: swept every `.ts`, `.tsx`, `.sql`, `.mjs` and `.js`. Every hit is
+prose — marketing copy, legal text about *slot* prices, a promo-recorder label.
+**`site/lib/demo/fixtures.ts:24` already says it outright**: *"provider_treatments
+has no price the site [uses]"*, and `:261`: *"A slot carries one figure however
+many [treatments]"*. The repo knew.
+
+⚠️ **Not yet written.** The drop belongs with 186, since the slot panel is what
+makes the price model visible, and a column drop is cheap to do once and
+awkward to do twice.
+
+### Why it was not decidable before
 
 **If treatments are meant to be priced separately, this is the column built for
 it**, and item 186's slot panel is the first surface that would make the gap

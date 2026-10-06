@@ -132,6 +132,9 @@ export interface StylistSetup {
    * (a name, a category) are already in publishBlockers.
    */
   websiteBlockers: string[]
+  /** Whether `public_stylists` actually returns her — read, not inferred.
+   *  Item 183: this is the truth; `websiteBlockers` only explains it. */
+  inPublicView: boolean
   idCheck: IdCheckState
   /** The reviewer's note. On a rejection it is the only thing that makes it fixable. */
   idCheckNote: string | null
@@ -189,13 +192,14 @@ export async function getStylistSetup(
   const empty: StylistSetup = {
     providerId: null, profilePicUrl: null, name: null, bio: null, locationText: null,
     detailsDone: false, treatmentCount: 0, publishBlockers: [], websiteBlockers: [],
+    inPublicView: false,
     idCheck: 'none', idCheckNote: null,
     isVerified: false, feeSettled: false, isFoundingProvider: false,
     isPublished: false, everPublished: false,
   }
   if (!prov) return empty
 
-  const [treatRes, userRes, payRes, reqRes, bioRes] = await Promise.all([
+  const [treatRes, userRes, payRes, reqRes, bioRes, viewRes] = await Promise.all([
     // Rows, not a head count: publishing needs a treatment WITH a category
     // (provider_shop_is_publishable, 0016 / item 52), so both counts matter.
     supabase.from('provider_treatments').select('category').eq('provider_id', prov.id),
@@ -209,9 +213,12 @@ export async function getStylistSetup(
     supabase.from('verification_requests')
       .select('status, notes, created_at').eq('user_id', userId)
       .order('created_at', { ascending: false }).limit(1).maybeSingle(),
-    // ⚠️ LAST, BECAUSE THE DESTRUCTURING ABOVE NAMES IT LAST. It sat second
-    // from 25 Sep to 29 Sep and every binding after treatRes was therefore off
-    // by one — see the header note on bioProblem below. Audit item 128.
+    // ⚠️ THE INVARIANT IS THAT THE DESTRUCTURING MATCHES THIS ARRAY, POSITION
+    // FOR POSITION. This used to read "LAST, BECAUSE THE DESTRUCTURING NAMES
+    // IT LAST", which was true until 6 Oct 2026 and is not any more — the view
+    // read below now follows it. Being last was never the rule; alignment was.
+    // It sat second from 25 Sep to 29 Sep and every binding after treatRes was
+    // off by one — see the header note on bioProblem below. Audit item 128.
     //
     // The same function public_stylists filters on, not a copy of its rule: it
     // returns the sentence she reads, so the view and the page explaining the
@@ -219,6 +226,19 @@ export async function getStylistSetup(
     // argument types as required and non-nullable, and '' is the same case to
     // the function.
     supabase.rpc('bio_publish_problem', { p_bio: prov.bio ?? '' }),
+    // ⚠⚠ THE VIEW ITSELF, WHICH DECIDES. Added 6 Oct 2026, item 183.
+    //
+    // Everything else here MIRRORS the listing rule; this READS it. The
+    // mirror was correct only while it and the rule agreed, and it failed
+    // toward reassurance — a stylist excluded for any reason the dashboard
+    // does not model was told she was fine. Same shape as
+    // providers.is_verified: a second copy of a rule that drifts, and drifts
+    // in the comfortable direction.
+    //
+    // Reading public_stylists bypasses RLS (it is security_invoker = false),
+    // which is harmless here because the only row asked for is her own
+    // provider id and the only column taken is its existence.
+    supabase.from('public_stylists').select('id').eq('id', prov.id).maybeSingle(),
   ])
 
   const u = (userRes.data ?? {}) as {
@@ -254,7 +274,21 @@ export async function getStylistSetup(
   // the destructuring, and the runtime check on the next line.
   const bioRaw = bioRes.error ? null : bioRes.data
   const bioProblem = typeof bioRaw === 'string' && bioRaw.trim() !== '' ? bioRaw : null
-  if (publishBlockers.length === 0 && bioProblem) {
+
+  // ⚠⚠ THE VIEW DECIDES, THE SENTENCE EXPLAINS. Item 183.
+  //
+  // `inPublicView` is whether public_stylists returns her. It is not derived
+  // from the blockers below and must never be: the blockers are a model of the
+  // rule, and a model that disagrees with the rule disagrees in the
+  // reassuring direction.
+  //
+  // On a read error it stays FALSE. Telling a stylist she is on the public
+  // site when the check failed is the exact over-claim this change removes;
+  // "we could not confirm" is the safe side of that, and the sentence below
+  // is still shown if we have one.
+  const inPublicView = !viewRes.error && viewRes.data !== null
+
+  if (!inPublicView && publishBlockers.length === 0 && bioProblem) {
     websiteBlockers.push(bioProblem)
   }
 
@@ -273,6 +307,7 @@ export async function getStylistSetup(
     treatmentCount,
     publishBlockers,
     websiteBlockers,
+    inPublicView,
     idCheck,
     idCheckNote,
     isVerified: !!u.is_verified,

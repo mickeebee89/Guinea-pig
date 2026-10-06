@@ -25,6 +25,42 @@ async function ownProviderId(supabase: Awaited<ReturnType<typeof createSupabaseS
 
 /* ── shop details ──────────────────────────────────────────────────────── */
 
+/**
+ * The database's sentence about why this bio would keep a shop off
+ * cavybeauty.com, or null when nothing would. Audit item 183.
+ *
+ * ── WHY THIS EXISTS ──
+ * The bio field called itself "(optional)" and named no rule. A stylist wrote
+ * one, published, cleared her name and treatments, and only THEN met a
+ * dashboard panel explaining that the optional field had a 40-character
+ * minimum and three "does this read as a description" tests. Measured 6 Oct
+ * 2026: one of three published stylists was off the public site for exactly
+ * that, with a 12-character bio. The notice was a consolation rather than a
+ * guide. This is the guide.
+ *
+ * ⚠⚠ IT RETURNS THE DATABASE'S OWN SENTENCE AND THE CLIENT SHOWS IT VERBATIM.
+ * Do not rephrase it, however much tidier a client-side wording looks.
+ * `public_stylists` filters on this same rule, so a second copy of the words
+ * is a second copy of the rule, and it drifts the first time 0060's tests
+ * change — the mirror defect item 183 exists to remove, not one to
+ * reintroduce a layer down.
+ *
+ * ⚠️ ADVISORY ONLY — THIS MUST NEVER BLOCK A SAVE. The bio genuinely IS
+ * optional for publishing: a thin-bio stylist is bookable inside Cavy today.
+ * Refusing it here would quietly become "publication requires what listing
+ * requires", which was considered and rejected because it trades a visibility
+ * gap for a revenue gap.
+ *
+ * On any error it returns null. Saying nothing beats inventing a rule.
+ */
+export async function bioWebsiteProblem(bio: string): Promise<{ sentence: string | null }> {
+  const supabase = await createSupabaseServerClient()
+  await requireUser()
+  const { data, error } = await supabase.rpc('bio_publish_problem', { p_bio: bio })
+  if (error) return { sentence: null }
+  return { sentence: typeof data === 'string' && data.trim() !== '' ? data : null }
+}
+
 export async function saveShopDetails(input: {
   name: string; bio: string; locationText: string
 }): Promise<Result> {

@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { saveShopDetails } from './actions'
+import { bioWebsiteProblem, saveShopDetails } from './actions'
 import { attempt } from '@/lib/attempt'
 import { PostcodeField } from '@/components/PostcodeField'
 
@@ -25,11 +25,25 @@ export function ShopDetailsForm({
   const [bio, setBio] = useState(initial.bio)
   const [locationText, setLocationText] = useState(initial.locationText)
   const [pending, start] = useTransition()
+  // ⚠️ THE DATABASE'S SENTENCE, HELD VERBATIM. Null means the bio is not what
+  // would keep her off cavybeauty.com — NOT that she is on it. Item 183.
+  const [bioNote, setBioNote] = useState<string | null>(null)
+  const [bioChecked, setBioChecked] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const dirty =
     name !== initial.name || bio !== initial.bio || locationText !== initial.locationText
+
+  // On blur rather than per keystroke: one round trip when she stops typing,
+  // and no sentence appearing mid-word telling her a half-written bio is short.
+  const checkBio = () => {
+    const text = bio
+    void bioWebsiteProblem(text).then(r => {
+      setBioNote(r.sentence)
+      setBioChecked(true)
+    }).catch(() => { setBioNote(null); setBioChecked(false) })
+  }
 
   const save = () => {
     setMsg(null); setError(null)
@@ -79,11 +93,16 @@ export function ShopDetailsForm({
 
         <div>
           <label htmlFor="shop-bio" className="block text-sm font-bold text-warm-dark">
-            About you <span className="font-normal text-muted">(optional)</span>
+            About you
           </label>
+          {/* ⚠️ "(optional)" WAS HERE AND HAD TO GO. Optional for WHAT? Optional
+              to publish, required to be findable — the two states a stylist has
+              a right to tell apart, collapsed into the one word on the field
+              that decides between them. Item 183. */}
           <p className="mt-0.5 text-xs text-muted">
             What you do, what you’re training in, what your space is like. A few honest lines
-            beat a paragraph of adjectives.
+            beat a paragraph of adjectives. You can leave it empty and still take bookings in
+            Cavy — it is what the public cavybeauty.com pages need.
           </p>
           <textarea
             id="shop-bio"
@@ -92,9 +111,24 @@ export function ShopDetailsForm({
             rows={5}
             maxLength={LIMITS.bio}
             placeholder="Tell models about yourself, what you specialise in, and where you work…"
+            onBlur={checkBio}
             className="mt-1.5 w-full rounded-md border border-hairline bg-input-bg px-3 py-2 text-sm text-warm-dark placeholder:text-muted focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-rose"
           />
           <Counter length={bio.length} max={LIMITS.bio} />
+          {/* ⚠️ ADVISORY, NEVER A BLOCKER, and the database's words unaltered.
+              The pass case says what it actually knows — that the ABOUT is not
+              the thing holding her back — and never that she will appear, which
+              also needs a name, a categorised treatment and publishing. Silence
+              would be ambiguous between "fine" and "not checked", so the pass
+              case says something; it just does not say more than it knows. */}
+          {bioNote !== null && (
+            <p className="mt-1.5 text-xs text-warm-dark">{bioNote}</p>
+          )}
+          {bioChecked && bioNote === null && bio.trim() !== '' && (
+            <p className="mt-1.5 text-xs text-muted">
+              Nothing in your about would keep you off cavybeauty.com.
+            </p>
+          )}
         </div>
       </div>
 
