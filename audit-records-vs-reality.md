@@ -18414,6 +18414,97 @@ and no cascade, they block no deletion and name a booking only by convention.
 
 ---
 
+## 176. THE PUBLIC VERIFIED BADGE READS A COLUMN NOTHING EVER SETS, AND ANY STYLIST CAN WRITE IT
+### Answered 6 Oct 2026 — the "sharpest unread" from item 156. ⚠️ It changes 156 from a revoke into a decision.
+
+**There are two `is_verified` columns**, and different surfaces read different
+ones:
+
+| surface | reads | source file |
+|---|---|---|
+| the **public stylist page badge** | **`providers.is_verified`** | `site/lib/queries/stylist.ts:108`, rendered at `stylist/[id]/page.tsx:70` |
+| `public_stylists` (the public site) | **`providers.is_verified`** | `public-web-views.sql:139`, `0034:232` |
+| the stylist's own setup panel | `users.is_verified` | `site/lib/queries/shop.ts:203, 278` |
+| a model's profile | `users.is_verified` | `site/lib/queries/model.ts:68` |
+
+**`admin_decide_verification` sets `users.is_verified`** (0077:
+`update public.users set is_verified = true where id = v_user`).
+
+⚠⚠ **NOTHING ANYWHERE SETS `providers.is_verified`.** Searched every migration
+and hand-run file for a write to it: there is none.
+`tg_user_verified_maybe_publish` fires on `users.is_verified` and calls
+`publish_provider_if_eligible`, which sets **`is_published`** — not
+`is_verified`.
+
+### Two consequences, and they point opposite ways
+
+1. **A genuinely approved stylist may show NO public badge.** Approval writes
+   `users.is_verified`; the badge reads `providers.is_verified`.
+2. **Any stylist can set `providers.is_verified = true` herself** —
+   `authenticated` holds **table-wide** UPDATE on `providers` — and display a
+   badge she was never given.
+
+This is precisely the hazard 156 named in the abstract: *"a displayed flag that
+is not the protected flag means a stylist can show a badge she was never
+given."* **It is not abstract.**
+
+### ⚠⚠ AND IT CHANGES 156's SHAPE
+
+Micky, before asking: *"If that is a different column from the protected one,
+narrowing this grant moves the problem rather than fixing it, and I would
+rather know that before a migration than after."*
+
+**It is a different column.** So revoking UPDATE on `providers.is_verified`
+**alone would lock in consequence 1** — the badge becomes permanently
+false-negative, because nothing would be left that can set it.
+
+**156's migration must decide which column is authoritative BEFORE it
+narrows anything:** either point the badge and the view at `users.is_verified`,
+or have the approval path write both. That is a decision, not a grant change,
+and it now sits in front of the rest of 156.
+
+### The one read that says which consequence is live today
+
+```sql
+select count(*) filter (where p.is_verified) as providers_flag_true,
+       count(*) filter (where u.is_verified) as users_flag_true,
+       count(*) filter (where p.is_verified and not coalesce(u.is_verified, false)) as badge_without_approval,
+       count(*) filter (where coalesce(u.is_verified, false) and not coalesce(p.is_verified, false)) as approved_without_badge,
+       count(*) as providers
+  from public.providers p join public.users u on u.id = p.user_id;
+```
+
+**`badge_without_approval > 0`** is consequence 2, live.
+**`approved_without_badge > 0`** is consequence 1, live.
+Both can be non-zero at once.
+
+---
+
+## 177. REVIEWS OF MODELS FEED NO STORED COLUMN — THE AVERAGE IS COMPUTED AT QUERY TIME
+### Answered 6 Oct 2026, for item 174's second block.
+
+Micky's two questions before taking the eight model reviews:
+
+* **Do reviews of models feed a derived displayed number the way
+  `providers.rating` does?** **No stored one.** `averageRating` is computed in
+  TypeScript at query time — `site/lib/queries/model.ts:224`,
+  `rated.reduce(…) / rated.length` — and rendered at
+  `model/[id]/page.tsx:83` and `:163`.
+* **Is there a models-side equivalent of `recompute_provider_rating`?** **No.**
+  `trg_recompute_provider_rating` is the **only** trigger on `public.reviews`
+  (snapshot:427), and it updates `public.providers` keyed on `reviewee_id`.
+
+✅ **So the model case is simpler than the provider case**: deleting the rows
+removes the text and the average together, with nothing to recompute and no
+derived column that could be left stale. The provider case needed the trigger
+observed; this one does not have one to observe.
+
+⚠️ **The reach is different though, and worth stating:** `/model/[id]` is
+behind sign-in, so these are visible to any signed-in member rather than to the
+open web. Smaller audience than the stylist listing, same invention.
+
+---
+
 ## Dated
 
 * **8 October** — the diarised selfie-orphan check. The only unarranged end-to-end
