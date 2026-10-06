@@ -278,12 +278,20 @@ begin
 
   -- (f) THE TWO CLEARED INVOKERS MUST STILL BE UNREACHABLE BY A CLIENT. Their
   -- clearance rests entirely on `revoke all … from public, anon, authenticated`.
+  --
+  -- ⚠️ 'public' IS NOT IN THIS LIST AND MUST NOT BE ADDED.
+  -- has_function_privilege('public', …) RAISES `role "public" does not exist`:
+  -- PUBLIC is a pseudo-role and has no pg_roles entry, so the check would abort
+  -- the migration with a bare SQL error that says nothing about privileges.
+  -- Nothing is lost by dropping it — authenticated and anon both INHERIT a grant
+  -- made to PUBLIC, so a PUBLIC grant is already visible through either of them.
+  -- Caught by Micky in this migration's own preflight, 6 Oct 2026, before it ran.
   select string_agg(x.label, ', ') into v_bad
     from (
       select (p.proname::text || ' (' || r.rolname::text || ')') as label
         from pg_proc p
         join pg_namespace n on n.oid = p.pronamespace
-        cross join (select unnest(array['authenticated', 'anon', 'public']) as rolname) r
+        cross join (select unnest(array['authenticated', 'anon']) as rolname) r
        where n.nspname = 'public'
          and p.proname::text in ('_admin_apply_user_action', '_withdraw_stylist')
          and has_function_privilege(r.rolname, p.oid, 'execute')
@@ -476,7 +484,7 @@ end $$;
 
 -- MIGRATION FOOTER
 insert into public.schema_migrations (version, name, checksum)
-values ('0088', 'a_column_you_cannot_name_is_a_column_you_cannot_forge', '4a6561365fad2b7255bd8f96761856b46dc209848e0c419a96f641cc2d022634');
+values ('0088', 'a_column_you_cannot_name_is_a_column_you_cannot_forge', '7f63f9ecc45a3c4ad0239da7180e3177cb7b9455c2f0e6cfd325d6b2208143ef');
 
 commit;
 
@@ -514,7 +522,7 @@ notify pgrst, 'reload schema';
 --   select 'invoker', 'the two that must be client-unreachable',
 --          coalesce((select string_agg(p.proname::text || '=' || r.rolname, ', ')
 --                      from pg_proc p join pg_namespace n on n.oid=p.pronamespace
---                      cross join (select unnest(array['authenticated','anon','public']) as rolname) r
+--                      cross join (select unnest(array['authenticated','anon']) as rolname) r
 --                     where n.nspname='public'
 --                       and p.proname::text in ('_admin_apply_user_action','_withdraw_stylist')
 --                       and has_function_privilege(r.rolname, p.oid, 'execute')),
@@ -527,6 +535,13 @@ notify pgrst, 'reload schema';
 --
 --   EXPECT: 0087_applied=true | 90 | PUBLIC=false | 45 ·
 --           (none - expected) · (none - expected) · 0 rows.
+--
+--   ⚠️ DO NOT ADD 'public' TO THAT ROLE ARRAY. has_function_privilege('public',
+--   …) raises `role "public" does not exist` — PUBLIC is a pseudo-role with no
+--   pg_roles entry. It is also redundant: authenticated and anon both inherit a
+--   PUBLIC grant, so it is visible through either. Note that UPDATE on a COLUMN
+--   is different: information_schema.column_privileges DOES report a 'PUBLIC'
+--   grantee, which is why guard (c) above can and does query for it by name.
 --
 --   ⚠️ IF `uncleared invoker writers` NAMES ANYTHING, STOP. That is the
 --   _withdraw_stylist class and it is the one failure here that is silent at
