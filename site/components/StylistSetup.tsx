@@ -95,6 +95,14 @@ export function StylistSetupPanel({ setup }: { setup: StylistSetup }) {
         <h2 className="font-display text-xl text-warm-dark">
           {setup.inPublicView ? 'Your shop is live' : 'Your shop is live in Cavy'}
         </h2>
+        {/* ⚠️ THIS LINE IS CORRECT ONLY BECAUSE OF ITS SUBJECT. "find you" is
+            the same verb the panel below uses for the public pages ("where
+            people who aren’t members yet can find you"), and the two states are
+            told apart by WHO is doing the finding — models, versus people who
+            are not members. Shorten it to "You can be found" or "People can
+            find you" and the sentence silently starts claiming the thing the
+            panel underneath is about to deny. Item 183: the one place 183’s
+            vocabulary crosses the boundary it exists to draw. */}
         <p className="mt-1 text-sm text-muted">
           Models can find you and apply for your open slots.
           {setup.treatmentCount === 0 &&
