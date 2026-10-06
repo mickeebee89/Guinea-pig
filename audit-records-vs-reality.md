@@ -20496,6 +20496,135 @@ attached has nothing to be surprised against.
 
 ---
 
+## 194. `session_consents` IS APPEND-ONLY; THE TABLE IT POINTS AT IS NOT
+### Raised 6 Oct 2026 out of 0091. ⚠️ BACKLOG. 189's shape, with a worse consequence.
+
+**Plainly:** an admin can edit the wording of a consent document from a client.
+Doing so recomputes that document's `content_hash`, and **every
+`session_consents` row pointing at it silently stops matching the text it names**
+— a retroactive misrepresentation of what past members agreed to, inside a
+six-year legal record.
+
+### The asymmetry, which is the finding
+
+| table | protection |
+|---|---|
+| `session_consents` | **`trg_lock_consents`** — `BEFORE DELETE OR UPDATE`, raising *"Records in % are immutable and cannot be modified or deleted"* |
+| `consent_documents` | **none.** Only `cd_write`: `for ALL to authenticated using (is_admin()) with check (is_admin())` |
+
+So the rows are locked and **the thing they are evidence ABOUT is not.** `FOR ALL`
+includes UPDATE, so any admin session can rewrite a document's `title`, `body` or
+`acknowledgements` with an ordinary PostgREST call.
+
+⚠⚠ **AND `set_consent_hash()` IS `BEFORE INSERT OR UPDATE`, WHICH IS WHAT TURNS AN
+EDIT INTO A SILENT INVALIDATION.** It recomputes
+`sha256(title || body || acknowledgements::text)` on the way through. So the edit
+does not merely change the text — it updates the hash to match the new text, which
+is exactly what makes the old `session_consents` rows wrong rather than
+detectably stale. **A row that disagrees with its document is the only trace, and
+nothing looks for one.**
+
+### ⚠️ "NO UI DOES IT" IS NOT A GUARD
+
+The only thing preventing this today is that the admin console has no screen for
+editing a consent document. That is a fact about the current build, not a
+property of the schema: an admin with the anon key and a REST client needs no
+screen, and the next admin feature that touches this table inherits the hole.
+
+0091 therefore does not rely on v3 staying put by luck — its post-condition
+asserts that every `session_consents` row still matches the document it points at,
+and its preflight refuses to apply if any row already does not. **That check is
+the detector this item says does not exist, and it currently exists only inside
+one migration.**
+
+### Why it is worse than 189's instances
+
+189 is about objects no migration owns — `set_consent_hash()` itself is one of
+them. **This is about a protection that exists on one table and not on the table
+that feeds it**, which is harder to notice precisely because the protection IS
+there when you look for it: `trg_lock_consents` makes the consent records look
+guarded, and they are. The gap is one join away.
+
+⚠️ And the failure is **silent and retroactive**. 192's defect cost a wasted
+journey; this one would change what the record says a person agreed to, after the
+fact, with no error and no gap in the sequence.
+
+### The fix, when it is done
+
+1. A `BEFORE UPDATE` trigger on `consent_documents` refusing any change to
+   `title`, `body` or `acknowledgements` — **and permitting `is_active`**, which is
+   the one sanctioned UPDATE (0091's header, and 0051's before it).
+2. ⚠️ **Not a blanket immutability trigger copied from `trg_lock_consents`.** That
+   one refuses every UPDATE, which would make deactivating a version impossible
+   and so make a new version impossible — breaking the exact discipline this
+   protects. The whole point is that one column must stay writable.
+3. Narrow `cd_write` from `FOR ALL` to `INSERT` plus an `UPDATE` scoped to what
+   the trigger allows, so the grant and the trigger say the same thing.
+4. A detector worth having regardless of the trigger, since it finds damage
+   already done:
+
+```sql
+select sc.id, sc.consent_version, sc.content_hash as recorded,
+       d.content_hash as document_now
+  from public.session_consents sc
+  join public.consent_documents d on d.id = sc.consent_document_id
+ where sc.content_hash <> d.content_hash;
+```
+
+**Zero rows is the only acceptable answer.** Any row means a document moved under
+a record that cites it.
+
+---
+
+## 195. NOTHING PREVENTS TWO CONSENT DOCUMENTS AT THE SAME VERSION
+### Raised 6 Oct 2026 out of 0091. ⚠️ BACKLOG — and the right KEY is a design question, which is why it is not in 0091.
+
+**No unique constraint on `consent_documents.version` exists in this repo**, and
+the table's DDL is in no migration and no snapshot — the same pre-0000 population
+as `public.sessions` (item 189). So whether one exists live is unknown from the
+repo and needs a read:
+
+```sql
+select c.conname, c.contype, pg_get_constraintdef(c.oid)
+  from pg_constraint c
+ where c.conrelid = 'public.consent_documents'::regclass
+union all
+select i.relname, 'i', pg_get_indexdef(i.oid)
+  from pg_class i
+  join pg_index x on x.indexrelid = i.oid
+ where x.indrelid = 'public.consent_documents'::regclass;
+```
+
+### Why it matters, narrowly
+
+**No client reads a document by version** — `site/lib/queries/consent.ts` selects
+by `is_active` or by `id`, and only ever reads `version` OUT of a fetched row. So
+the product is not exposed.
+
+⚠️ **Migrations and hand-SQL are.** `select … into … where version = N` in
+plpgsql takes the FIRST of several rows **silently** — no error, no warning. 0091
+originally did exactly that in four places and would have asserted things about
+whichever duplicate Postgres returned. It now counts first and refuses by name,
+which is a workaround for a missing constraint rather than a substitute for one.
+
+### ⚠⚠ AND THE CORRECT KEY IS NOT OBVIOUSLY `(version)`
+
+`consent_documents` carries a **`category_id`** column. If per-category consent
+documents are intended — and that column exists for some reason — then the key is
+`(category_id, version)` and a global unique on `version` would be **WRONG** and
+would have to be dropped again.
+
+**That is the whole reason this is its own item rather than a line in 0091.**
+Adding the wrong constraint inside a data migration is worse than adding none:
+the data migration gets blamed for the rollback, and the constraint gets re-added
+by someone who assumes the first attempt was merely unlucky.
+
+**So the question to answer first is what `category_id` is for** — nothing in the
+repo writes it, and `session_consents` carries one too. Until that is known,
+`(version)` is a guess dressed as hygiene.
+
+---
+
 ## Dated
 
 * **8 October** — the diarised selfie-orphan check. The only unarranged end-to-end

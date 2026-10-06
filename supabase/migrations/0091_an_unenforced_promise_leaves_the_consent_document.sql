@@ -97,6 +97,23 @@
 -- Raised separately rather than bundled; this migration simply must not rely on
 -- v3 staying put by luck, and the post-condition below is what does not.
 --
+-- ── ⚠️ THERE IS NO UNIQUE CONSTRAINT ON `version`, AND THIS FILE ASSUMES NONE ─
+-- Not in any migration, and `consent_documents`' DDL is in no migration and no
+-- snapshot — the same pre-0000 population as `public.sessions` (item 189). So
+-- whether one exists live is unknown from here.
+--
+-- Every assertion in this migration that reads "where version = N" therefore
+-- COUNTS FIRST and refuses by name on anything but one row, because plpgsql's
+-- `select … into` takes the first row of several SILENTLY.
+--
+-- ⚠️ THE CONSTRAINT ITSELF IS ITEM 195, NOT THIS MIGRATION, and the reason is
+-- that the correct key is a design question rather than hygiene:
+-- `consent_documents` carries a `category_id`. If per-category documents are
+-- intended — and the column exists for some reason — then the key is
+-- `(category_id, version)` and a global unique on `version` would be WRONG and
+-- would have to be dropped again. Adding the wrong constraint inside a data
+-- migration is worse than adding none.
+--
 -- ── DEPLOY ─────────────────────────────────────────────────────────────────
 --   1. Preflight.
 --   2. Apply this.
@@ -119,6 +136,7 @@ declare
   v_entries  integer;
   v_ticks    integer;
   v_att      integer;
+  v_rows3    integer;
   v_expected text := '0a04dd74a9313f384822bfbfa60a59bf264e4a6c5795d3bba58424b2a5696085';
 begin
   if not exists (select 1 from public.schema_migrations where version = '0090') then
@@ -144,6 +162,17 @@ begin
   -- the whole of title + body + acknowledgements, so one comparison covers all
   -- three: v4 carries title and body over verbatim, and if v3's text is not what
   -- was read on 6 Oct 2026 then "verbatim" means something else.
+  -- ⚠⚠ ONE ROW PER VERSION IS ASSERTED, NOT ASSUMED. There is NO unique
+  -- constraint on `version` anywhere in this repo, and consent_documents' DDL is
+  -- in no migration and no snapshot (same pre-0000 population as public.sessions,
+  -- item 189). With two v3 rows, every `select … into … where version = 3` below
+  -- would take one of them SILENTLY — plpgsql's `into` does not raise on multiple
+  -- rows. Item 195 covers the constraint itself.
+  select count(*) into v_rows3 from public.consent_documents where version = 3;
+  if v_rows3 <> 1 then
+    raise exception '0091: there are % rows at version 3; expected exactly 1. Nothing in this schema stops duplicates (no unique constraint on version — item 195), and every read below would silently pick one. Nothing changed.', v_rows3;
+  end if;
+
   select content_hash into v_v3_hash from public.consent_documents where version = 3;
   if v_v3_hash <> v_expected then
     raise exception '%', '0091: v3''s content_hash is ' || v_v3_hash
@@ -241,6 +270,10 @@ declare
   v_carried   integer;
   v_consents  integer;
   v_untouched integer;
+  v_rows3     integer;
+  v_rows4     integer;
+  v_a3        jsonb;
+  v_a4        jsonb;
   v_expected  text := '0a04dd74a9313f384822bfbfa60a59bf264e4a6c5795d3bba58424b2a5696085';
 begin
   -- ⚠️⚠️ THE ONE THAT IS LOAD-BEARING. If the is_active UPDATE moved v3's hash,
@@ -285,12 +318,34 @@ begin
   -- with the attendance element removed against v4's array, as jsonb — so it
   -- proves "v3 minus one entry", in order, to the character, without needing a
   -- literal copy of the text to compare against.
-  if (select (select jsonb_agg(t.e order by t.ord)
-                from jsonb_array_elements(a3.acknowledgements) with ordinality as t(e, ord)
-               where t.e->>'key' <> 'attendance')
-              is distinct from a4.acknowledgements
-        from public.consent_documents a3, public.consent_documents a4
-       where a3.version = 3 and a4.version = 4) then
+  -- ⚠️ TWO FAULTS FIXED HERE AFTER IT WAS FIRST WRITTEN, both Micky's, both the
+  -- same class — an assertion that depended on something it did not state:
+  --
+  -- (i) `t.e->>'key' <> 'attendance'` is NULL for an entry with NO `key` field,
+  --     and NULL is not true, so a keyless entry was dropped from the expected
+  --     array ALONGSIDE attendance. The count check would have caught the
+  --     asymmetric case, which is exactly the problem: the assertion relied on a
+  --     DIFFERENT check to mean what it said. `coalesce(…, '')` makes it
+  --     self-contained.
+  --
+  -- (ii) `from consent_documents a3, consent_documents a4 where version = 3 and
+  --      version = 4` assumed one row per version. With two, the cross join
+  --      returns several rows and the `if` fails with a subquery error instead of
+  --      the message written for it. The counts are now asserted first and the
+  --      arrays read into variables, so a duplicate produces a NAMED refusal.
+  select count(*) into v_rows3 from public.consent_documents where version = 3;
+  select count(*) into v_rows4 from public.consent_documents where version = 4;
+  if v_rows3 <> 1 or v_rows4 <> 1 then
+    raise exception '0091: % row(s) at version 3 and % at version 4; expected exactly 1 each. Nothing in this schema prevents duplicates (item 195). Rolled back.', v_rows3, v_rows4;
+  end if;
+
+  select acknowledgements into v_a3 from public.consent_documents where version = 3;
+  select acknowledgements into v_a4 from public.consent_documents where version = 4;
+
+  if (select jsonb_agg(t.e order by t.ord)
+        from jsonb_array_elements(v_a3) with ordinality as t(e, ord)
+       where coalesce(t.e->>'key', '') <> 'attendance')
+     is distinct from v_a4 then
     raise exception '0091: v4''s acknowledgements are NOT v3''s with the `attendance` entry removed. The counts match but something else was reworded, reordered or lost. Rolled back.';
   end if;
 
@@ -334,7 +389,7 @@ end $mig$;
 
 -- MIGRATION FOOTER
 insert into public.schema_migrations (version, name, checksum)
-values ('0091', 'an_unenforced_promise_leaves_the_consent_document', '4f318443f073819409487952f1ab1f972cc90eb75132df42f9a11a38ab53afc5');
+values ('0091', 'an_unenforced_promise_leaves_the_consent_document', 'ddff66f6cb8e5d9bf6394b28945f8742fb6ad99c158e9e61b0b6d94907d3ce91');
 
 commit;
 
