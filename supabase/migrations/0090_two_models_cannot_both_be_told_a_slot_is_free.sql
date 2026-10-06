@@ -424,12 +424,25 @@ notify pgrst, 'reload schema';
 --   * TWO future availability rows with no colliding session — one to contest,
 --     one to leave alone;
 --   * TWO model accounts that are not the provider's owner — one to HOLD the
---     fixture session, one to BE the caller.
+--     fixture session, and one to BE the caller which must ALSO NOT BE AN ADMIN.
 --
--- To see whether the second condition holds:
+-- To see whether the second condition holds — the admins column is the one that
+-- decides whether an account can take the caller seat:
 --
---     select id, email, role from public.users
---      where role in ('model', 'both') order by created_at;
+--     select u.id, u.email, u.role,
+--            exists (select 1 from public.admins a where a.user_id = u.id) as is_admin
+--       from public.users u
+--      where u.role in ('model', 'both')
+--      order by u.created_at;
+--
+-- ⚠️ AND READ THE LIVE POLICY RATHER THAN TRUSTING THIS FILE ABOUT IT. The claim
+-- that an admin can read every session is REPO EVIDENCE (schema-snapshot-2026-08-08
+-- -policies.sql:204, and no migration alters it since). The authority is:
+--
+--     select policyname, permissive, cmd, roles, qual
+--       from pg_policies
+--      where schemaname = 'public' and tablename = 'sessions' and cmd = 'SELECT'
+--      order by policyname;
 --
 -- ⚠⚠⚠ THE CALLER MUST BE A SECOND MODEL, NOT THE PROVIDER'S OWNER. A first
 -- version of this block set the claim to the owner while its own comment said
@@ -499,10 +512,34 @@ notify pgrst, 'reload schema';
 --      order by a.date, a.start_time limit 1;
 --
 --     select p.user_id into v_owner from public.providers p where p.id = v_prov;
+--     -- ⚠️ ITS OWN MESSAGE, BECAUSE A NULL HERE POISONS EVERY TEST BELOW. With
+--     -- v_owner null, `u.id <> v_owner` is NULL for every row, both resolvers come
+--     -- back empty, and the block would raise "no model account other than the
+--     -- provider owner" — blaming the ACCOUNT SET for a missing providers row.
+--     if v_owner is null then
+--       raise exception 'VERIFY: availability row % names provider % which has no row in public.providers, so there is no owner to resolve. That is a data problem, not an account problem. Nothing was tested.', v_slot, v_prov;
+--     end if;
+--
 --     select u.id into v_holder from public.users u
 --      where u.role in ('model','both') and u.id <> v_owner order by u.created_at limit 1;
+--
+--     -- ⚠⚠ ADMINS ARE EXCLUDED FROM THE CALLER SEAT, AND THE BLOCK'S CONCLUSION
+--     -- MUST NOT DEPEND ON A FACT IT DOES NOT CHECK. `sessions_select_admin` is a
+--     -- PERMISSIVE SELECT policy on public.sessions `using (is_admin())`, so it ORs
+--     -- with the participants arm and AN ADMIN READS EVERY SESSION. An admin in this
+--     -- seat makes v_direct non-zero and line 4 print "sessions RLS is weaker than
+--     -- it was" on a database where nothing changed — the most serious sentence
+--     -- here, printed falsely, by a party who was never meant to be the blind one.
+--     --
+--     -- ⚠️ NOT HYPOTHETICAL ON THIS DATABASE: admin@guineapigapp.co.uk has
+--     -- role = 'model' AND a row in public.admins (items 34 and 35), so it resolves
+--     -- into whichever of the two seats created_at puts it in. Micky's catch.
+--     --
+--     -- v_holder is deliberately NOT filtered this way: nothing is READ as the
+--     -- holder, so admin-as-fixture is harmless in a transaction that rolls back.
 --     select u.id into v_caller from public.users u
 --      where u.role in ('model','both') and u.id <> v_owner and u.id <> v_holder
+--        and not exists (select 1 from public.admins ad where ad.user_id = u.id)
 --      order by u.created_at limit 1;
 --     select t.id into v_treat from public.provider_treatments t
 --      where t.provider_id = v_prov limit 1;
@@ -512,7 +549,7 @@ notify pgrst, 'reload schema';
 --     end if;
 --     -- ⚠️ NO FALLBACK TO THE OWNER. That is the fault this names.
 --     if v_caller is null then
---       raise exception 'VERIFY: need a SECOND model account to be the caller (one that is neither the provider owner % nor the fixture holder %). Falling back to the owner would make line 4 report a false RLS alarm. Nothing was tested.', v_owner, v_holder;
+--       raise exception 'VERIFY: no ORDINARY model account is available to be the caller. It must be neither the provider owner (%) nor the fixture holder (%), AND NOT AN ADMIN — sessions_select_admin lets an admin read every session, so an admin caller would make line 4 report a false RLS alarm. If the remaining model-capable accounts are all admins, what is needed is a NEW ORDINARY MODEL ACCOUNT, not just a second account. Nothing was tested.', v_owner, v_holder;
 --     end if;
 --     if v_treat is null then
 --       raise exception 'VERIFY: provider % has no treatment to attach a session to. Nothing was tested.', v_prov;
