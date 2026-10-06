@@ -1,0 +1,19 @@
+{
+  "_comment": [
+    "Exemptions for check-admin-guards.mjs. Every entry needs a reason a PERSON wrote.",
+    "A stale entry is a FAILURE: if it no longer violates anything the checker exits",
+    "non-zero and names it. Without that a baseline becomes a graveyard, and the next",
+    "real violation gets added to it because that is what the file appears to be for.",
+    "Audit item 149."
+  ],
+  "exempt": {
+    "_admin_apply_user_action": {
+      "violation": "not declared SECURITY DEFINER",
+      "why": "INVOKER ON PURPOSE AND IT IS NOT REACHABLE BY A CLIENT. 0039:842 and 0044:550 both end with `revoke all on function public._admin_apply_user_action(uuid, text, text, integer) from public, anon, authenticated`, so no client role may execute it. Its only callers are admin_act_on_user, admin_act_on_report and admin_act_on_provider, all three SECURITY DEFINER, and the outermost definer's owner supplies the privileges for the whole nest. Confirmed against the LIVE catalogue 6 Oct 2026: security INVOKER, has_function_privilege('authenticated', ...) = false.",
+      "and_note": "It guards itself anyway — `if not public.is_admin()` is its first statement, with 0039's own reason: 'Checked again here, though every caller has checked it. Cheap, and it means a future caller that forgets cannot turn this into an unguarded path.' So this exemption is about the DEFINER rule only, not about the guard.",
+      "do_not": "Do not 'fix' this by making it DEFINER. It would then run as its owner regardless of who got hold of it, which is the opposite of what the revoke buys. The leading underscore and the revoke are the design.",
+      "recorded": "2026-10-06",
+      "item": 149
+    }
+  }
+}
