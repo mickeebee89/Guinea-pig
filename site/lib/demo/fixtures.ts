@@ -481,16 +481,24 @@ export function buildTables(images: DemoImages = NO_IMAGES): Tables {
     // cannot is the worst possible final frame for an advert, and it was live
     // in the first cut on 29 Sep.
     //
-    // Version 3 EXACTLY as migration 0051 inserts it — title, body and every
+    // Version 4 EXACTLY as migration 0091 inserts it — title, body and every
     // acknowledgement lifted from that file, not retyped. The demo must show
     // the terms the product actually asks people to agree to; inventing
     // plausible ones would be the one thing this file must never do.
+    //
+    // ⚠️ WHICH IS WHY THIS FOLLOWED 0091 IN THE SAME COMMIT RATHER THAN AFTER
+    // IT. 0091 removed the `attendance` tick ("I will attend, or cancel at least
+    // 24 hours in advance"): of v3's two promises, community_standards is
+    // enforced through _admin_apply_user_action and attendance was enforced by
+    // nothing. Left at v3, this file would show a tick production no longer asks
+    // for — the exact thing the paragraph above forbids. Eight entries, five
+    // tickable.
     //
     // content_hash is a stand-in: in the database a trigger computes it from
     // title || body || acknowledgements, and nothing here recomputes it.
     consent_documents: [{
       id: uid(8300),
-      version: 3,
+      version: 4,
       title: "Before you apply",
       body: "Cavy connects you with people who are practising their skills. Providers on this platform are learners and may not be professionally qualified. Treatments carry normal risks, including reactions, irritation or unsatisfactory results. Cavy is a platform that introduces members to each other and does not provide treatments itself.",
       content_hash: 'demo-not-a-real-hash',
@@ -516,11 +524,6 @@ export function buildTables(images: DemoImages = NO_IMAGES): Tables {
             "key": "patch_test",
             "requires_tick": true,
             "text": "I understand some treatments need an allergy patch test at least 48 hours beforehand, and I will not go ahead without one if my stylist says it's needed"
-      },
-      {
-            "key": "attendance",
-            "requires_tick": true,
-            "text": "I will attend, or cancel at least 24 hours in advance"
       },
       {
             "key": "community_standards",
