@@ -16153,7 +16153,87 @@ and do not read a clean 163 sweep as covering it.
 ---
 
 ## 149. FOUR ADMIN RPCs ARE DEFINER AND EXECUTABLE BY ANY MEMBER, AND NOBODY HAS READ THEIR GUARDS
-### ✅ READ 6 Oct 2026. ALL FOUR GUARD CORRECTLY. ~~NOT STARTED.~~ ⚠️ REPO-DERIVED — the live read is below and is the authority.
+### ✅ CLOSED 6 Oct 2026. NO HOLE. Confirmed against the LIVE bodies, then 0089 applied and verified.
+### ✅ READ 6 Oct 2026. ALL FOUR GUARD CORRECTLY. ~~NOT STARTED.~~ ~~⚠️ REPO-DERIVED~~ — live read done, see below.
+
+### ✅ CLOSED WITH NO HOLE, AND THAT IS THE FINDING RATHER THAN A DISAPPOINTMENT
+
+**The live bodies confirmed the repo read exactly.** All four check `is_admin()`
+as their first statement, before every read and every write;
+`_admin_apply_user_action` is INVOKER with `authed_may_run = false` and re-checks
+`is_admin()` itself; `is_admin()` is `sql STABLE SECURITY DEFINER` with
+`search_path` pinned.
+
+⚠️ **An item can close by being answered rather than by being fixed, and this
+one did.** It was moved to third on the argument that an unread guard is MORE
+likely to hide something, not less — *"if 148 confirms, 'the guard is assumed' has
+a demonstrated failure rate in this schema."* That reasoning was right to act on
+and the answer came back clean. **Recording "no hole" as the finding, not padding
+it into one.**
+
+### ✅ WHAT 0089 DID, AND IT IS NOT A REPAIR
+
+* **`revoke_verification` gained errcodes** — 42501 for admin-only, 22023 for the
+  ten-character reason, matching its three siblings and
+  `_admin_apply_user_action`. ⚠️ **It buys nothing visible today**:
+  `adminErrorText` branches only on `CV002` and otherwise falls through to
+  `humanError(message)`. It removes a fragile shape rather than fixing a present
+  bug.
+* **`is_admin()` was ADOPTED into the framework** — it existed only in
+  `schema-snapshot-2026-08-08.sql`, so nothing in the repo asserted the shape of
+  the function all four admin entry points and several RLS policies depend on.
+* **No second `is_admin()` guard was added**, and the argument against it is
+  better than the argument for. Micky, 6 Oct: *"Their second check isn't depth,
+  it's `_admin_apply_user_action` protecting ITSELF from a future caller that
+  forgets."* `revoke_verification` calls no such function, so a second check in
+  the same body is the same check twice in the same place. The destructive helper
+  it does call, `_withdraw_stylist`, is already revoked from every client role.
+
+### ✅ VERIFIED 6 Oct 2026 — ALL FIVE SECTIONS PASS
+
+Run as admin `8788ed3d-40a6-44da-ad61-c38d0932b6d5`:
+
+1. `is_admin()` adopted unchanged — body, definer, stable and search_path.
+2. non-admin → **42501**.
+3. nine-character reason → **22023**.
+4. a valid admin call still works end to end.
+5. control: 3 of 3 sibling admin RPCs still DEFINER.
+
+### ✅✅ SECTION 1 IS A STANDING CHECK, AND IT HAS PASSED ONCE — 6 Oct 2026
+
+Section 1 compares live `prosrc` against a `chr(10)`-built literal, so it fails
+if `is_admin()` is ever recreated with CRLF. **That makes it the only evidence
+item 190's `format()` mitigation works in practice rather than in principle**, and
+it passed on 6 Oct 2026, the same day the editor was measured converting LF to
+CRLF on paste.
+
+⚠️ **Re-run it after any future adoption of this kind.** One pass proves the
+mitigation held once; it does not prove the next paste will behave.
+
+### ⚠️ A CONTRADICTION THIS SURFACED, NOT YET SETTLED
+
+The verify's `v_admin` was written as `ff06d568-8936-45fa-ad5f-0b88c150ec30`,
+carried from 0057's own block, which calls it *"must be in public.admins"*. Micky,
+6 Oct 2026: *"your v_admin was hardcoded to ff06d568, which is the user_id of
+provider 49d40aae, not an admin."* He resolved the id from `public.admins` and
+got `8788ed3d-40a6-44da-ad61-c38d0932b6d5`.
+
+⚠⚠ **If that is literal, `CLAUDE.md` and items 34 and 35 are wrong about
+something operational.** They record TWO admins — the dedicated console admin
+`8788ed3d…` and Micky B `ff06d568…` as break-glass backup — and item 35 records
+Micky B as having made **28 of 30** logged verification decisions. If `ff06d568`
+is no longer in `admins`, then the account that made 28 of 30 decisions has lost
+access and the only remaining admin is the one that made 2 and last signed in
+26 Jul. **That is a single point of failure on the moderation surface, not a
+documentation tidy-up.** One read settles it:
+
+```sql
+select a.user_id, u.email, u.role,
+       (select count(*) from public.moderation_actions m where m.admin_id = a.user_id) as decisions
+  from public.admins a left join public.users u on u.id = a.user_id order by 1;
+```
+
+### ── THE MEASUREMENT, KEPT ─────────────────────────────────
 ### Raised 3 Oct 2026 while closing item 147. ⬆ Moved to THIRD on 5 Oct 2026.
 
 ### ✅ THE ANSWER: FOUR OF FOUR CHECK `is_admin()` AS THEIR FIRST STATEMENT

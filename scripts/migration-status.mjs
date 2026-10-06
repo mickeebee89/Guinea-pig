@@ -101,6 +101,47 @@
  *
  *   * `begin; ... rollback;` is fine — it is the multi-statement dependencies
  *     inside that break, not the transaction.
+ *   * ⚠⚠ AN ID A BLOCK DEPENDS ON IS RESOLVED AND PRINTED, NEVER PASTED IN.
+ *     Micky, 6 Oct 2026, after 0089's verify:
+ *
+ *       "An id a block depends on should be resolved and printed, not pasted in."
+ *
+ *     0089's block hardcoded v_admin from 0057's own verify, where it is labelled
+ *     "must be in public.admins". It is not one. The block would have reported
+ *     SKIPPED on two of five sections — not a failure, but TWO SECTIONS PROVING
+ *     NOTHING INSIDE A BLOCK THAT LOOKS MOSTLY GREEN, which is item 188's class
+ *     wearing a different hat. So:
+ *
+ *       select a.user_id into v_admin from public.admins a limit 1;
+ *       if v_admin is null then raise exception 'no admin row; nothing tested'; end if;
+ *
+ *     and PRINT it as line 0 of the output, so the result says what it tested
+ *     rather than leaving it to be assumed. The same goes for a provider id, a
+ *     session id, or anything else resolved from data: print what was used.
+ *
+ *   * ⚠⚠ A BODY THAT MUST MATCH AN EXACT STRING IS BUILT FROM chr(10) AND
+ *     PASSED THROUGH format(). The Supabase SQL editor CONVERTS LF TO CRLF ON
+ *     PASTE — measured 6 Oct 2026, item 190, by predicting four signatures and
+ *     measuring the second. So a body written as literal multi-line SQL arrives
+ *     with CRLF while a chr(10)-built comparison string stays LF, and the two
+ *     render IDENTICALLY in every error message. 0089 refused itself on exactly
+ *     this.
+ *
+ *       execute format('create or replace function … as $f$%s$f$', v_want);
+ *
+ *     Two copies of one string is the fault; only one of them survives a
+ *     clipboard. And a textual anchor on a function body MUST NOT SPAN A LINE
+ *     BREAK for the same reason — 241 anchors across 29 migrations happen not to,
+ *     by habit rather than by rule, which is why it is now a rule.
+ *
+ *   * ⚠️ A REFUSAL THAT COMPARES STRINGS PRINTS length AND md5, AND hex WHEN THE
+ *     STRINGS ARE SHORT. 0089's first version printed two delimited bodies that
+ *     RENDERED IDENTICALLY, because the difference was invisible whitespace. It
+ *     fired correctly and reported unactionably — item 188's class one step
+ *     along: a check that fails informatively to itself and opaquely to its
+ *     reader. md5 says THAT they differ; encode(convert_to(x,'UTF8'),'hex') says
+ *     HOW, which for a stray 0d or a missing 0a is the only actionable form.
+ *
  *   * ⚠⚠ A VERIFY THAT TESTS WHAT A ROLE *CAN* DO MUST ALSO COUNT WHAT IT CAN
  *     DO IN TOTAL. Micky, 6 Oct 2026, after 0088:
  *
