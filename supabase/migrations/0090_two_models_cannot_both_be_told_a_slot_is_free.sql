@@ -408,19 +408,47 @@ notify pgrst, 'reload schema';
 -- ===========================================================================
 --
 -- ===========================================================================
--- ── VERIFY — ONE BLOCK, after applying. Rolls itself back. ─────────────────
+-- ── VERIFY — ONE BLOCK, after applying. Rolls itself back. ───────────
 --
 -- ⚠️ IT ASSERTS BEHAVIOUR, NEVER BODY TEXT (item 190: this function's body is
--- not compared by anything, and a verify that started comparing it would be
--- the first thing to break on a CRLF paste).
+-- not compared by anything, and a verify that started comparing it would be the
+-- first thing to break on a CRLF paste).
 --
 -- Results accumulate into variables; the Supabase SQL editor does not display
 -- NOTICE. Every line starts at 'not run'. Ids are RESOLVED AND PRINTED, never
 -- pasted (the 0089 lesson).
 --
--- ⚠️ THE FIXTURE SESSION IS INSERTED AS THE OWNER, AND THAT IS ONLY POSSIBLE
--- BECAUSE 0086's CONSENT TRIGGER IS `DEFERRABLE INITIALLY DEFERRED` AND FIRES
--- AT COMMIT, WHICH NEVER COMES HERE. Used deliberately, not stumbled into.
+-- ⚠⚠ PRECONDITIONS, AND THE BLOCK REFUSES RATHER THAN IMPROVISING IF THEY ARE
+-- MISSING. It needs, on the same provider:
+--
+--   * TWO future availability rows with no colliding session — one to contest,
+--     one to leave alone;
+--   * TWO model accounts that are not the provider's owner — one to HOLD the
+--     fixture session, one to BE the caller.
+--
+-- To see whether the second condition holds:
+--
+--     select id, email, role from public.users
+--      where role in ('model', 'both') order by created_at;
+--
+-- ⚠⚠⚠ THE CALLER MUST BE A SECOND MODEL, NOT THE PROVIDER'S OWNER. A first
+-- version of this block set the claim to the owner while its own comment said
+-- "become a DIFFERENT model". `"participants can read sessions"` is
+-- `using (auth.uid() = model_user_id OR <provider owner>)`, so the OWNER CAN READ
+-- EVERY SESSION ON THEIR OWN PROVIDER — the direct read would return 1, line 1
+-- would fail to demonstrate the defect, and line 4 would report
+-- "sessions RLS is weaker than it was", **a false alarm about the most serious
+-- thing this block can say.** Micky's catch, 6 Oct 2026.
+--
+-- The intent was in the comment and absent from the code, which is the same gap
+-- as apply.ts's fail-closed arm: a sentence describing a thing the code does not
+-- do. Hence the resolver raises by name rather than falling back to the owner,
+-- and prints all three identities.
+--
+-- ⚠️ IT RUNS slot_contention AS A MODEL WHO CAN SEE NOTHING, WHICH IS THE
+-- POINT. And the FIXTURE SESSION IS INSERTED AS THE OWNER, which is only
+-- possible because 0086's consent trigger is `DEFERRABLE INITIALLY DEFERRED` and
+-- fires at COMMIT, which never comes here. Used deliberately, not stumbled into.
 -- **THIS IS NOT HOW PRODUCT CODE MAY CREATE A SESSION** — the only sanctioned
 -- path is create_session_with_consent. Do not copy this insert anywhere.
 --
@@ -428,8 +456,10 @@ notify pgrst, 'reload schema';
 --   declare
 --     v_prov    uuid;
 --     v_owner   uuid;
---     v_model   uuid;
---     v_slot    uuid;
+--     v_holder  uuid;   -- the model whose fixture session contests the slot
+--     v_caller  uuid;   -- a SECOND model: the one who must see nothing directly
+--     v_slot    uuid;   -- the slot to contest
+--     v_free    uuid;   -- a slot with NO colliding session, confirmed as owner
 --     v_sess    uuid;
 --     v_treat   uuid;
 --     v_direct  integer;
@@ -441,7 +471,8 @@ notify pgrst, 'reload schema';
 --     r_free  text := 'not run';
 --     r_ctrl  text := 'not run';
 --   begin
---     -- Resolve everything, and print it, so the output says what it tested.
+--     -- ── Resolve, as the owner, so every "is there a session" question below
+--     --    is answered by somebody who can actually see them ─────────────
 --     select a.provider_id, a.id into v_prov, v_slot
 --       from public.availability a
 --      where a.date >= current_date and a.is_taken is not true
@@ -451,63 +482,100 @@ notify pgrst, 'reload schema';
 --                           and s.status in ('pending','accepted'))
 --      order by a.date, a.start_time limit 1;
 --     if v_slot is null then
---       raise exception 'VERIFY: no free future slot exists to test with. Nothing was tested.';
+--       raise exception 'VERIFY: no free future slot exists to contest. Nothing was tested.';
 --     end if;
---     select p.user_id into v_owner from public.providers p where p.id = v_prov;
---     select u.id into v_model from public.users u
---      where u.role = 'model' and u.id <> v_owner limit 1;
---     select t.id into v_treat from public.provider_treatments t where t.provider_id = v_prov limit 1;
---     if v_model is null or v_treat is null then
---       raise exception 'VERIFY: need a model account and one treatment on that provider. Nothing was tested.';
---     end if;
---     r_ids := 'provider=' || v_prov::text || ' slot=' || v_slot::text
---              || ' model=' || v_model::text;
 --
---     -- A pending session from SOMEBODY ELSE on that slot's provider/date/time.
+--     -- A SECOND free slot, on the same provider, to leave alone. Line 3 needs a
+--     -- slot whose freedom was established by someone who can see sessions — NOT
+--     -- by the caller, who sees none and would call everything free.
+--     select a.id into v_free
+--       from public.availability a
+--      where a.provider_id = v_prov and a.id <> v_slot
+--        and a.date >= current_date and a.is_taken is not true
+--        and not exists (select 1 from public.sessions s
+--                         where s.provider_id = a.provider_id and s.date = a.date
+--                           and s.start_time = a.start_time
+--                           and s.status in ('pending','accepted'))
+--      order by a.date, a.start_time limit 1;
+--
+--     select p.user_id into v_owner from public.providers p where p.id = v_prov;
+--     select u.id into v_holder from public.users u
+--      where u.role in ('model','both') and u.id <> v_owner order by u.created_at limit 1;
+--     select u.id into v_caller from public.users u
+--      where u.role in ('model','both') and u.id <> v_owner and u.id <> v_holder
+--      order by u.created_at limit 1;
+--     select t.id into v_treat from public.provider_treatments t
+--      where t.provider_id = v_prov limit 1;
+--
+--     if v_holder is null then
+--       raise exception 'VERIFY: no model account other than the provider owner. Nothing was tested.';
+--     end if;
+--     -- ⚠️ NO FALLBACK TO THE OWNER. That is the fault this names.
+--     if v_caller is null then
+--       raise exception 'VERIFY: need a SECOND model account to be the caller (one that is neither the provider owner % nor the fixture holder %). Falling back to the owner would make line 4 report a false RLS alarm. Nothing was tested.', v_owner, v_holder;
+--     end if;
+--     if v_treat is null then
+--       raise exception 'VERIFY: provider % has no treatment to attach a session to. Nothing was tested.', v_prov;
+--     end if;
+--
+--     r_ids := 'provider=' || v_prov::text
+--           || ' owner=' || v_owner::text
+--           || ' holder=' || v_holder::text
+--           || ' caller=' || v_caller::text
+--           || ' contested_slot=' || v_slot::text
+--           || ' free_slot=' || coalesce(v_free::text, '(none - line 3 cannot run)');
+--
+--     -- ── The fixture: a pending session held by the HOLDER ─────────────
 --     insert into public.sessions
 --       (provider_id, model_user_id, model_id, availability_id, treatment_id,
 --        date, start_time, end_time, status)
---     select v_prov, v_model, v_model, a.id, v_treat,
+--     select v_prov, v_holder, v_holder, a.id, v_treat,
 --            a.date, a.start_time, a.end_time, 'pending'
 --       from public.availability a where a.id = v_slot
 --     returning id into v_sess;
 --     r_fix := case when v_sess is null then 'FAIL  - fixture session not created'
---                   else 'fixture pending session ' || v_sess::text end;
+--                   else 'pending session ' || v_sess::text || ' held by ' || v_holder::text end;
 --
---     -- Now become a DIFFERENT model and ask both ways.
+--     -- ── Become the CALLER: a model who is neither owner nor holder ──────
 --     perform set_config('request.jwt.claims',
---       json_build_object('sub', v_owner, 'role', 'authenticated')::text, true);
+--       json_build_object('sub', v_caller, 'role', 'authenticated')::text, true);
 --     execute 'set local role authenticated';
 --
 --     -- 1. THE DEFECT: a direct read sees nothing, and raises nothing.
 --     select count(*) into v_direct from public.sessions s
 --      where s.provider_id = v_prov and s.status in ('pending','accepted');
 --
---     -- 2. THE FIX: the function sees it.
+--     -- 2. THE FIX: the function sees it anyway.
 --     select c.contested into v_flag
 --       from public.slot_contention(v_prov) c where c.availability_id = v_slot;
+--     r_see := case when v_flag is true then 'pass  - slot_contention says contested = true'
+--                   when v_flag is false then 'FAIL  - slot_contention says FREE; the fix does not work'
+--                   else 'FAIL  - slot_contention returned no row for that slot' end;
+--
+--     -- 3. A slot the OWNER confirmed has no session must still read free, or the
+--     --    function is just answering "true" to everything.
+--     --    ⚠️ "NOT TESTED" IS NOT "pass". A first version used
+--     --    bool_or(...) over a set that could be empty: bool_or of nothing is
+--     --    NULL, coalesce(NULL, false) is false, and the line reported a pass it
+--     --    had not earned — on today's data, where there may be no second free
+--     --    slot at all. Micky's catch.
+--     if v_free is null then
+--       r_free := 'NOT TESTED - no second free slot existed; this line is not evidence';
+--     else
+--       select c.contested into v_flag
+--         from public.slot_contention(v_prov) c where c.availability_id = v_free;
+--       r_free := case when v_flag is false then 'pass  - the uncontested slot still reads free'
+--                      when v_flag is true then 'FAIL  - an uncontested slot reads contested'
+--                      else 'FAIL  - slot_contention returned no row for the free slot' end;
+--     end if;
 --
 --     execute 'reset role';
 --
---     r_blind := v_direct || ' row(s) from a direct read';
---     r_see   := case when v_flag is true then 'pass  - slot_contention says contested = true'
---                     when v_flag is false then 'FAIL  - slot_contention says FREE; the fix does not work'
---                     else 'FAIL  - slot_contention returned no row for that slot' end;
+--     r_blind := v_direct || ' row(s) from a direct read, as the caller';
 --
---     -- 3. A slot with no session must still read free, or the function is
---     --    just answering "true" to everything.
---     select bool_or(c.contested) into v_flag
---       from public.slot_contention(v_prov) c
---      where c.availability_id <> v_slot
---        and not exists (select 1 from public.sessions s
---                         join public.availability a2 on a2.id = c.availability_id
---                        where s.provider_id = a2.provider_id and s.date = a2.date
---                          and s.start_time = a2.start_time
---                          and s.status in ('pending','accepted'));
---     r_free := case when coalesce(v_flag, false) then 'FAIL  - an uncontested slot reads contested'
---                    else 'pass  - uncontested slots still read free' end;
---
---     -- 4. THE CONTROL. The policy must NOT have been weakened to achieve it.
+--     -- 4. THE CONTROL. The policy must NOT have been weakened to achieve any of
+--     --    it. ⚠️ This is only meaningful because the caller is a model with no
+--     --    stake in these sessions; as the owner it would read 1 and cry wolf.
 --     r_ctrl := case when v_direct = 0
 --                    then 'pass  - the direct read still returns 0; RLS intact'
 --                    else 'FAIL  - the direct read returned ' || v_direct
@@ -515,20 +583,25 @@ notify pgrst, 'reload schema';
 --
 --     raise exception '%',
 --       chr(10) || '=== 0090 VERIFY — ROLLED BACK ON PURPOSE ==='
---       || chr(10) || '0  ids used                 : ' || r_ids
---       || chr(10) || '0  fixture                  : ' || r_fix
---       || chr(10) || '1  direct read (the defect) : ' || r_blind
---       || chr(10) || '2  slot_contention (the fix): ' || r_see
---       || chr(10) || '3  uncontested still free   : ' || r_free
---       || chr(10) || '4  RLS untouched (control)  : ' || r_ctrl;
+--       || chr(10) || '0  identities              : ' || r_ids
+--       || chr(10) || '0  fixture                 : ' || r_fix
+--       || chr(10) || '1  direct read (the defect): ' || r_blind
+--       || chr(10) || '2  slot_contention (fix)   : ' || r_see
+--       || chr(10) || '3  uncontested still free  : ' || r_free
+--       || chr(10) || '4  RLS untouched (control) : ' || r_ctrl;
 --   end $$;
 --
 --   EXPECT: 1 says "0 row(s)" · 2 pass · 3 pass · 4 pass.
 --
---   ⚠️⚠️ LINES 1 AND 4 ARE THE POINT. "0 rows from a direct read" and
+--   ⚠⚠ LINES 1 AND 4 ARE THE POINT. "0 rows from a direct read" and
 --   "contested = true" in the same transaction, for the same slot, as the same
 --   caller, is the defect and the fix proved by CONTRAST rather than as two
 --   separate claims. If line 1 ever reports a non-zero count, the test has
 --   stopped proving anything — the caller can see the session directly and the
 --   function is no longer the only way to know.
+--
+--   ⚠️ A "NOT TESTED" ON LINE 3 IS NOT A PASS. It means no second free slot
+--   existed, so nothing established that the function can say "false". Lines 1,
+--   2 and 4 still stand on their own, but the block has proved the fix fires
+--   without proving it discriminates.
 -- ===========================================================================
