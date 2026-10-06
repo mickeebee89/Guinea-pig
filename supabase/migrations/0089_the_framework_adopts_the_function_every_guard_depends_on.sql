@@ -111,6 +111,17 @@
 -- Anyone editing this body to say `admins` instead of `public.admins` opens
 -- exactly that, and the body is two lines long, which is how it would happen.
 --
+-- ── ⚠⚠ ONE FAULT CAUGHT IN THIS MIGRATION'S OWN DRAFT — IT IS ITEM 188's ──
+-- Three property checks below were written `not (v_cfg @> array['search_path=
+-- public'])`. **`NULL @> x` IS NULL AND `not NULL` IS NULL, SO THE `if` NEVER
+-- FIRES** — the check for a MISSING search_path could not fire on the one case
+-- where it is actually missing, which is `proconfig IS NULL`. A check that
+-- cannot fail, in the migration that cites item 188 for precisely that class.
+-- Coalesced to '{}'.
+--
+-- Named here and not only in the item because the next person reading these
+-- blocks will copy them, and `@>` against a nullable array is the trap.
+--
 -- ── NO DEPLOY, NO TYPES, NO CLIENT CHANGE ──────────────────────────────────
 -- Both signatures are unchanged and `create or replace` preserves grants, so
 -- there is nothing to regenerate and nothing to ship. Unusual enough in this
@@ -378,12 +389,14 @@ declare
   v_new1 integer;
   v_new2 integer;
   v_sec  boolean;
+  v_vol  "char";
   v_cfg  text[];
   v_a1   text := 'raise exception ''revoke_verification is admin-only'';';
   v_n1   text := 'using errcode = ''42501''';
   v_n2   text := 'using errcode = ''22023''';
 begin
-  select pg_get_functiondef(p.oid), p.prosecdef, p.proconfig into v_def, v_sec, v_cfg
+  select pg_get_functiondef(p.oid), p.prosecdef, p.provolatile, p.proconfig
+    into v_def, v_sec, v_vol, v_cfg
     from pg_proc p join pg_namespace n on n.oid = p.pronamespace
    where n.nspname = 'public' and p.proname = 'revoke_verification';
 
@@ -412,6 +425,24 @@ begin
       || coalesce(array_to_string(v_cfg, ','), '(none)') || '. Rolled back.';
   end if;
 
+  -- ⚠⚠ VOLATILITY, AND HERE THE REASON IS SHARPER THAN THE PLANNER ONE.
+  -- Micky asked for this against is_admin(), where it is ALREADY asserted either
+  -- side of the replace: a STABLE function turned VOLATILE is re-evaluated per
+  -- row by the RLS policies that call it instead of once, which is silent and
+  -- surfaces only as a slowdown nobody traces back to a two-line adoption. The
+  -- gap was HERE, in part 1.
+  --
+  -- And the consequence here is worse than planning: revoke_verification
+  -- performs FIVE WRITES. A plpgsql function declared STABLE or IMMUTABLE that
+  -- writes is UNDEFINED BEHAVIOUR rather than merely mis-planned, and Postgres
+  -- does not reliably refuse it. 0057 declared no volatility, so VOLATILE is
+  -- correct and is what this asserts.
+  if v_vol <> 'v' then
+    raise exception '%', '0089: revoke_verification is no longer VOLATILE (provolatile='
+      || v_vol::text || '). It performs five writes, and a non-volatile function that writes '
+      || 'is undefined behaviour. Rolled back.';
+  end if;
+
   -- GRANTS MUST BE UNTOUCHED. create-or-replace preserves the ACL; asserted
   -- because "preserves" is a claim about an object this migration rewrote.
   if not has_function_privilege('authenticated',
@@ -435,7 +466,7 @@ end $mig$;
 
 -- MIGRATION FOOTER
 insert into public.schema_migrations (version, name, checksum)
-values ('0089', 'the_framework_adopts_the_function_every_guard_depends_on', '8d27011152d3488dce92b49e0c7206e25445f75d12df9caf46820274fa4fc1be');
+values ('0089', 'the_framework_adopts_the_function_every_guard_depends_on', '3b54afce23f3db3e944d6c96140e24249aebe6b8572a167c9a0471e41e16c9a8');
 
 commit;
 
