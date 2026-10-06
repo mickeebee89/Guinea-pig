@@ -18505,6 +18505,124 @@ open web. Smaller audience than the stylist listing, same invention.
 
 ---
 
+## 178. A DESTRUCTIVE STATEMENT RAN WITHOUT ITS GUARD. THE GUARD-ACT-PROVE SHAPE IS THEATRE IN THIS EDITOR.
+### 6 Oct 2026. ⚠⚠ THE MOST IMPORTANT FINDING IN THIS RECORD. It applies to 73 migrations.
+
+Nine reviews were deleted from production **without the guard that was supposed
+to authorise the deletion ever running.**
+
+Sequence, as Micky reported it:
+
+1. The block — `begin;` → `create temp table _target` → DO guard → `delete …
+   using _target` → DO post-condition → `commit;` — **failed** with
+   `relation _target does not exist`, reported against the **DO guard**.
+2. A single-statement rewrite then aborted with
+   `expected 9 reviews for this provider, found 0`. **They were already gone.**
+3. `rating` reads `0.00`, not a stale `3.78`, so
+   `trg_recompute_provider_rating` fired — which happens **only on an actual
+   DELETE**.
+
+**So the delete executed, referencing the same `_target` the guard could not
+see, after the guard had raised, inside a `begin;` that did not hold.**
+
+### Two things this requires, and only one of them is Micky's hypothesis
+
+**H1 — pooled connections.** `create temp table` and the `delete` landed on one
+connection; the DO guard landed on another and could not see the temp table.
+
+⚠️ **H1 is not sufficient on its own.** It also requires that **the editor does
+not abort the remaining statements when one errors.** Without that, the raise
+would have stopped everything regardless of which connection saw what.
+
+**And the converse matters:** a single-connection autocommit model (`begin;`
+ignored, each statement its own transaction) does **not** explain it, because
+on one connection the DO *would* have seen `_target`. **The temp-table error is
+the evidence that points specifically at more than one connection.**
+
+### ✅ THE PROBE THAT CONFIRMS OR REFUTES IT
+
+```sql
+create table if not exists public._conn_probe
+  (n int, pid int, txid bigint, at timestamptz default clock_timestamp());
+
+insert into public._conn_probe (n, pid, txid) values (1, pg_backend_pid(), txid_current());
+do $$ begin raise exception 'PROBE: a deliberate error between two inserts'; end $$;
+insert into public._conn_probe (n, pid, txid) values (2, pg_backend_pid(), txid_current());
+
+select n, pid, txid, at from public._conn_probe order by n;
+```
+
+Then `drop table public._conn_probe;`.
+
+**How to read it:**
+
+* **Row 2 exists at all** → *the editor continued after an error*. **That alone
+  makes every guard in every file theatre**, and it is the half that matters
+  most.
+* **Different `pid` between rows** → H1 confirmed, different connections.
+* **Same `pid`, different `txid`** → one connection, autocommit per statement;
+  `begin;` is not holding.
+* **Same `pid`, same `txid`, and row 2 missing** → the paste IS one transaction
+  and the reviews incident needs a different explanation entirely.
+
+⚠️ **Whether Supabase documents this: I do not know, and I have not looked.**
+Saying so rather than guessing. The probe is better evidence either way —
+documentation describes intent, and the probe describes this editor today.
+
+### ⚠⚠ THE SWEEP: 74 FILES PUT A GUARD IN A DIFFERENT STATEMENT FROM THE ACTION
+
+Measured by splitting each file into top-level statements (respecting `$tag$`
+quoting), finding the first DO block containing `raise exception`, and counting
+destructive statements after it.
+
+* **hand-run: 1** — `supabase/cleanup-consentless-test-sessions.sql`, with
+  **five** actions after its guard. ⚠️ **Its section-4 abort is a separate
+  statement after four deletes**, so in this editor the deletes would run and
+  the abort would be decoration — in the one file whose entire purpose is to
+  delete things safely.
+* **migrations: 73** — effectively all of them, including 0083, 0085 and 0086.
+
+### ✅ AND ONE FILE IS ALREADY THE RIGHT SHAPE, BY ACCIDENT
+
+**0084 is NOT in the list.** Its revokes are `execute format(…)` **inside the
+guarding DO block**, because the "one list, one place" decision put the table
+array and the loop in the same place. **A choice made for drift-avoidance
+produced the only correct guard shape in the directory.**
+
+That is the proof the rule is achievable rather than aspirational.
+
+### THE RULE THAT REPLACES THE HOUSE SHAPE
+
+> **Guard and action in one statement, or the guard is theatre.**
+
+In practice:
+
+* **DML** — put the guard in the action's own statement. A data-modifying CTE
+  works: `with guard as (…), del as (delete … using guard g where … and g.n = 9
+  and g.outsiders = 0 returning 1) select …`. The delete cannot run unless the
+  guard's condition holds, because it is the same statement.
+* **DDL** — `revoke`, `grant`, `drop`, `alter` take no WHERE, so the only safe
+  form is to issue them with `execute` **inside** the guarding DO block. That is
+  0084's shape.
+* **A `begin; … commit;` wrapper is not a substitute**, and that is the whole
+  lesson: it was there, and it did not hold.
+
+### ⚠️ WHAT SAVED IT WAS HINDSIGHT, NOT DESIGN — RECORDED AS LUCK
+
+The 01:35 reading had `test_reviewers=17`, so the outsider check **would have
+passed** and the same nine rows would have gone. **That is luck and is recorded
+as luck.** A block that deletes before its guard runs is the same defect whether
+or not the guard would have objected — the next one may be a block whose guard
+would have refused.
+
+### For the record, from the same incident
+
+The stored `rating` of 3.78 **did** have nine real review rows behind it, so it
+was **not** a direct write to `review_count`. **Item 156's forged-social-proof
+vector is still open; it is not what happened here.**
+
+---
+
 ## Dated
 
 * **8 October** — the diarised selfie-orphan check. The only unarranged end-to-end
