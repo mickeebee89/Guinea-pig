@@ -17992,6 +17992,33 @@ checksum-locked, and that is the copy anyone reads from the database.
 
 ---
 
+## 152b. THE RESEND CHECK GATES MORE THAN ITEM 152's WORDING
+### 6 Oct 2026. Pending Micky's read of the Resend dashboard.
+
+0086's verify (f) reported **2 pg_net queue rows** written by a transaction that
+then rolled back. Item 152's claim is that nothing can be delivered from such a
+transaction: `net.http_post` only queues a row, `net.wake()` takes no arguments,
+so the queue row is the only channel and an uncommitted row is invisible to the
+worker under MVCC.
+
+**Micky is checking the Resend dashboard rather than the recipient's inbox**, and
+that is the better instrument: `nahitih259@bevriz.com` is a throwaway, while
+**Resend logs every attempt regardless of recipient**. A negative at the provider
+is stronger evidence than an empty inbox, which could be empty for a dozen
+reasons.
+
+⚠⚠ **AND IT DECIDES MORE THAN THIS ITEM'S WORDING.** If anything *was* logged,
+a rolled-back transaction delivered mail — which invalidates the safety
+assumption behind **every verify block that exercises a notification path and
+relies on rollback to contain it**. That includes 0082's, 0086's, and anything
+169 will need. The deduction is not just unobserved; **it is load-bearing in
+blocks that have already been run against the live database.**
+
+**Nothing is recorded as observed until that read comes back.** "Never once
+observed" stands.
+
+---
+
 ## 171. THE EMAIL LIST WAS CURATED ACROSS SIX MIGRATIONS. THE PUSH LIST DOES NOT EXIST.
 ### Found 6 Oct 2026, from 0086's verify reporting TWO pg_net queue rows for one notification.
 
@@ -18046,11 +18073,26 @@ records that as a decision.
 holds three lists in agreement — trigger WHEN, reconciler allowlist, `copyFor`.
 Push has one list, implied, and it is "all of them".
 
-### Not started
+### ⚠️ NOT STARTED — AND ITS POSITION IS TIED TO RECRUITMENT, NOT TO THE QUEUE
 
-Behind 169, 156, 149. **It is a decision before it is a fix**: whether every
-type should push is a product question, and `new_availability`'s mass send is
-the one that forces it.
+Filed behind 169, 156 and 149 on code grounds. **That was the wrong frame** —
+Micky, 6 Oct:
+
+> *"It's behind 169/156/149 on code grounds, but it stops being a backlog item
+> the moment real stylists start posting availability, not when the list reaches
+> it."*
+
+`new_availability` pushes **once per favouriter**, so the cost scales with
+*stylists posting availability × models favouriting them*. Today both are near
+zero and the item is harmless. **The trigger is recruitment, not the queue
+position**, and a backlog ordered by item number cannot express that.
+
+⚠️ **So the thing to watch is not this entry — it is the first week of real
+stylist signups.** Whoever is reading the list then should pull this forward
+whether or not 169, 156 and 149 are done.
+
+**It is also a decision before it is a fix**: whether every type should push is
+a product question, and `new_availability`'s mass send is what forces it.
 
 ---
 
