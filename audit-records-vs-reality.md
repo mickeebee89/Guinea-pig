@@ -20120,6 +20120,33 @@ near miss rather than a clean bill. **A zero answer is stranger**, because the
 editor demonstrably converts today, and then the question is what changed and
 when.
 
+### ⚠⚠ AND THE SAME CLASS EXISTS ON THE WAY OUT: `clip` MANGLES UTF-8
+
+Found 6 Oct 2026 while handing a verify block over. The file was verified clean
+first — no BOM, no CR, LF only — and `type verify0090.sql | clip` still produced:
+
+| | after `type \| clip` | after the fix |
+|---|---|---|
+| first char is a BOM | **TRUE** | false |
+| has em-dash U+2014 | **false** | TRUE |
+| has ⚠ U+26A0 | **false** | TRUE |
+| has U+00E2 (mojibake) | **TRUE** | false |
+
+**Two independent faults.** `clip.exe` prepends a BOM, so the paste begins
+`﻿do $$` and Postgres rejects the first statement. And PowerShell 5.1's `type`
+decodes a BOM-less UTF-8 file as CP1252, so every em-dash and ⚠️ becomes
+mojibake — harmless in a comment, visible in a `raise` message, silent either way.
+
+```
+Set-Clipboard -Value (Get-Content -Raw -Encoding UTF8 <file>)
+```
+
+⚠️ **So this item is not about the editor; it is about every pipeline that carries
+SQL.** The editor adds CR on the way IN, `clip` mangles UTF-8 on the way OUT, and
+neither is visible until something compares bytes. The lesson generalises past
+both: a transport that is never checked is assumed to be lossless, and both of
+these were.
+
 ### ✅ THE MITIGATION, AND IT COVERS BOTH CANDIDATE CAUSES
 
 0089 builds the DDL **from** the expected literal via `format()`, so the body

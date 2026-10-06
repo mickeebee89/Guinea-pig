@@ -101,6 +101,29 @@
  *
  *   * `begin; ... rollback;` is fine — it is the multi-statement dependencies
  *     inside that break, not the transaction.
+ *   * ⚠⚠ NEVER `type <file> | clip` FOR SQL ON THIS MACHINE. Measured 6 Oct
+ *     2026, on a file verified clean beforehand (no BOM, no CR, LF only):
+ *
+ *                            after `type | clip`   after the fix
+ *       first char is a BOM        TRUE                false
+ *       has em-dash U+2014         false               TRUE
+ *       has U+00E2 (mojibake)      TRUE                false
+ *
+ *     TWO independent faults. `clip.exe` PREPENDS A BOM, so the paste begins
+ *     `﻿do $$` and Postgres rejects the first statement. And PowerShell 5.1's
+ *     `type` (Get-Content with no -Encoding) decodes a BOM-less UTF-8 file as
+ *     CP1252, so every em-dash and every ⚠️ becomes `â€”`-style mojibake —
+ *     harmless in a comment, visible in a raise message, and silent either way.
+ *
+ *     Use instead:
+ *
+ *       Set-Clipboard -Value (Get-Content -Raw -Encoding UTF8 <file>)
+ *
+ *     ⚠️ SAME CLASS AS ITEM 190, FROM THE OTHER DIRECTION: the SQL editor adds CR
+ *     on the way IN, clip mangles UTF-8 on the way OUT, and neither is visible
+ *     until something compares bytes. Any pipeline that carries SQL between a
+ *     file and the editor is a place to check lengths and hashes, not to trust.
+ *
  *   * ⚠⚠ A BLOCK IS PRINTED, NEVER DESCRIBED. Micky, 6 Oct 2026, on the third
  *     occurrence: *"the third time a block has been described rather than
  *     printed — worth noticing as a habit rather than as three separate
