@@ -101,6 +101,31 @@
  *
  *   * `begin; ... rollback;` is fine — it is the multi-statement dependencies
  *     inside that break, not the transaction.
+ *   * ⚠⚠ A VERIFY THAT TESTS WHAT A ROLE *CAN* DO MUST ALSO COUNT WHAT IT CAN
+ *     DO IN TOTAL. Micky, 6 Oct 2026, after 0088:
+ *
+ *       "A verify that tests what a role CAN do and never counts what it can do
+ *        in total proves the named cases and nothing about the ones nobody
+ *        thought to name. The count is what catches a column accidentally
+ *        retained."
+ *
+ *     0088's block proved eight named columns writable and five named columns
+ *     refused, and would have passed unchanged with a sixteenth column left in
+ *     the grant by a typo — because nothing asked how many there were. The two
+ *     lines that close that gap:
+ *
+ *       select count(*) ... where grantee = 'authenticated' and privilege_type = 'UPDATE'
+ *       select string_agg(table_name || '.' || column_name, ', ' order by 1) ...
+ *
+ *     The COUNT catches an extra; the LIST says which, so a mismatch is
+ *     actionable rather than just alarming. And the count for the role that is
+ *     supposed to hold NOTHING (anon, here) is the other half — a revoke that
+ *     silently missed a role reads exactly like one that worked.
+ *
+ *     This sits alongside the outside-the-list control, and it is not the same
+ *     check: the control proves the migration did not reach too FAR, the count
+ *     proves it reached FAR ENOUGH.
+ *
  *   * ⚠⚠ WHEN A REPO READ AND A LIVE READ DISAGREE, THE LIVE READ IS RIGHT,
  *     AND THE USUAL CAUSE IS A BOUNDARY THE PARSER GOT WRONG RATHER THAN A
  *     STALE FILE. Three times on 6 Oct 2026 a repo read contradicted a live

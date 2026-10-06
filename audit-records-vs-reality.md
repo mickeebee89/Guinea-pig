@@ -16153,7 +16153,111 @@ and do not read a clean 163 sweep as covering it.
 ---
 
 ## 149. FOUR ADMIN RPCs ARE DEFINER AND EXECUTABLE BY ANY MEMBER, AND NOBODY HAS READ THEIR GUARDS
-### Raised 3 Oct 2026 while closing item 147. NOT STARTED. ⬆ Moved to THIRD on 5 Oct 2026.
+### ✅ READ 6 Oct 2026. ALL FOUR GUARD CORRECTLY. ~~NOT STARTED.~~ ⚠️ REPO-DERIVED — the live read is below and is the authority.
+### Raised 3 Oct 2026 while closing item 147. ⬆ Moved to THIRD on 5 Oct 2026.
+
+### ✅ THE ANSWER: FOUR OF FOUR CHECK `is_admin()` AS THEIR FIRST STATEMENT
+
+Read in full, with boundaries taken at the next `create … function` rather than
+at a guessed closing dollar-quote tag (see item 188 and the `$function$` bleed).
+
+| function | last defined | guard position | first read/write |
+|---|---|---|---|
+| `revoke_verification` | 0057 | **statement 1** | `update public.users` |
+| `admin_act_on_provider` | 0058 | **statement 1** | `select p.user_id into` |
+| `admin_act_on_report` | 0058 | **statement 1** | `select r.status … into` |
+| `admin_act_on_user` | 0058 | **statement 1** | `insert into` |
+
+**Both of this item's conditions hold.** Each refuses a non-admin, and the
+refusal precedes every read and every write. Three also check `v_admin is null`
+second, so an action that could not be attributed is refused rather than logged
+anonymously.
+
+✅ **And the DECLARE blocks run no queries** — that was the subtle way this could
+have failed, since DECLARE initialisers execute BEFORE `begin` and therefore
+before the guard. All four declare only `auth.uid()` and string functions.
+
+✅ **`is_admin()` itself is sound:** `LANGUAGE sql STABLE SECURITY DEFINER SET
+search_path TO 'public'`, body `select exists (select 1 from public.admins where
+user_id = auth.uid())`. DEFINER, so `admins` RLS cannot hide a row from it.
+⚠️ It exists **only in `schema-snapshot-2026-08-08.sql`** — no migration has ever
+created or replaced it. A guard all four depend on, whose shape no migration has
+ever asserted. It reads correctly; it is simply unversioned, and pre-0000
+hand-made artifacts are where this record keeps finding things.
+
+### ✅ WHAT A NON-ADMIN WOULD REACH IF A GUARD WERE MISSING — AND IT DIFFERS BY FUNCTION
+
+| function | reachable | second guard? |
+|---|---|---|
+| `admin_act_on_user` | suspend, ban, reinstate, verify any account; writes `moderation_actions` + `admin_audit_log` | ✅ **YES** — `_admin_apply_user_action` re-checks `is_admin()` as its own first statement |
+| `admin_act_on_report` | the same, against the reported user, plus resolving the report | ✅ **YES**, same inner function |
+| `admin_act_on_provider` | the same, against the shop owner, plus portfolio/status handling | ✅ **YES**, same inner function |
+| **`revoke_verification`** | **un-verify any stylist, delete her `verification_requests`, hide her shop, cancel every upcoming booking and notify each model** | ❌ **NO** |
+
+⚠⚠ **SO `revoke_verification` IS THE ONLY ONE OF THE FOUR WITH A SINGLE GUARD.**
+The other three route through `_admin_apply_user_action`, which guards itself —
+0039's own comment says why: *"Checked again here, though every caller has
+checked it. Cheap, and it means a future caller that forgets cannot turn this
+into an unguarded path."* `revoke_verification` writes `users.is_verified`
+directly and calls `_withdraw_stylist`, which correctly has **no** guard because
+it is a private helper revoked from every client role.
+
+**That is not a hole — the guard is present and first.** It is a single point of
+failure where its three siblings have two, on the function with the widest blast
+radius of the four. Defence in depth exists here by accident of routing rather
+than by design.
+
+### ⚠️ TWO SECOND-ORDER FINDINGS, NEITHER A HOLE
+
+1. **`revoke_verification`'s refusals carry no errcode.** It raises
+   `'revoke_verification is admin-only'` with no `using errcode`, so it arrives
+   as **P0001**; the other three use **42501**. A client cannot tell "not an
+   admin" from any other failure by code and must match on message text — which
+   `site/app/(app)/shop/actions.ts` already does for a different guard and
+   already knows is fragile. Its reason-length check is the same.
+2. ⚠⚠ **NOTHING ENFORCES THE PATTERN FOR THE NEXT ONE.** Four DEFINER functions
+   executable by `authenticated`, each correct **by convention only**. The same
+   allowlist-by-omission class as 0040's trigger and 156's grant list — but at
+   the function level, where there is no GRANT to make it deny-by-default,
+   because the console must be able to call them as a signed-in admin.
+
+   The available fix is an assertion, not a mechanism: enumerate DEFINER
+   functions in `public` that `authenticated` may execute and that write a
+   moderation or gate table, and require an `is_admin()` check before the first
+   read or write. ⚠️ **Be honest about what that buys** — a check someone has to
+   remember to run is weaker than a grant that refuses, and this project's own
+   standing lesson is that mechanisms adopted to stop a trap get walked past on
+   tasks that feel too small to need them. It is still better than convention.
+
+### ⚠️ THE LIVE READ, WHICH IS THE AUTHORITY. Everything above is REPO-DERIVED.
+
+Recorded as a hypothesis, per item 188's last convention. 0062 redefined
+`_admin_apply_user_action` four times after 0039; the same could have happened to
+any of these four outside the migration ledger.
+
+```sql
+select p.proname::text                                   as fn,
+       case when p.prosecdef then 'DEFINER' else 'INVOKER' end as security,
+       has_function_privilege('authenticated', p.oid, 'execute') as authed_may_run,
+       position('is_admin' in pg_get_functiondef(p.oid))  as is_admin_at,
+       position('begin' in pg_get_functiondef(p.oid))     as begin_at,
+       pg_get_functiondef(p.oid)                          as body
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+ where n.nspname = 'public'
+   and p.proname::text in ('revoke_verification', 'admin_act_on_provider',
+                           'admin_act_on_report', 'admin_act_on_user',
+                           '_admin_apply_user_action', 'is_admin')
+ order by 1;
+```
+
+⚠️ **`position()` IS A SANITY CHECK, NOT THE TEST.** It reads "absent" and
+"below" identically — the two-worlds flaw Micky caught in 0083 — and
+`pg_get_functiondef` includes the COMMENTS, so a guard named only in prose would
+match. **Read the bodies.** The columns are there to make a missing guard
+obvious, not to decide anything.
+
+### ── THE ORIGINAL REASONING, KEPT ────────────────────────────
 
 **⚠️ Why it moved up, and the reasoning is worth more than the position.** It was
 ranked low *because it is unmeasured*. That is the wrong way round:
@@ -16844,7 +16948,93 @@ in 0035"* said, minus the part that can rot. **Not built yet** — it belongs wi
 ---
 
 ## 156. WAS ITEM 147 ONE TABLE OR THE SCHEMA? NOBODY HAS ASKED
-### Raised 4 Oct 2026. ⚠️ THIS IS AN OPEN QUESTION, NOT A FINDING. Unmeasured by Micky and unmeasured by me.
+### ✅ CLOSED 6 Oct 2026 by migration 0088. Answer: THE SCHEMA.
+### Raised 4 Oct 2026. ~~⚠️ THIS IS AN OPEN QUESTION, NOT A FINDING. Unmeasured by Micky and unmeasured by me.~~
+
+### ✅ THE ANSWER, MEASURED 6 Oct 2026: 45 OF 45 COLUMNS, TO BOTH CLIENT ROLES
+
+`authenticated` **and** `anon` held UPDATE on **every column** of `public.users`
+(27) and `public.providers` (18) — 45 of 45, no exceptions.
+
+⚠️ **So 147 was one instance of a schema-wide pattern and 0079 reached exactly
+one table.** The worse of the two answers, and the one this item said was not
+the obvious one: *a finding is only as wide as the check.*
+
+**0088 narrowed it to the columns a member actually writes:**
+
+| table | granted to `authenticated` | locked |
+|---|---|---|
+| `users` | first_name, last_initial, instagram_handle, notification_preferences, profile_pic_url, postcode, latitude, longitude | **19 of 27** |
+| `providers` | name, bio, location_text, profile_pic_url, is_published, latitude, longitude | **11 of 18** |
+
+`anon` holds **nothing** on either table. Verified after applying: 15 columns to
+`authenticated` across both tables, 0 to `anon`, and the list is exactly the 8
+and the 7 — nothing extra retained.
+
+### ✅ WHAT THE MEASUREMENT FOUND THAT THE PLAN DID NOT EXPECT
+
+* **`set_my_postcode` is SECURITY INVOKER and writes five of the columns** —
+  `users.postcode/latitude/longitude` and `providers.latitude/longitude`. The
+  `_withdraw_stylist` class that nearly broke 0079, sitting directly in this
+  item's path. The five stay granted; making the function DEFINER would have
+  made it re-implement own-row confinement **and** the suspended-stylist refusal
+  that `providers_not_suspended` gives free — a second copy of a rule.
+  ⚠️ **And the postcodes.io rule it looks like this weakens was already
+  advisory**: 0054 says the function *"does not and cannot check that the
+  coordinate matches the postcode"*. The grant never held that rule up.
+* **`_admin_apply_user_action` and `_withdraw_stylist` are also INVOKER**, but
+  `revoke all … from public, anon, authenticated` and every caller chain bottoms
+  out in a DEFINER, so neither can ever run as `authenticated`. That clearance
+  is **repo evidence about live objects**, so it went into 0088's GUARD rather
+  than its header (0084's precedent).
+* ⚠⚠ **"providers can update own row" IS `USING (auth.uid() = user_id)` WITH
+  CHECK (NONE).** USING only tests the OLD row, so nothing refused a stylist
+  rewriting `providers.user_id` to another account. `public.users` has the WITH
+  CHECK that `public.providers` lacks — **the two policies look alike and only
+  one is sound.** The missing WITH CHECK is STILL MISSING; `user_id` is closed
+  by 0088's grant, not by that policy. Recorded because the next person reads the
+  policy name and believes it.
+* **`providers.rating` / `review_count` were writable** — derived by
+  `recompute_provider_rating()` from `reviews`, so a stylist could set her own
+  star rating with no review behind it. Forged social proof, now refused.
+* **0040's own proposed grant list was already stale.** It named
+  `profile_pic_url, date_of_birth, instagram_handle, latitude, longitude`.
+  `postcode` arrived in 0054, fourteen migrations later; `notification_
+  preferences`, `first_name` and `last_initial` were never in it; `date_of_birth`
+  was in it and should not be. ⚠️ **A grant list is an allowlist too** — the
+  reason it is still the right fix is the DIRECTION IT FAILS IN: a column
+  forgotten in a trigger is OPEN and silent, a column forgotten in a grant is
+  LOCKED and breaks loudly.
+
+### ✅ AND `first_published_at` COULD NOT BE POLICED BY A TRIGGER
+
+The plan was a BEFORE trigger pinning the stamp to OLD unless the transition
+sanctioned a new value. **The read killed it.** Two deliberately opposite
+conventions exist and both are correct:
+
+* **preserve** — `coalesce(first_published_at, now())`: 0016:213, 0039:606,
+  **0044:314 (`_withdraw_stylist`)**, 0045:229, 0077:266. The stamp keeps
+  auto-publish disarmed so a withdrawn shop stays hidden.
+* **clear** — `first_published_at = null`: 0040:386
+  (`unpublish_on_verification_lost`), 0040:445. Nulling RE-ARMS auto-publish so a
+  re-verified shop republishes.
+
+So a value policy would have had to break one of them, and pinning would have
+**silently discarded `_withdraw_stylist`'s load-bearing write** — meaning a
+suspended stylist's shop auto-republishing itself. What shipped instead is a
+gap-filling trigger (`tg_provider_stamp_first_published`) that acts **only when
+the caller did not name the column**: it never overrides, never refuses, and
+replaces the stamp `shop/actions.ts` used to write.
+
+### The dead-column drop from item 155, still waiting
+
+`providers.status_text` and `providers.status_expires_at`. 0088 did not drop
+them — it only narrowed grants. ⚠️ And 0087 established the drop is not free:
+`public_stylists` selects both, so the view must be re-run by hand first or the
+drop is refused. Still one statement, still waiting, now with its precondition
+written down.
+
+### ── THE ORIGINAL INVESTIGATION, KEPT ──────────────────────────
 
 Item 147 established that `public.sessions` granted `authenticated` **table-wide
 UPDATE on all 26 columns**, narrowed only by a USING-only policy — so either
@@ -17149,7 +17339,46 @@ the drop and the grant narrowing are one migration rather than two.
 ---
 
 ## 157. A MEMBER CAN MARK THEIR OWN PHOTO AS REVIEWED, WHICH TAKES IT OUT OF MODERATION
-### Confirmed 4 Oct 2026 by reading the trigger and the client. NOT FIXED.
+### ✅ CLOSED 6 Oct 2026 by migration 0088, as a by-product of 156's users grant. NO FORENSIC TAIL.
+### Confirmed 4 Oct 2026 by reading the trigger and the client. ~~NOT FIXED.~~
+
+### ✅ CLOSED THE WAY THIS ITEM SAID IT HAD TO BE
+
+0088 revoked table-wide UPDATE on `public.users` and granted eight columns.
+`profile_pic_reviewed_at` and `profile_pic_reviewed_by` are not among them, so
+they stopped being writable **without being named** — which is exactly what this
+item insisted on: *"Patching the trigger to name two more columns is writing the
+eighth entry in the list whose missing eighth entry IS the bug."* No trigger
+branch was added.
+
+`profile_pic_updated_at`, which this item flagged as equally unguarded, is locked
+by the same omission. The allowlist-by-omission trap closed in the safe
+direction for once.
+
+**Proved by a refused statement, not inferred from the grant list** — 0088's
+VERIFY B2 runs `update public.users set profile_pic_reviewed_at = now()` as the
+member and requires 42501. A column privilege is checked against the statement's
+TARGET LIST, so a refused UPDATE is the only thing that proves PostgREST and the
+catalogue agree about that column.
+
+### ✅ AND THERE IS NO BACKFILL. 0 OF 0.
+
+Measured 6 Oct 2026 before applying: **0 rows have `profile_pic_reviewed_at`
+set.** No photo has ever been marked reviewed — by its owner or by anyone. So
+the second half of this item, *"nothing records that it was skipped"*, has no
+instances to record: there is nothing to un-tick, nothing to return to the
+queue, and no second decision hiding behind the grant.
+
+⚠️ **That was asked because the grant is PROSPECTIVE.** It stops the next
+self-tick; a row already ticked would have stayed out of the queue after 0088
+landed, because the column was already set. The count is what established there
+were none, rather than assuming it.
+
+**Still true and unchanged:** `admin_mark_profile_pic_seen` (DEFINER) is the only
+writer, and `mark_profile_pic_unreviewed` still resets on a url change — triggers
+are unaffected by column grants.
+
+### ── THE ORIGINAL FINDING, KEPT ──────────────────────────────
 
 **Plainly:** an account can set its own `profile_pic_reviewed_at`, and the photo
 then disappears from the admin queue of pictures awaiting a look. Nobody ever
@@ -19553,6 +19782,71 @@ should go the way `providers.is_verified` went.**
 
 Held with 186 until the price model is decided. ⚠️ **Not to be "tidied" in the
 meantime**: dropping it is a decision about the product, not about the schema.
+
+---
+
+## 188. A CHECK WHOSE OUTPUT IS INDISTINGUISHABLE FROM A PASS IT DID NOT EARN
+### The recurring class, 6 Oct 2026. ONE ENTRY, NOT EIGHT — the instances keep differing and the mechanism does not.
+
+Eight faults in one night, in checks rather than in code, all the same shape:
+**the check reported success for a reason other than the thing it was testing
+being true.** Recorded as a class because they were caught by eight different
+observations and would have been eight unconnected entries.
+
+⚠️ **Different authors, and that is the point.** Six were mine and caught by me
+before shipping; two were Micky's own probes. A class that only ever catches one
+author is a habit; one that catches both is a property of the work.
+
+### The eight
+
+| # | the check | why its output was not evidence |
+|---|---|---|
+| 1 | 0088 guard (d) asserted `service_role count > 0`; the post-condition demanded 45 | **A post-condition asserting a precondition the guard never established.** A pre-existing shortfall this migration never caused would have passed the gate, done the work, and rolled back naming a figure nobody had measured |
+| 2 | 0088 VERIFY A1 bundled `first_name` with six other columns | `guard_users_name_change` (0056) rate-limits names, so **a refusal from a different mechanism would have read as this grant failing** |
+| 3 | 0088 VERIFY A1b: `when others then 'pass (grant held)'` | **Reported a pass on any unknown error** — a constraint, an unrelated trigger, a typo in the statement |
+| 4 | the same A1b treated 42501 as proof the grant was wrong | **0056 raises 42501 for a SUSPENDED account too**, so the code alone was ambiguous in both directions |
+| 5 | 0088 VERIFY D3 called `row_count_hint()`, which does not exist — and its `UPDATE` matched zero rows | **An UPDATE matching no rows SUCCEEDS.** The test account may own no `model_attributes` row, so it would have reported a pass it had not earned. Two faults in one line |
+| 6 | 0088 VERIFY emitted all fifteen results with `raise notice` | **The Supabase SQL editor does not display NOTICE.** The only thing on screen would have been *"read the notices above"*, with none above it. A verify that cannot REPORT is the same class as one that cannot FAIL |
+| 7 | a hand-written `LIKE` probe assuming a single space before `:=` | **Returned `sets_model_id=false` against column-aligned assignments.** Micky, 6 Oct: *"a false negative from a hand-written probe is the same failure class as a false positive from one."* The migration was never wrong |
+| 8 | two verify reads left after `set local role authenticated` with no `reset role` | They would have run as the member, returned null, and printed **`UNREADABLE`** — a word that is neither a pass nor a failure, in a slot the reader scans for a verdict |
+
+### ⚠⚠ THE FOUR ROUTES, WHICH IS WHAT MAKES THIS PREDICTABLE RATHER THAN A LIST
+
+1. **The check cannot run.** Its output slot is filled by something that is not a
+   result (#5, #6, #8). Fix: initialise every result to `'not run'`, so a block
+   that dies before a line says so instead of leaving a plausible blank.
+2. **The check catches too much.** A bare `when others` converts every unknown
+   failure into the one verdict it knows how to print (#3). Fix: name the
+   expected errcode; anything else reports `UNEXPECTED` with its sqlstate —
+   neither a pass nor a failure.
+3. **The check cannot distinguish two causes.** One statement, two mechanisms,
+   one verdict (#2, #4). Fix: one assertion per mechanism, and say in the output
+   which one answered.
+4. **The check measures the wrong thing successfully.** A zero-row UPDATE, a
+   `count > 0` where exactness was meant, a probe whose pattern is narrower than
+   the text (#1, #5, #7). Fix: assert from the catalogue rather than from a
+   side effect, and prefer an exact list to a bound.
+
+### The conventions these produced, all in `scripts/migration-status.mjs`
+
+* Accumulate results into variables; **one `raise exception`, one `%`, one
+  concatenated string.** Never `raise notice` — the editor does not show it.
+* Every result initialised to `'not run'`.
+* A setup failure gets **its own output line**, never folded into the verdict it
+  invalidates — 0088's C0, so a setup that failed cannot read as a test that
+  passed.
+* Name the errcode. `when others` is for reporting the unexpected, never for
+  passing it.
+* **Count and list the total, not just the named cases** — 0088 proved eight
+  columns writable and five refused and would have passed with a sixteenth left
+  in by a typo. Micky, 6 Oct: *"The count is what catches a column accidentally
+  retained."*
+* An **outside-the-list control** proving the change did not reach too far, which
+  is NOT the same check as the count: the control bounds the blast radius, the
+  count proves it reached far enough.
+* A **repo read is a hypothesis about a live object.** Put it in the guard so the
+  database refuses it if it is wrong, not in the header where it merely reads as
+  true.
 
 ---
 
