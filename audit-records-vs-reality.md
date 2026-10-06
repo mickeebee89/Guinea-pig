@@ -18463,7 +18463,117 @@ narrows anything:** either point the badge and the view at `users.is_verified`,
 or have the approval path write both. That is a decision, not a grant change,
 and it now sits in front of the rest of 156.
 
-### The one read that says which consequence is live today
+### ✅ MEASURED 6 Oct 2026 — AND IT IS A PRODUCT BUG, NOT A HARDENING QUESTION
+
+```
+providers=3  badge_on(providers.is_verified)=0  approved(users.is_verified)=3  published=3
+combination: providers.is_verified=false  users.is_verified=true  is_published=true  n=3
+defaults:    providers.is_verified=false  users.is_verified=false
+```
+
+**Every published stylist is approved and none shows a badge.** The column the
+badge reads defaults to `false` and nothing writes it, **so it has never been
+true for anyone.**
+
+⚠⚠ **THE VERIFIED BADGE HAS NEVER WORKED.** On a marketplace whose proposition
+is that the stylist has been checked, that is the product, not the plumbing.
+Consequence 1 is live and total; consequence 2 was never reached.
+
+`users.is_verified` is authoritative: `admin_decide_verification` writes it,
+`guard_users_protected_columns` protects it, and it is true for exactly the
+three approved accounts. **`providers.is_verified` is a fossil.**
+
+✅ **Nobody real is affected**, confirmed from the addresses: `09c6d70c`
+(`nahitih259@bevriz.com`, the cleanup script's test set), `49d40aae` and
+`b604a402` (both Micky's own). **This is the cheap window to fix it** — the same
+timing argument as item 171: the cost is near zero until recruitment starts.
+
+### ⚠⚠ 1. THE COMPLETE SET IS NINE SITES ACROSS THREE APPS — MY EARLIER LIST OF THREE WAS WRONG
+
+I named `stylist.ts:108`, `page.tsx:70` and `public-web-views.sql:139` and
+called it the set. **It was a third of it.**
+
+| # | site | what it drives |
+|---|---|---|
+| 1 | `site/lib/queries/stylist.ts:108, 181` | the stylist page badge (`page.tsx:70`) |
+| 2 | `site/lib/queries/browse.ts:85, 173` | **the browse listing** |
+| 3 | `site/lib/stylists.ts:5` (`CARD_COLUMNS`) | **every public-site stylist read**, via the view |
+| 4 | `site/components/FeaturedStylists.tsx:33` | **the home page** |
+| 5 | `site/components/StylistCard.tsx:38` | renders the badge itself |
+| 6 | `site/lib/supabase-public.ts:52` | the `PublicStylist` type |
+| 7 | `mobile/…/index.tsx:228, 258, 461, 968` | the mobile directory — **and a filter** |
+| 8 | `mobile/…/provider/[id].tsx:164, 436, 445, 482` | the mobile profile badge, ×3 |
+| 9 | `public-web-views.sql:139`, `0034:232` | the view |
+
+⚠️ **`mobile/…/index.tsx:461` is a "verified only" FILTER** —
+`matchesVerified = !verifiedOnly || p.is_verified`. **It can never match
+anything**, so a member who ticks it gets an empty directory and no
+explanation. A silent false negative with a control attached to it.
+
+### ✅ 2. THE VIEW JOIN IS STRAIGHTFORWARD, AND THE PRECEDENT IS IN THE SAME FILE
+
+`public-web-views.sql:19`, in its own header:
+
+> *"it lets the view read `providers.user_id` to join reviews WITHOUT
+> publishing it."*
+
+**The exclusion rule governs what the view OUTPUTS, not what it may JOIN ON**,
+and `security_invoker = false` is what makes the join legal — the view runs as
+its owner and bypasses RLS on the base tables. **The reviews join is already
+exactly this pattern.** So joining `users` and surfacing only
+`coalesce(u.is_verified, false)` is the shape the file was built for, not a
+departure from it.
+
+⚠️ **It must be a LEFT JOIN.** An inner join silently drops any stylist whose
+`users` row is missing or hidden, turning a badge fix into a listing outage —
+the directory losing rows is a worse bug than the badge being off.
+
+### ✅ 3. THE ORDERING IS RIGHT, AND THE DATABASE ENFORCES IT
+
+Agreed, and it is stronger than "dropping it first breaks the view":
+**PostgreSQL refuses to drop a column a view depends on.** The drop is not
+risky-if-done-first, it is *rejected* until the view no longer reads it.
+
+    view → all nine client sites → deploy → confirm the three show a badge → drop
+
+⚠️ **One addition: the badge appearing is a visible product change**, not a
+silent correction. Three listings gain a verified tick the moment the view
+changes. All three are test or Micky's own today, which is precisely why this
+is cheap now and will not be later.
+
+### ✅ 4. DROP, NOT REVOKE — NO REASON TO KEEP IT
+
+* It holds **no information**: `false` on all three rows, and it has never been
+  true for anyone, so there is nothing to preserve or migrate.
+* It has **no rollback value** for the same reason.
+* **Revoked-but-present invites the "fix"**: the next person who finds a badge
+  not showing sees a column named `is_verified` and writes to it. A revoke can
+  also be undone by a later `grant`, which is the trigger-versus-grant point
+  below.
+
+**Dropping makes the mistake impossible rather than discouraged.** That is the
+fossil class treated the way items 155 and 178 say to treat it.
+
+### ✅ THE 156 FOLD-IN, CONFIRMED BY READING THE GUARD
+
+`guard_users_protected_columns` covers **seven of twenty-seven** columns:
+`is_verified`, `is_founding_provider`, `provider_fee_waived`,
+`subscription_waived`, `subscription_status`, `fraud_flagged`, `role`.
+
+`users.is_verified` is granted UPDATE to **anon and authenticated**, so the
+only thing stopping a member setting her own verified flag is that trigger.
+
+⚠️ **The trigger is doing the grant's job, which is 0079's argument exactly.**
+Folded into 156's split as a principle rather than a column: **the grant is the
+deny-by-default layer and the trigger is the backstop, not the other way
+round.** A trigger that is the only defence covers the cases its author thought
+of — seven of twenty-seven — while a narrowed grant covers every column nobody
+thought about, including ones added later.
+
+### The read that produced all of this
+
+### The query, as run
+
 
 ```sql
 select count(*) filter (where p.is_verified) as providers_flag_true,
