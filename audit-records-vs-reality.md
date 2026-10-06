@@ -18255,6 +18255,165 @@ launch.
 
 ---
 
+## 174. FAKE REVIEWS ARE LIVE ON THE PUBLIC SITE — FROM MANUAL TESTING, NOT THE SEED
+### Measured 6 Oct 2026. ⚠️ 172 was aimed at the wrong source and the finding is real anyway.
+
+```
+reviews: all=17  seeded_reviewers=0  test_reviewers=17
+published listings with stars: 1
+  49d40aae…  rating=3.78  review_count=9  owner=micky.buckfield@gmail.com
+```
+
+**The seed never ran here.** So item 172's mechanism — sixteen seeded reviews —
+is not what produced this. **Seventeen reviews written by test accounts during
+manual testing did**, and `recompute_provider_rating` turned nine of them into
+`rating 3.78` on a **published** listing that `public_stylists` serves to the
+public site.
+
+⚠️ **So the thing `site/lib/demo/README.md` refuses by rule — "No reviews,
+ratings or testimonials. UK law bans fake reviews" — is on the live site now,
+produced by the one route nobody had a rule for.** 172 named the seed; the seed
+was innocent; the exposure is real.
+
+*A finding can be right about the hazard and wrong about the source, and the
+source is the part that gets fixed.*
+
+### ✅ DELETING THE REVIEWS IS THE COMPLETE FIX, NOT HALF OF ONE
+
+Both checks Micky asked for:
+
+* **No guard on `reviews`.** The only trigger is
+  `trg_recompute_provider_rating AFTER INSERT OR DELETE OR UPDATE` (snapshot:427).
+  There is no `guard_reviews` equivalent — deletes work, and the trigger
+  **fires on DELETE**, so `rating` and `review_count` recompute by themselves.
+* **Review TEXT is rendered publicly**, so clearing only the numbers would have
+  been the half fix he suspected:
+  * `site/app/(app)/stylist/[id]/page.tsx:238` — `p.reviews.map(…)` with
+    `r.reviewerName` and the comment.
+  * `site/app/(app)/model/[id]/page.tsx:175` — the same for models.
+
+**Deleting the rows removes the text AND resets the derived numbers in one
+action.** That is why the lever is the reviews table and not the columns.
+
+### ⚠️ The other eight are a separate decision
+
+Nine of the seventeen are reviews OF the published stylist. **The other eight
+are reviews of models**, rendered on `/model/[id]` to any signed-in member.
+They are equally invented, equally test-authored, and are not covered by a
+block scoped to one provider. Not folded in, because "clear the public listing"
+and "clear every fake review in the product" are different decisions and the
+second one is his.
+
+---
+
+## 175. session_consents HAS NO FOREIGN KEY TO THE BOOKING IT IS THE RECORD OF
+### Raised by Micky, 6 Oct 2026, from the item 173 read. ⚠️ IT ALSO REFUTES MY OWN ARGUMENT AGAINST 169.
+
+```
+session_consents FK: session_consents_consent_document_id_fkey
+                     FOREIGN KEY (consent_document_id) REFERENCES consent_documents(id)
+session_consents user_id nullable: NO
+```
+
+**Exactly one foreign key, and it is to the document.** There is **no FK on
+`session_id`** and **no FK on `user_id`**.
+
+### ⚠⚠ WHICH MEANS MY BLOCKING ARGUMENT FOR 169 WAS WRONG
+
+I argued that a seeded consent row makes the seeded session undeletable and
+that `teardown.mjs` would fail at its `sessions` delete — reasoning "if the FK
+is CASCADE … if it is RESTRICT …". **I enumerated two branches and the world
+took a third.** With no FK, deleting a session is not blocked at all: it
+succeeds and leaves an **orphan consent row that still cannot be deleted for six
+years**.
+
+Still a reason to prefer option 2, and **a weaker one than I gave**. The
+stronger reason is now item 174: the seed manufactures reviews, and reviews on
+this database become public star ratings.
+
+*The standing rule is read the live definition first. I branched on two guesses
+instead, and a guess that enumerates cases can still miss the case.*
+
+### What the absence means
+
+`session_consents` is the durable legal record for **one specific booking**. As
+it stands:
+
+* 0086's constraint checks only at **INSERT**, so it cannot notice a session
+  disappearing later.
+* `guard_session_consents` refuses DELETE for six years.
+* **Nothing stops the session being deleted underneath it.**
+
+So a consent can outlive its booking, pointing at an id that resolves to
+nothing — and because there is no FK, **a consent row can also name a session
+id that never existed**.
+
+### Deliberate de-identification, or an omission? — THE COLUMNS AND THE CONSTRAINTS DISAGREE
+
+0004's de-identification shape is **nullable column + `ON DELETE SET NULL` +
+durable identity columns alongside**. `reports` has it; `patch_tests` has it
+(0007 dropped NOT NULL *specifically* so SET NULL would be legal).
+
+`session_consents` has **half** of it:
+
+* ✅ it HAS the durable identity columns — `subject_name`, `subject_email_hash`
+* ❌ `session_id` is **NOT NULL**, so SET NULL is not even legal on it
+* ❌ there is **no FK at all**, so nothing enforces or de-identifies anything
+
+**The columns say this table was meant to join the 0004 family. The constraints
+say nobody finished.** That is the reading the evidence supports: an omission,
+not a design — 0007 had to explicitly drop NOT NULL to make SET NULL possible,
+and no equivalent migration was ever written here.
+
+**The right shape is an FK, and the delete rule is the decision:**
+
+* `ON DELETE RESTRICT` — a booking with a consent cannot be deleted. Honest, and
+  it makes `teardown.mjs` fail on test bookings, which is item 173's problem
+  made worse.
+* `ON DELETE SET NULL` — needs `session_id` nullable first (0007's move). The
+  consent survives de-identified from the booking, which is what
+  `subject_name`/`subject_email_hash` exist for. **This is the shape the columns
+  were built for.**
+* A CHECK cannot help: it cannot reference another table.
+
+Not written. It is a decision about a legal record and it belongs behind 174.
+
+---
+
+## 173b. CORRECTION — teardown.mjs DESCRIBES A CONSTRAINT THAT DOES NOT EXIST
+### 6 Oct 2026. Correcting item 173 rather than closing it.
+
+`seed/teardown.mjs:77` lists `['session_consents', 'user_id']` among the foreign
+keys that can hold a row when `auth.admin.deleteUser` fails, and its header
+names `session_consents` as a table whose rows *"CANNOT be removed here"*,
+advising a ban instead.
+
+**With `user_id` NOT NULL and NO foreign key, deleting a test user is not
+blocked by `session_consents` at all.** The entry describes a constraint that
+does not exist.
+
+⚠️ **And it is in teardown's own header, which is where it is most likely to be
+trusted** — the file someone reads precisely when a delete has failed and they
+are looking for the cause. It would send them to ban an account over a table
+that was never the blocker.
+
+Same class as items 168 and 170: **a record of a mechanism that outlived the
+mechanism**, sitting in the place built to be authoritative.
+
+The row still cannot be DELETED for six years — `guard_session_consents` is
+real. What is false is that it blocks anything else.
+
+```
+session_consents totals: rows=10  within_6_years=10  oldest=2026-08-08  newest=2026-10-03
+session_consents by account kind: test account = 10
+```
+
+**All ten are test accounts, and all ten are immovable until 2032.** Nothing
+short of disabling the guard deletes them — but nothing needs to: with no FK
+and no cascade, they block no deletion and name a booking only by convention.
+
+---
+
 ## Dated
 
 * **8 October** — the diarised selfie-orphan check. The only unarranged end-to-end
