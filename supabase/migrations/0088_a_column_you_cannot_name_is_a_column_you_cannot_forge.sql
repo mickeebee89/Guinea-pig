@@ -549,14 +549,23 @@ notify pgrst, 'reload schema';
 -- ===========================================================================
 --
 -- ===========================================================================
--- ── VERIFY — ONE BLOCK, after applying. Rolls itself back. ─────────────────
+-- ── VERIFY ─ ONE BLOCK, after applying. Rolls itself back. ───────────
+--
+-- ⚠⚠ EVERY RESULT ACCUMULATES INTO A VARIABLE AND IS EMITTED BY THE FINAL
+-- `raise exception`. THE SUPABASE SQL EDITOR DOES NOT DISPLAY NOTICE MESSAGES
+-- — it shows result sets and errors. An earlier draft of this block used
+-- `raise notice` for all fifteen results, so the only thing it would have put
+-- on screen was "ROLLED BACK ON PURPOSE - read the notices above", with no
+-- notices above it. A verify that cannot report is the same class as a verify
+-- that cannot fail. 0086's and 0087's blocks already did it this way; this one
+-- broke the convention and Micky caught it. 6 Oct 2026.
 --
 -- Run as the provider test account 517c2853… (nahitih259@bevriz.com). Every
--- section has its own begin/exception so one failure cannot mask the rest,
--- and every refusal is proved by a REFUSED STATEMENT rather than inferred
--- from the grant list — a column privilege is checked against the statement's
--- TARGET LIST, so a refused UPDATE is the only thing that proves PostgREST
--- and the catalogue agree about that column.
+-- section has its own begin/exception so one failure cannot mask the rest, and
+-- every refusal is proved by a REFUSED STATEMENT rather than inferred from the
+-- grant list — a column privilege is checked against the statement's TARGET
+-- LIST, so a refused UPDATE is the only thing proving PostgREST and the
+-- catalogue agree about that column.
 --
 --   do $$
 --   declare
@@ -565,8 +574,20 @@ notify pgrst, 'reload schema';
 --     v_txt   text;
 --     v_ts    timestamptz;
 --     v_pub   boolean;
---     v_out   text;
 --     v_tag   text := 'cavy-0088-verify';
+--     r_a1    text := 'not run';
+--     r_a1b   text := 'not run';
+--     r_a2    text := 'not run';
+--     r_b1    text := 'not run';
+--     r_b2    text := 'not run';
+--     r_b3    text := 'not run';
+--     r_b4    text := 'not run';
+--     r_b5    text := 'not run';
+--     r_c0    text := 'setup OK';
+--     r_c1    text := 'not run';
+--     r_d1    text := 'not run';
+--     r_d2    text := 'not run';
+--     r_d3    text := 'not run';
 --   begin
 --     select id into v_prov from public.providers where user_id = v_user;
 --     if v_prov is null then
@@ -578,10 +599,10 @@ notify pgrst, 'reload schema';
 --     execute 'set local role authenticated';
 --
 --     -- ── A1. BUCKET A ON users, SIX COLUMNS ─────────────────────
---     -- ⚠️ first_name and last_initial are NOT in here. guard_users_name_change
+--     -- ⚠️ first_name and last_initial are NOT here. guard_users_name_change
 --     -- (0056) rate-limits them, so a refusal on those two is A DIFFERENT
 --     -- MECHANISM doing its job — bundled in, it would read as this migration's
---     -- grant having failed. They get their own section below.
+--     -- grant having failed. They get A1b to themselves.
 --     begin
 --       update public.users
 --          set instagram_handle = v_tag,
@@ -590,102 +611,113 @@ notify pgrst, 'reload schema';
 --              latitude = 51.5, longitude = -0.14
 --        where id = v_user;
 --       select instagram_handle into v_txt from public.users where id = v_user;
---       v_out := case when v_txt = v_tag then 'pass - users bucket A (6 cols) accepted and READ BACK NEW'
---                     else 'FAIL - reported success but the row still reads ' || coalesce(v_txt,'null') end;
+--       r_a1 := case when v_txt = v_tag then 'pass  - 6 granted cols accepted and READ BACK NEW'
+--                    else 'FAIL  - reported success but the row still reads ' || coalesce(v_txt, 'null') end;
 --     exception when others then
---       v_out := 'FAIL - users bucket A refused with ' || sqlstate || ': ' || sqlerrm;
+--       r_a1 := 'FAIL  - refused with ' || sqlstate || ': ' || sqlerrm;
 --     end;
---     raise notice 'A1 %', v_out;
 --
---     -- ── A1b. THE TWO NAME COLUMNS, WITH 0056 TOLD APART FROM 0088 ──────
+--     -- ── A1b. THE TWO NAME COLUMNS ──────────────────────────
+--     -- ⚠⚠ FOUR DISTINCT OUTCOMES, AND THE OUTPUT SAYS WHICH ONE HAPPENED. An
+--     -- earlier draft had `when others then 'pass (grant held)'`, which reports a
+--     -- PASS ON ANY UNKNOWN ERROR — a constraint, an unrelated trigger, a typo in
+--     -- the statement. That is the class this migration's own guard (b) refuses.
+--     --
+--     -- 0056 raises 22023 for the 30-day limit and 42501 for a SUSPENDED account,
+--     -- so 42501 ALONE DOES NOT MEAN THE GRANT IS WRONG and is split by message.
+--     -- A write that succeeds is stronger evidence than any refusal, and the
+--     -- output distinguishes the two rather than calling both 'pass'.
 --     begin
 --       update public.users set first_name = v_tag, last_initial = 'Z' where id = v_user;
 --       select first_name into v_txt from public.users where id = v_user;
---       v_out := case when v_txt = v_tag then 'pass - name columns accepted and READ BACK NEW'
---                     else 'FAIL - reported success but the row still reads ' || coalesce(v_txt,'null') end;
---     exception when insufficient_privilege then
---       v_out := 'FAIL - name columns refused 42501; THE GRANT IS WRONG';
---     when others then
---       v_out := 'pass (grant held) - refused by 0056 rate limit, not by privilege: ' || sqlstate || ' ' || sqlerrm;
+--       r_a1b := case when v_txt = v_tag
+--                     then 'pass  - BY WRITING: name columns accepted and READ BACK NEW'
+--                     else 'FAIL  - reported success but the row still reads ' || coalesce(v_txt, 'null') end;
+--     exception
+--       when invalid_parameter_value then          -- 22023, 0056's 30-day limit
+--         r_a1b := 'pass  - BY REFUSAL: grant held; 0056 30-day rate limit refused it (22023). '
+--                  || 'No read-back, so this is the weaker of the two passes. ' || sqlerrm;
+--       when insufficient_privilege then           -- 42501: grant OR 0056 suspension
+--         r_a1b := case when sqlerrm ilike '%suspend%'
+--                       then 'pass  - BY REFUSAL: grant held; 0056 refused a SUSPENDED account (42501). ' || sqlerrm
+--                       else 'FAIL  - 42501 and nothing about suspension: THE GRANT IS WRONG. ' || sqlerrm end;
+--       when others then
+--         r_a1b := 'UNEXPECTED - refused by something this block does not model: '
+--                  || sqlstate || ': ' || sqlerrm || ' (neither a pass nor a grant failure)';
 --     end;
---     raise notice 'A1b %', v_out;
 --
---     -- ── A2. BUCKET A ON providers ───────────────────────────────────────
+--     -- ── A2. BUCKET A ON providers ─────────────────────────
 --     begin
 --       update public.providers
 --          set name = v_tag, bio = v_tag, location_text = v_tag,
 --              profile_pic_url = v_tag, latitude = 51.5, longitude = -0.14
 --        where id = v_prov;
 --       select bio into v_txt from public.providers where id = v_prov;
---       v_out := case when v_txt = v_tag then 'pass - providers bucket A accepted and READ BACK NEW'
---                     else 'FAIL - providers bucket A reported success but the row still reads ' || coalesce(v_txt,'null') end;
+--       r_a2 := case when v_txt = v_tag then 'pass  - 6 granted cols accepted and READ BACK NEW'
+--                    else 'FAIL  - reported success but the row still reads ' || coalesce(v_txt, 'null') end;
 --     exception when others then
---       v_out := 'FAIL - providers bucket A refused with ' || sqlstate || ': ' || sqlerrm;
+--       r_a2 := 'FAIL  - refused with ' || sqlstate || ': ' || sqlerrm;
 --     end;
---     raise notice 'A2 %', v_out;
 --
---     -- ── B. THE FIVE REFUSALS, EACH NAMED, EACH EXPECTING 42501 ──────────
---     -- users.email is the sharpest column in the set: send-email addresses
---     -- every transactional message from public.users.email, so a writable
---     -- one redirects Cavy's own mail to any address from an authenticated
---     -- domain. Proved, not inferred.
+--     -- ── B. THE FIVE REFUSALS, EACH NAMED, EACH EXPECTING 42501 ────────
+--     -- users.email is the sharpest column in the set: send-email addresses every
+--     -- transactional message from public.users.email (index.ts:364), so a
+--     -- writable one redirects Cavy's own mail to any address from an
+--     -- authenticated domain. Proved by a refusal, never inferred.
 --     begin
 --       update public.users set email = 'cavy-0088@example.invalid' where id = v_user;
---       v_out := 'FAIL - users.email WAS ACCEPTED';
---     exception when insufficient_privilege then v_out := 'pass - users.email refused 42501';
---               when others then v_out := 'FAIL - users.email refused with ' || sqlstate || ', not 42501';
+--       r_b1 := 'FAIL  - users.email WAS ACCEPTED';
+--     exception when insufficient_privilege then r_b1 := 'pass  - users.email refused 42501';
+--               when others then r_b1 := 'FAIL  - refused with ' || sqlstate || ', not 42501: ' || sqlerrm;
 --     end;
---     raise notice 'B1 %', v_out;
 --
 --     begin
 --       update public.users set profile_pic_reviewed_at = now() where id = v_user;
---       v_out := 'FAIL - users.profile_pic_reviewed_at WAS ACCEPTED (item 157 is NOT closed)';
---     exception when insufficient_privilege then v_out := 'pass - users.profile_pic_reviewed_at refused 42501 (item 157 closed)';
---               when others then v_out := 'FAIL - refused with ' || sqlstate || ', not 42501';
+--       r_b2 := 'FAIL  - profile_pic_reviewed_at WAS ACCEPTED (item 157 is NOT closed)';
+--     exception when insufficient_privilege then
+--                 r_b2 := 'pass  - profile_pic_reviewed_at refused 42501 (item 157 closed)';
+--               when others then r_b2 := 'FAIL  - refused with ' || sqlstate || ', not 42501: ' || sqlerrm;
 --     end;
---     raise notice 'B2 %', v_out;
 --
 --     begin
 --       update public.providers set rating = 5.0 where id = v_prov;
---       v_out := 'FAIL - providers.rating WAS ACCEPTED (forged social proof)';
---     exception when insufficient_privilege then v_out := 'pass - providers.rating refused 42501';
---               when others then v_out := 'FAIL - refused with ' || sqlstate || ', not 42501';
+--       r_b3 := 'FAIL  - providers.rating WAS ACCEPTED (forged social proof)';
+--     exception when insufficient_privilege then r_b3 := 'pass  - providers.rating refused 42501';
+--               when others then r_b3 := 'FAIL  - refused with ' || sqlstate || ', not 42501: ' || sqlerrm;
 --     end;
---     raise notice 'B3 %', v_out;
 --
---     -- The policy has no WITH CHECK, so the GRANT is the only thing refusing.
+--     -- The policy has NO WITH CHECK, so the GRANT is the only thing refusing.
 --     begin
 --       update public.providers set user_id = v_user where id = v_prov;
---       v_out := 'FAIL - providers.user_id WAS ACCEPTED; nothing stands in front of the missing WITH CHECK';
---     exception when insufficient_privilege then v_out := 'pass - providers.user_id refused 42501';
---               when others then v_out := 'FAIL - refused with ' || sqlstate || ', not 42501';
+--       r_b4 := 'FAIL  - providers.user_id WAS ACCEPTED; nothing stands in front of the missing WITH CHECK';
+--     exception when insufficient_privilege then r_b4 := 'pass  - providers.user_id refused 42501';
+--               when others then r_b4 := 'FAIL  - refused with ' || sqlstate || ', not 42501: ' || sqlerrm;
 --     end;
---     raise notice 'B4 %', v_out;
 --
 --     begin
 --       update public.providers set first_published_at = now() where id = v_prov;
---       v_out := 'FAIL - providers.first_published_at WAS ACCEPTED';
---     exception when insufficient_privilege then v_out := 'pass - providers.first_published_at refused 42501';
---               when others then v_out := 'FAIL - refused with ' || sqlstate || ', not 42501';
+--       r_b5 := 'FAIL  - providers.first_published_at WAS ACCEPTED';
+--     exception when insufficient_privilege then r_b5 := 'pass  - providers.first_published_at refused 42501';
+--               when others then r_b5 := 'FAIL  - refused with ' || sqlstate || ', not 42501: ' || sqlerrm;
 --     end;
---     raise notice 'B5 %', v_out;
 --
 --     -- ── C. THE STAMP FILLS THE GAP THE CLIENT USED TO FILL ──────────
 --     -- The real scenario from shop/actions.ts:302 — a stylist HIDES her shop.
---     -- Without a stamp, trg_provider_maybe_publish stays armed and the next
---     -- write to her row silently republishes her.
+--     -- Without a stamp, trg_provider_maybe_publish stays armed and the same
+--     -- statement's trigger undoes the hide.
 --     --
 --     -- ⚠️ THE SETUP NEVER TOGGLES is_published AS OWNER. An earlier draft did,
---     -- which fires 0016's AFTER trigger and can auto-republish the row
---     -- mid-test — a precondition that undoes itself. Nulling the stamp alone is
---     -- not a transition, so neither trigger fires on the setup.
+--     -- which fires 0016's AFTER trigger and can auto-republish the row mid-test
+--     -- — a precondition that undoes itself. Nulling the stamp alone is not a
+--     -- transition, so neither trigger fires on the setup.
 --     execute 'reset role';
---     update public.providers set is_published = true where id = v_prov;      -- stamp auto-fills
+--     update public.providers set is_published = true where id = v_prov;       -- stamp auto-fills
 --     update public.providers set first_published_at = null where id = v_prov; -- no transition
 --     select first_published_at, is_published into v_ts, v_pub
 --       from public.providers where id = v_prov;
 --     if v_ts is not null or v_pub is not true then
---       raise notice 'C0 SETUP FAILED - stamp=% published=%; C1 below proves nothing', v_ts, v_pub;
+--       r_c0 := 'SETUP FAILED - stamp=' || coalesce(v_ts::text, 'null')
+--               || ' published=' || coalesce(v_pub::text, 'null') || '; C1 BELOW PROVES NOTHING';
 --     end if;
 --
 --     perform set_config('request.jwt.claims',
@@ -696,61 +728,79 @@ notify pgrst, 'reload schema';
 --       execute 'reset role';
 --       select first_published_at, is_published into v_ts, v_pub
 --         from public.providers where id = v_prov;
---       v_out := case
---         when v_ts is null then 'FAIL - hidden with the stamp still null; auto-publish is RE-ARMED'
---         when v_pub is not false then 'FAIL - stamped but is_published reads ' || v_pub::text || '; auto-publish fired anyway'
---         else 'pass - stamp filled by the trigger and the shop stayed hidden' end;
+--       r_c1 := case
+--         when v_ts is null then 'FAIL  - hidden with the stamp still null; auto-publish is RE-ARMED'
+--         when v_pub is not false then 'FAIL  - stamped but is_published reads ' || v_pub::text
+--                                      || '; auto-publish fired anyway'
+--         else 'pass  - stamp filled by the trigger and the shop stayed hidden' end;
 --     exception when others then
 --       execute 'reset role';
---       v_out := 'FAIL - member could not hide at all: ' || sqlstate || ' ' || sqlerrm;
+--       r_c1 := 'FAIL  - member could not hide at all: ' || sqlstate || ': ' || sqlerrm;
 --     end;
---     raise notice 'C1 %', v_out;
 --
---     -- ── D. CONTROLS. A verify that passes because everything is broken
---     --      must be distinguishable from one that passes correctly. ───────
+--     -- ── D. CONTROLS. A verify that passes because everything is broken must
+--     --    be distinguishable from one that passes correctly. ─────────────
 --     execute 'reset role';
---
---     select count(*)::text into v_txt from information_schema.column_privileges
---      where table_schema='public' and table_name in ('users','providers')
---        and grantee='service_role' and privilege_type='UPDATE';
---     raise notice 'D1 service_role UPDATE columns (expect 45): %', v_txt;
+--     select count(*)::text || ' (expect 45)' into r_d1
+--       from information_schema.column_privileges
+--      where table_schema = 'public' and table_name in ('users', 'providers')
+--        and grantee = 'service_role' and privilege_type = 'UPDATE';
 --
 --     perform set_config('request.jwt.claims',
 --       '{"sub":"517c2853-50bb-4e8f-87fe-d79311bc37c0","role":"authenticated"}', true);
 --     execute 'set local role authenticated';
 --     begin
 --       perform public.set_my_postcode('SW1A 1AA', 51.5, -0.14);
---       v_out := 'pass - set_my_postcode still works; the five retained columns earn their place';
+--       r_d2 := 'pass  - set_my_postcode still works; the five retained columns earn their place';
 --     exception when others then
---       v_out := 'FAIL - set_my_postcode broke: ' || sqlstate || ' ' || sqlerrm;
+--       r_d2 := 'FAIL  - set_my_postcode broke: ' || sqlstate || ': ' || sqlerrm;
 --     end;
---     raise notice 'D2 %', v_out;
 --
---     -- A table OUTSIDE the two must be untouched. ⚠️ ASSERTED FROM THE
---     -- CATALOGUE, NOT BY AN UPDATE: the test account may own no
---     -- model_attributes row, and an UPDATE matching zero rows SUCCEEDS — so
---     -- that version would have reported a pass it had not earned, which is
---     -- the exact fault this migration's own guard (b) exists to refuse.
+--     -- ⚠️ ASSERTED FROM THE CATALOGUE, NOT BY AN UPDATE: the test account may own
+--     -- no model_attributes row, and an UPDATE matching zero rows SUCCEEDS — so
+--     -- that version would have reported a pass it had not earned.
 --     execute 'reset role';
 --     select (count(cp.column_name))::text || ' of ' || (count(c.column_name))::text
---       into v_txt
+--            || ' (expect all of them)'
+--       into r_d3
 --       from information_schema.columns c
 --       left join information_schema.column_privileges cp
 --             on cp.table_schema = 'public' and cp.table_name = 'model_attributes'
 --            and cp.column_name = c.column_name
 --            and cp.grantee = 'authenticated' and cp.privilege_type = 'UPDATE'
 --      where c.table_schema = 'public' and c.table_name = 'model_attributes';
---     raise notice 'D3 model_attributes columns authenticated may update (expect all): %', v_txt;
 --
 --     execute 'reset role';
---     raise exception 'ROLLED BACK ON PURPOSE - read the notices above.';
+--
+--     -- ONE raise, ONE %, ONE concatenated string. This is the only output.
+--     raise exception '%',
+--       chr(10) || '=== 0088 VERIFY — ROLLED BACK ON PURPOSE ==='
+--       || chr(10) || 'A1   users  bucket A (6 cols) : ' || r_a1
+--       || chr(10) || 'A1b  users  name columns      : ' || r_a1b
+--       || chr(10) || 'A2   provs  bucket A (6 cols) : ' || r_a2
+--       || chr(10) || 'B1   users.email              : ' || r_b1
+--       || chr(10) || 'B2   users.profile_pic_rev_at : ' || r_b2
+--       || chr(10) || 'B3   providers.rating         : ' || r_b3
+--       || chr(10) || 'B4   providers.user_id        : ' || r_b4
+--       || chr(10) || 'B5   providers.first_pub_at   : ' || r_b5
+--       || chr(10) || 'C0   stamp-test setup         : ' || r_c0
+--       || chr(10) || 'C1   hide fills the stamp     : ' || r_c1
+--       || chr(10) || 'D1   service_role UPDATE cols : ' || r_d1
+--       || chr(10) || 'D2   set_my_postcode          : ' || r_d2
+--       || chr(10) || 'D3   model_attributes (control): ' || r_d3;
 --   end $$;
 --
---   EXPECT: A1 pass, A1b pass, A2 pass, B1-B5 all pass, NO C0 notice, C1 pass,
---           D1 = every column of both tables, D2 pass, D3 all of them, then the
---           deliberate rollback.
+--   EXPECT: A1, A1b, A2 pass · B1-B5 all pass · C0 "setup OK" · C1 pass ·
+--           D1 = 45 · D2 pass · D3 all of them.
 --
---   ⚠️ A C0 NOTICE MEANS C1 PROVED NOTHING. It is printed rather than raised
---   so the rest of the block still runs, but C1's verdict is void whenever it
---   appears — a setup that failed must not be readable as a test that passed.
+--   ⚠️ ANY LINE STILL READING "not run" MEANS THE BLOCK DIED BEFORE REACHING IT
+--   — that is why they are initialised to that and not to anything that could be
+--   mistaken for a result.
+--
+--   ⚠️ C0 ANYTHING BUT "setup OK" VOIDS C1. It is a separate line rather than
+--   folded into C1 so a setup that failed cannot be read as a test that passed.
+--
+--   ⚠️ A1b TELLS YOU WHICH PASS YOU GOT. "BY WRITING" is a read-back and is
+--   strong. "BY REFUSAL" means 0056 refused it first and the grant was never
+--   exercised — true, but weaker, and worth re-running after 30 days.
 -- ===========================================================================

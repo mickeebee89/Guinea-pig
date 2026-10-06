@@ -299,7 +299,12 @@ export type VisibilityResult = { ok: true; published: boolean } | { ok: false; e
  * checked here by publishRefusal, the same as mobile checks it in the app,
  * because nothing in the database checks it (audit item 56).
  *
- * ── first_published_at, AND WHY HIDING SETS IT WHEN IT IS NULL ────────────
+ * ── first_published_at ─ NO LONGER WRITTEN HERE, AND WHY IT STILL MATTERS ──
+ * ⚠️ 0088 REVOKED THIS CLIENT'S PRIVILEGE ON first_published_at and moved the
+ * stamp into `tg_provider_stamp_first_published`, a BEFORE UPDATE trigger that
+ * fills it ONLY when the caller does not name it. Naming it here now returns
+ * 42501. The reasoning below is unchanged and is why that trigger exists — it
+ * describes a rule this file used to enforce and the database now does.
  * Auto-publish, `trg_provider_maybe_publish` (0016:313-316), fires AFTER UPDATE
  * `when (new.is_published is not true and new.first_published_at is null)`.
  * With the date set, hiding sticks. With it null, hiding a publishable,
@@ -352,12 +357,9 @@ export async function setShopPublished(publish: boolean): Promise<VisibilityResu
     if (refusal) return { ok: false, error: refusal }
   }
 
-  const patch: { is_published: boolean; first_published_at?: string } = { is_published: publish }
-  if (!setup.everPublished) patch.first_published_at = new Date().toISOString()
-
   const { data, error } = await supabase
     .from('providers')
-    .update(patch)
+    .update({ is_published: publish })
     .eq('id', providerId)
     .select('id')
     .maybeSingle()
