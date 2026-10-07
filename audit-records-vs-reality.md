@@ -16031,6 +16031,53 @@ The successor is **item 167**, deliberately behind this.
 ## 167. A CONSENT ROW CAN BE SELF-MADE, SO "A RECORD EXISTS" IS NOT "CONSENT WAS GIVEN"
 ### Raised 6 Oct 2026, by Micky, as the bounded successor to 148's fix. Behind 148.
 
+### ✅ BEFORE COUNTING ROWS HERE: A CONSENT WITH NO SESSION IS EXPECTED, NOT A DEFECT
+
+⚠⚠ **`session_consents.session_id` HAS NO FOREIGN KEY, AND THAT IS DELIBERATE.**
+`supabase/account-deletion-fix.sql` (8 Aug 2026) severed it: *"Sever the foreign
+keys and keep the columns as plain uuid. A dangling id is correct here."* So a
+row whose session has been deleted is the retention design working, not a
+dangling reference to tidy.
+
+⚠⚠⚠ **DO NOT RE-ADD THE FK. IT WOULD RE-BREAK ACCOUNT DELETION** — and that is
+an Apple 5.1.1(v) requirement, not a preference. The chain it caused, in that
+file's own words: `session_consents` survives (it is append-only) → its
+`session_id` FK, then **RESTRICT**, blocks the `sessions` delete → the surviving
+`user_id` blocks `auth.admin.deleteUser` → a 500, *after* messages, reviews,
+notifications, provider rows and all four storage buckets were already gone. The
+member was left with a stripped account and an error, and retrying failed
+identically. Severing the FK is what fixed it.
+
+✅ **And the orphan is self-contained evidence rather than a half-record.**
+Sections 2–3 of that file add `subject_name` and `subject_email_hash`
+(SHA-256 of the email at consent time), populated **by a trigger at insert** so
+the app cannot forget. With `consent_version`, `content_hash`, `acknowledgements`
+and `agreed_at` already denormalised onto the row, it proves a named person
+agreed to text whose hash still matches its document. What it loses is the
+booking's own detail — destroyed on purpose by an erasure request.
+
+Measured 7 Oct 2026: **10 rows, 9 with a surviving session**, and 0091's
+preflight found **0 hash mismatches across all ten, the orphan included**.
+
+⚠️ `trg_lock_consents` blocking UPDATE and DELETE here is not an obstacle to a
+cleanup — there is nothing to clean up, and the lock is the same protection doing
+its job. Micky, 7 Oct 2026, on his own first reading: *"I reasoned from the
+missing join rather than from what the row holds."* **That is the trap this note
+exists to stop: the join is absent by design, and the evidence is in the row.**
+
+⚠️ REPO-DERIVED, like everything about pre-framework objects. The read that
+confirms it:
+
+```sql
+select conname, contype, pg_get_constraintdef(oid)
+  from pg_constraint
+ where conrelid = 'public.session_consents'::regclass;
+```
+
+**Expect no FK on `session_id`.** If one is present, `account-deletion-fix.sql`
+did not fully apply — and THAT is the finding, because account deletion is broken
+again.
+
 148's deferred constraint trigger guarantees a session has a `session_consents`
 row. **It cannot guarantee the row is genuine.** A member inserting a session and
 a hand-made consent row in the same transaction satisfies it completely.
