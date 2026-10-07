@@ -20817,6 +20817,94 @@ set stops containing a shape the product forbids.
 
 ---
 
+## 197. DEMO MODE IS A SECOND IMPLEMENTATION AND NOTHING MADE IT KEEP UP
+### Found 7 Oct 2026 while verifying item 186. ✅ ONE HALF NOW HAS A CHECKER; the other half still does not.
+
+**Plainly:** demo mode re-implements Supabase — the client, the query engine and
+every RPC the site calls. **It is a second implementation of the database, and
+until 7 Oct 2026 nothing checked that it kept up with the first.**
+
+### What broke, and for how long
+
+* **Since 0087 (6 Oct):** item 176's fix made `browse.ts` and `stylist.ts` read
+  `users!user_id(is_verified)`. The demo ENGINE threw on any embedded select, so
+  **browse showed "No stylists to show" and every stylist page 404'd** for a day.
+* **The moment 186 part 1 shipped:** the shared loader called `slot_contention()`
+  (0090). `demoRpc`'s default throws by design, so **every stylist page and the
+  whole apply wizard** would have died on it.
+* **Longer than either, undated:** `notify_favourites_of_availability`,
+  `set_my_postcode` and `unsubscribe_email` had no mock at all.
+
+⚠️ **None was found by a checker.** The first two were found by RUNNING demo mode
+to verify something else; the last three by writing the checker.
+
+⚠️ **And "unmocked" is not "broken", which is worth separating.**
+`notifyFavourites` wraps its call in try/catch and only `console.warn`s, so that
+one degraded to a warning rather than a failure. It is mocked anyway — a warning
+on every save hides the next real one — but a claim that it broke saving would
+have been wrong.
+
+### ⚠⚠ WHY NOTHING CAUGHT IT, WHICH IS THE PART WORTH KEEPING
+
+Demo mode is **local-only by design** (item 69): `DEMO_MODE=1` fails a build and
+fails on Vercel, deliberately, so a demo fixture can never reach a real user.
+**That safety property is exactly what makes it invisible to CI** — `next build`
+never resolves the aliases, `tsc` type-checks the stubs but never runs them, and
+no other checker reads them.
+
+So the thing that protects production from the demo also protects the demo from
+being tested. ✅ The property is right and must not change; what was missing is a
+checker that reads it statically.
+
+### ✅ WHAT NOW EXISTS — `scripts/check-demo-rpc-coverage.mjs`
+
+Micky, 7 Oct 2026: *"check-admin-guards catches an unguarded function; the
+unmocked case has no checker. Worth building one if it is cheap."*
+
+It was, and **it paid on its first run** by naming three nobody had met — each on
+a path a walkthrough does not take. *That is the argument for a checker over a
+habit: the habit only finds what somebody happens to click.*
+
+* Every `.rpc('name')` in `site/app` and `site/lib` must have a `case` in
+  `lib/demo/rpc.ts`. Wired into `npm run checks`, ahead of the types nag so it
+  cannot be gated behind one.
+* Every embedded select must match the one shape the engine implements,
+  `table!fk(cols)`.
+* Both failure arms **tested by planting faults**, not assumed. It also fails if
+  it finds no `.rpc()` calls at all — a checker that examines nothing and exits 0
+  is item 188.
+* A mocked-but-uncalled RPC is **reported, not failed**. Deliberate asymmetry
+  against check-admin-guards' stale baseline: a stale baseline manufactures
+  confidence, a dead mock is only dead weight.
+
+⚠️ **AND A MOCK MUST AGREE WITH THE REAL FUNCTION ABOUT ANY KEY IT USES.**
+`slot_contention` keys on `(provider_id, date, start_time)`; a demo keyed on
+`availability_id` would disagree with the database about which slots are free —
+the one thing a walkthrough must not do. The checker cannot see that; the mock's
+own comment says it.
+
+### ⚠⚠ WHAT STILL HAS NO CHECKER, STATED SO THE GREEN TICK IS NOT MISREAD
+
+| break | caught by |
+|---|---|
+| an RPC with no `case` | ✅ the checker |
+| an embedded select of an unknown shape | ✅ the checker, as far as a text scan reaches |
+| a filter operator the engine does not implement | ❌ nothing |
+| a view the engine does not build | ❌ nothing |
+| a mock that returns the WRONG ANSWER | ❌ nothing — and this is the worst, because it is silent |
+
+**A green run means "no RPC the site calls is missing a mock". It does not mean
+demo mode works**, and the script says so in its own output.
+
+### The standing rule
+
+**Every new RPC needs a demo mock; every new query shape needs engine support.**
+The checker enforces the first. The second is enforced by RUNNING demo mode —
+which, after 7 Oct, is a thing to do whenever a change touches how the site
+QUERIES rather than only what it renders.
+
+---
+
 ## Dated
 
 * **8 October** — the diarised selfie-orphan check. The only unarranged end-to-end

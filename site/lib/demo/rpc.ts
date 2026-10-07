@@ -159,6 +159,61 @@ export function demoRpc(name: string, args: Row, store: DemoStore, user: DemoUse
     case 'cancel_sessions_for_block':
       return { ok: true, cancelled: 0 }
 
+    /**
+     * ⚠⚠ THREE MOCKS FOUND BY BUILDING THE CHECKER, NOT BY HITTING THEM.
+     * check-demo-rpc-coverage.mjs compared every `.rpc()` the site makes
+     * against this switch and named these on its first run — which is the whole
+     * argument for the checker: all three were already unmocked before
+     * slot_contention, and nobody had met them because they sit on paths a
+     * walkthrough does not take.
+     *
+     * demoRpc's default THROWS, so each was a real failure waiting on a
+     * particular click.
+     */
+
+    /**
+     * Returns nothing and notifies nobody, which is the house rule stated
+     * above for cancel_booking and report_not_held: demo RPCs do not notify,
+     * and fixtures seed whatever notifications a walkthrough needs.
+     *
+     * ⚠️ ITS ABSENCE WAS NOT A VISIBLE BREAK, and the distinction is worth
+     * keeping: `notifyFavourites` wraps the call in try/catch and only
+     * console.warns, so saving a day in demo mode logged a warning rather than
+     * failing. Mocked anyway — a warning on every save is noise that hides the
+     * next real one.
+     */
+    case 'notify_favourites_of_availability':
+      return null
+
+    /**
+     * The real one (0054) writes postcode and coordinate to `users` AND mirrors
+     * the coordinate onto `providers`, in one transaction. The demo does both
+     * for the same reason: a stylist who sets a postcode and then sees her own
+     * shop unplaced would be watching the demo disagree with itself.
+     */
+    case 'set_my_postcode': {
+      if (!user) throw new Error('set_my_postcode: not signed in')
+      const u = store.tables.users.find(r => r.id === user.id)
+      if (u) {
+        u.postcode = args.p_postcode ?? null
+        u.latitude = args.p_lat ?? null
+        u.longitude = args.p_lng ?? null
+      }
+      for (const prov of store.tables.providers.filter(r => r.user_id === user.id)) {
+        prov.latitude = args.p_lat ?? null
+        prov.longitude = args.p_lng ?? null
+      }
+      return null
+    }
+
+    /**
+     * The route reads `data === true`, so the shape matters more than the
+     * behaviour. True: a demo walkthrough that clicks an unsubscribe link
+     * should see it work, and nothing in the demo sends email for it to undo.
+     */
+    case 'unsubscribe_email':
+      return true
+
     default:
       throw new Error(`${name} is not available in demo mode`)
   }
