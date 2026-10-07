@@ -19783,7 +19783,30 @@ provider pages break. One device, his, and his call.
 ---
 
 ## 185. THE 24-HOUR CANCELLATION ACKNOWLEDGEMENT COMES OUT OF THE BOOKING FLOW
-### Decided by Micky, 6 Oct 2026. ⚠️ RECORDED, NOT ACTED ON.
+### ✅ CLOSED 7 Oct 2026. Shipped as consent v4 (migration 0091) and PROVEN BY A REAL CONSENT.
+### Decided by Micky, 6 Oct 2026. ~~⚠️ RECORDED, NOT ACTED ON.~~
+
+### ✅ HOW IT CLOSED
+
+0091 inserted **version 4** — v3 verbatim minus the `attendance` entry — and
+deactivated v3 in the same transaction. The `attendance` tick is gone from both
+the document and `site/lib/demo/fixtures.ts`.
+
+**The argument that shipped is the second one, not the first.** *"A box with no
+consequence trains people to tick without reading"* proves too much — it would
+also catch `community_standards`. What distinguishes them: items 1–4 are
+acknowledgements of RISK, 5 and 6 are PROMISES, and of the two promises only
+`community_standards` is enforced, through `_admin_apply_user_action`.
+
+✅ **PROVEN END TO END, NOT INFERRED.** A real model completed a booking on the
+live site on 7 Oct 2026 and her `session_consents` row reads
+`consent_version 4`, `content_hash 6f10cfd5…`, **8 entries**, `identity_captured
+true`. That is v4 reaching an actual member, not a row count.
+
+⚠️ **NO-SHOW POLICY REMAINS A SEPARATE DECISION**, to be made when there are real
+bookings to reason from. **Do not invent a penalty to justify restoring the
+box.** If a policy ever exists it arrives as v5, with a tick that names it.
+
 
 > *"A box with no consequence attached trains people to tick without reading,
 > which devalues the acknowledgements that carry legal weight."*
@@ -19866,7 +19889,32 @@ gap visible to a stylist.
 ---
 
 ## 187. provider_treatments.price — A COLUMN BUILT FOR A MODEL THAT WAS NEVER WIRED
-### Raised by Micky, 6 Oct 2026, out of item 186's scoping. Unfinished, not abandoned.
+### ✅ DECIDED — IT IS A FOSSIL AND IT GOES. An action to schedule, NOT a question to re-ask.
+### Raised by Micky, 6 Oct 2026, out of item 186's scoping. ~~Unfinished, not abandoned.~~
+
+### ✅ THE DECISION, AND WHO MADE IT WHEN
+
+**Micky settled this BEFORE 186 was designed:** pricing is per-slot,
+`availability.price_pence`, and `provider_treatments.price` is a fossil to drop.
+
+**186 shipping per-slot pricing end to end is the CONFIRMATION, not the
+question.** The slot panel renders one price per slot; the wizard restates the
+same number on three steps; `loadSlots` selects `id, name, category` from
+`provider_treatments` and deliberately not `price`; and a real booking has now
+been taken that way.
+
+⚠️ **I RE-OPENED THIS ON 7 Oct AS "a product call", AND THAT WAS WRONG.** It was
+already decided, and putting a settled question back to the person who settled it
+costs them the decision twice. Recorded because the failure is not in the
+analysis — which was right — but in treating a conclusion as still open after it
+had been reached. Micky, 7 Oct 2026: *"Treat it as a decided item to action, not
+a product call."*
+
+**What remains is the drop**, with the same shape as 0087's `providers.is_verified`:
+confirm nothing reads it, drop the column, and let the refusal arrive as a
+sentence if anything still depends on it. `duration` is in the same position and
+should be considered in the same migration.
+
 
 `provider_treatments` carries `price` and `duration`. **Nothing writes either.**
 0052's own note: they *"are never written at all"*, and a sweep of every client
@@ -20320,7 +20368,37 @@ than a compromise.
 ---
 
 ## 192. TWO MODELS BOTH SEE THE SAME SLOT AS FREE, AND THE SECOND FINDS OUT AFTER PAYING
-### Found 6 Oct 2026 while measuring item 186. ⚠️ LIVE DEFECT. Raised SEPARATELY and fixed FIRST, on its own merits.
+### ✅ CLOSED 7 Oct 2026 — FIXED: 1 LIVE / 1 DORMANT. Proven against a real contested row.
+### Found 6 Oct 2026 while measuring item 186. ~~⚠️ LIVE DEFECT.~~ Raised SEPARATELY and fixed FIRST, on its own merits.
+
+### ✅ HOW IT CLOSED, AND WHY THE COUNT IS TWO NUMBERS
+
+0090 added `slot_contention()` — SECURITY DEFINER, so it sees what
+`"participants can read sessions"` rightly hides — and `site/lib/queries/slots.ts`
+made it the single answer for both the stylist page and the apply wizard.
+`apply.ts`'s RLS-blind `sessions` read is **deleted, with its comment**, because a
+sentence describing a guard that never ran is how the next reader concludes it
+was already solved.
+
+✅ **Proven in production 7 Oct 2026**: `slot_contention` returned contested on a
+real row, and a real booking completed through the loader.
+
+⚠⚠ **FIXED: 1 LIVE / 1 DORMANT, AND THE SECOND NUMBER IS NOT PEDANTRY.**
+`mobile/src/app/(app)/apply-session.tsx` has the SAME RLS-blind read and the SAME
+`availability_id` key mismatch. Mobile is mothballed (CLAUDE.md, 6 Oct) so it is
+not a live defect — but a flat "closed" would tell a later sweep this class is
+gone from the codebase, and it is not. **If mobile is ever revived, this is one
+of the things that must be fixed before it ships.**
+
+### ✅ AND THE KEY, WHICH IS THE PART MOST LIKELY TO BE UNDONE
+
+`slot_contention` keys on `(provider_id, date, start_time)` to match
+`sessions_active_slot_uniq`, NOT on `availability_id`. Two availability rows can
+share a start_time with different end_times, so it reports a slot contested when
+a session collides on the triple even though it sits on a different availability
+row. **That looks like a bug and is not.** 0090's header and the function's own
+comment both say so, because narrowing it back is this item, restored.
+
 
 **Plainly:** a model picks a time, works through seven steps, and is refused at
 the last one because another model applied for that slot first. She cannot see
@@ -20736,7 +20814,61 @@ redundant.
 ---
 
 ## 196. A SLOT WITH NO TREATMENT IS OFFERED AND CANNOT BE FULFILLED
+### ✅ CLOSED 7 Oct 2026, all three parts. ⚠️ THE CHECK CONSTRAINT IS THE END STATE AND IS RECORDED BELOW, NOT CARRIED.
 ### Found by Micky, 7 Oct 2026, while 186 was being planned. ⚠️ FOLDED INTO 186 rather than planned around.
+
+### ✅ HOW IT CLOSED — THREE PARTS, AND THE ORDER WAS THE POINT
+
+1. **The model-facing loader excludes them** (`site/lib/queries/slots.ts`), as a
+   fourth filter beside `is_taken`, started slots and contention. This is the
+   part that works on rows that ALREADY EXIST — a form gate does not clean up
+   history.
+2. **The form refuses to save one** (`DayEditor`), with the count and the remedy.
+   A BLOCK, not a warning: a treatment-less slot is not a lesser slot, it is one
+   the marketplace cannot sell. ⚠️ With a door in both directions — tap a
+   treatment, or Remove — verified live, including that `Remove` is never
+   disabled and that deleting the offending slot re-enables Save.
+3. **She is told where she made it**, per slot in the editor, with a different
+   sentence for the stylist whose shop lists no treatments at all (that one links
+   to `/shop`, because telling her to pick from an empty list is a gate with no
+   door). Plus one pointer line on the availability page, because the editor
+   shows ONE DAY and she would never navigate to a day she has no reason to
+   suspect.
+
+⚠️ **And part 1 made the model-facing empty state capable of lying**, which was
+fixed in the same change: a stylist whose slots are all treatment-less would have
+been reported as *"hasn't posted availability"*. She has. It now reads *"Nothing
+free at the moment"*, true in every case that empties the list.
+
+### ⚠⚠ THE END STATE, RECORDED HERE RATHER THAN CARRIED AS AN OPEN ITEM
+
+**`alter table public.availability add constraint ... check (cardinality(active_treatments) >= 1)`.**
+
+It is the right final shape and it CANNOT be added yet:
+
+* it would make every existing treatment-less row **unsavable**, including
+  through `saveDay`'s whole-day upsert — **breaking the very page that exists to
+  fix them**;
+* so it can only follow the history being cleared BY ITS OWNERS, which part 3
+  asks them to do and nothing can force;
+* and the rows must not be backfilled or deleted on their behalf. Choosing a
+  treatment for her is guessing what she meant — the same reasoning
+  `cleanup-consentless-test-sessions.sql` used about consent rows: *"backfilling
+  would be fabrication."*
+
+**The precondition is one read.** When it returns zero, the constraint can land:
+
+```sql
+select count(*) from public.availability
+ where coalesce(cardinality(active_treatments), 0) = 0;
+```
+
+⚠️ Measured 7 Oct 2026: **0 treatment-less future slots across both providers**
+— but the only instance found was repaired by its owner before it could be
+measured, so **this item rests on the code path having permitted it, not on a
+surviving row.** "Measured zero" and "cannot happen" are different claims, and
+until the constraint exists only the first is true.
+
 
 **Plainly:** a stylist can publish an availability slot without saying what
 treatment it is for. A model browses to it, works through the wizard, and meets a
