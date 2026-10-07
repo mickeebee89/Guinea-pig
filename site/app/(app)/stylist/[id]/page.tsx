@@ -194,21 +194,40 @@ export default async function StylistPage({
       <section className="mt-6">
         <div className="mb-2 flex flex-wrap items-baseline justify-between gap-3">
           <h2 className="text-xs font-bold uppercase tracking-widest text-muted">Availability</h2>
-          {/* The way in. Before 23 Sep this said applying was in the app —
-              which was true, and was the whole of item 77: the web sent a
-              model to an app that is in no store. */}
-          {!p.isOwner && p.openDates.length > 0 && (
-            <Link
-              href={`/stylist/${id}/apply`}
-              className="inline-flex min-h-11 items-center rounded-[999px] bg-rose px-5 text-sm font-bold text-white"
-            >
-              Apply for a session
-            </Link>
-          )}
+          {/* ⚠️ THE STANDALONE "Apply for a session" BUTTON WAS HERE AND IS GONE.
+              Item 186.
+
+              It linked to /apply with no date and no slot, so it opened the
+              wizard on its own date list — a SECOND date-picking surface beside
+              the panel. The loader already made the two agree about WHICH days
+              are open, so this was never a correctness problem; it was two
+              pieces of UI for one choice, which is two places to change and two
+              chances for the copy to drift.
+
+              The way in is now the panel: pick a day, then "Apply for this
+              time" on the slot you want, which enters the wizard WITH a slot
+              rather than asking again.
+
+              ⚠️ THE ROUTE IS UNCHANGED AND STILL WORKS. A bookmarked or shared
+              /apply URL with no slot still lands on the wizard's date list,
+              which is fed by the same loader — not a dead step. Collapsing that
+              to one surface means deleting step 1 and renumbering seven steps
+              to six, which touches twelve hardcoded step numbers in a live
+              booking flow. That is its own change, not a rider on removing a
+              button: done together, a regression in either could not be
+              attributed to one of them. */}
         </div>
+        {/* ⚠⚠ "NOTHING FREE" RATHER THAN "HASN'T POSTED". Item 196 changed what
+            an empty openDates MEANS: a stylist whose slots all lack a treatment
+            now has none offered, and telling a model she "hasn't posted
+            availability" would be FALSE — she has, and it is the slots that are
+            unbookable. This wording is true in every case that empties the list
+            — no slots at all, all taken, all already started, all contested, all
+            treatment-less — without claiming to know which. */}
         {p.openDates.length === 0 ? (
-          <EmptyState title="No open slots">
-            {p.name} hasn’t posted availability for the next couple of months.
+          <EmptyState title="Nothing free at the moment">
+            {p.name} has no times open in the next couple of months. Save them and
+            you’ll see when that changes.
           </EmptyState>
         ) : (
           /* grid-cols-[minmax(0,1fr)] on phones for the same reason the

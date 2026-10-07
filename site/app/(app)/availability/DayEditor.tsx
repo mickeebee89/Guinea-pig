@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { saveAvailability } from './actions'
@@ -35,6 +36,9 @@ export function DayEditor({
   const router = useRouter()
   const [slots, setSlots] = useState<Slot[]>(initial)
   const [pending, start] = useTransition()
+
+  /** Unbooked slots with nothing a model could book. Item 196 part 2. */
+  const incomplete = slots.filter(s2 => !s2.isBooked && s2.treatmentIds.length === 0).length
   const [msg, setMsg] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -180,9 +184,78 @@ export function DayEditor({
                 </div>
               </fieldset>
             )}
+
+            {/*
+              ⚠⚠ THE AUTHORITATIVE PLACE SHE IS TOLD. Item 196 part 3.
+
+              A slot with no treatment is skipped by the model-facing loader
+              (part 1) — so without this she keeps a diary she believes is live
+              and nobody ever applies. That silence is item 183's shape, and the
+              page she created the slot on is where it has to be broken.
+
+              ⚠️ IT NAMES THE CAUSE AND THE REMEDY IN HER TERMS. Not "no
+              active_treatments", not "filtered out" — what is wrong and what to
+              do, in the words she would use.
+
+              ⚠️ AND THE TWO CAUSES GET DIFFERENT SENTENCES, because one of them
+              cannot be acted on here. With treatments in her shop the fix is a
+              tap above; with NONE the picker does not render at all (see the
+              condition above), so telling her to pick one would point at an
+              empty space. That second case cannot reach a model today —
+              publishing needs a categorised treatment — but she can still fill a
+              diary that can never be booked, and the surface that would explain
+              it is the one she is on.
+
+              A booked slot is exempt: it already has a model, so nothing about
+              being offered applies to it.
+            */}
+            {!s.isBooked && s.treatmentIds.length === 0 && (
+              treatments.length > 0 ? (
+                <p className="mt-2 text-xs font-bold text-warm-dark">
+                  No treatment selected — models can’t book this slot. Pick at least one above.
+                </p>
+              ) : (
+                <p className="mt-2 text-xs font-bold text-warm-dark">
+                  Models can’t book this slot until your shop lists a treatment.{' '}
+                  <Link href="/shop" className="text-rose hover:underline">Add one to your shop</Link>, then
+                  choose it here.
+                </p>
+              )
+            )}
           </li>
         ))}
       </ul>
+
+      {/*
+        ⚠⚠ SAVE IS BLOCKED WHILE A SLOT HAS NO TREATMENT. Item 196 part 2.
+
+        Part 3 tells her; this stops NEW ones being made. Both are needed: a
+        form gate does not clean up history, and a warning alone does not stop
+        tomorrow's slot being created the same way.
+
+        ⚠️ A BLOCK AND NOT A WARNING, because a treatment-less slot is not a
+        lesser version of a slot — it is one the marketplace cannot sell, and
+        saving it produces exactly the row item 196 exists to stop. That is
+        different from the bio rule (item 183), which is advisory because an
+        empty bio still leaves a bookable shop.
+
+        ⚠️ IT HAS A ROUTE OUT IN BOTH DIRECTIONS, which is what makes a block
+        fair rather than a trap: fix the slot by tapping a treatment, or Remove
+        it. And for a stylist whose shop lists NO treatments, the per-slot
+        sentence above links to /shop, because telling her to pick from an
+        empty list would be a gate with no door.
+
+        Booked slots are exempt — they already have a model, and their picker is
+        not rendered, so she could not satisfy the rule for them if it applied.
+      */}
+      {incomplete > 0 && (
+        <p className="mt-4 text-sm font-bold text-warm-dark">
+          {incomplete === 1
+            ? 'One slot has no treatment yet.'
+            : `${incomplete} slots have no treatment yet.`}{' '}
+          Choose one for each, or remove them, and you can save.
+        </p>
+      )}
 
       <div className="mt-4 flex flex-wrap gap-2">
         <button
@@ -193,7 +266,7 @@ export function DayEditor({
         </button>
         <button
           onClick={save}
-          disabled={pending}
+          disabled={pending || incomplete > 0}
           className="inline-flex min-h-11 items-center rounded-[999px] bg-rose px-5 text-sm font-bold text-white hover:bg-rose-dark disabled:opacity-50"
         >
           {pending ? 'Saving…' : 'Save this day'}
