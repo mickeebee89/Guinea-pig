@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { withoutStartedSlots } from '@/lib/slots'
+import { loadSlots, treatmentLabel } from '@/lib/queries/slots'
 import { getGateState } from '@/lib/verification'
 import { getIdCheck, type IdCheck } from '@/lib/queries/idCheck'
 import { loadActiveConsentDocument, type ConsentDocument } from '@/lib/queries/consent'
@@ -65,7 +65,6 @@ export interface ApplyContext {
   isBlocked: boolean
 }
 
-const hhmm = (t: string) => t.substring(0, 5)
 
 export async function getApplyContext(
   supabase: SupabaseClient,
@@ -80,19 +79,14 @@ export async function getApplyContext(
   const p = prov as { id: string; name: string | null; user_id: string | null; is_published: boolean | null } | null
   if (!p) return null
 
-  const today = new Date().toISOString().slice(0, 10)
 
-  const [gate, idCheck, slotRes, treatRes, photoRes, consentLoad, blocked, meRes] = await Promise.all([
+  const [gate, idCheck, loaded, photoRes, consentLoad, blocked, meRes] = await Promise.all([
     getGateState(supabase, userId),
     getIdCheck(supabase, userId),
-    supabase
-      .from('availability')
-      .select('id, date, start_time, end_time, active_treatments, is_taken, price_pence')
-      .eq('provider_id', providerId)
-      .gte('date', today)
-      .order('date')
-      .order('start_time'),
-    supabase.from('provider_treatments').select('id, name, category').eq('provider_id', providerId),
+    // ⚠️ ONE LOADER, SHARED WITH THE STYLIST PAGE. It composes is_taken,
+    // started slots, slot_contention() and the treatment check — see
+    // lib/queries/slots.ts for why this is not two call sites.
+    loadSlots(supabase, providerId),
     supabase
       .from('model_photos')
       .select('id, photo_url')
@@ -106,26 +100,24 @@ export async function getApplyContext(
     supabase.from('users').select('profile_pic_url').eq('id', userId).maybeSingle(),
   ])
 
-  const rawSlots = (slotRes.data ?? []) as {
-    id: string; date: string; start_time: string; end_time: string
-    active_treatments: string[] | null; is_taken: boolean | null; price_pence: number | null
-  }[]
-
-  // Which of these already have a pending or accepted booking. `is_taken` is
-  // the stylist's own flag and does not know about applications, so both are
-  // read — and a failure here treats everything as taken rather than risk
-  // offering a slot that is gone. Mobile takes the same line.
-  let booked = new Set<string>()
-  if (rawSlots.length > 0) {
-    const { data: sess, error } = await supabase
-      .from('sessions')
-      .select('availability_id')
-      .in('availability_id', rawSlots.map(s => s.id))
-      .in('status', ['pending', 'accepted'])
-    booked = error
-      ? new Set(rawSlots.map(s => s.id))
-      : new Set(((sess ?? []) as { availability_id: string }[]).map(r => r.availability_id))
-  }
+  /*
+   * ⚠⚠ THE `sessions` READ THAT USED TO BE HERE IS GONE, AND ITS COMMENT WENT
+   * WITH IT. It said "a failure here treats everything as taken rather than risk
+   * offering a slot that is gone" — a fail-closed arm guarding `error`, when the
+   * failure that actually occurred was RLS FILTERING ROWS, which raises nothing.
+   * `"participants can read sessions"` let a model see only her own, so the set
+   * was systematically empty and the arm never ran. Audit item 192, and the
+   * sharpest instance of item 188.
+   *
+   * It now comes from `slot_contention()` (0090) inside loadSlots, which is
+   * SECURITY DEFINER and so can see what the policy rightly hides from the
+   * caller — existence only, never whose.
+   *
+   * ⚠️ The old read also keyed on `availability_id`, where
+   * `sessions_active_slot_uniq` collides on (provider_id, date, start_time). Two
+   * availability rows can share a start_time with different end_times, so that
+   * key was wrong as well as blind. 0090's header has the full reasoning.
+   */
 
   const photoRows = (photoRes.data ?? []) as { id: string; photo_url: string }[]
   const photos: ApplyPhoto[] = []
@@ -157,22 +149,37 @@ export async function getApplyContext(
     verified: gate.verified,
     hasProfilePic: !!(meRes.data as { profile_pic_url: string | null } | null)?.profile_pic_url,
     idCheck,
-    // ⚠️ STARTED SLOTS DROPPED HERE, not in the query: Postgrest cannot
-    // compare date + start_time against now(), so `.gte('date', today)` above
-    // is as far as SQL gets and the rest is done in one shared helper. Item
-    // 133 — a 9am slot was applied for at 16:37 the same day.
-    slots: withoutStartedSlots(rawSlots, s => ({
-      date: s.date, startTime: s.start_time,
-    })).map(s => ({
-      id: s.id,
-      date: s.date,
-      startTime: hhmm(s.start_time),
-      endTime: hhmm(s.end_time),
-      treatmentIds: s.active_treatments ?? [],
-      pricePence: s.price_pence,
-      isTaken: !!s.is_taken || booked.has(s.id),
+    /*
+     * ⚠⚠ TREATMENT-LESS SLOTS ARE EXCLUDED ENTIRELY, NOT MARKED TAKEN. The
+     * time step renders `isTaken ? 'Booked'`, and a slot held back for having no
+     * treatment is NOT booked — saying so would tell a model something false
+     * about a stylist's diary. Item 196: it is not listed at all, because the
+     * step after this one would have nothing to offer her.
+     *
+     * 'taken' and 'contested' DO collapse into isTaken, because "somebody has
+     * it" is true of both and is all she needs to know.
+     */
+    slots: loaded.slots
+      .filter(s => s.blockedBy !== 'no_treatment')
+      .map(s => ({
+        id: s.id,
+        date: s.date,
+        startTime: s.startTime,
+        endTime: s.endTime,
+        treatmentIds: s.treatmentIds,
+        pricePence: s.pricePence,
+        isTaken: s.blockedBy !== null,
+      })),
+    // ⚠️ `name` IS THE LABEL, NOT THE COLUMN. ApplyTreatment.name is typed
+    // `string` while provider_treatments.name is nullable, so the old
+    // `as ApplyTreatment[]` cast was asserting something the database does not
+    // guarantee and the wizard could have rendered an empty name. treatmentLabel
+    // applies the same `name ?? category` rule `_withdraw_stylist` uses in SQL.
+    treatments: loaded.treatments.map(t => ({
+      id: t.id,
+      name: treatmentLabel(t),
+      category: t.category,
     })),
-    treatments: ((treatRes.data ?? []) as ApplyTreatment[]),
     photos,
     consent: consentLoad.ok ? consentLoad.doc : null,
     consentProblem: consentLoad.ok ? null : consentLoad.reason,

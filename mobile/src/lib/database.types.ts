@@ -1,8 +1,8 @@
 // GENERATED FILE — DO NOT EDIT BY HAND.
 //
 // Written by scripts/gen-supabase-types.mjs from the live database.
-// TYPES_STAMP: 0083
-// TYPES_FILES_AT_GEN: 0083
+// TYPES_STAMP: 0091
+// TYPES_FILES_AT_GEN: 0091
 //
 // TYPES_STAMP is the migration the DATABASE was at when these were generated,
 // stated by whoever ran it (--applied). TYPES_FILES_AT_GEN is the newest
@@ -1158,7 +1158,6 @@ export type Database = {
           first_published_at: string | null
           id: string
           is_published: boolean | null
-          is_verified: boolean | null
           latitude: number | null
           level: string | null
           location: string | null
@@ -1179,7 +1178,6 @@ export type Database = {
           first_published_at?: string | null
           id?: string
           is_published?: boolean | null
-          is_verified?: boolean | null
           latitude?: number | null
           level?: string | null
           location?: string | null
@@ -1200,7 +1198,6 @@ export type Database = {
           first_published_at?: string | null
           id?: string
           is_published?: boolean | null
-          is_verified?: boolean | null
           latitude?: number | null
           level?: string | null
           location?: string | null
@@ -2678,6 +2675,13 @@ export type Database = {
       set_my_postcode: {
         Args: { p_lat?: number; p_lng?: number; p_postcode?: string }
         Returns: undefined
+      }
+      slot_contention: {
+        Args: { p_provider_id: string }
+        Returns: {
+          availability_id: string
+          contested: boolean
+        }[]
       }
       stripe_webhook_health: {
         Args: never

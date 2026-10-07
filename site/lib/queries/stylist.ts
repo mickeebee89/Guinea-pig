@@ -1,5 +1,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { withoutStartedSlots } from '@/lib/slots'
+import {
+  bookableDates, loadSlots,
+  type LoadedSlot, type LoadedTreatment,
+} from '@/lib/queries/slots'
 import { getBlockedIds } from '@/lib/blocks'
 // ⚠️ `providers.level` IS GONE FROM EVERY SURFACE — item 105, 24 Sep 2026.
 //
@@ -110,8 +113,26 @@ export interface StylistProfile {
    * notifications (notifyFavourites). See favourite-actions.ts.
    */
   isFavourite: boolean
-  /** Dates in the next 60 days with an unbooked slot. */
+  /**
+   * Dates with at least one BOOKABLE slot — see lib/queries/slots.ts for the
+   * four filters that word covers.
+   *
+   * ⚠️ NO LONGER BOUNDED TO 60 DAYS, and that is a deliberate consistency
+   * change rather than a slip. The wizard's own read never had an upper bound,
+   * so the calendar stopped at 60 days while the step that actually books did
+   * not — a third silent difference between the two surfaces, found while
+   * putting them on one loader. MonthCalendar renders a single month, so
+   * nothing visible depended on the bound.
+   */
   openDates: string[]
+  /**
+   * Every future slot, bookable or not, with the reason when not. The panel
+   * renders from this; the calendar renders from `openDates`, which is derived
+   * from the same array so the two cannot disagree.
+   */
+  slots: LoadedSlot[]
+  /** For naming a slot's treatments. `treatmentLabel` is the rule. */
+  slotTreatments: LoadedTreatment[]
 }
 
 export async function getStylistProfile(
@@ -148,10 +169,8 @@ export async function getStylistProfile(
     profile_pic_url: string | null
   }
 
-  const today = new Date().toISOString().slice(0, 10)
-  const in60 = new Date(Date.now() + 60 * 86_400_000).toISOString().slice(0, 10)
 
-  const [treatRes, portRes, revRes, blocked, availRes, favRes] = await Promise.all([
+  const [treatRes, portRes, revRes, blocked, loaded, favRes] = await Promise.all([
     // Category is the only column edit-shop reliably fills; `name` holds a copy
     // and duration/price are never written. Same note as mobile.
     supabase.from('provider_treatments').select('category').eq('provider_id', providerId),
@@ -167,11 +186,11 @@ export async function getStylistProfile(
       .order('created_at', { ascending: false })
       .limit(20),
     getBlockedIds(supabase, viewerId).catch(() => new Set<string>()),
-    supabase.from('availability')
-      // start_time is selected ONLY so the shared helper can drop slots that
-      // have already begun; the calendar itself renders dates. Item 133.
-      .select('date, start_time, is_taken').eq('provider_id', providerId)
-      .gte('date', today).lte('date', in60),
+    // ⚠️ ONE LOADER, SHARED WITH THE APPLY WIZARD. It composes is_taken,
+    // started slots, slot_contention() (0090) and the treatment check (196).
+    // This page used to apply two of those four and the wizard three, which is
+    // the asymmetry lib/queries/slots.ts exists to end.
+    loadSlots(supabase, providerId),
     // maybeSingle rather than a count: nothing here proves the table has a
     // unique index on the pair, and a count would turn a duplicate row into a
     // wrong-looking number rather than a saved stylist.
@@ -240,15 +259,12 @@ export async function getStylistProfile(
     })),
     isBlocked: !!(prov.user_id && blocked.has(prov.user_id)),
     isFavourite: !!favRes.data,
-    // A day stops being pale pink once its last slot has begun, rather than
-    // at midnight. Item 133.
-    openDates: [...new Set(
-      withoutStartedSlots(
-        (availRes.data ?? []) as {
-          date: string; start_time: string; is_taken: boolean | null
-        }[],
-        a => ({ date: a.date, startTime: a.start_time }),
-      ).filter(a => !a.is_taken).map(a => a.date),
-    )].sort(),
+    // ⚠️ A DATE IS MARKED ONLY IF SOMETHING ON IT CAN BE BOOKED, which now
+    // includes "has a treatment" (item 196) and "nobody else has applied"
+    // (item 192) as well as item 133's started-slot rule. A marked day that
+    // opens to an empty panel is the same broken promise one level up.
+    openDates: bookableDates(loaded.slots),
+    slots: loaded.slots,
+    slotTreatments: loaded.treatments,
   }
 }
