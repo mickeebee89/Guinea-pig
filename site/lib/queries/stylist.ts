@@ -117,12 +117,12 @@ export interface StylistProfile {
    * Dates with at least one BOOKABLE slot — see lib/queries/slots.ts for the
    * four filters that word covers.
    *
-   * ⚠️ NO LONGER BOUNDED TO 60 DAYS, and that is a deliberate consistency
-   * change rather than a slip. The wizard's own read never had an upper bound,
-   * so the calendar stopped at 60 days while the step that actually books did
-   * not — a third silent difference between the two surfaces, found while
-   * putting them on one loader. MonthCalendar renders a single month, so
-   * nothing visible depended on the bound.
+   * ⚠️ BOUNDED BY SLOT_HORIZON_DAYS, which both surfaces now share. This page
+   * used to bound at 60 days while the wizard's own read had NO upper bound — so
+   * the calendar stopped at two months while the step that actually books did
+   * not. That was a third silent difference between them, found while putting
+   * them on one loader. The fix is one constant, not two, and not a parameter
+   * each caller passes; see lib/queries/slots.ts for why.
    */
   openDates: string[]
   /**

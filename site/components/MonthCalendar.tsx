@@ -8,9 +8,15 @@ import Link from 'next/link'
  * days they have a treatment booked, a stylist sees the days they have slots
  * open with bookings marked on top.
  *
- * Deliberately not a date PICKER. Editing availability is app-only for now, and
- * a grid that looks clickable but does nothing is worse than one that clearly
- * doesn't.
+ * ⚠️ IT IS A PICKER WHEN GIVEN `hrefFor`, AND TWO PAGES NOW USE IT THAT WAY.
+ * This comment used to read "deliberately not a date PICKER. Editing
+ * availability is app-only for now" — true when it was written, stale since the
+ * stylist's own /availability page started passing `hrefFor`, and doubly so now
+ * that a model picks a date on a stylist's profile the same way.
+ *
+ * The principle it was protecting still holds and is worth keeping: a grid that
+ * LOOKS clickable and does nothing is worse than one that clearly doesn't — which
+ * is why clickability is opt-in per caller rather than the default.
  */
 
 export interface CalendarMark {

@@ -79,6 +79,41 @@ export interface LoadedSlots {
 const hhmm = (t: string) => t.substring(0, 5)
 
 /**
+ * How far ahead a slot is loaded, in days.
+ *
+ * ⚠⚠ BOUNDED, AND IT IS ONE CONSTANT RATHER THAN A PARAMETER. Micky's catch,
+ * 7 Oct 2026, on a first version that was unbounded:
+ *
+ *   "MonthCalendar renders one month, so an unbounded loader reads every future
+ *    slot to display thirty days of them. At four rows that is invisible; at a
+ *    stylist with a year of availability it is a full-year read per page view."
+ *
+ * Right, and the argument I had given for unbounded — "nothing visible depended
+ * on the bound" — showed the old bound was INERT, not that its absence was safe.
+ * Those are different claims. **The read must scale with what is displayed, not
+ * with the size of a stylist's diary**, and the diary is the thing the product
+ * exists to grow.
+ *
+ * ⚠️ WHY A CONSTANT AND NOT A PER-CALLER PARAMETER. A parameter would let the
+ * calendar ask for 60 days and the wizard for 90, and a date would then appear in
+ * one surface and not the other — EXACTLY the class this whole file was written to
+ * close. One horizon, used by both, cannot diverge. If a consumer ever genuinely
+ * needs a different window, add the parameter THEN, with a reason; do not
+ * pre-build the divergence.
+ *
+ * 60 days is not arbitrary: it is what the empty state has always promised —
+ * "hasn't posted availability for the next couple of months".
+ *
+ * ⚠⚠ AND THE BOUND DOES NOT REDUCE slot_contention's WORK. That function takes a
+ * provider id and nothing else, so it still considers every future slot for the
+ * stylist; the bound trims the `availability` select and the join, not the
+ * function. **If row counts ever actually matter, the function needs a horizon
+ * argument too, and that is a migration.** Recorded so nobody concludes this
+ * constant settled the scaling question.
+ */
+export const SLOT_HORIZON_DAYS = 60
+
+/**
  * What to call a treatment, in ONE place.
  *
  * `edit-shop` reliably fills only `category`, with `name` holding a copy of it
@@ -106,6 +141,8 @@ export async function loadSlots(
   providerId: string,
 ): Promise<LoadedSlots> {
   const today = new Date().toISOString().slice(0, 10)
+  const horizon = new Date(Date.now() + SLOT_HORIZON_DAYS * 86_400_000)
+    .toISOString().slice(0, 10)
 
   const [slotRes, treatRes, contentionRes] = await Promise.all([
     supabase
@@ -113,6 +150,7 @@ export async function loadSlots(
       .select('id, date, start_time, end_time, active_treatments, is_taken, price_pence')
       .eq('provider_id', providerId)
       .gte('date', today)
+      .lte('date', horizon)
       .order('date')
       .order('start_time'),
     // ⚠️ THREE COLUMNS, AND `price` IS DELIBERATELY NOT ONE OF THEM.

@@ -88,3 +88,26 @@ export function withoutStartedSlots<T>(
     return !slotHasStarted(date, startTime, now)
   })
 }
+
+/**
+ * ⚠️ ONE COPY OF EACH, because there were about to be two. These lived as
+ * module-private consts inside ApplyWizard; the slot panel needs the same two
+ * formats, and a second copy of "how a slot time reads" is how the two surfaces
+ * start disagreeing about something a model compares side by side.
+ *
+ * They sit in lib/slots.ts rather than a presentation module because what they
+ * format is a slot's bare `date` and `start_time` — the same London-wall-clock
+ * values this file already reasons about.
+ */
+
+/** 09:00:00 → 9:00am. */
+export const fmtSlotTime = (t: string) => {
+  const [h, m] = t.split(':').map(Number)
+  return `${h % 12 || 12}:${String(m).padStart(2, '0')}${h >= 12 ? 'pm' : 'am'}`
+}
+
+/** 2026-10-14 → Wednesday 14 October. */
+export const fmtSlotDate = (d: string) =>
+  new Date(`${d}T00:00:00`).toLocaleDateString('en-GB', {
+    weekday: 'long', day: 'numeric', month: 'long',
+  })

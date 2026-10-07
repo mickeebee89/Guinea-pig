@@ -230,7 +230,41 @@ export class DemoQuery implements PromiseLike<Result> {
     for (const raw of this.cols.split(',')) {
       const c = raw.trim()
       if (!c) continue
-      if (c.includes('(')) throw new Error(`demo engine: embedded select "${c}" is not implemented`)
+      /**
+       * ⚠⚠ A TO-ONE FK EMBED, BECAUSE THE SITE STARTED USING ONE AND THIS THREW.
+       *
+       * `users!user_id(is_verified)` arrived with item 176's fix (0087): the
+       * verified badge had to stop reading the dropped `providers.is_verified`
+       * and read `users.is_verified` through the FK instead. **Demo mode has
+       * thrown on browse AND every stylist page ever since**, which is why
+       * browse showed "No stylists to show" and a profile 404'd. Nothing caught
+       * it: demo mode is local-only by design (item 69), so `next build` never
+       * exercises it and no checker reads it.
+       *
+       * ⚠️ IT RETURNS AN OBJECT, NOT AN ARRAY, because that is what PostgREST
+       * returns at runtime for a to-one embed. The GENERATED TYPES model it as an
+       * array — which is the disagreement `embeddedVerified()` exists to absorb in
+       * browse.ts and stylist.ts. Matching runtime is what makes the demo a
+       * rehearsal rather than a different system.
+       *
+       * Only the `table!fk(cols)` shape is supported, which is the only shape the
+       * site uses. Anything else still throws, deliberately: a silent empty
+       * embed would make a demo walkthrough quietly wrong instead of loudly
+       * broken.
+       */
+      if (c.includes('(')) {
+        const m = /^([a-z_]+)!([a-z_]+)\(([^)]*)\)$/.exec(c)
+        if (!m) throw new Error(`demo engine: embedded select "${c}" is not implemented`)
+        const [, table, fk, inner] = m
+        const parent = (this.store.tables[table] ?? []).find(x => x.id === r[fk])
+        out[table] = parent
+          ? Object.fromEntries(
+              inner.split(',').map(k => k.trim()).filter(Boolean)
+                .map(k => [k, parent[k] ?? null]),
+            )
+          : null
+        continue
+      }
       const [alias, col] = c.includes(':') ? c.split(':').map(s => s.trim()) : [c, c]
       out[alias] = r[col] ?? null
     }

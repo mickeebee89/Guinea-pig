@@ -16,6 +16,40 @@ export function demoRpc(name: string, args: Row, store: DemoStore, user: DemoUse
       return null
 
     /**
+     * ⚠⚠ WITHOUT THIS, EVERY STYLIST PAGE AND THE APPLY WIZARD THROW IN DEMO
+     * MODE. 0090 added slot_contention and item 186's shared loader calls it on
+     * both surfaces; demoRpc's default throws on an unknown name, deliberately,
+     * so a missing mock is loud. Same class as transition_session below — found
+     * the same way, by asking what the demo does with a newly added RPC rather
+     * than by watching it break on camera.
+     *
+     * ⚠⚠ IT KEYS ON (provider_id, date, start_time), NOT availability_id, AND
+     * THAT IS NOT A STYLISTIC CHOICE. `sessions_active_slot_uniq` collides on
+     * that triple, two availability rows may share a start_time with different
+     * end_times, and 0090's header explains at length why keying on
+     * availability_id reintroduces item 192. **A demo that used the easier key
+     * would disagree with the database about which slots are free** — which is
+     * the one thing a walkthrough must not do.
+     *
+     * The statuses are 0090's list too. If a third occupying status is ever
+     * added, the migration's guard catches the database side and nothing catches
+     * this — so it is named here as the second place to change.
+     */
+    case 'slot_contention': {
+      const providerId = args.p_provider_id as string
+      const key = (r: Row) => `${r.date as string}T${r.start_time as string}`
+      const occupied = new Set(
+        store.tables.sessions
+          .filter(r => r.provider_id === providerId
+            && (r.status === 'pending' || r.status === 'accepted'))
+          .map(key),
+      )
+      return store.tables.availability
+        .filter(r => r.provider_id === providerId)
+        .map(r => ({ availability_id: r.id as string, contested: occupied.has(key(r)) }))
+    }
+
+    /**
      * ⚠️ WITHOUT THIS, ACCEPT AND DECLINE BREAK ON CAMERA. Since 0078 the web
      * calls transition_session instead of updating sessions directly, and
      * demoRpc's default THROWS on an unknown name — so a recorded walkthrough

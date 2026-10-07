@@ -7,6 +7,7 @@ import { MonthCalendar, type CalendarMark } from '@/components/MonthCalendar'
 import { PortfolioGallery } from '@/components/PortfolioGallery'
 import { SafetyMenu } from '@/components/SafetyMenu'
 import { FavouriteButton } from './FavouriteButton'
+import { SlotPanel } from './SlotPanel'
 
 export const metadata = { title: 'Stylist' }
 
@@ -24,16 +25,37 @@ export const metadata = { title: 'Stylist' }
  */
 export default async function StylistPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>
+  /**
+   * ⚠️ THE SELECTED DAY LIVES IN THE URL, NOT IN STATE. Item 186.
+   *
+   * Three things fall out of that and all three are wanted: refresh, Back and
+   * Forward work; a link to a particular day is shareable; and the slot panel
+   * can stay a SERVER component, which is what lets `router.refresh()` clear a
+   * slot that has just been taken. `MonthCalendar` was already built for this —
+   * `hrefFor` has existed since the stylist's own availability page.
+   */
+  searchParams: Promise<{ date?: string }>
 }) {
   const { id } = await params
+  const { date: rawDate } = await searchParams
   const user = await requireUser()
   const supabase = await createSupabaseServerClient()
 
   const p = await getStylistProfile(supabase, id, user.id)
   // Not found and not visible to you both land here, on purpose.
   if (!p) notFound()
+
+  /**
+   * ⚠️ VALIDATED AGAINST THE DAYS THAT ACTUALLY HAVE SOMETHING, not merely
+   * parsed. `?date=` is user input: a malformed one, or a day with nothing on
+   * it, would otherwise render a panel saying "nothing free" about a date the
+   * calendar never offered — indistinguishable from a real empty day.
+   */
+  const todayIso = new Date().toISOString().slice(0, 10)
+  const selectedDate = rawDate && p.openDates.includes(rawDate) ? rawDate : null
 
   return (
     <>
@@ -189,11 +211,38 @@ export default async function StylistPage({
             {p.name} hasn’t posted availability for the next couple of months.
           </EmptyState>
         ) : (
-          <div className="max-w-sm">
-            <MonthCalendar
-              marks={p.openDates.map((d): CalendarMark => ({ date: d, kind: 'open', label: 'Slots open' }))}
-              caption="Days with slots open. Pick a time on the next screen."
-            />
+          /* grid-cols-[minmax(0,1fr)] on phones for the same reason the
+             availability page uses it: without it a single 'auto' column grows
+             to its widest unbreakable content and pushes the page wider than the
+             screen (audit item 73). */
+          <div className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
+            <div className="max-w-sm">
+              <MonthCalendar
+                marks={p.openDates.map((d): CalendarMark => ({ date: d, kind: 'open', label: 'Slots open' }))}
+                hrefFor={d => `/stylist/${id}?date=${d}`}
+                selected={selectedDate ?? undefined}
+                minDate={todayIso}
+                caption={
+                  p.isOwner
+                    ? 'Days with slots open. This is what a model sees.'
+                    : 'Click a day to see its times and prices.'
+                }
+              />
+            </div>
+
+            {/* ⚠️ RENDERED ONLY ONCE A DAY IS CHOSEN. An auto-selected first day
+                would be a decision made for her, and it would mean the panel's
+                "Nothing free on this day" could appear before she had clicked
+                anything. */}
+            {selectedDate && (
+              <SlotPanel
+                providerId={id}
+                stylistName={p.name}
+                date={selectedDate}
+                slots={p.slots}
+                treatments={p.slotTreatments}
+              />
+            )}
           </div>
         )}
       </section>

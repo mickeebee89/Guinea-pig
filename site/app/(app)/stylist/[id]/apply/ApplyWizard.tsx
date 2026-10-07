@@ -5,6 +5,9 @@ import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { ConsentGate } from '@/components/ConsentGate'
 import { formatPrice } from '@/lib/price'
+// ⚠️ SHARED WITH THE SLOT PANEL, not redefined here. A model compares the
+// panel's times against this wizard's directly, so one format, one place.
+import { fmtSlotDate as fmtDate, fmtSlotTime as fmtTime } from '@/lib/slots'
 import { downscaleToFile, UNREADABLE_IMAGE_MESSAGE } from '@/lib/downscale'
 import type { AcceptedTicks } from '@/lib/queries/consent'
 import type { ApplyContext, ApplyPhoto } from '@/lib/queries/apply'
@@ -50,12 +53,6 @@ const STEPS = [
 
 const NOTE_MAX = 300
 
-const fmtTime = (t: string) => {
-  const [h, m] = t.split(':').map(Number)
-  return `${h % 12 || 12}:${String(m).padStart(2, '0')}${h >= 12 ? 'pm' : 'am'}`
-}
-const fmtDate = (d: string) =>
-  new Date(`${d}T00:00:00`).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })
 
 export function ApplyWizard({ ctx }: { ctx: ApplyContext }) {
   const router = useRouter()
@@ -202,6 +199,26 @@ export function ApplyWizard({ ctx }: { ctx: ApplyContext }) {
           res.code === 'consent_malformed'
         ) {
           setConsent(null)
+        }
+        /*
+         * ⚠⚠ A LOST SLOT RACE SENDS HER SOMEWHERE SHE CAN ACT. Item 186.
+         *
+         * `actions.ts` already wrote her the right sentence — "That slot has just
+         * been taken. Pick another time." — and it was shown on STEP 7, beside a
+         * Send button for a slot that no longer exists. The message named the
+         * remedy and the screen did not offer it.
+         *
+         * ⚠️ AND 186 MAKES THIS ROUTINE RATHER THAN RARE. A model who picks a
+         * slot before the paywall, subscribes, and comes back has had minutes in
+         * which somebody else could apply — so the race stops being an edge case
+         * and becomes an ordinary outcome of the new flow.
+         *
+         * Back to the TIME step for the same day, with the slot cleared so the
+         * dead one cannot be re-sent. The refresh below re-reads the day, so what
+         * she lands on is the list without it.
+         */
+        if (res.code === 'slot_taken') {
+          setParams({ slot: null, treatment: null, step: date ? '2' : '1' })
         }
         if (res.refresh) router.refresh()
         return
