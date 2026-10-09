@@ -53,11 +53,23 @@ export interface PayFormProps {
   /** Shown once everything succeeded. */
   successTitle: string
   successBody: string
+  /**
+   * Optional. Rendered under the success body — a way onward from here.
+   *
+   * ⚠⚠ OPTIONAL SO THE FEE PATH IS UNCHANGED BY CONSTRUCTION, NOT BY AGREEMENT.
+   * This component is shared with verify/FeePanel.tsx, the LIVE £14.99 provider
+   * fee. FeePanel does not pass this prop, so it is `undefined` there and
+   * `{successAction}` renders nothing — the fee's success block is byte-identical
+   * to what it was. TypeScript proves FeePanel still compiles without it; a
+   * required prop would have forced a change to the fee flow to add a feature it
+   * does not want.
+   */
+  successAction?: React.ReactNode
 }
 
 type Msg = { tone: 'error' | 'warn' | 'ok'; title?: string; text: string }
 
-function Inner({ onConfirm, submitLabel, successTitle, successBody }: Omit<PayFormProps, 'clientSecret'>) {
+function Inner({ onConfirm, submitLabel, successTitle, successBody, successAction }: Omit<PayFormProps, 'clientSecret'>) {
   const stripe = useStripe()
   const elements = useElements()
   const [busy, setBusy] = useState(false)
@@ -147,6 +159,8 @@ function Inner({ onConfirm, submitLabel, successTitle, successBody }: Omit<PayFo
       <div className="rounded-xl border border-border bg-white p-4">
         <h3 className="font-display text-lg text-warm-dark">{successTitle}</h3>
         <p className="mt-1 text-sm text-muted">{successBody}</p>
+        {/* Absent for the £14.99 fee, which passes no successAction. */}
+        {successAction}
       </div>
     )
   }

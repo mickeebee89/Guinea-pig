@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { createSupabaseServerClient, requireUser } from '@/lib/supabase-server'
+import { applyReturnTo } from '@/lib/return-to'
 import { getApplyContext } from '@/lib/queries/apply'
 import { EmptyState } from '@/components/ui'
 import { IdCheckStep } from '@/components/IdCheckStep'
@@ -28,12 +29,32 @@ export const dynamic = 'force-dynamic'
  */
 export default async function ApplyPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>
+  /**
+   * ⚠️ READ ONLY TO BUILD THE RETURN PATH. The wizard itself takes its state from
+   * the URL on the CLIENT (`useSearchParams`); this server component never
+   * interprets step/date/slot, it just carries them so a member who hits the
+   * membership wall comes back to the slot she chose rather than to step 1.
+   */
+  searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const { id } = await params
+  const sp = await searchParams
   const user = await requireUser()
   const supabase = await createSupabaseServerClient()
+
+  /**
+   * The wizard's own query string, rebuilt from what arrived. Array values take
+   * their first entry — a repeated `?slot=` is not a shape this app produces, and
+   * picking one beats carrying both into a link.
+   */
+  const qs = new URLSearchParams(
+    Object.entries(sp).flatMap(([k, v]) =>
+      v === undefined ? [] : [[k, Array.isArray(v) ? (v[0] ?? '') : v]] as [string, string][],
+    ),
+  ).toString()
 
   const ctx = await getApplyContext(supabase, id, user.id)
   if (!ctx) notFound()
@@ -85,8 +106,18 @@ export default async function ApplyPage({
             Applying for sessions needs an active Cavy membership — £4.99 a month, cancel any
             time. Browsing and searching stay free either way.
           </p>
+          {/*
+            ⚠⚠ THE RETURN PATH. Without it she pays, lands on a success panel, and
+            has to find her way back to a slot she chose minutes ago — and 186's
+            whole point is that she chose it BEFORE paying.
+
+            The wall RENDERS rather than redirecting, so this page's own URL
+            already holds step/date/slot; `applyReturnTo` just carries it across
+            to /subscribe. ⚠️ It is validated THERE, not here: a value this page
+            builds is trustworthy, and a value arriving at /subscribe is not.
+          */}
           <Link
-            href="/subscribe"
+            href={`/subscribe?next=${encodeURIComponent(applyReturnTo(id, qs))}`}
             className="mt-5 inline-flex min-h-11 items-center rounded-[999px] bg-rose px-6 text-sm font-bold text-white"
           >
             See membership

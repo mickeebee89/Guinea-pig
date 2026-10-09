@@ -23,7 +23,17 @@ import { startSubscription, confirmSubscription } from './actions'
  * or cancels anything that moves money. The button starts it, and
  * create_subscription asks Stripe before it replaces anything.
  */
-export function SubscribePanel() {
+export function SubscribePanel({
+  /**
+   * The validated way back to her application, or null. Built and checked on
+   * the SERVER (see page.tsx) and passed down as a ready element — this
+   * component never sees the raw `?next=`, so there is nothing here to validate
+   * and nothing to get wrong twice.
+   */
+  backToApplication,
+}: {
+  backToApplication: React.ReactNode
+}) {
   const [state, setState] = useState<
     | { kind: 'idle' }
     | { kind: 'loading' }
@@ -115,6 +125,7 @@ export function SubscribePanel() {
       submitLabel="Pay £4.99 and join"
       successTitle="You’re a member"
       successBody="Your membership is active. You can apply for sessions as soon as your ID check is done."
+      successAction={backToApplication}
     />
   )
 }

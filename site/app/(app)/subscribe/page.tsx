@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { createSupabaseServerClient, requireUser } from '@/lib/supabase-server'
 import { getGateState } from '@/lib/verification'
+import { safeReturnTo } from '@/lib/return-to'
 import { SubscribePanel } from './SubscribePanel'
 
 export const metadata = { title: 'Membership' }
@@ -36,10 +37,33 @@ function Wrap({ children }: { children: React.ReactNode }) {
   )
 }
 
-export default async function SubscribePage() {
+export default async function SubscribePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ next?: string }>
+}) {
   const user = await requireUser()
   const supabase = await createSupabaseServerClient()
   const gate = await getGateState(supabase, user.id)
+
+  /**
+   * ⚠⚠ VALIDATED HERE, WHERE IT ARRIVES FROM OUTSIDE. `?next=` is part of a URL
+   * anyone can construct and send to a member. `safeReturnTo` is an ALLOWLIST
+   * matching the one route this is for; everything else, including things it has
+   * never heard of, comes back null and she simply sees the ordinary dashboard
+   * link. An open redirect here would be performed on somebody who has just
+   * entered card details. site/lib/return-to.ts has the cases,
+   * scripts/check-return-to.mjs asserts them.
+   */
+  const next = safeReturnTo((await searchParams).next)
+  const backToApplication = next ? (
+    <Link
+      href={next}
+      className="mt-4 inline-flex min-h-11 items-center rounded-[999px] bg-rose px-6 text-sm font-bold text-white"
+    >
+      Back to your application
+    </Link>
+  ) : null
 
   if (gate.subscribed) {
     return (
@@ -56,6 +80,14 @@ export default async function SubscribePage() {
             ? 'You can apply for sessions now.'
             : 'The ID check is the other half of applying — you do it in the flow, when you apply.'}
         </p>
+        {/*
+          ⚠️ THIS BRANCH NEEDS THE RETURN TOO, and it is easy to miss. A COMPED
+          member who presses "See membership" from the wall lands here, not on
+          the card form — and so does anyone who refreshes after paying. Without
+          this she is told there is nothing to pay and left to find her own way
+          back to a slot she chose minutes ago.
+        */}
+        {backToApplication}
       </Wrap>
     )
   }
@@ -75,7 +107,7 @@ export default async function SubscribePage() {
       </ul>
 
       <div className="mt-5">
-        <SubscribePanel />
+        <SubscribePanel backToApplication={backToApplication} />
       </div>
 
       <p className="mt-4 text-xs text-muted">

@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "checks": "eslint . --max-warnings=0 && node scripts/check-client-boundary.mjs && node scripts/check-route-coverage.mjs && node scripts/check-links.mjs && node ../scripts/check-handrun-drift.mjs && node ../scripts/check-anon-view-grants.mjs && node ../scripts/check-admin-guards.mjs && node ../scripts/check-demo-rpc-coverage.mjs && node ../scripts/check-migration-tails.mjs && node ../scripts/check-migration-forward-refs.mjs && node ../scripts/check-status-coverage.mjs && node ../scripts/check-email-type-coverage.mjs && node ../scripts/check-types-freshness.mjs",
+    "checks": "eslint . --max-warnings=0 && node scripts/check-client-boundary.mjs && node scripts/check-route-coverage.mjs && node scripts/check-links.mjs && node ../scripts/check-handrun-drift.mjs && node ../scripts/check-anon-view-grants.mjs && node ../scripts/check-admin-guards.mjs && node ../scripts/check-demo-rpc-coverage.mjs && node ../scripts/check-return-to.mjs && node ../scripts/check-migration-tails.mjs && node ../scripts/check-migration-forward-refs.mjs && node ../scripts/check-status-coverage.mjs && node ../scripts/check-email-type-coverage.mjs && node ../scripts/check-types-freshness.mjs",
     "verify": "npm run checks && npm run build",
     "check-boundary": "node scripts/check-client-boundary.mjs"
   },
