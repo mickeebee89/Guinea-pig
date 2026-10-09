@@ -16265,6 +16265,29 @@ there is no single point of failure on the moderation surface. **Nothing in the
 durable record needed changing.** The premise was wrong; see item 191 for the
 mechanism, which is the part worth keeping.
 
+### ⚠⚠ COUNTING `moderation_actions` MISSES MOST ADMIN DECISIONS — CORRECTED 9 Oct 2026
+
+**Two logs exist and they hold different things.** Anyone sweeping "how many
+decisions has this admin made" from one table will undercount, and the shortfall
+is not small:
+
+| written to | by |
+|---|---|
+| **`moderation_actions`** | `revoke_verification` (0027/0028/0057/0089) and the suspend/ban path via `_withdraw_stylist` (0044) — **and nothing else** |
+| **`admin_audit_log`** | the console itself, `admin/lib/audit.ts`, for every action it performs — including **comp**, **waive**, **verify** and the verification queue's decisions |
+
+⚠️ **SO A COMP IS INVISIBLE TO A `moderation_actions` COUNT.** So is a fee
+waiver, and so is a verification approval. **A sweep that reads only
+`moderation_actions` is measuring revocations and suspensions, not "admin
+activity"** — and will report a working admin as idle.
+
+⚠️ **AND `comp` REQUIRES NO REASON.** 0062's gate is
+`if p_action in ('warn', 'suspend', 'ban') and (p_reason is null or length(btrim(p_reason)) < 10)`,
+so comp, waive, verify and reinstate are all exempt. **I stated on 7 Oct that
+comp required a ten-character reason and wrote to `moderation_actions`. Both were
+wrong**; the mechanism and the fact that it is logged were right. Micky's
+correction, 9 Oct 2026, after granting one.
+
 ⚠️ **AND DO NOT READ THE DECISION COUNTS AS A SECOND CONTRADICTION.** The same
 read returned `decisions=0` for the console admin and `decisions=3` for Micky B,
 counting `moderation_actions` — which is where `revoke_verification` writes.
@@ -20355,6 +20378,29 @@ exempt from that just because it is upstream.**
 And the inverse failure is real too: a stated correction that turns out to be
 right must not be argued with once the read lands. The test is the read, not who
 said it.
+
+### ⚠⚠ THE INVERSE, 9 Oct 2026: I ASSERTED A LIVE STATE I COULD NOT READ
+
+Setting up the payment walk I wrote: *"use `740a7b41` (`+model2`), not
+`b0df9c2f` if it already has a membership."* **It was the other way round.**
+`740a7b41` had held an active £4.99 subscription since 14 September; `b0df9c2f`
+was the clean one.
+
+**Membership state is not in the repo.** It is a `subscriptions` row and a
+`users` column, and nothing in any file could have told me which account held
+one. I named accounts anyway, in an instruction for a walk that was about to put
+a real card through a live Stripe account.
+
+⚠️ **This is 191's own rule pointed the other way.** The entry above is about not
+acting on an unverified claim from a message; this is about not MAKING one. A
+confident instruction is worse than a stated uncertainty, because the reader has
+no reason to check it.
+
+✅ **The rule, stated so it is usable:** when an instruction depends on live state
+— a membership, a balance, a row's existence, who is an admin — **name the CHECK,
+not the answer.** *"Use a model account with no active subscription; confirm with
+`select ... from subscriptions where user_id = ...` first"* costs the reader one
+query and cannot be wrong. Naming an account costs them the walk if it is.
 
 ### ✅ WHAT SURVIVES ANYWAY, ON ITS OWN MERITS
 
