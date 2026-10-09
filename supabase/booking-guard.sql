@@ -28,6 +28,18 @@ having count(*) > 1;
 --    bookings starting at the same provider/date/time overlap regardless of
 --    duration, so start_time is the correct collision key. Does NOT touch the
 --    availability table's own unique index (provider_id, date, start_time, end_time).
+-- MIGRATION-OWNS: sessions_active_slot_uniq 0093
+--
+-- ⚠️ AND FOR AN INDEX THAT MARKER MEANS SOMETHING SHARPER THAN IT DOES FOR A
+-- FUNCTION. `create or replace function` overwrites; `create index if not
+-- exists` matches on the NAME ALONE. So re-running this file against a database
+-- whose index has DRIFTED — or whose index is INVALID, which is what a failed
+-- CREATE INDEX CONCURRENTLY leaves behind — is a silent no-op, not a repair. It
+-- will report success and change nothing.
+--
+-- ✅ 0093 is the authority. It asserts the key by position and parses the status
+-- set out of the predicate, and it REFUSES rather than relying on a create to fix
+-- anything. If this file and the live index disagree, 0093 is what will say so.
 create unique index if not exists sessions_active_slot_uniq
   on public.sessions (provider_id, date, start_time)
   where status in ('pending','accepted');

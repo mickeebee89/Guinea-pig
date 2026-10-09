@@ -20650,11 +20650,27 @@ select count(*)                                            as rows_total,
 **Every count must be 0.** A non-zero one is its own finding before it is a
 blocker: a row that already evades both booking guards.
 
-⚠️ **`end_time` is the fourth column and is a weaker case.** Neither
+### ⚠⚠ CORRECTED 9 Oct 2026: `end_time` IS NOT THE WEAK ONE
+
+~~**`end_time` is the fourth column and is a weaker case.** Neither
 `sessions_active_slot_uniq` nor `slot_contention` uses it, so a NULL there evades
 nothing — but `availability`'s own unique index DOES include it, and 0090's header
 turns on exactly that difference. Worth the same treatment for consistency, not
-for safety.
+for safety.~~
+
+**The premise was true and the conclusion was false, because the survey was
+incomplete.** It named the two objects this audit knew about. `public.sessions`
+has a third: `reject_overlapping_session` (hand-run, item 199) tests
+`s.start_time < new.end_time and s.end_time > new.start_time`.
+
+⚠️ **A NULL `end_time` makes both of those comparisons NULL, so the overlap
+guard finds nothing and returns `new`.** A NULL end_time does not evade "nothing" —
+it evades the only guard in the database that addresses overlap at all, and it
+evades it silently. `end_time` belongs in the NOT NULL work for SAFETY, on the
+same footing as `date` and `start_time`.
+
+✅ **The lesson is this item's own rule, applied to itself:** "a finding is only
+as wide as the check." The check was two objects; the table has six triggers.
 
 **Also true, and it narrows the risk:** 0079 scoped `authenticated`'s UPDATE on
 `sessions` to `(status)` alone, so no client can null these columns after the
@@ -21129,6 +21145,336 @@ which, after 7 Oct, is a thing to do whenever a change touches how the site
 QUERIES rather than only what it renders.
 
 ---
+
+## 198. THE DATABASE REFUSES OVERLAP; THE FUNCTION THAT OFFERS SLOTS TESTS ONLY EXACT COLLISION
+### Found 9 Oct 2026 by Micky, from the full trigger list on `public.sessions` while preflighting 0093. ⚠️ LIVE — SAME HARM AS 192, DIFFERENT ROUTE. Measurement needed before it is sized.
+
+**Plainly:** a model can be shown a free slot, work through the wizard, and be
+refused at the last step — because the database refuses bookings that OVERLAP an
+existing one, while the function that decides which slots to show her only looks
+for an EXACT start-time collision.
+
+### The two tests, side by side
+
+| | tests | key |
+|---|---|---|
+| `slot_contention` (0090) | a session exists with the same `provider_id, date, start_time` | **exact start** |
+| `reject_overlapping_session` (hand-run) | `s.start_time < new.end_time and s.end_time > new.start_time` | **any overlap** |
+
+**So the set of slots the function calls free is strictly larger than the set the
+database will accept.** Existing booking 09:00–12:00; a 10:00–11:00 availability
+row has a different start_time, so `slot_contention` reports it free — and
+`reject_overlapping_session` refuses the insert with 23505.
+
+✅ **It surfaces rather than corrupting:** `apply/actions.ts:306` catches 23505
+with *"That slot has just been taken."* So the harm is **item 192's harm exactly** —
+a wasted journey, possibly after paying £4.99 — not a double booking. 0090 fixed
+one half of this and nobody knew the other half existed.
+
+### ⚠️ WHAT DECIDES WHETHER IT IS REACHABLE TODAY, AND IT IS ONE READ
+
+A session's times come from its availability row (0065, "the slot is the
+authority"), so one session spans exactly one slot. **Two sessions can therefore
+only overlap without sharing a start_time if two AVAILABILITY rows overlap.**
+`booking-overlap-guard.sql` says the editor's overlap was *"now blocked
+client-side"* — client-side only, so history can hold them and a crafted call can
+still make them.
+
+```sql
+select a.provider_id, a.date, a.start_time, a.end_time,
+       b.start_time as b_start, b.end_time as b_end
+  from public.availability a
+  join public.availability b
+    on a.provider_id = b.provider_id and a.date = b.date and a.id < b.id
+   and a.start_time < b.end_time and b.start_time < a.end_time
+ where a.date >= current_date
+ order by a.provider_id, a.date, a.start_time;
+```
+
+### ✅ MEASURED 9 Oct 2026: **ZERO ROWS.** 198 IS LATENT, NOT LIVE.
+
+No two future availability rows on the same provider and date overlap today, so
+there is currently no slot `slot_contention` can offer that the overlap trigger
+would refuse. **The divergence between the two tests is real; the data that would
+expose it does not exist.**
+
+⚠⚠ **AND NOTHING PREVENTS ONE TOMORROW.** `availability`'s own unique index is
+`(provider_id, date, start_time, end_time)` — **it includes end_time, so it
+PERMITS an overlapping pair** (09:00–12:00 and 10:00–11:00 differ in both columns
+and collide on neither). The editor blocks overlaps **client-side only**. So
+"zero" is a measurement of today, exactly as in item 196: *"measured zero" and
+"cannot happen" are different claims.*
+
+✅ **Which makes the ordering clear rather than urgent:** this is not a defect to
+chase, it is a reason the exclusion constraint in 0093's header is the right end
+state — and that is gated on item 193.
+
+⚠️ **AND "no rows" DOES NOT CLOSE IT**, for the same reason 196 is not closed by
+its zero: the availability overlap is blocked in the client, not in the database.
+Until there is a constraint, "none today" is a measurement, not a guarantee.
+
+### ✅ THE FIX, AND WHY IT IS NOT "MAKE slot_contention TEST OVERLAP"
+
+That is the obvious move and it is wrong on its own: it would make the function
+agree with the trigger, but the trigger is **not atomic** (item 199), so two
+concurrent applications on different availability rows would still both pass and
+produce a genuine overlapping double booking. **The function must follow whatever
+the database actually enforces** — 0090's own rule, stated in its header — so the
+order is: make overlap atomic first, then make the function test what that
+enforces.
+
+The atomic instrument is the exclusion constraint recorded in 0093's header, and
+it cannot land until 193 makes `start_time` and `end_time` NOT NULL. **So 193 is
+upstream of this**, which is the most useful thing this item establishes.
+
+## 199. 189's SWEEP ON `public.sessions`: SIX TRIGGERS, AND TWO OF THEM NO MIGRATION OWNS
+### Read 9 Oct 2026 from `pg_trigger` by Micky. ⚠️ THREE OF THE SIX HAD NEVER COME UP IN THIS AUDIT.
+
+**Plainly:** the table that holds every booking is guarded by six triggers. Two of
+them exist only because somebody pasted a file into the SQL editor, and nothing
+in the repo would have said so.
+
+| trigger | function | timing | owned by |
+|---|---|---|---|
+| `session_apply_gate` | `tg_session_apply_gate` | BEFORE INSERT | ✅ migration **0049** (both) |
+| `session_needs_consent_record` | `tg_session_needs_consent_record` | CONSTRAINT AFTER INSERT DEFERRED | ✅ migration **0086** (both) |
+| `session_price_snapshot` | `tg_session_price_snapshot` | BEFORE INSERT | ✅ migration **0052** (both) |
+| `session_slot_authority` | `tg_session_slot_authority` | BEFORE INSERT | ✅ trigger **0065**; function **0065 → 0086** |
+| `trg_enforce_session_status` | `enforce_session_status_transition` | BEFORE UPDATE OF status | ⚠️ **TRIGGER: hand-run only** (`session-status-guard.sql`). Function **0066 → 0070** |
+| `trg_reject_overlapping_session` | `reject_overlapping_session` | BEFORE INSERT OR UPDATE OF date, start_time, end_time, status, provider_id | ⚠⚠ **BOTH hand-run only** (`booking-overlap-guard.sql`) |
+
+### ⚠⚠ THE SPLIT IN ROW 5 IS THE INTERESTING ONE
+
+`enforce_session_status_transition` the FUNCTION is owned by 0070 and marked.
+`trg_enforce_session_status` the TRIGGER is created by no migration at all. **A
+function nothing fires enforces nothing** — so on a database where that file was
+never pasted, every status transition is unguarded while `pg_get_functiondef`
+shows a perfectly good guard. The same shape as item 193: the protection is the
+trigger, not the function.
+
+⚠️ **AND ITS MARKER IS STALE BY TWO MIGRATIONS.** `session-status-guard.sql:25`
+reads `-- MIGRATION-OWNS: enforce_session_status_transition 0066`, but **0070**
+redefined it. `check-handrun-drift.mjs` only checks that the name is marked, not
+that the number is current, so it passes while pointing the next reader at a
+version two migrations behind — the precise failure mode its own header warns
+about: *"a marker pointing the wrong way is worse than no marker."*
+
+### ⚠️ `reject_overlapping_session` IS NOT ATOMIC, AND THAT IS NOT A STYLE POINT
+
+It is a BEFORE trigger that runs a `SELECT`. **A SELECT cannot see an uncommitted
+row in a concurrent transaction**, so two simultaneous inserts both find nothing
+and both commit. Time-of-check/time-of-use, inside the database — the same class
+as item 192's client-side check, one layer down.
+
+✅ **What partly saves it is in a different object:** 0065's
+`tg_session_slot_authority` takes `select … for update` on the availability row, so
+two applications for the **same** row serialise. Two applications on **different**
+availability rows take different locks and do not. **The protection is a property
+of three objects together, two of which no migration owned.**
+
+### ⚠️ IT IS ALSO `security definer` WITH `search_path = public`
+
+No `pg_temp`, where the house style is `public, pg_temp`. Adopting it verbatim
+preserves that; changing it is a decision, not an adoption — which is why it is
+**0094, not part of 0093**.
+
+### ⚠⚠ AND THE REPO COPY IS NOT EVIDENCE OF THE LIVE BODY
+
+`supabase/booking-overlap-guard.sql` is what this item quotes. The trigger
+definition Micky read matches that file exactly, which is good evidence the file
+was run — **but the function BODY has not been read from the database.** That is
+item 123's whole lesson, and it is the first thing 0094's preflight must do:
+
+```sql
+select pg_get_functiondef('public.reject_overlapping_session()'::regprocedure);
+```
+
+## 200. A PROBE WHOSE NEGATIVE CANNOT BE TOLD FROM A MISNAMED LOOKUP
+### My fault, 9 Oct 2026, in 0093's preflight. Caught by Micky in one line.
+
+**Plainly:** my preflight reported a guard as MISSING when it was present and
+enabled, because I looked it up by the wrong name.
+
+Row (o) asked for `tgname = 'tg_session_slot_authority'`. **That is the
+FUNCTION's name**; the trigger is `session_slot_authority`. The row printed
+`(MISSING — see item 193)` for a trigger that is there, enabled, and deriving six
+columns of every booking.
+
+### ⚠⚠ WHY THIS IS A CLASS AND NOT A TYPO
+
+**`(MISSING)` meant two different things and the row could not distinguish
+them:** "this object is absent" and "I asked for the wrong name". The first is an
+emergency; the second is noise. On the row about the trigger that item 193 calls a
+single point of failure for three guards, that ambiguity is the worst possible
+place for it — and the convention in this schema makes it likely rather than
+unlucky, because every trigger here is named `X` and fires `tg_X`.
+
+✅ **It is item 188's sibling.** 188 is a check whose output cannot be told from a
+pass it did not earn. This is a probe whose NEGATIVE cannot be told from a
+mis-aimed question. Same remedy both times: **do not confirm a guess — enumerate
+what is there.**
+
+Row (o) now lists every trigger on the table with BOTH names and `tgenabled`:
+
+```sql
+select string_agg(t.tgname || '  →  ' || p.proname || '  [' || t.tgenabled || ']', chr(10)
+                  order by t.tgname)
+  from pg_trigger t join pg_proc p on p.oid = t.tgfoid
+ where t.tgrelid = to_regclass('public.sessions') and not t.tgisinternal;
+```
+
+✅ **And enumerating is what found item 199.** The fixed row returns six triggers;
+the guess would have returned one boolean about one name I already believed in.
+**The ambiguous row was not just wrong, it was narrower than the question** — and
+three of those six had never appeared in this audit.
+
+⚠️ **`tgenabled` is in the output deliberately.** `ALTER TABLE … DISABLE TRIGGER`
+leaves the trigger in `pg_trigger`, listed by every catalogue query, doing
+nothing. A presence check that ignores the flag is item 195's class again: the
+object exists and does not hold.
+
+## 201. ONE SECURITY DEFINER FUNCTION RESOLVES ITS TABLES THROUGH THE CALLER'S TEMP SCHEMA
+### Found 9 Oct 2026 by Micky, who also narrowed it twice before it was written down. ⚠️ SCOPE: 1 of 41, and **0 live callers / 1 dormant**. See [202] for the other forty.
+
+**Plainly:** `has_open_availability()` names two tables without saying which
+schema they are in, and runs with a `search_path` that does not mention
+`pg_temp`. **Postgres searches the caller's temporary-table schema FIRST for
+relations when `pg_temp` is not listed** — before `public`, before `pg_catalog`
+— so a caller who creates `pg_temp.availability` decides what the function reads.
+`anon`, `authenticated` and `service_role` all have TEMP on the database
+(measured).
+
+```sql
+-- schema-snapshot-2026-08-08.sql:234, SECURITY DEFINER, STABLE, search_path TO 'public'
+select exists (select 1 from availability a            -- ⚠️ unqualified
+  where a.provider_id = p_provider_id and a.date >= current_date
+    and not exists (select 1 from sessions s           -- ⚠️ unqualified
+      where s.availability_id = a.id and s.status in ('pending','accepted')))
+```
+
+⚠️ **That is the SNAPSHOT, which is a record of August. The live body has not
+been read** — `preflight0095.sql` row (c) is what reads it, and the fix is written
+from that, not from this quote. `taken_slots` sits four lines below it in the same
+file and IS qualified, which is the whole argument of [202] in one example.
+
+### ⚠⚠ WHAT IT DOES **NOT** LET A CALLER DO, AND THIS IS THE DECISIVE PART
+
+**`pg_temp` is SESSION-LOCAL.** A temporary schema belongs to one connection and
+is invisible to every other. So a caller who poisons the resolution **changes only
+the answers given to themselves, in their own session**. They cannot change what
+any other user sees, cannot persist anything, and cannot make the site tell a
+third party anything.
+
+And poisoning cannot extract data either. The function returns **one boolean**
+derived from the relations the caller substituted — so shadowing REPLACES what it
+reads rather than widening it. A temp view in place of the table would be
+evaluated with the **view owner's** rights, and the view owner is the caller, so
+SECURITY DEFINER buys them nothing. There is no write anywhere in the body for a
+trigger or default to hang off.
+
+✅ **So the honest statement is: a caller can lie to themselves.** Micky's first
+framing was a live bypass of the overlap guard, corrected by Micky before it was
+recorded; this is the second narrowing, and it goes the same way.
+
+### ✅ WHY IT IS STILL WORTH FIXING, STATED WITHOUT INFLATION
+
+1. **It is a latent escalation primitive.** The reasoning above depends on the
+   body having no write and leaking nothing. **That is a property of today's five
+   lines, not of the function.** Add one `insert`, or one read of a column the
+   caller cannot see, and the hazard becomes real — and whoever makes that edit
+   will not be thinking about `search_path`.
+2. **The cost of removing it is zero** and it is behaviour-preserving.
+
+### WHERE THE ANSWER IS USED — 0 LIVE / 1 DORMANT
+
+* **`mobile/src/app/(app)/provider/[id].tsx:205`** — the only caller in any of the
+  three apps. It sets `hasOpenSlots`, which shows or hides an availability hint on
+  the stylist screen. ⚠️ **MOBILE IS MOTHBALLED**, so this is dormant: a caller
+  could make **their own** app hide or show that hint, and nothing else.
+* **The live website does NOT use it.** `public_stylists.has_open_slots` is a
+  plain inline `exists` over **`public.availability`** — qualified, and in a view,
+  so no temp schema enters it. `public-web-views.sql:198` says so deliberately:
+  *"Plain EXISTS rather than has_open_availability()"*.
+
+⚠⚠ **BUT "NO CALLER IN OUR CODE" IS NOT "NOT REACHABLE".** The function lives in
+`public`, so PostgREST exposes it as an RPC to anyone holding the anon key if
+EXECUTE is granted to PUBLIC — which is the DEFAULT for a new function, and no
+migration in this repo revokes it. **Preflight row (g) is what settles that**, and
+it is the only row that could move this item's severity.
+
+### ✅ THE FIX IS BOTH HALVES, AND THAT IS NOT BELT-AND-BRACES FOR ITS OWN SAKE
+
+**Schema-qualify the two references AND add `pg_temp` last.** Either alone closes
+it today. Together, the next person editing the body cannot reintroduce it by
+writing an unqualified name — which is exactly how it got here, four lines from a
+function that does it correctly.
+
+⚠️ **IT IS A BODY CHANGE, SO IT GETS THE 0092 TREATMENT**: live `prosrc` read as
+hex, CR and LF counted for THIS object, exact before and after assertions. **CR
+counts vary per object and must never be carried over** — `set_consent_hash` was
+CR=0 opening `0a`; `reject_overlapping_session` is CR=15 opening `0d0a`.
+
+✅ **AND IT CAN BE PROVEN RATHER THAN ARGUED.** The migration captures the
+function's answer for every provider, replaces it, recomputes, and asserts the two
+are identical — so "behaviour-preserving" is a measurement, not a claim. Preflight
+rows (h) and (i) are the same question asked twice, once through the function and
+once in schema-qualified SQL inline; they must already agree.
+
+## 202. FORTY MORE SECURITY DEFINER FUNCTIONS HAVE NO `pg_temp` DEFENCE, AND NONE OF THEM NEEDS IT TODAY
+### Measured 9 Oct 2026 by Micky, scope narrowed by Micky. ⚠️ NOT A LIVE DEFECT — THE RISK IS A FUTURE EDIT. See [201] for the one that is real.
+
+**Plainly:** 41 of 78 SECURITY DEFINER functions in `public` have a `search_path`
+that does not name `pg_temp`. **Micky checked which of them actually name a
+relation without its schema, and found exactly one** — `has_open_availability`,
+item 201. Everything else matched only `v_*` PL/pgSQL variables from `select …
+into`, `join lateral` aliases, or words inside comments.
+
+### ⚠⚠ SO READ THE NUMBER 41 CORRECTLY, WHICH IS THE POINT OF THIS ITEM
+
+**A missing `pg_temp` is only exploitable through an UNQUALIFIED relation
+reference.** `reject_overlapping_session` reads `from public.sessions s` and
+`is_admin()` reads `from public.admins` — both qualified, so the temp schema never
+enters resolution and neither is exploitable at all.
+
+⚠️ **A later reader meeting "41 functions" will otherwise assume the worst about
+all of them**, and that assumption would cost real time on a list where forty
+entries are hygiene. **One live instance, forty defence-in-depth.** Micky called
+his own first framing too wide and corrected it; this item exists so the
+correction is what survives.
+
+### ✅ THE FIX IS ONE MIGRATION, AND IT NEVER TOUCHES A BODY
+
+**`alter function … set search_path = …` changes `proconfig` only.** `prosrc` is
+untouched, so there is no hex to read, no CR/LF to count, no literal to paste and
+no checksum exposure — none of the 0092 machinery applies. That is what makes
+forty objects a batch rather than forty migrations.
+
+⚠⚠ **BUT IT CANNOT WRITE A FIXED STRING, AND THIS IS THE TRAP THAT WOULD BREAK
+THE SITE.** `set_consent_hash` needs `search_path = public, extensions` because
+`digest()` lives ONLY in `extensions` (0092). A batch that set every function to
+`public, pg_temp` would silently remove `extensions` and **every
+`consent_documents` insert would start failing.** So the batch must APPEND
+`pg_temp` to each function's existing list, per function, and never replace it.
+
+✅ **Which makes it a loop over `pg_proc`, and a loop that alters forty objects
+needs the guard this audit keeps relearning:** predict the count, refuse if the
+live count differs, and print every function it is about to touch. A batch that
+quietly does thirty-nine or forty-one is a batch nobody can verify.
+
+**Estimate: ONE migration.** Roughly 60 lines: the count assertion, the loop, and
+a post-condition that every SECURITY DEFINER function in `public` now names
+`pg_temp`. ⚠️ It must EXCLUDE `has_open_availability`, which needs its own body
+change first (item 201) — or simply run after it, which is cheaper than an
+exclusion.
+
+### ⚠️ AND IT SHOULD RUN **BEFORE** 0094 ADOPTS `reject_overlapping_session`
+
+0094 adopts that function verbatim (item 199). If the batch runs first, 0094
+adopts an object whose `search_path` is already correct, and the adoption stays
+**verbatim** — no migration ever records a known-deficient posture as the thing it
+owns, and nothing has to be adopted twice. **Fixing first and adopting second is
+the same two migrations as adopting first and fixing second, with none of the
+tension.**
 
 ## Dated
 
