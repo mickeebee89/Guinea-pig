@@ -20012,6 +20012,36 @@ observations and would have been eight unconnected entries.
 before shipping; two were Micky's own probes. A class that only ever catches one
 author is a habit; one that catches both is a property of the work.
 
+### ⚠⚠ THE NINTH, 9 Oct 2026 — AND IT IS THE GENERAL RULE, SO IT GOES FIRST
+
+**A verify line must not state an outcome it did not measure. An `info` line is
+exactly where that slips through, because nothing is looking at it.**
+
+0094's line 4 read *"78 SECURITY DEFINER functions in public, all of them now
+naming pg_temp; 0094 changed 41 and skipped 37 that already did"*. It measured
+**one** number — the total — and derived everything else from the assumption that
+the migration had run: `v_n - 41` for the skipped count, and "all of them now
+naming pg_temp" as a flat assertion.
+
+⚠️ **Micky ran the block once BEFORE applying the migration.** Line 1 correctly
+reported FAIL and named all 41 functions. Line 4, **in the same output**, said the
+work was done. Two lines of one block contradicted each other and only one was
+honest — on a database where 0094 was not in `schema_migrations` and `is_admin`
+still read `search_path=public`.
+
+✅ **WHY IT IS WORSE THAN THE OTHER EIGHT.** Every one of those was a pass/fail
+line, so a reader scanning for `FAIL` would meet it. **This was an `info` line:
+no verdict, nothing to catch the eye, and a skim-for-failures reads it as
+established fact.** The label that exempted it from being a test also exempted it
+from being checked.
+
+✅ **THE REMEDY, STATED SO IT IS USABLE ON THE NEXT ONE.** Every number in a
+verify line comes from a `count(*)` in that block, and any line that describes a
+change says whether the change HAPPENED — for a migration, by reading
+`schema_migrations`. "0094 has NOT been applied" is a sentence a verify block
+must be able to print. **An info line earns its exemption from a verdict by
+reporting only what it measured, not by being labelled info.**
+
 ### The eight
 
 | # | the check | why its output was not evidence |
