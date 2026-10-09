@@ -21426,11 +21426,33 @@ recorded; this is the second narrowing, and it goes the same way.
   so no temp schema enters it. `public-web-views.sql:198` says so deliberately:
   *"Plain EXISTS rather than has_open_availability()"*.
 
-⚠⚠ **BUT "NO CALLER IN OUR CODE" IS NOT "NOT REACHABLE".** The function lives in
+### ✅ AND ROW (g) SETTLED IT — MEASURED 9 Oct 2026, NARROWING THIS A FOURTH TIME
+
+~~**"NO CALLER IN OUR CODE" IS NOT "NOT REACHABLE".** The function lives in
 `public`, so PostgREST exposes it as an RPC to anyone holding the anon key if
 EXECUTE is granted to PUBLIC — which is the DEFAULT for a new function, and no
-migration in this repo revokes it. **Preflight row (g) is what settles that**, and
-it is the only row that could move this item's severity.
+migration in this repo revokes it.~~
+
+```
+postgres=X/postgres   authenticated=X/postgres   service_role=X/postgres
+```
+
+**EXECUTE is granted to neither PUBLIC nor `anon`.** So PostgREST does not expose
+it to an anon key, and only a signed-in caller can reach it. Combined with
+`pg_temp` being session-local, **the worst case was always "a signed-in model can
+lie to herself, in her own session"**.
+
+⚠️ **MY NOTE SAID THE DEFAULT IS PUBLIC AND THAT NO MIGRATION REVOKES IT. THE
+DEFAULT WAS EVIDENTLY NOT LEFT IN PLACE HERE** — something revoked it that is not
+in the repo, which is itself worth knowing. The absence of a revoke in the
+migrations was treated as evidence the grant was wide; it was evidence of
+nothing. **"No migration does X" is not "X was never done" on a database that
+predates the migration framework.**
+
+### ⚠⚠ AND IT IS ONE OF FOUR ANSWERS TO THE SAME QUESTION — see [203]
+
+Fixing the key here (0095) removed one of four implementations of "is this slot
+bookable". The table and the live one are in item 203.
 
 ### ✅ THE FIX IS BOTH HALVES, AND THAT IS NOT BELT-AND-BRACES FOR ITS OWN SAKE
 
@@ -21505,6 +21527,124 @@ adopts an object whose `search_path` is already correct, and the adoption stays
 owns, and nothing has to be adopted twice. **Fixing first and adopting second is
 the same two migrations as adopting first and fixing second, with none of the
 tension.**
+
+## 203. FOUR ANSWERS TO "IS THIS SLOT BOOKABLE", AND THE ONE ON THE LIVE SITE IS WRONG
+### Found 9 Oct 2026 while answering item 201's "is it live on the website?". ⚠️ LIVE — THE ONLY LIVE MEMBER OF THE FAMILY. ⚠️ NOT FIXED: THE FIX NEEDS A MIGRATION, SEE BELOW.
+
+**Plainly:** on `/browse`, a stylist whose every slot is already contested by a
+pending or accepted booking can still show the **"Slots open"** badge — because
+the badge checks `availability.is_taken` and never asks whether a session holds
+the slot.
+
+### The four, and what each one tests
+
+| # | where | key | filters | status |
+|---|---|---|---|---|
+| 1 | `site/lib/queries/slots.ts` (item 186) | provider+date+start_time via `slot_contention` | **all four**: taken, contested, no_treatment, started | ✅ authoritative, drives the booking path |
+| 2 | `site/lib/queries/browse.ts:186` | — (never joins `sessions`) | `is_taken`, started | ⚠⚠ **LIVE AND WRONG** — this item |
+| 3 | `public_stylists.has_open_slots` | — (never joins `sessions`) | none | dead column — see [204] |
+| 4 | `has_open_availability()` | ~~`availability_id`~~ → delegates to `slot_contention` (0095) | contested only | 0 live / 1 dormant, key fixed |
+
+✅ **186 ALREADY BUILT THE OBJECT THAT ANSWERS THIS PROPERLY.** The defect is not
+that nobody knows how; it is that the badge predates the answer.
+
+### ⚠⚠ (1) WHAT THE OBVIOUS FIX COSTS, BECAUSE IT CHANGES WHAT KIND OF FIX IT IS
+
+**`loadSlots` is PER-PROVIDER and issues THREE queries each** — `availability`,
+`provider_treatments` and `slot_contention` — in one `Promise.all`. Browse today
+costs **ONE** `availability` query for the whole page (`.in('provider_id', ids)`,
+bounded to 60 days).
+
+⚠️ **So calling `loadSlots` per card is 3N requests where there is now 1.** For a
+page of twenty stylists that is sixty round trips to render a badge.
+
+⚠️ **AND N IS NOT TWENTY.** `getBrowseStylists` has **no limit**: it selects every
+`is_published` provider matching the filters and narrows client-side. Three
+providers today; the query does not bound itself.
+
+⚠️ **AND `slot_contention` HAS NO HORIZON.** It takes a provider id and nothing
+else, so it considers every future slot regardless of the 60-day window.
+`slots.ts:107` already says so: *"the bound does not reduce slot_contention's
+work … if row counts ever actually matter, the function needs a horizon argument
+too, and that is a migration."*
+
+**✅ SO: A CORRECT BADGE IS NOT FREE, AND IT IS NOT A ONE-LINER.** The honest
+statement of the trade is that it needs a migration first:
+
+1. **A multi-provider contention function** — `slot_contention` for a `uuid[]`,
+   or a variant returning `provider_id` alongside. One round trip for the page,
+   and it keeps the SECURITY DEFINER boundary that item 192 requires.
+   **← the shape to build.**
+2. **Inline it in browse's existing `availability` query.** ⚠️ **IMPOSSIBLE, and
+   the reason is item 192 itself:** the test needs to read `sessions`, and
+   `"participants can read sessions"` returns a model only her OWN rows —
+   silently, with no error. A client-side join cannot see other models'
+   bookings. **That is exactly the defect 0090 existed to fix, and reaching for
+   this option is how it comes back.**
+3. **Make `is_taken` authoritative** by writing it when a session is created.
+   ⚠️ Mentioned to be dismissed: 186 treats `taken` and `contested` as DISTINCT
+   blockers on purpose, and collapsing them changes the booking path to fix a
+   badge.
+
+⚠️ **DO NOT change `browse.ts` before the function exists.** Micky's instruction,
+9 Oct 2026, and it is the right order: a React change that calls `loadSlots` in a
+loop would make the page correct and slow, and the slowness would be blamed on
+browse rather than on the missing function.
+
+### How wrong is it today
+
+**Over-reporting only.** The badge can say "Slots open" when nothing is bookable;
+it cannot hide a stylist who has slots. And the badge is not the booking path —
+`slots.ts` governs what is actually offered, so a model who taps through meets a
+correct list. **The harm is a wasted tap, not a wasted payment**, which puts it
+well below item 192 in severity and above zero.
+
+⚠️ It also feeds the SORT: `browse.ts:245` orders by `hasOpenSlots` first, so a
+fully-booked stylist outranks a free one.
+
+## 204. A DEAD COLUMN IN A VIEW `anon` CAN READ IS A FIFTH ANSWER WAITING FOR A CALLER
+### Raised 9 Oct 2026 out of item 203's second question. ⚠️ NOT HARMFUL. ITS OWN ITEM BECAUSE ITS MECHANISM IS NOT 203's.
+
+**Plainly:** `public_stylists.has_open_slots` is computed by the view, readable by
+every logged-out visitor, and **rendered nowhere**.
+
+### Measured, 9 Oct 2026
+
+* **The only reference in `site/` is a TYPE DECLARATION** —
+  `site/lib/supabase-public.ts:63`. No component selects it.
+* **The view IS read live, by three paths**, each with an explicit column list
+  that excludes it: `FeaturedStylists.tsx:32`, `stylists.ts:62` and `:77` (the
+  category pages), `queries/shop.ts:241` (the publish check).
+* **Nothing outside `site/` reads it in code.** `mobile/` mentions
+  `public_stylists` only in a comment (`provider/[id].tsx:396`); `admin/` never
+  references it; no hand-run script selects from it.
+* ⚠️ **Its value over-reports by design:** a booked slot still counts as
+  availability — `public-web-views.sql:198` says so in as many words.
+
+### ✅ WHY IT IS ITS OWN ITEM AND NOT PART OF 203
+
+**⚠⚠ DROPPING IT IS NOT A MIGRATION.** `public-web-views.sql:99` carries
+`-- FILE-OWNS: public_stylists 0034` — the hand-run file is the LIVING definition
+of this view, and `check-handrun-drift`'s own header records why: 0063 refuses to
+run until that file has been re-run by hand, and 0064 depends on it too.
+
+So removing a column means **editing a hand-run file and re-running it**, with
+migrations that depend on the result — a different owner, a different mechanism
+and a different risk from 203's React change. **Grouping them would put a view
+rebuild inside a change about a badge**, which is how the admin app's `proxy.ts`
+nearly shipped a login wall onto the public website (CLAUDE.md).
+
+### Why it is worth doing at all
+
+It is **a fifth answer to item 203's question**, already computed, already
+exposed to `anon`, and wrong in the same direction as the badge. Harmless while
+nobody reads it; a trap for whoever reaches for the obvious-looking column while
+fixing 203. **The cheapest moment to delete an unused answer is before somebody
+uses it** — the same argument the `check-handrun-drift` widenings were made on.
+
+⚠️ **AND IT MUST NOT BE DROPPED WHILE 203 IS OPEN WITHOUT A NOTE**, or the next
+person fixing the badge will reinvent it. If 203's multi-provider function lands
+first, this column becomes unambiguously dead and the drop is trivial.
 
 ## Dated
 
