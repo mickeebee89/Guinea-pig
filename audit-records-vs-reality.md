@@ -18442,6 +18442,26 @@ observed" stands.
 ---
 
 ## 171. THE EMAIL LIST WAS CURATED ACROSS SIX MIGRATIONS. THE PUSH LIST DOES NOT EXIST.
+
+> ### ⏱ ⚠⚠ THIS IS THE ONE WITH A CLOCK ON IT. READ THIS LINE BEFORE THE LIST.
+>
+> **Of every parked item, this is the only one that reaches a real person's phone
+> rather than a column in a table.** `new_availability` sends one push per
+> favouriter with no gate of any kind — no batching, no quiet hours, no per-user
+> cap, no preference to switch it off.
+>
+> **It cannot bother anybody today because nobody has favourites.** That is the
+> whole of its current safety, and it is not a property of the code.
+>
+> ⚠️ **IT FIRES FOR THE FIRST TIME THE MOMENT A REAL STYLIST POSTS AVAILABILITY TO
+> A HANDFUL OF FAVOURITERS** — so the trigger is the arrival of ordinary success,
+> not a change anybody will make deliberately. Nothing will warn that the
+> conditions have arrived; the first notice will be the notifications themselves.
+>
+> ✅ **So it is not "another row on the parked list": it is the one to fix BEFORE
+> favourites get used, not after somebody complains.** Micky, 9 Oct 2026, stopping
+> work on the database: *"it is the only one I would not leave unsaid."*
+
 ### Found 6 Oct 2026, from 0086's verify reporting TWO pg_net queue rows for one notification.
 
 (f) reported `pg_net queue rows added by THIS transaction: 2`. Micky: *"Either
@@ -20092,6 +20112,25 @@ reporting only what it measured, not by being labelled info.**
 * A **repo read is a hypothesis about a live object.** Put it in the guard so the
   database refuses it if it is wrong, not in the header where it merely reads as
   true.
+* ⚠⚠ **Any `pg_catalog` column of type `"char"` needs `::text` before it touches
+  a string.** Without it Postgres cannot choose an operator and raises
+  `42725: operator is not unique: text || "char"` — and **the whole block fails
+  to run, having tested nothing**, which is the worst possible outcome for a
+  verify. The "char" columns this repo actually reads: `prokind`, `provolatile`,
+  `tgenabled`, `relkind`, `contype`, `confdeltype`, `polcmd`, `relpersistence`.
+  Booleans (`prosecdef`, the `indis*` family) need `::text` too, for the
+  different reason that there is no implicit boolean-to-text cast.
+
+  ⚠️ **SECOND INSTANCE, SAME POSITION, SAME CATCHER.** 0090's `confdeltype` failed
+  this way and Micky caught it in the same kind of row; `preflight0096`'s
+  `prokind` failed it again on 9 Oct 2026. Written down at the second instance
+  rather than the fifth, and a repo-wide sweep at that moment found a THIRD:
+  `tgenabled` uncast inside 0093's embedded preflight — **a row that had never
+  run, because it was written as a correction AFTER the preflight was run.**
+
+  ✅ **The sweep is the lesson, not the cast.** `grep` for those column names next
+  to `||` without `::text` takes one command and found every instance in the
+  repo. A convention nobody can check is a hope; this one is checkable.
 
 ---
 
@@ -21259,6 +21298,7 @@ upstream of this**, which is the most useful thing this item establishes.
 
 ## 199. 189's SWEEP ON `public.sessions`: SIX TRIGGERS, AND TWO OF THEM NO MIGRATION OWNS
 ### Read 9 Oct 2026 from `pg_trigger` by Micky. ⚠️ THREE OF THE SIX HAD NEVER COME UP IN THIS AUDIT.
+### ✅ CLOSED by 0096, 9 Oct 2026. The booking table has no unowned guard left.
 
 **Plainly:** the table that holds every booking is guarded by six triggers. Two of
 them exist only because somebody pasted a file into the SQL editor, and nothing
@@ -21272,6 +21312,56 @@ in the repo would have said so.
 | `session_slot_authority` | `tg_session_slot_authority` | BEFORE INSERT | ✅ trigger **0065**; function **0065 → 0086** |
 | `trg_enforce_session_status` | `enforce_session_status_transition` | BEFORE UPDATE OF status | ⚠️ **TRIGGER: hand-run only** (`session-status-guard.sql`). Function **0066 → 0070** |
 | `trg_reject_overlapping_session` | `reject_overlapping_session` | BEFORE INSERT OR UPDATE OF date, start_time, end_time, status, provider_id | ⚠⚠ **BOTH hand-run only** (`booking-overlap-guard.sql`) |
+
+### ✅ CLOSED 9 Oct 2026 BY 0096 — AND THE DELETION MATTERED MORE THAN THE ADOPTION
+
+0096 adopted `reject_overlapping_session` verbatim (567 chars, md5 54eb50f0…) plus
+both triggers, then **stripped the DDL out of `booking-overlap-guard.sql` and
+`session-status-guard.sql`**, keeping their prose. Six enabled triggers before,
+six after, asserted as a count rather than only by name.
+
+### ⚠⚠⚠ THE REVERSION THAT WAS LOADED AND WAITING, WHICH IS WHY THE STRIP IS THE POINT
+
+**`session-status-guard.sql` held a PRE-0070 copy of the status guard — no
+`not_held` branch, no CV004 — while its own header read "This file is safe to
+re-run."**
+
+`report_not_held` (0070) does `update public.sessions set … status = 'not_held'`.
+`trg_enforce_session_status` is BEFORE UPDATE OF status, fires for every role, and
+returns early only for admins and a null `auth.uid()`. So re-running that file
+would have made `new.status = 'not_held'` fall through to the `else` branch and
+raise **"Illegal status transition accepted -> not_held"** — **breaking the "it
+did not happen" feature, which is moderation evidence, on every single use.**
+
+✅ **Measured: the LIVE guard was 0070's** (not_held and CV004 present, 3182 chars,
+md5 be5d87a2…). **The database was correct; the file was the stale one.** Nothing
+was broken; the hazard was entirely that somebody trusted the file's promise.
+
+⚠️ **AND IT WAS MARKED.** `-- MIGRATION-OWNS: enforce_session_status_transition
+0066` sat above it while 0070 had redefined the function, and
+`check-handrun-drift` verified only that the NAME was marked — so it reported a
+DECLARED overlap, **which reads as checked**. The checker now verifies the NUMBER
+against the latest migration defining the name; that is what pointed at this, and
+it found exactly one stale marker across eight overlaps with no false positives.
+
+### ✅ WHY THE COPIES WERE DELETED RATHER THAN BROUGHT FORWARD
+
+**Bringing a copy forward only resets the clock on the failure that just
+happened.** `session-status-guard.sql` had been brought forward once already — its
+header says so, for 0066 — and went stale again at 0070 without anything noticing.
+
+The overlap file had drifted three ways without being dangerous: `search_path =
+public` where 0094 had appended `pg_temp`; a reformatted body; and ⚠️ **every
+explanatory comment already absent from the live object** — so the half-open
+overlap rule (*"09:00-10:00 and 10:00-11:00 do NOT clash"*) survived only in the
+file. That prose is kept, and is now also in 0096's `comment on function`, so it
+lives on the object instead of in a script nobody runs.
+
+⚠️ **THE COST, STATED: both files are now documentation, not runnable scripts.**
+A fresh database gets these objects from the migrations, which is the
+provisioning path anyway — but anyone who reached for these files to repair a
+database by hand will find prose and a pointer instead. That is the intended
+trade: **a second copy of a live object is the hazard.**
 
 ### ⚠⚠ THE SPLIT IN ROW 5 IS THE INTERESTING ONE
 

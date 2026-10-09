@@ -415,7 +415,7 @@ commit;
 --   -- part of the answer, not decoration.
 --   select 'o. all triggers', 'every trigger on sessions: name / function / enabled',
 --          coalesce((select string_agg(t.tgname || '  →  ' || p.proname
---                                        || '  [' || t.tgenabled || ']', chr(10) order by t.tgname)
+--                                        || '  [' || t.tgenabled::text || ']', chr(10) order by t.tgname)
 --                      from pg_trigger t join pg_proc p on p.oid = t.tgfoid
 --                     where t.tgrelid = to_regclass('public.sessions') and not t.tgisinternal),
 --                   '(NO TRIGGERS ON public.sessions — see item 193)')
@@ -434,6 +434,14 @@ commit;
 --            where table_schema = 'public' and table_name = 'sessions'
 --              and column_name in ('provider_id','date','start_time'))
 --    order by part;
+--
+--   ⚠⚠ AND THE REPLACEMENT ROW (o) ABOVE CARRIED A SECOND, UNTESTED FAULT until
+--   9 Oct 2026: `'[' || t.tgenabled || ']'` with no `::text`. `tgenabled` is
+--   "char", so that raises `42725: operator is not unique` and the WHOLE block
+--   fails having tested nothing. **It never ran in this form** — the fix was
+--   written after the preflight had already been run, so nothing exercised it.
+--   ⚠️ A CORRECTION WRITTEN AFTER THE RUN IS UNTESTED CODE, and this one sat in an
+--   applied migration. Found by the same fault failing in preflight0096.
 --
 --   ⚠️ AND ONE ROW OF THAT PREFLIGHT WAS WRONG IN A WAY WORTH KEEPING VISIBLE.
 --   Row (o) probed `tgname = 'tg_session_slot_authority'` — the FUNCTION's name;

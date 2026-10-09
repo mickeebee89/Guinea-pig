@@ -155,18 +155,58 @@ for (const f of readdirSync(MIG_DIR).filter(f => f.endsWith('.sql')).sort()) {
 
 let unmarked = 0
 let marked = 0
+let stale = 0
+let unnumbered = 0
 
 for (const f of readdirSync(SQL_DIR).filter(f => f.endsWith('.sql') && !IGNORE.test(f)).sort()) {
   const src = readFileSync(join(SQL_DIR, f), 'utf8')
   // ⚠️ THE MARKERS ARE READ FROM THE RAW SOURCE, because a marker IS a comment.
   // Only the DDL scan above strips them.
-  const markers = new Set(
-    [...src.matchAll(/--\s*(?:MIGRATION-OWNS|FILE-OWNS):\s*([a-z0-9_]+)/gi)].map(m => m[1].toLowerCase()),
+  //
+  // ⚠⚠ AND THE NUMBER IS CAPTURED, NOT JUST THE NAME. Until 9 Oct 2026 this only
+  // checked that a name was marked, so `MIGRATION-OWNS: x 0066` passed on a
+  // database where 0070 had redefined x — and it passed LOUDLY, as a declared
+  // overlap, which reads as checked.
+  //
+  // ⚠⚠ THAT WAS NOT A COSMETIC STALENESS. session-status-guard.sql cited 0066
+  // while 0070 had added an entire `not_held` branch, so the file's own promise
+  // — "This file is safe to re-run" — was false: re-running it would have removed
+  // the branch and made report_not_held raise "Illegal status transition" on
+  // every use. The number was the only thing in the repo that pointed at it.
+  const markers = new Map(
+    [...src.matchAll(/--\s*(?:MIGRATION-OWNS|FILE-OWNS):\s*([a-z0-9_]+)(?:\s+(\d{4}))?/gi)]
+      .map(m => [m[1].toLowerCase(), m[2] ?? null]),
   )
 
   for (const [name, kind] of [...objectsIn(src)].sort()) {
     if (!ownedBy.has(name)) continue
-    if (markers.has(name)) { marked++; continue }
+    if (markers.has(name)) {
+      // ⚠️ THE NUMBER MUST BE THE LATEST MIGRATION THAT DEFINES THE NAME — for
+      // MIGRATION-OWNS because that is the current definition, and for FILE-OWNS
+      // because it is the migration the file supersedes. A marker citing an
+      // earlier one sends the reader to a version that has since moved.
+      const cited = markers.get(name)
+      const latest = ownedBy.get(name).at(-1)
+      if (cited && cited !== latest) {
+        stale++
+        console.error(
+          `${basename(f)}: the marker for ${name} cites migration ${cited}, but ${latest} ` +
+          `also defines it.\n` +
+          `  A marker pointing at an older migration is WORSE than no marker, because it reads\n` +
+          `  as checked. Compare this file against ${latest} with ${
+            { view: 'pg_get_viewdef', index: 'pg_get_indexdef',
+              trigger: 'pg_get_triggerdef' }[kind] ?? 'pg_get_functiondef'
+          },\n` +
+          `  bring it forward or remove the copy, then update the marker to ${latest}.`,
+        )
+        continue
+      }
+      // A marker with no number at all is accepted: it still records a decision.
+      // ⚠️ It just cannot be verified, so it is counted apart from the rest.
+      if (!cited) unnumbered++
+      marked++
+      continue
+    }
     unmarked++
     const fn = name
     // ⚠️ ONE READ PER KIND. Naming the wrong one sends somebody to a query that
@@ -188,10 +228,10 @@ for (const f of readdirSync(SQL_DIR).filter(f => f.endsWith('.sql') && !IGNORE.t
   }
 }
 
-if (unmarked > 0) {
+if (unmarked > 0 || stale > 0) {
   console.error(
-    `\nhand-run drift — ${unmarked} undeclared overlap(s). These files are pasted in by hand, so\n` +
-    `nothing else will ever tell you they have gone stale.`,
+    `\nhand-run drift — ${unmarked} undeclared overlap(s) and ${stale} stale marker(s). These files\n` +
+    `are pasted in by hand, so nothing else will ever tell you they have gone stale.`,
   )
   process.exit(1)
 }
@@ -199,5 +239,9 @@ if (unmarked > 0) {
 console.log(
   `hand-run drift — ${marked} declared overlap(s) (functions, triggers, policies, views, indexes) ` +
   `between supabase/*.sql and migrations ` +
-  `(a marker records a decision; it does NOT prove the copy is current)`,
+  `(a marker records a decision, and its NUMBER is now checked against the latest migration ` +
+  `that defines the name — but it still does NOT prove the copy itself is current; only ` +
+  `pg_get_functiondef can)` +
+  (unnumbered > 0 ? `\n⚠️  ${unnumbered} marker(s) cite no migration number, so they record a ` +
+                    `decision nothing can verify.` : ''),
 )

@@ -22,83 +22,42 @@
 --   only trusted server code runs without a user JWT.
 -- ============================================================================
 
--- MIGRATION-OWNS: enforce_session_status_transition 0066
+-- ===========================================================================
+-- ⚠⚠⚠ THE DDL THAT WAS HERE WAS DANGEROUS AND IS NOW OWNED BY MIGRATIONS.
+-- DO NOT RE-ADD IT. DO NOT RECONSTRUCT IT FROM AN OLD COMMIT.
 --
--- ⚠️ 0066 IS THE CURRENT DEFINITION AND THIS FILE HAS BEEN BROUGHT FORWARD TO
--- MATCH IT. Two rules were added there and are reproduced below:
---   * 'expired' is terminal (the lapsed-application state, written only by the
---     scheduled job in 0067);
---   * an appointment that has already started can no longer be ACCEPTED,
---     though it can always be declined.
+--   `enforce_session_status_transition()`  →  owned by migration **0070**
+--   `trg_enforce_session_status`           →  adopted by migration **0096**
 --
--- Marking a file without correcting it is the item 123 fault: re-running a
--- marked-but-stale file silently reverts the migration it declares. This file
--- is safe to re-run.
+-- ⚠⚠ WHY "DANGEROUS" AND NOT JUST "STALE". The copy that was here was the
+-- pre-0070 version: **no `not_held` branch and no CV004.** Its own header said
+-- *"This file is safe to re-run."* It was not.
+--
+-- `report_not_held` (0070) does `update public.sessions set … status =
+-- 'not_held'`. The trigger is BEFORE UPDATE OF status, it fires for every role,
+-- and it returns early only for admins and a null `auth.uid()`. So re-running
+-- the deleted copy would have made `new.status = 'not_held'` fall through to the
+-- `else` branch and raise **"Illegal status transition accepted -> not_held"** —
+-- **breaking the "it did not happen" feature, which is moderation evidence, on
+-- every single use.**
+--
+-- ✅ The live guard was measured as 0070's on 9 Oct 2026 (not_held branch and
+-- CV004 present, 3182 chars, md5 be5d87a2…). **The database was correct; this
+-- file was the stale one.** 0096 records that measurement as a precondition, so
+-- the version this copy would have reverted is pinned in a migration rather than
+-- only in a deleted file.
+--
+-- ⚠️ IT WAS MARKED AND THE MARKER DID NOT SAVE IT. The line here read
+-- `-- MIGRATION-OWNS: enforce_session_status_transition 0066` while 0070 had
+-- redefined the function, and `check-handrun-drift` only verified that the NAME
+-- was marked — so it reported a DECLARED overlap, which reads as checked. The
+-- checker now verifies the NUMBER against the latest migration defining the
+-- name. That is what finally pointed at this.
+--
+-- To change the guard now, write a migration. To read the live one:
+--   select pg_get_functiondef('public.enforce_session_status_transition()'::regprocedure);
+-- ===========================================================================
 
-create or replace function public.enforce_session_status_transition()
-returns trigger
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  is_provider boolean;
-  is_model    boolean;
-begin
-  -- Only guard real status changes; non-status edits and no-ops pass through.
-  if new.status is not distinct from old.status then
-    return new;
-  end if;
-
-  -- Trusted server (service role / no JWT) and admins bypass the actor rules.
-  if auth.uid() is null or is_admin() then
-    return new;
-  end if;
-
-  -- Terminal states never change again. 'expired' joined them in 0066.
-  if old.status in ('completed', 'declined', 'cancelled', 'expired') then
-    raise exception 'Session is already % and cannot change', old.status
-      using errcode = '42501';
-  end if;
-
-  -- 0066: the appointment cannot be agreed to after it has begun. Europe/London
-  -- because date and start_time are UK wall clock and this database runs UTC.
-  if new.status = 'accepted'
-     and (old.date + old.start_time) at time zone 'Europe/London' <= now() then
-    raise exception 'That appointment has already started and can no longer be accepted.'
-      using errcode = 'CV003';
-  end if;
-
-  is_model := (auth.uid() = old.model_user_id);
-  is_provider := exists (
-    select 1 from public.providers p
-    where p.id = old.provider_id and p.user_id = auth.uid()
-  );
-
-  if new.status in ('accepted', 'declined', 'completed') then
-    if not is_provider then
-      raise exception 'Only the provider can set a session to %', new.status
-        using errcode = '42501';
-    end if;
-  elsif new.status = 'cancelled' then
-    if not (is_provider or is_model) then
-      raise exception 'Not a participant of this session'
-        using errcode = '42501';
-    end if;
-  else
-    raise exception 'Illegal status transition % -> %', old.status, new.status
-      using errcode = '42501';
-  end if;
-
-  return new;
-end;
-$$;
-
-drop trigger if exists trg_enforce_session_status on public.sessions;
-create trigger trg_enforce_session_status
-  before update of status on public.sessions
-  for each row
-  execute function public.enforce_session_status_transition();
 
 -- ============================================================================
 -- VERIFY

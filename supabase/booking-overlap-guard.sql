@@ -25,48 +25,54 @@
 --   completed/declined/cancelled booking frees the time again.
 -- ============================================================================
 
-create or replace function public.reject_overlapping_session()
-returns trigger
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  clash record;
-begin
-  -- Only active bookings hold a time. Cancelling/declining frees it.
-  if new.status not in ('pending', 'accepted') then
-    return new;
-  end if;
+-- ===========================================================================
+-- ⚠⚠ THE DDL THAT WAS HERE IS NOW OWNED BY MIGRATION 0096. DO NOT RE-ADD IT.
+--
+-- This file created `reject_overlapping_session()` and
+-- `trg_reject_overlapping_session`. Both were adopted VERBATIM by 0096 (item
+-- 199) and the copies were deleted on 9 Oct 2026, so there is no second
+-- definition left to drift.
+--
+-- ✅ WHY DELETED RATHER THAN BROUGHT FORWARD. The copy that was here had already
+-- gone stale in three ways without anything noticing:
+--
+--   1. `set search_path = public` — 0094 appended `pg_temp` (item 202), so the
+--      live object was `public, pg_temp` and this file would have reverted it.
+--   2. The live body was reformatted — the early return on one line, the `where`
+--      clause collapsed — so re-running this would have rewritten it.
+--   3. Every explanatory comment below was ALREADY absent from the live body.
+--
+-- ⚠️ ITS SIBLING, `session-status-guard.sql`, HAD DRIFTED FURTHER AND MORE
+-- DANGEROUSLY: it held a pre-0070 status guard with no `not_held` branch while
+-- promising "This file is safe to re-run". Re-running it would have made
+-- `report_not_held` raise "Illegal status transition" on every use. **Keeping a
+-- second copy of a live object is the hazard; bringing it forward only resets
+-- the clock.** Item 199.
+--
+-- To change either object now, write a migration. To read the live one:
+--   select pg_get_functiondef('public.reject_overlapping_session()'::regprocedure);
+-- ===========================================================================
 
-  select s.start_time, s.end_time
-    into clash
-  from public.sessions s
-  where s.provider_id = new.provider_id
-    and s.date        = new.date
-    and s.id         <> new.id
-    and s.status in ('pending', 'accepted')
-    -- Half-open overlap: 09:00-10:00 and 10:00-11:00 do NOT clash.
-    and s.start_time < new.end_time
-    and s.end_time   > new.start_time
-  limit 1;
-
-  if found then
-    raise exception
-      'This time overlaps an existing booking (%-%)', clash.start_time, clash.end_time
-      using errcode = '23505';
-  end if;
-
-  return new;
-end;
-$$;
-
-drop trigger if exists trg_reject_overlapping_session on public.sessions;
-create trigger trg_reject_overlapping_session
-  before insert or update of date, start_time, end_time, status, provider_id
-  on public.sessions
-  for each row
-  execute function public.reject_overlapping_session();
+-- ---------------------------------------------------------------------------
+-- ✅ THE RULE THE DELETED BODY NO LONGER EXPLAINS, KEPT BECAUSE THIS IS THE
+-- ONLY PLACE IT WAS EVER WRITTEN DOWN — and now also in 0096's
+-- `comment on function`, so it lives on the object itself.
+--
+--   * Active = pending|accepted. completed/declined/cancelled/expired free the
+--     time again, matching booking-guard.sql and taken_slots.
+--   * ⚠️ HALF-OPEN: `s.start_time < new.end_time and s.end_time > new.start_time`.
+--     So 09:00-10:00 and 10:00-11:00 do NOT clash, while 09:00-12:00 and
+--     10:00-11:00 do. Back-to-back bookings must keep working.
+--   * errcode 23505 deliberately, because the app already handles that code on
+--     the booking insert with "That time was just booked".
+--   * `s.id <> new.id` so an UPDATE does not clash with itself.
+--
+-- ⚠️ AND WHAT IT CANNOT DO, which the original WHY above does not say: it is a
+-- BEFORE trigger running a SELECT, so it CANNOT see an uncommitted row in a
+-- concurrent transaction. It is not a substitute for `sessions_active_slot_uniq`
+-- (0093), and 0090's claim that the index is "the only thing preventing a double
+-- booking" is corrected in 0093's header.
+-- ---------------------------------------------------------------------------
 
 -- ============================================================================
 -- PRE-CHECK — existing overlapping active bookings. The trigger only guards NEW
