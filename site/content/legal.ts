@@ -145,7 +145,7 @@ export const TERMS: LegalDoc = {
   title: 'Terms of Service',
   metaTitle: 'Terms of Service',
   metaDescription:
-    'The terms that govern your use of the Cavy website, waitlist and mobile app.',
+    'The terms that govern your use of the Cavy website and mobile app.',
   updated: '23 September 2026',
   sections: [
     {
@@ -167,7 +167,7 @@ export const TERMS: LegalDoc = {
           // Until 22 Sep 2026: "…the Cavy website, the Cavy waitlist, and the Cavy
           // mobile app (“the app”). By joining the waitlist or using the app, you
           // agree to these terms." (audit item 71)
-          text: 'These terms govern your use of the Cavy website and the Cavy mobile app (“the app”), and applied to the Cavy waitlist while it was open. By using the website or the app, you agree to these terms. If you don’t agree, please don’t use our services. Please also read our Privacy Policy and Community Guidelines, which form part of these terms.',
+          text: 'These terms govern your use of the Cavy website and the Cavy mobile app (“the app”). By using the website or the app, you agree to these terms. If you don’t agree, please don’t use our services. Please also read our Privacy Policy and Community Guidelines, which form part of these terms.',
         },
       ],
     },
@@ -193,26 +193,35 @@ export const TERMS: LegalDoc = {
     },
     {
       n: '5',
-      heading: 'The waitlist',
+      heading: 'Founding Provider accounts',
       blocks: [
-        // Rewritten 22 Sep 2026, when Cavy opened (audit item 71). Until then:
-        //   "Joining the waitlist means we'll email you when Cavy launches. …"
-        //   "The free early-stylist account offer is for people who join the
-        //    waitlist as a stylist before launch. Full details will be confirmed
-        //    at launch, and the offer may be subject to reasonable conditions
-        //    (for example, completing identity verification) and to availability."
-        // How it's honoured, as built: a sign-up link with ?ref=waitlist carries
-        // signup_source, and handle_new_auth_user grants Founding status to a
-        // stylist with a source while places remain (0011; cap 200). Founding
-        // settles the fee (provider_fee_settled, 0045). Mobile sign-up sends no
-        // source, hence "on the Cavy website".
+        // ⚠️ REWRITTEN 12 Oct 2026. This section was headed "The waitlist" and
+        // described a personal sign-up link that would be emailed to people who
+        // had joined it. THE WAITLIST BELONGED TO THE OLD GUINEA PIG APP BRAND
+        // AND WAS NEVER CARRIED OVER TO CAVY: its form, API route and rate
+        // limiter were removed on 22 Sep 2026 (audit item 71), its edge function
+        // was never deployed, the four real members were emailed, and
+        // public.waitlist was deleted — all 9 rows — on 12 Oct 2026. So no email
+        // was ever going to arrive, and a published promise of one was a
+        // commitment with nothing behind it.
+        //
+        // ⚠️ THE SECTION NUMBER IS LOAD-BEARING AND MUST NOT MOVE. /terms#5 is
+        // linked from the for-stylists CTA paragraph, and other anchors are
+        // linked from the paid screens. Rewritten in place for that reason
+        // rather than removed.
+        //
+        // What the text now describes is the mechanism as built: ?ref= on
+        // /sign-up carries signup_source, and handle_new_auth_user grants
+        // Founding status to a stylist with a non-empty source while places
+        // remain (0011; settings.founding_provider_cap = 200). Founding settles
+        // the fee (provider_fee_settled, 0045). ANY non-empty source qualifies —
+        // there is no code list — which is why the text says "an invite or
+        // referral link we or a partner have shared" rather than naming one.
+        // ⚠️ And typing the address by hand really does lose it, so that
+        // sentence is a statement of the gap, not a disclaimer.
         {
           type: 'p',
-          text: 'Before Cavy opened, people could join a waitlist to hear when it launched. Cavy is now open and the waitlist is closed. We’ll email everyone on it once to say so, and then delete the list, as our Privacy Policy explains. Joining it never created an account.',
-        },
-        {
-          type: 'p',
-          text: 'If you joined the waitlist as a stylist before launch, we promised you a free early-stylist account. We keep that promise like this: we’ll email you a personal sign-up link. Create your account through that link, on the Cavy website, and it becomes a Founding Provider account, which means you won’t pay the £14.99 verification fee. You’ll still need to complete the identity check before you can offer treatments (section 7). Founding places are limited (200 in total); if they have all gone by the time you sign up, your account will be a standard stylist account.',
+          text: 'A limited number of stylist accounts are Founding Provider accounts, which means you won’t pay the £14.99 verification fee. You get one by creating your account through an invite or referral link we or a partner have shared — the link carries a code that marks where you came from, and typing the address in by hand instead won’t do it. There are 200 Founding places in total; if they have all been taken by the time you sign up, your account will be a standard stylist account. You’ll still need to complete the identity check before you can offer treatments (section 7).',
         },
       ],
     },
@@ -381,7 +390,7 @@ export const PRIVACY: LegalDoc = {
   title: 'Privacy Policy',
   metaTitle: 'Privacy Policy',
   metaDescription:
-    'What Cavy does with your information across the website, the waitlist and the app, and your rights over it.',
+    'What Cavy does with your information across the website and the app, and your rights over it.',
   updated: '23 September 2026',
   sections: [
     {
@@ -400,7 +409,7 @@ export const PRIVACY: LegalDoc = {
       blocks: [
         {
           type: 'p',
-          text: 'This notice covers everything: the Cavy website, the waitlist, and the Cavy app. Where something applies to only one of them, we say so.',
+          text: 'This notice covers everything: the Cavy website and the Cavy app. Where something applies to only one of them, we say so.',
         },
       ],
     },
@@ -423,32 +432,44 @@ export const PRIVACY: LegalDoc = {
     },
     {
       n: '4',
-      heading: 'What we collect — website and waitlist',
+      heading: 'What we collect — the website',
       blocks: [
-        // Until 22 Sep 2026: "When you join the waitlist, we collect only what
-        // you enter in the form:". The waitlist closed when Cavy opened (audit
-        // item 71), so this now describes what is held for people who joined.
-        { type: 'p', text: 'Before Cavy opened, you could join a waitlist. It’s now closed. For people who joined it, we hold only what they entered in the form:' },
-        {
-          type: 'ul',
-          items: [
-            'Your first name',
-            'Your email address',
-            'Whether you’re a stylist or a model',
-            'Your city or area, if you choose to add it (optional)',
-            'Your TikTok or Instagram handle, if you choose to add it (optional)',
-            'A record that you gave consent, and the date you signed up',
-          ],
-        },
+        // ⚠⚠ REWRITTEN 12 Oct 2026, AND THIS SECTION WAS *ENTIRELY* WAITLIST:
+        // the heading, the opening line, the list of form fields and the closing
+        // sentence. public.waitlist was deleted on 12 Oct 2026 (9 rows), the
+        // waitlist was never a Cavy mechanism, and nothing about it is current.
+        //
+        // ⚠️ SO THERE WAS NOTHING LEFT TO TRIM — ONLY A NUMBER TO KEEP. Deleting
+        // the section would renumber §5–§14 and silently break the document's own
+        // cross-references to "section 7", "section 9" and "section 11" (two
+        // each), as well as any external link to /privacy#n. Rewritten in place.
+        //
+        // ⚠️ WHAT IT SAYS NOW IS NOT A THIRD DESCRIPTION OF COLLECTION. §5
+        // already lists everything held once you have an account — including the
+        // website-only postcode box — so this section covers the one thing §5 does
+        // not: visiting the public pages without an account. The page-visit
+        // counting is Vercel Web Analytics (SiteAnalytics.tsx), already described
+        // in §3 and §11, and it is named here rather than claiming nothing at all
+        // is collected, which was the untrue version of this claim before
+        // 22 Sep 2026 (audit item 67).
         {
           type: 'p',
-          text: 'That’s everything for the waitlist, and we delete it once we’ve told you Cavy is open (section 9). We don’t track you around the web.',
+          text: 'You can read our public pages — the home page, the treatment pages and our guides — without an account, and we don’t collect anything that identifies you when you do. We count page visits, without cookies and without identifying anyone, as section 11 explains. The next section lists what we hold once you create an account.',
         },
       ],
     },
     {
       n: '5',
-      heading: 'What we collect — the app',
+      // ⚠️ RETITLED 12 Oct 2026, from "What we collect — the app". The heading
+      // was wrong in a way that misdirects: this section describes the WHOLE
+      // product's collection — account, profile, bookings, payments, and
+      // explicitly the website-only postcode box ("On the website you can type a
+      // postcode instead") — so a reader looking for what the website holds was
+      // sent past it. §4 now covers visiting the public pages, so the split is
+      // website vs account, not website vs app.
+      // ⚠️ The BODY is unchanged and the number is unchanged; /privacy#5 and the
+      // document's own cross-references still resolve.
+      heading: 'What we collect — your account',
       blocks: [
         {
           type: 'p',
@@ -616,12 +637,14 @@ export const PRIVACY: LegalDoc = {
           type: 'p',
           text: 'Safety and agreement records: up to 6 years, then deleted automatically. This covers records that you agreed to a treatment, any moderation action taken, and reports made by or about you. These survive account deletion — a report about someone shouldn’t disappear because they left. What stays is your first name and a scrambled version of your email address that we cannot turn back into an address, not your photos, messages or contact details. Our Request account & data deletion page explains this in full.',
         },
-        {
-          type: 'p',
-          // Until 22 Sep 2026: "until Cavy launches and we've told you, or until
-          // you unsubscribe or ask us to delete them — whichever comes first."
-          text: 'Waitlist details: only long enough to tell you Cavy is open, then deleted. If you’d like them deleted sooner, unsubscribe or email us.',
-        },
+        // ⚠️ REMOVED 12 Oct 2026: 'Waitlist details: only long enough to tell
+        // you Cavy is open, then deleted. If you'd like them deleted sooner,
+        // unsubscribe or email us.' — a retention PROMISE, and the only one in
+        // this list that nothing enforced: run_retention_purge covers
+        // session_consents, moderation_actions and reports, never waitlist. The
+        // table has been deleted (12 Oct 2026, 9 rows) and the waitlist was never
+        // a Cavy mechanism, so the row is gone rather than reworded. ⚠️ Do not
+        // reinstate a retention line for a table that no longer exists.
         {
           type: 'p',
           // Added with notification emails (audit item 74). email_sends, 0047.
