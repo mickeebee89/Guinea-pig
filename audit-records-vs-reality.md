@@ -21736,6 +21736,307 @@ uses it** — the same argument the `check-handrun-drift` widenings were made on
 person fixing the badge will reinvent it. If 203's multi-provider function lands
 first, this column becomes unambiguously dead and the drop is trivial.
 
+## 205. A FREE ACCOUNT COULD ENUMERATE EVERY MODEL, AND I ARGUED FOR LEAVING IT
+### Found 11 Oct 2026 out of item 201's scoping. ✅ CLOSED 12 Oct 2026 by 0097.
+
+**Plainly:** `nearby_models(null, null, null)` returned up to **200 rows** of
+first name, last initial, profile photo, distance in miles, hair colour, hair
+type, hair length and skin tone — to **any account that could sign up for free
+and call it**.
+
+It filtered on two things: `role = 'model'` and the block pair. **Not suspension,
+not verification, not subscription.**
+
+### ⚠⚠ THE PART WORTH KEEPING IS THAT I GOT THE RECOMMENDATION WRONG
+
+On 11 Oct I measured this correctly and then recommended **deferring** it, on the
+grounds that reaching it needs somebody who knows the RPC exists.
+
+**On 11 and 12 Oct two real models signed up.** Micky, 12 Oct:
+
+> *"That was a fair call on Saturday when every model row was one of Micky's test
+> accounts. It is not a fair call today … The cost of the fix has not changed and
+> the thing being protected has."*
+
+✅ **"Nobody would think to call it" was never a control.** And the analysis was
+right while the recommendation was wrong, which is the harder failure to notice —
+there was nothing to correct in the finding, only in what I advised doing with it.
+
+⚠️ **THE GENERAL FORM: a deferral is a judgement about cost AND about what is
+behind the door. When the second changes, the deferral has to be re-made, and
+nothing prompts that.** I had the trigger in hand — Micky told me the two signups
+in the same conversation — and did not revisit it.
+
+### ✅ HOW IT CLOSED
+
+0097 revoked EXECUTE from `authenticated`, `anon` **and PUBLIC**. Live ACL after:
+`postgres=X/postgres service_role=X/postgres`.
+
+⚠️ **PUBLIC WAS REVOKED EVEN THOUGH NO ACLITEM NAMED IT**, because a NULL
+`proacl` is not "no grants" — it means the default is in force, and the default
+for a function is EXECUTE TO PUBLIC. The verify asserts the ACL is **explicit**
+separately from asserting no grantee holds EXECUTE: a revoke that left NULL
+behind would have made the function MORE reachable while the first line passed.
+
+⚠️ **THE LIVE ACL WAS THE AUTHORITY, NOT 0018.** `supabase/nearby-models-any.sql`
+had dropped, recreated and re-granted the function on 25 Sep 2026, so the repo
+was not the record.
+
+### ⚠⚠ MOBILE'S PROVIDER DASHBOARD CANNOT SHIP UNTIL THIS IS RESTORED
+
+`mobile/src/app/(app)/provider-dashboard.tsx:612` is the only caller in any of
+the three apps. **0 live / 1 dormant.** After 0097 it gets
+`42501 permission denied for function nearby_models` — which will present as the
+nearby-models list being empty, in a screen nobody has opened for months, with
+the cause six weeks upstream. Recorded in 0097's header, in its
+`comment on function`, and here, because that is the kind of thing found as a
+mystery.
+
+### ⚠⚠ AND IT REMOVED ENUMERATION, NOT ACCESS. DO NOT READ IT AS SOLVED.
+
+`site/lib/queries/salonFloor.ts` already said so, in the note explaining why the
+web built a shared wall instead of model browse: **`public_profiles` has no WHERE
+clause**, and `model_attributes` and `model_photos` both carry a PERMISSIVE
+SELECT policy `using (true)` to `authenticated`. **Any signed-in account can
+still read any model's profile if it knows the id**, via `/model/[id]` — name,
+photo, attributes, photos, reviews.
+
+✅ What changed is the shape of the ask: from *"here are 200, sorted by distance,
+filterable"* to *"if you know the id"*. salonFloor.ts calls that a real
+difference while the access rules are identical, and it is right. **It is not the
+same as closing it.**
+
+## 206. AN AUTO-UPDATABLE VIEW OWNED BY THE TABLE'S OWNER IS AN RLS BYPASS
+### Found 12 Oct 2026 by Micky, sweeping anon's grants. ⚠⚠ THE SEVEREST FINDING IN THIS AUDIT SO FAR. ✅ CLOSED the same day — views by hand, tables by 0098.
+
+**Plainly:** every signed-in account could have deleted any member's `users` row,
+and row-level security would not have been consulted.
+
+### The mechanism, and why "RLS is holding" did not cover it
+
+`public_profiles` is `select id, first_name, last_initial, profile_pic_url,
+instagram_handle from users` — one base table, no aggregates, so **auto-updatable**
+(confirmed from `information_schema.views.is_updatable`, not from reading the
+view text).
+
+* It has **no `security_invoker`**, so the base table is accessed as the **VIEW
+  OWNER**.
+* View owner is `postgres`. `users` owner is `postgres`.
+* `users` has `relforcerowsecurity = false`.
+
+⚠⚠ **A table's owner is exempt from its own policies unless FORCE ROW LEVEL
+SECURITY is set.** So a write through this view ran as the owner and **RLS on
+`users` was not weak — it was never consulted.**
+
+### ⚠⚠⚠ AND `authenticated` HELD THE SAME SET, WITH SELECT
+
+anon held `awdDxtm` — no SELECT, so it could only have managed an UNQUALIFIED
+write. **`authenticated` held `arwdDxtm`.** The `r` is the difference that
+matters: with SELECT, a `WHERE` clause is permitted, so a signed-in account could
+have issued
+
+```sql
+delete from public.public_profiles where id = '<any member>';
+```
+
+— a **targeted deletion of any user row**, cascading into the seven FKs that hang
+off `public.users`, two of which are moderation evidence. **That was live with two
+real models on the platform.**
+
+### ⚠⚠ HOW IT WAS NEARLY MISSED: A PROBE THAT FAILED SAFE
+
+The first probe ran `update public_profiles set first_name = first_name` and came
+back **refused, 42501** — which read as "the write path is guarded".
+
+**It was refused because of the probe.** The right-hand side READS the column, and
+PostgreSQL requires SELECT on any column whose value is read in an expression or
+condition. anon had no SELECT, so the probe tested its own requirement.
+
+⚠️ **A REFUSAL FOR THE WRONG REASON IS NOT A PASS**, and this one reported the
+SAFE answer — the worst direction for a wrong measurement to fail in, because
+nobody re-opens a question that came back clean. Micky caught it by asking why,
+rather than accepting it: *"we do not know why this is safe is not the same claim
+as this is safe."*
+
+✅ **The corrected probes used a literal and no WHERE clause**, so they needed no
+SELECT: `set first_name = 'probe'`, and — the sharpest — an **unqualified DELETE**,
+which reads no column at all.
+
+### ✅ HOW IT CLOSED
+
+* **The views, by hand, 12 Oct 2026:** both roles' write grants revoked on all
+  six. Verified: `public_categories` and `public_profiles` auto-updatable,
+  **neither now carrying a write for anon or authenticated**. The class is closed,
+  not just the `public_profiles` instance.
+* **The tables, by 0098:** anon's **145 write grants across 42 base tables** gone.
+  SELECT untouched at exactly 45; `authenticated` and `service_role` untouched.
+* 0098 **asserts the view state rather than re-issuing the revokes**, because
+  re-issuing would have the framework record a change it did not make.
+
+### ⚠⚠ WHAT IS STILL NOT ESTABLISHED, AND MUST NOT BE RECORDED AS SAFE
+
+**TRUNCATE sits outside RLS entirely.** It is not a row-filtered operation, so a
+policy has nothing to filter — which means the whole "no policy permits an anon
+write, so nothing is exploitable" argument **never covered it**, and TRUNCATE was
+granted on all 42 tables.
+
+⚠️ **The only thing that stood in front of it was that PostgREST exposes no
+TRUNCATE verb** — a property of the API layer, not the database. Not a grant, not
+a policy, not a constraint: the absence of a feature in software in front of the
+database.
+
+⚠️ **And its reachability was never measured.** `EXPLAIN` does not accept
+TRUNCATE, so the probe could not run; `has_table_privilege` said **true**. The
+grant existed and whether anything could reach it is **unproven, not disproven**.
+0098's verify line 6 says exactly that and **must be kept as written** — Micky,
+12 Oct: *"a later reader skimming six passes is precisely who it exists for."*
+
+### ⚠⚠ THE GAP THAT REMAINS: NOTHING WATCHES FOR A SEVENTH VIEW
+
+0098's verify asserts the **six views that exist today** are clean. **Nothing
+would catch a new auto-updatable view created with a write grant**, and CI has no
+database connection to check it (item 38). The sweep is kept here so it can be
+re-run by hand rather than reconstructed:
+
+```sql
+select c.relname, pg_get_userbyid(c.relowner) as owner,
+       coalesce((select 'invoker' from unnest(coalesce(c.reloptions,'{}'::text[])) o
+                  where o ilike 'security_invoker=true'), 'OWNER (bypasses RLS)') as runs_as,
+       coalesce((select v.is_updatable from information_schema.views v
+                  where v.table_schema='public' and v.table_name=c.relname),'?') as updatable,
+       case when has_table_privilege('anon', c.oid,'INSERT')
+              or has_table_privilege('anon', c.oid,'UPDATE')
+              or has_table_privilege('anon', c.oid,'DELETE')
+              or has_table_privilege('anon', c.oid,'TRUNCATE') then 'WRITE' else '-' end as anon,
+       case when has_table_privilege('authenticated', c.oid,'INSERT')
+              or has_table_privilege('authenticated', c.oid,'UPDATE')
+              or has_table_privilege('authenticated', c.oid,'DELETE')
+              or has_table_privilege('authenticated', c.oid,'TRUNCATE') then 'WRITE' else '-' end as auth
+  from pg_class c join pg_namespace n on n.oid = c.relnamespace
+ where n.nspname = 'public' and c.relkind = 'v'
+ order by c.relname;
+```
+
+✅ **Any row with `updatable=YES`, `runs_as=OWNER` and a `WRITE` is this finding,
+restored.**
+
+## 207. A COLUMN GRANT WHOSE SAFETY DEPENDS ON A COMMENT
+### Found 12 Oct 2026 in 0098's column-grant sweep. ⚠️ NOT A BYPASS TODAY — MEASURED, NOT INFERRED. Small revoke, not queued behind anything.
+
+**Plainly:** `authenticated` can write the four moderation columns on
+`status_posts` — `moderation_status`, `review_note`, `reviewed_at`,
+`reviewed_by` — and the only thing stopping a model approving her own post is
+that no policy lets her UPDATE the row at all.
+
+```sql
+-- 0031:209-212
+grant select, insert, delete on public.status_posts to authenticated;
+grant update (moderation_status, reviewed_at, reviewed_by, review_note)
+  on public.status_posts to authenticated;   -- narrowed further by RLS to admins
+```
+
+### ✅ MEASURED: NOT EXPLOITABLE. The probe wrote and rolled back.
+
+Acting as a **pinned** non-admin model (`b0df9c2f`), with the actor asserted
+first — `current_user = authenticated`, `auth.uid()` equal to her, `is_admin()`
+false:
+
+| probe | result |
+|---|---|
+| insert a post as her | succeeded; the screen set `moderation_status = approved` |
+| **self-approve by id** | **0 rows — RLS refused** |
+| unqualified update | 0 rows |
+| rewrite her own body | 0 rows |
+
+**The only PERMISSIVE UPDATE/ALL policy is `status_posts_admin_all`, `using
+(public.is_admin())`.** There is no author UPDATE policy, and 0072 says so on
+purpose:
+
+> *"Still NO author UPDATE policy, for 0031's reason: an approved post silently
+> becoming different text is the hole that makes moderation decorative."*
+
+### ⚠⚠ THE TRIGGER IS NOT THE DEFENCE, AND WOULD NOT REFUSE IT
+
+`screen_status_post()` is BEFORE INSERT OR UPDATE, but its **first statement** is
+`if tg_op = 'UPDATE' and new.body is not distinct from old.body then return new`.
+**An update touching only `moderation_status` returns early and the trigger sets
+nothing.** It is not a guard on this path — it simply would not run. (Changing the
+body WOULD make it overwrite the verdict, so a self-approval would have to leave
+the text alone to survive.)
+
+**So the defence is the absent policy and nothing else.**
+
+### ✅ AND NOTHING NEEDS THE GRANT
+
+`admin/app/moderation/page.tsx:429` approves through **`admin_decide_status_post`**,
+which is **SECURITY DEFINER** in both 0039 and 0077 — it runs as its owner and
+writes those columns itself. The grant's own comment, *"narrowed further by RLS to
+admins"*, describes a design those migrations replaced. **Nothing exercises it.**
+
+### ✅ WHY REVOKE IT ANYWAY
+
+**The only thing between this grant and a self-approval is the absence of a
+`status_posts_update_own` policy, and the only thing recording that the absence is
+deliberate is 0072's comment.** A grant whose safety depends on a comment is worth
+revoking even though nothing is wrong today — Micky, 12 Oct 2026.
+
+```sql
+revoke update (moderation_status, reviewed_at, reviewed_by, review_note)
+  on public.status_posts from authenticated;
+```
+
+⚠️ **COLUMN-LEVEL REVOKE, NOT TABLE-LEVEL.** A table-level revoke does not clear
+`pg_attribute.attacl`, so `revoke update on status_posts from authenticated` would
+report success and leave these standing. Verify with
+`has_any_column_privilege('authenticated', 'public.status_posts', 'UPDATE')`, not
+`has_table_privilege`.
+
+## 208. `authenticated`'s WRITE GRANTS HAVE NEVER BEEN SWEPT
+### Raised 12 Oct 2026 by Micky, out of 0098. ⚠️ 362 write grants. NOT the same severity as [206] — and the reason matters.
+
+**Plainly:** nobody has looked at what `authenticated` may write. 0088 narrowed
+table-wide UPDATE on `users` and `providers` specifically, **which implies the
+other 40 tables were never examined.**
+
+### ✅ WHY IT IS NOT [206]'s SEVERITY
+
+On a **table** there is no owner bypass: the write goes directly to the relation
+as `authenticated`, so **RLS applies normally**. [206] was severe precisely
+because the view ran as the owner and RLS was never consulted. That is a
+structural difference, not a judgement about how much to trust RLS.
+
+### ⚠⚠ THE MEASUREMENT THAT MATTERS, AND THE TRAP IN READING IT
+
+The useful question is not "how many" but **"how many have no PERMISSIVE policy
+behind them"** — a write grant no policy permits cannot be serving a feature,
+because RLS filters every attempt to zero rows. A grant WITH one is a live feature
+and must be left alone.
+
+⚠⚠ **BUT THE QUERY I WROTE FOR THAT CANNOT BE READ BOTH WAYS, AND THE NEXT
+READER WILL TRY.** It tested whether a PERMISSIVE policy **exists for the role** —
+not whether that policy would permit a **non-admin**. So `status_posts` was kept
+off the no-policy list by `status_posts_admin_all`, which is `using
+(public.is_admin())` and permits nobody else.
+
+✅ **THE RULE, STATED SO IT IS USABLE:** the no-policy list is a list of
+**definitely-dead** grants. **Its complement is NOT a list of live ones.** A grant
+can sit outside the list because an admin-only policy exists, in which case it is
+as dead as the ones inside it — [207] is exactly that case, and it was only found
+because Micky read the column-grant row rather than the summary.
+
+To turn the complement into something actionable, each policy's `USING` has to be
+read, which is a judgement per table and not a count.
+
+### What it would take
+
+A loop like 0098's, but it **cannot be driven by "anon holds it, revoke it"** —
+every candidate needs its policies read first. Per-table decisions, so probably
+several migrations or one with an explicit allow-list reviewed by hand.
+
+⚠️ **NOT STARTED, AND DELIBERATELY NOT FOLDED INTO 0098.** Mixing a 40-table
+change to the role every live feature uses into a migration about `anon` would
+have put the two at the same risk, and they are not.
+
 ## Dated
 
 * **8 October** — the diarised selfie-orphan check. The only unarranged end-to-end
