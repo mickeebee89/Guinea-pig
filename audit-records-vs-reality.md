@@ -22037,6 +22037,109 @@ several migrations or one with an explicit allow-list reviewed by hand.
 change to the role every live feature uses into a migration about `anon` would
 have put the two at the same risk, and they are not.
 
+## 209. A NAV ENTRY TO A PAGE THAT CAN NEVER HAVE CONTENT
+### Noticed 14 Oct 2026 while making the admin console usable on a phone. ⚠️ NOT A DEFECT — a decision nobody has made. Change nothing until it is made.
+
+**Plainly:** the admin sidebar has a **Waitlist** entry, and nothing can ever put
+a row in that table again.
+
+### Measured, 14 Oct 2026 — and the first version of this note was WRONG
+
+```
+public.waitlist   exists
+rows              0
+RLS               enabled
+policy            waitlist_select_admin — SELECT to authenticated using is_admin()
+```
+
+**The table is intact and the admin policy works**, so
+`admin/app/waitlist/page.tsx` reads it successfully and renders an empty list
+because the list is empty. ✅ Nothing is broken.
+
+⚠⚠ **I CLAIMED THE TABLE HAD BEEN DROPPED, FROM READING A COMMIT MESSAGE I HAD
+WRITTEN MYSELF.** `fdc074c` says *"public.waitlist has been deleted — all 9 rows,
+12 Oct 2026"*, which means the ROWS; I read it as the relation and reported that
+the page "will show an empty list ... rather than saying anything is wrong",
+implying a swallowed error that was not happening.
+
+✅ **This is [191]'s rule turned on its sharpest case: a claim in a message is not
+evidence, INCLUDING ONE I WROTE.** A commit message is a description of an
+intention at a moment; the database is the fact. Micky checked the database.
+**The cost of the shortcut was a reported defect that did not exist**, which
+spends attention exactly like a missed one does.
+
+### What actually survives
+
+The waitlist signup route, its API handler and its rate limiter went on
+22 Sep 2026 (item 71), and the edge function was never deployed. **So the table
+is write-only-by-nobody.** The nav entry leads somewhere that is correct, empty,
+and permanently empty.
+
+**That is a product decision, not a bug:** keep the entry as an archive of a
+thing that happened, or remove it so the console has no dead ends. ⚠️ On a phone
+the cost is higher than on a desktop — it is one of twelve items in a drawer you
+have to open deliberately.
+
+## 210. A QUERY THAT DOES NOT DESTRUCTURE `error` RENDERS BLANK INSTEAD OF FAILING
+### Found 14 Oct 2026 in `admin/app/waitlist/page.tsx`. ⚠️ LATENT — harmless today, and the reason it is harmless is a fact about the DATA, not about the code.
+
+**Plainly:** if a read fails, the page shows an empty list and says nothing.
+
+```ts
+// admin/app/waitlist/page.tsx:26-30
+let q = supabase.from('waitlist').select('*').order('created_at', { ascending: false })
+if (roleFilter !== 'all') q = q.eq('role', roleFilter)
+const { data } = await q          // ⚠️ error is not destructured
+if (stale()) return
+setRows((data as WaitlistRow[]) ?? [])
+```
+
+**On a PostgREST failure `data` is null**, `?? []` turns that into an empty
+array, and the page renders its empty state. **A dropped table, a changed
+policy, a network failure and a genuinely empty list all look identical.**
+
+✅ **It is not firing on the waitlist page today** — the table exists, the policy is intact and the
+list really is empty (item 209). ⚠️ **But that is the data being empty, not the
+code being right**, and the two are indistinguishable from the screen. If the
+table were ever dropped or `waitlist_select_admin` changed, this page would go
+on looking exactly as it does now.
+
+### ⚠⚠ AND IT IS NOT ONE PAGE. NINE READS ACROSS EIGHT, MEASURED.
+
+My first draft of this item called the waitlist page "an outlier" and said the
+rest of the console "does this properly". **Micky had just corrected me for
+asserting instead of reading, so I grepped before writing it down — and the
+claim was wrong in the other direction.**
+
+```
+app/audit-log/page.tsx:79      app/moderation/page.tsx:166
+app/categories/page.tsx:29     app/moderation/page.tsx:175
+app/messages/page.tsx:37       app/reports/page.tsx:180
+app/messages/page.tsx:52       app/users/page.tsx:99
+                               app/waitlist/page.tsx:28
+```
+
+**Nine `const { data } = await …` reads with no `error` beside them, in eight
+files.** Six of those files ALSO contain reads that do destructure `error`, so
+this is not a page-by-page habit — **it is mixed within single files**, which is
+why nobody has noticed it as a pattern.
+
+✅ **The remedy is still "match the call next door"** — e.g.
+`moderation/page.tsx:341` does `if (error) { setPostsError(…); return }` — but
+the scope is a sweep of nine, not a one-line fix to one page.
+
+### ⚠️ IT IS ITEM 27's CLASS, ON READS
+
+Item 27 is *"a refused write reports success"*, recorded in comments at
+`admin/app/categories/page.tsx:55` and `messages/page.tsx:66`. **This is the
+read-side twin**, and the console was never swept for it: a refused READ reports
+emptiness, which on a moderation queue or a reports list reads as "nothing to
+do".
+
+⚠⚠ **THAT IS WORSE HERE THAN ON THE WAITLIST.** An empty waitlist is true. An
+empty **moderation queue** or **reports** list, shown because a policy changed or
+a request failed, says there is nothing to moderate when there might be.
+
 ## Dated
 
 * **8 October** — the diarised selfie-orphan check. The only unarranged end-to-end
