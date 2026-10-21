@@ -49,6 +49,15 @@ export function SignUpForm({
         </p>
         {/* Was a <Link href="/sign-up"> — a link to the page it sits on, which
             soft-navigates without remounting, so it did nothing (item 62). */}
+        {/* ⚠⚠ SHOWN HERE, NOT AS A FORM ERROR. The account exists. This is the
+            one thing that did not happen, said once, with where to fix it —
+            and it is deliberately quiet styling rather than red, because
+            nothing is wrong with her account. */}
+        {state.postcodeNotice && (
+          <p className="mt-4 rounded-md bg-input-bg px-3 py-2 text-sm text-warm-dark">
+            {state.postcodeNotice}
+          </p>
+        )}
         <p className="mt-4 text-sm text-muted">Nothing arrived? Check spam, or send it again.</p>
         {/* startCoolingDown: signUp() has just sent the first email, and
             Supabase refuses another for 60 s from then. */}
@@ -118,6 +127,40 @@ export function SignUpForm({
                autoComplete="email" autoCapitalize="none" autoCorrect="off" spellCheck={false}
                className={`mt-1.5 ${field}`} />
         {err('email')}
+      </div>
+
+      {/* ⚠⚠ OPTIONAL, AND IT SAYS SO IN THE LABEL. Privacy §5 calls location
+          optional and withdrawable; a box that looked required here would make
+          that sentence false on the one screen where nobody has read it yet.
+          No `required`, and an empty value is the normal case.
+
+          ⚠️ NOT PostcodeField. That component calls saveMyPostcode, which starts
+          `await requireUser()` — and there is no session at signup: signUp()
+          returns a confirmation email, not a session. It would raise 42501.
+          Its Save/Remove buttons and its echo-back also need a round trip per
+          save, where this is one field in a form with one submit. What IS
+          shared is the input's attributes, which are the real knowledge about
+          postcode inputs: postal-code autocomplete, characters autocapitalise,
+          no autocorrect, no spellcheck, maxLength 8.
+
+          ⚠️ THE LOOKUP DOES NOT HAPPEN HERE. It happens server-side in the
+          action, before signUp, and it cannot stop the account being created.
+          See actions.ts. */}
+      <div>
+        <label className={label} htmlFor="postcode">
+          Postcode <span className="font-normal text-muted">(optional)</span>
+        </label>
+        <input id="postcode" name="postcode" maxLength={8}
+               placeholder="BR1 2AB"
+               autoComplete="postal-code"
+               autoCapitalize="characters"
+               autoCorrect="off"
+               spellCheck={false}
+               className={`mt-1.5 ${field} uppercase placeholder:normal-case`} />
+        <p className="mt-1 text-xs text-muted">
+          So we can show you people nearby and sort by distance. You can add, change or remove
+          it later in Settings — and skip it entirely for now.
+        </p>
       </div>
 
       <div>

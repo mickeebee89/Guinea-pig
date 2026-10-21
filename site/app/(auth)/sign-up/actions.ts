@@ -3,6 +3,7 @@
 import { headers } from 'next/headers'
 import { createSupabaseServerClient } from '@/lib/supabase-server'
 import { isRateLimited } from '@/lib/authErrors'
+import { lookupPostcode } from '@/lib/postcode'
 import {
   buildSignupMetadata,
   validateSignup,
@@ -14,6 +15,14 @@ export interface SignUpState {
   errors?: Record<string, string>
   /** Set when the account was created and a confirmation email is on its way. */
   sentTo?: string
+  /**
+   * Shown on the "check your email" screen when the postcode could not be
+   * used. ⚠⚠ IT IS NOT IN `errors` AND THAT IS THE WHOLE POINT: the account
+   * WAS created. Putting it in `errors` would render it as a form failure next
+   * to fields she can no longer edit, and she would reasonably conclude the
+   * signup had failed.
+   */
+  postcodeNotice?: string
 }
 
 /**
@@ -39,6 +48,7 @@ export async function signUp(_prev: SignUpState | null, formData: FormData): Pro
   const ageConfirmed = formData.get('ageConfirmed') === 'on'
   const termsAccepted = formData.get('termsAccepted') === 'on'
   const source = String(formData.get('source') ?? '') || null
+  const postcodeRaw = String(formData.get('postcode') ?? '').trim()
 
   if (role !== 'model' && role !== 'provider') {
     return { errors: { form: 'Choose whether you are signing up as a stylist or a model.' } }
@@ -66,6 +76,43 @@ export async function signUp(_prev: SignUpState | null, formData: FormData): Pro
   const h = await headers()
   const origin = h.get('origin') ?? `https://${h.get('host') ?? 'cavybeauty.com'}`
 
+  // ═══ THE POSTCODE LOOKUP — BEFORE signUp, AND IT CANNOT STOP IT ══════════
+  //
+  // ⚠⚠ OPTIONAL MEANS A FAILED LOOKUP STILL CREATES THE ACCOUNT. Every outcome
+  // below falls through to signUp; none of them returns early. The notice is
+  // carried on `postcodeNotice`, not `errors`.
+  //
+  // ⚠⚠ AND IT HAPPENS HERE RATHER THAN INSIDE THE SIGNUP TRANSACTION. The
+  // alternative was to write the postcode in handle_new_auth_user from the
+  // metadata — but anything that can raise in there reaches the user as
+  // "Database error saving new user", which names nothing and which this file
+  // already has forty lines of apology for. A ::double precision cast on
+  // crafted metadata would do exactly that. So the lookup runs out here, and
+  // the trigger never learns a postcode exists.
+  //
+  // ⚠️ ONLY THE POSTCODE GOES INTO THE METADATA — never the coordinate. See
+  // SignupMetadata.signup_postcode for why, and /auth/confirm for the write.
+  let signupPostcode: string | null = null
+  let postcodeNotice: string | undefined
+  if (postcodeRaw) {
+    const found = await lookupPostcode(postcodeRaw)
+    if (found.ok) {
+      signupPostcode = found.place.postcode
+    } else if (found.reason === 'unavailable') {
+      // ⚠️ OURS, NOT HERS. A service outage must never read as "your postcode
+      // is wrong" — the same distinction postcodeMessage() makes, reworded for
+      // a screen she cannot retype on.
+      postcodeNotice = 'We couldn’t check your postcode just now, so we haven’t saved it. You can add it in Settings once you’re signed in.'
+    } else {
+      // malformed | not_found | not_located — ONE WORDING FOR ALL THREE,
+      // deliberately. On the settings page "Check it and try again" is right
+      // because the box is still there; here the form is gone and the account
+      // is made, so there is nothing to retry and telling her to retry would
+      // send her looking for a box that no longer exists.
+      postcodeNotice = 'We couldn’t use that postcode, so we haven’t saved it. You can add it in Settings once you’re signed in.'
+    }
+  }
+
   const { error } = await supabase.auth.signUp({
     email,
     password,
@@ -77,6 +124,7 @@ export async function signUp(_prev: SignUpState | null, formData: FormData): Pro
         lastName,
         dateOfBirth: dateOfBirth!,
         source,
+        signupPostcode,
       }),
     },
   })
@@ -132,5 +180,5 @@ export async function signUp(_prev: SignUpState | null, formData: FormData): Pro
     }
   }
 
-  return { sentTo: email }
+  return { sentTo: email, postcodeNotice }
 }

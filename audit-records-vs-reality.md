@@ -22383,6 +22383,97 @@ the one edit that would make it unsafe.
 
 ⚠️ NOTHING LIKE THIS GOES ON `cavy`. Its builds stay unconditional.
 
+## 215. ITEM 56's FEE GUARD IS ROUTED AROUND BY `role = 'both'`, IN BOTH ADMIN PATHS
+### Found 21 Oct 2026 while scoping a 'both' account. ⚠️ LOW SEVERITY — needs admin access, and there is one admin. NOT FIXED in this piece of work.
+
+**Plainly:** an admin can verify a stylist without the £14.99 fee being settled,
+if that stylist's role is `'both'`.
+
+### Both paths, read live by Micky
+
+```sql
+-- _admin_apply_user_action, the Users/Providers "Verify" button (latest: 0062)
+if exists (select 1 from public.users u where u.id = p_user_id and u.role = 'provider')
+   and not public.provider_fee_settled(p_user_id) then
+  raise exception '…' using errcode = 'CV002';
+end if;
+
+-- admin_decide_verification, the verification queue's approve
+if p_decision = 'approved' and v_role = 'provider' and not public.provider_fee_settled(…)
+```
+
+**For `role = 'both'` the role test is false, the `and` short-circuits, and
+`is_verified = true` is written with no fee check.** ⚠️ I first reported this as
+one instance; Micky read both bodies and found it in **both** — the Verify
+button AND the queue's approve. 0062's own comment says the button exists so it
+cannot be *"the way round the queue's check"*, and this is a third way round
+both.
+
+⚠️ It also appears at 0045:357, 0058:299, 0059:175 and 0061:302, but those are
+successive redefinitions of the same function — **two live instances, not six.**
+
+### ✅ THE FIX, AND THE CODEBASE ALREADY CONTAINS THE RIGHT PATTERN
+
+**Key the guard off the `providers` row, not off `role = 'provider'`.**
+`_withdraw_stylist` (0044) does exactly that —
+`from public.providers p where p.is_published is true and public.is_suspended(p.user_id)`
+— which is why suspension withdraws a 'both' account's shop correctly while
+verification skips its fee. **One function got it right and two did not, and the
+difference is whether the question was asked of the role or of the shop.**
+
+A stylist IS someone with a providers row. The role column is a label on the
+account; the row is the fact.
+
+### Why it is not fixed now
+
+Exploiting it requires admin access and there is one admin. ⚠️ **And it is
+unreachable today for a second reason: no account has `role = 'both'`** — so
+creating the first one is what makes it reachable. Recorded before that account
+exists, which is the only useful time to record it.
+
+## 216. NOTHING STOPS A MODEL BOOKING HER OWN SHOP
+### Suspected 21 Oct 2026 while scoping 'both'; settled by Micky against the live database. ⚠️ UNREACHABLE until a 'both' account exists.
+
+**Plainly:** if one account is both a model and a stylist, nothing prevents it
+applying for its own slot.
+
+### Measured
+
+**No CHECK constraint on `sessions`, no policy and no trigger** compares
+`model_user_id` with the session's provider's `user_id`. I suspected it from
+reading `model_may_apply`, which tests only subscription and `is_verified`:
+
+```sql
+(coalesce(u.subscription_waived, false) or exists (… status in ('active','cancelling','past_due')))
+and coalesce(u.is_verified, false)
+```
+
+— **no role test and no self-reference test at all.** Micky confirmed there is
+nothing elsewhere either.
+
+⚠️ And none of the booking guards would object: `sessions_active_slot_uniq`
+keys on `(provider_id, date, start_time)`, `reject_overlapping_session` on the
+same provider and date, `tg_session_slot_authority` on the availability row.
+**A self-booking collides with none of them.**
+
+### Why it is not a defect today, and what it would cost
+
+`handle_new_auth_user` creates a providers row only for `role = 'provider'`, and
+signup cannot produce `'both'` at all — `sign-up/actions.ts:43` rejects anything
+but `model` or `provider`. **So no account can currently be both sides of a
+booking.**
+
+⚠️ For a TEST account this is arguably useful: it is the only way to walk both
+sides of a booking single-handed. **For a real 'both' account it is a hole** —
+a stylist could manufacture her own completed bookings and, through them, her own
+reviews, since `review.ts` authorises on being a participant.
+
+✅ **The cheap guard, if one is ever wanted:** refuse in the apply path where
+`providers.user_id = auth.uid()`, which is one `exists` in
+`tg_session_apply_gate` (0049) and would raise a named errcode rather than
+colliding with a constraint. Not written — deciding whether a test account
+needs the hole open is the first question, not the last.
+
 ## Dated
 
 * **8 October** — the diarised selfie-orphan check. The only unarranged end-to-end

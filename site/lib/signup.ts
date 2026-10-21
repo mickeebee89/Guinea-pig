@@ -36,6 +36,8 @@ export interface SignupInput {
   dateOfBirth: Date
   /** Where this signup came from — a cohort link, a campaign. Optional. */
   source?: string | null
+  /** Optional. Absent, or the canonical postcode a successful lookup returned. */
+  signupPostcode?: string | null
 }
 
 /** Shape written to auth.users.raw_user_meta_data. Mirrors what 0002 reads. */
@@ -49,7 +51,38 @@ export interface SignupMetadata {
   age_confirmed: true
   terms_accepted: true
   signup_source?: string
+  /**
+   * The postcode she typed at signup, in the canonical form OUR lookup
+   * returned. Optional, and absent unless the lookup succeeded.
+   *
+   * ⚠⚠ IT IS A CARRIER, NOT A STORE. Nothing reads it except
+   * `/auth/confirm`, which RE-LOOKS-IT-UP and writes through
+   * `set_my_postcode`. It is never trusted as a location.
+   *
+   * ⚠⚠ AND THE COORDINATE IS DELIBERATELY NOT HERE. Auth metadata is
+   * client-settable — anyone can call signUp directly with the anon key and
+   * put what they like in `options.data` — so a latitude carried here would be
+   * a coordinate from the browser, which
+   * `site/lib/queries/postcode-action.ts` exists to refuse: "being placed
+   * somewhere you are not is the exact failure this feature exists to remove."
+   * A forged POSTCODE only places someone at a real postcode they could have
+   * typed into the box anyway; a forged coordinate places them anywhere.
+   */
+  signup_postcode?: string
 }
+
+/**
+ * The longest a canonical UK postcode can be: 7 characters plus the one space,
+ * e.g. "AA9A 9AA". Used as the cap on `signup_postcode` in both directions.
+ *
+ * ⚠⚠ WHAT THE CAP DOES AND DOES NOT BUY. It bounds what WE write. It cannot
+ * bound what a crafted client writes — `raw_user_meta_data` is whatever was
+ * sent to GoTrue, and nothing on our side sees that call. What it guarantees is
+ * that the READ side never processes an unbounded string: `/auth/confirm`
+ * slices to this length before it looks at the value at all, so the worst case
+ * is 8 junk characters handed to a lookup that refuses them.
+ */
+export const POSTCODE_MAX = 8
 
 /** Full years, matching ageOn() in SignupScreen.tsx AND the trigger's
  *  extract(year from age(...)). All three must agree on a birthday boundary. */
@@ -87,6 +120,10 @@ export function buildSignupMetadata(input: SignupInput): SignupMetadata {
   }
   const source = input.source?.trim()
   if (source) meta.signup_source = source.slice(0, 120)
+  // ⚠️ Only ever set from a SUCCESSFUL lookup in the signup action, so this is
+  // already canonical; the cap is belt and braces on our own write.
+  const postcode = input.signupPostcode?.trim()
+  if (postcode) meta.signup_postcode = postcode.slice(0, POSTCODE_MAX)
   return meta
 }
 
