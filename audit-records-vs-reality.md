@@ -22474,6 +22474,168 @@ reviews, since `review.ts` authorises on being a participant.
 colliding with a constraint. Not written — deciding whether a test account
 needs the hole open is the first question, not the last.
 
+## 217. EVERY SIGNED-IN ACCOUNT CAN READ EVERY MODEL'S PHOTOS
+### Measured 21 Oct 2026 by Micky, probing as a real non-admin model. ⚠⚠ LIVE. Not a new defect — a DEFERRED one whose condition has expired. NOT CHANGED: the scope is proposed below and not yet decided.
+
+**Plainly:** anyone who has confirmed an email address can read every model
+photo on the platform. It reaches 11 photos today because only one account has
+uploaded any — **luck about the content, not a property of the policy.**
+
+### The measurement — as `shirin2006` (`aa2724a5`), a real model with no relationship to the subject
+
+| read | rows | |
+|---|---|---|
+| his `users` row | 0 | blocked |
+| his `providers` row | 0 | blocked |
+| all `providers` | 0 | blocked |
+| his `public_profiles` | **1** | ⚠️ first name, last initial, photo |
+| all `public_profiles` | **36** | ⚠️ every member enumerable |
+| his `model_photos` | **11** | ⚠⚠ VISIBLE |
+| all `model_photos` | **11** | from 1 user — his is the only account with any |
+
+✅ **RLS is doing its job everywhere else.** `users`, `providers` — all blocked.
+This is one policy, not a pattern of leaks.
+
+### The mechanism
+
+```
+model_photos_select_auth   PERMISSIVE  SELECT  authenticated  using (true)
+model_photos_hide_blocked  RESTRICTIVE SELECT  authenticated  (own OR is_admin() OR NOT is_blocked_pair(…))
+```
+
+0018 added the RESTRICTIVE blocked-pair rule, which is the **only** bound. The
+PERMISSIVE policy grants everything else.
+
+✅ **AND THE OWNER'S OWN ACCESS DOES NOT DEPEND ON IT.** PERMISSIVE policies OR
+together, and `model_photos` also carries `"Allow users to read own photos"`
+(`auth.uid() = user_id`) and `"users can manage own photos"` (FOR ALL, own row).
+**So `model_photos_select_auth` can be replaced without the owner losing her own
+gallery** — which is what makes narrowing a one-policy change rather than a
+rewrite.
+
+### ⚠⚠⚠ IT IS NOT A NEW FINDING. IT IS WRITTEN DOWN, WITH THE FIX, IN THE REPO.
+
+`supabase/storage-lockdown.sql:29-34`:
+
+> ```sql
+> -- 1. Allow authenticated users to sign (read) any model-photos object.
+> --    Parity with the model_photos TABLE policy (a stylist viewing a model may see
+> --    their gallery). POST-LAUNCH hardening: narrow to "stylist in an active booking".
+> create policy "model photos read"
+>   on storage.objects for select to authenticated
+>   using (bucket_id = 'model-photos');
+> ```
+
+⚠⚠ **"POST-LAUNCH hardening" was written when there were no real members.**
+There are now 36, including the real model this was measured as. **The
+deferral has outlived the condition it was deferred on, and nothing was watching
+for that** — the same shape as item 205, where I argued for leaving an
+enumeration open and the thing behind the door changed.
+
+### ⚠⚠ AND IT IS TWO POLICIES, NOT ONE. NARROWING ONE IS COSMETIC.
+
+* **The TABLE** (`model_photos`) decides who can list rows and read paths.
+* **The BUCKET** (`storage.objects`, `using (bucket_id = 'model-photos')`)
+  decides who can get a signed URL for a path.
+
+The bucket is **private** (storage-lockdown.sql made it so; it had been public),
+and `site/lib/queries/model.ts:176` mints `createSignedUrls(paths, 3600)`.
+⚠️ **So narrowing only the table stops enumeration while leaving anyone able to
+sign any path they obtain** — from an old message, a leaked link, or a legacy
+row. Both must move together, or the fix is a feeling.
+
+⚠️ **TWO THINGS I COULD NOT SETTLE FROM THE REPO.** (a) Whether
+storage-lockdown.sql's step-2 backfill of legacy `/object/public/…` rows to bare
+paths ever ran — `model.ts:79` still tolerates both shapes, which is evidence the
+code was written for the possibility, not that the data is clean. (b) The same
+file records `portfolio-photos` and `profile-pics` as **still PUBLIC**, "out of
+scope" — so a stylist's portfolio and every profile picture are fetchable by
+anyone with a URL, no login. Not this item, but the same class.
+
+### ✅ WHAT THE REAL REQUIREMENT IS — worked out from the call sites, not assumed
+
+**There is exactly ONE cross-user read of `model_photos` in the live product:**
+`site/lib/queries/model.ts:140`, behind `/model/[id]`.
+
+Everything else reads the caller's OWN rows: `apply.ts:91` and
+`my-profile.ts:123` are both `.eq('user_id', userId)` where that is
+`auth.uid()`; `profile/actions.ts` writes own rows. Mobile's
+`model/[id].tsx:227` is the same cross-user read and is mothballed.
+
+✅ **And `/model/[id]` is only ever linked from a relationship** —
+`bookings/page.tsx:44`, `dashboard/page.tsx:57`, `messages/page.tsx:47`,
+`ChatThread.tsx:147`, and her own `profile/page.tsx:62`. **No listing links to
+it.**
+
+⚠⚠ **AND THE CASE MICKY RAISED IS ALREADY COVERED, WHICH IS THE KEY FINDING.**
+*"A stylist deciding whether to accept an application may need to see her photos
+before any session exists."* — **an application IS a session.**
+`create_session_with_consent` writes a `sessions` row with status `'pending'`,
+so at the moment she is deciding, the row exists. There is no window in the live
+product where a stylist legitimately needs a model's photos and no session row
+joins them.
+
+### The options, and what breaks under each
+
+**OPTION A — session-scoped.** Replace `using (true)` with: own row, OR
+`is_admin()`, OR a session exists joining `auth.uid()`'s provider row to
+`model_photos.user_id`, in ANY status.
+
+* ✅ **No live flow breaks.** Pending (deciding), accepted (chat), completed
+  (review), cancelled/declined (history) all keep the row.
+* ⚠️ Must be a SECURITY DEFINER helper, like `is_blocked_pair` already is — a
+  bare subquery over `sessions` inside the policy evaluates `sessions`' own RLS
+  as the caller, which is slower and can recurse.
+* ⚠️ **Breaks mobile's model browse if mobile is ever revived**, because
+  `nearby_models` was built to show models with no session. That RPC's EXECUTE
+  is already revoked (0097), so it is dormant either way — but it would need
+  designing rather than un-revoking.
+
+**OPTION B — session-scoped AND active only** (`pending`/`accepted`).
+
+* ⚠⚠ **Breaks the review flow and the history view.** After completion the
+  stylist loses the photos she is reviewing against, and `/model/[id]` renders
+  an empty gallery for a member she has worked with. **Not recommended.**
+
+**OPTION C — leave it, and record the decision.**
+
+* ⚠️ Defensible only while the photo count is near zero, which is exactly the
+  argument that produced "POST-LAUNCH hardening" and then expired.
+
+✅ **RECOMMENDATION: Option A, in both places, as one migration.**
+
+### ⚠⚠ AND THREE TABLES MOVE TOGETHER, NOT ONE
+
+`/model/[id]` reads `model_photos`, `model_attributes` AND
+`model_photo_categories` in one `Promise.all`. All three carry
+`using (true)` PERMISSIVE SELECT for `authenticated`. Narrowing one leaves a
+page that renders photos it cannot group, or attributes for a gallery it cannot
+see.
+
+⚠️ **`model_photo_categories` is the awkward one, twice over:** `mpc_select` is
+its ONLY select policy, so narrowing it must ADD an own-row clause or the owner
+loses her own category names — and 0018 gave the blocked-pair RESTRICTIVE
+policy to `model_attributes` and `model_photos` but **NOT** to it, so a blocked
+stylist can still read a blocked model's category names today. A small
+inconsistency, and it is in the same three-table change.
+
+### `public_profiles` — smaller, and worth writing down rather than assuming
+
+`relacl` is `authenticated=rm`, and it returns **all 36 members**: id, first
+name, last initial, profile photo, instagram handle. The view has **no WHERE
+clause** (confirmed in 0098's preflight).
+
+✅ **This is what the view is for** — reviewer names, session participants, chat
+counterparties — and a first name plus an initial is what the schema snapshot
+calls "what a stranger is allowed to see".
+
+⚠️ **But "any member can enumerate the whole membership" is a sentence that
+should exist on purpose rather than by default.** It is the same primitive item
+205 revoked on `nearby_models`, at lower resolution: no distance, no appearance
+attributes, no filtering — but 36 rows of real people to anyone who signs up.
+**Recorded, not changed.** Narrowing it would need the same per-flow work as
+above, and the flows that read it are far wider.
+
 ## Dated
 
 * **8 October** — the diarised selfie-orphan check. The only unarranged end-to-end
