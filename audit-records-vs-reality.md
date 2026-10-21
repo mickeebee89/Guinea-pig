@@ -22475,7 +22475,7 @@ colliding with a constraint. Not written — deciding whether a test account
 needs the hole open is the first question, not the last.
 
 ## 217. EVERY SIGNED-IN ACCOUNT CAN READ EVERY MODEL'S PHOTOS
-### Measured 21 Oct 2026 by Micky, probing as a real non-admin model. ⚠⚠ LIVE. Not a new defect — a DEFERRED one whose condition has expired. NOT CHANGED: the scope is proposed below and not yet decided.
+### Measured 21 Oct 2026 by Micky, probing as a real non-admin model. Not a new defect — a DEFERRED one whose condition had expired. ✅ **CLOSED 21 Oct 2026** by migration 0100 and the matching storage policy. The finding below is kept as written; the closure is at the end.
 
 **Plainly:** anyone who has confirmed an email address can read every model
 photo on the platform. It reaches 11 photos today because only one account has
@@ -22658,6 +22658,65 @@ should exist on purpose rather than by default.** It is the same primitive item
 attributes, no filtering — but 36 rows of real people to anyone who signs up.
 **Recorded, not changed.** Narrowing it would need the same per-flow work as
 above, and the flows that read it are far wider.
+
+
+### ✅ CLOSED — 21 Oct 2026, both halves, verified from the catalogue
+
+**Option A as proposed**, applied in two places because one would have been
+cosmetic.
+
+**The tables** — migration `0100`, checksum `8e41f7cb…`. A new
+`public.shares_session_with_model(uuid)` (SQL, STABLE, SECURITY DEFINER,
+`search_path = public, pg_temp`, body 489 / `2aebf5aa…`) is true when a session
+in ANY status joins the viewer's `providers` row to the model. All three
+`using (true)` reads — `model_photos_select_auth`,
+`model_attributes_select_auth`, `mpc_select` — are replaced by `*_select_scoped`
+reading `own row OR is_admin() OR shares_session_with_model(user_id)`, and
+`model_photo_categories_hide_blocked` adds the blocked-pair rule 0018 gave the
+other two and not that one.
+
+**The bucket** — the `storage.objects` policy `"model photos read"`, narrowed
+to the same three escapes with the folder uuid as the key.
+
+⚠⚠ **AND THE BUCKET HALF COULD NOT BE A MIGRATION, WHICH IS A FACT ABOUT THIS
+DATABASE WORTH KEEPING.** `storage.objects` is owned by
+`supabase_storage_admin`; **`postgres` is not a member of it, nobody is, and
+`postgres` is not a superuser** (`rolsuper = false`, `bypassrls = true`). Policy
+DDL there fails from the SQL editor and from the connector alike. It was done
+through Storage → Policies. **Which also means `storage-lockdown.sql`'s own
+`create policy` cannot have been run the way that file reads** — it is a record
+of a decision, not a runnable script, and that was already true before this.
+
+### The end state, read as four real viewers
+
+| viewer | `model_photos` | `model_attributes` | `model_photo_categories` | storage objects |
+|---|---|---|---|---|
+| a model with no relationship | **0** | **0** | **0** | **0** |
+| the owner `b0df9c2f` | 11 | 1 | 2 | 12 |
+| an admin | 11 | 1 | 2 | 12 |
+| a provider sharing a session | 11 | 1 | 2 | 12 |
+
+Role set and `request.jwt.claim.sub` blanked first, because `auth.uid()` prefers
+that GUC and a stale value would have decided the answer.
+
+✅ **Also closed in passing:** `is_blocked_pair` carried the
+EXECUTE-TO-PUBLIC default (`=X`) on a SECURITY DEFINER function over `blocks` —
+a boolean oracle on who has blocked whom, and 0097's finding on a second
+function. Its ACL now matches `is_admin()` exactly.
+
+### ⚠⚠ AND ONE THING ABOUT HOW IT WAS VERIFIED, WHICH IS THE DURABLE PART
+
+0100 shipped with a VERIFY block. **Micky did not run it.** He read every one of
+its questions directly from `pg_policies`, `pg_proc` and `storage.objects`.
+
+✅ **That is better than running it, and the reason generalises.** A verify
+block answers in its own words: it decides what to compare, and its "PASS" is
+the block's opinion of the catalogue, not the catalogue. Items 188 and 0094
+record the failure mode from the inside — a line that stated an outcome it had
+not measured — and the fix there was to make the block honest. **This is the
+other fix: remove the block from the path.** The block is still worth writing,
+because it says what to look at; it is just not the thing that should be
+believed. See also [[exit-zero-is-not-the-check]].
 
 ## 218. PROFILE PICTURES ARE READABLE BY ANYONE, WITH NO LOGIN, FOR EVER
 ### Measured 21 Oct 2026 by Micky from the live data, with the bucket flags and the call-site count read in chat. ⚠⚠ LIVE. NOT FIXED and NO FIX PROPOSED — scoping it is a separate piece of work.

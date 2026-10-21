@@ -68,3 +68,61 @@ update storage.buckets set public = false where id = 'model-photos';
 --     application-photo viewer is a pending feature; it must sign via photoUrls.ts.
 --   * Decide separately whether portfolio-photos / profile-pics should be private.
 -- ============================================================================
+
+-- ============================================================================
+-- ⚠️⚠️ AMENDMENT, 21 Oct 2026 — "POST-LAUNCH HARDENING" IS NOW DUE. ITEM 217.
+--
+-- The policy above says, in its own comment, *POST-LAUNCH hardening: narrow to
+-- "stylist in an active booking"*. That was written when no real member
+-- existed. There are 35 now, and the deferral outlived its condition with
+-- nothing watching for it — the same shape as audit item 205.
+--
+-- Measured on 21 Oct 2026: a real model with no relationship to the owner read
+-- all 11 model_photos rows. Migration 0100 narrows the three TABLES
+-- (model_photos, model_attributes, model_photo_categories) to
+--   own row OR is_admin() OR public.shares_session_with_model(user_id)
+-- where that helper is true when a session in ANY status joins the viewer's
+-- providers row to the model. An application IS a session at 'pending', so a
+-- stylist deciding on one already qualifies; a completed one is what a review
+-- is written against.
+--
+-- ⚠️⚠️ THIS HALF CANNOT BE A MIGRATION, AND THAT IS MEASURED, NOT ASSUMED.
+-- storage.objects is owned by supabase_storage_admin. postgres is NOT a member
+-- of it, NOBODY is a member of it, and postgres is not a superuser
+-- (super=false, bypassrls=true) — so policy DDL here fails from the SQL editor
+-- and from the connector alike. Which also means the `create policy` above
+-- cannot have been run from the SQL editor; it was almost certainly made
+-- through Storage → Policies. This file is the record of a decision, not a
+-- runnable script, and that was already true before this amendment.
+--
+-- THE REPLACEMENT CLAUSE — apply in Storage → Policies → model-photos, editing
+-- "model photos read" (SELECT, role `authenticated`):
+--
+--   bucket_id = 'model-photos'
+--   and (
+--     (storage.foldername(name))[1] = auth.uid()::text
+--     or public.is_admin()
+--     or case
+--          when (storage.foldername(name))[1] ~*
+--               '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+--          then public.shares_session_with_model(((storage.foldername(name))[1])::uuid)
+--          else false
+--        end
+--   )
+--
+-- ⚠️ A `case`, NOT A BARE `AND`: the folder name is text and the helper takes
+-- uuid, and a cast of a non-uuid folder raises 22P02 — inside a policy that
+-- means the read FAILS rather than returning nothing. AND does not promise
+-- left-to-right evaluation; `case` does. All 12 objects carry a valid uuid
+-- folder today, so the regex guards a future object, not a present one.
+--
+-- ⚠️ WHETHER THIS IS LIVE IS NOT RECORDED HERE, DELIBERATELY. A status line in
+-- a file is the thing that goes stale. Row 8 of 0100's VERIFY block reads the
+-- live policy and reports STILL OPEN or NARROWED.
+--
+-- ⚠️ STILL OUT OF SCOPE, AND NOW WRITTEN UP RATHER THAN LEFT AS A FOLLOW-UP
+-- LINE: portfolio-photos and profile-pics are still public buckets. See audit
+-- item 218 for the full chain — it is larger than this one and is deliberately
+-- NOT folded into 0100, because making profile-pics private means signing a
+-- profile picture at every call site.
+-- ============================================================================
