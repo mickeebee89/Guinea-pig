@@ -22242,6 +22242,147 @@ red line. Item 28's shape: *"a signal you watch can hide a signal you don't."*
 its own header says it works, and the question is whether that is acceptable now
 there are real members on the platform.
 
+## 213. A RULE THAT IS EMITTED IS NOT A RULE THAT TAKES EFFECT
+### The admin sidebar was invisible on every desktop browser for a week. Found 21 Oct 2026 by Micky. ✅ FIXED the same day. ⚠⚠ THE VERIFICATION IS THE FINDING.
+
+**Plainly:** I shipped a mobile drawer that pushed the desktop sidebar off the
+left edge of the screen, reported the desktop as verified unchanged, and the
+check I verified it with could not have detected the fault.
+
+### The fault
+
+`admin/components/Sidebar.tsx` cancelled its mobile transform at `md` with
+`md:transform-none`. **Tailwind v4 implements translate utilities with the
+standalone `translate` property, not `transform`:**
+
+```css
+.-translate-x-full  { --tw-translate-x: -100%;
+                      translate: var(--tw-translate-x) var(--tw-translate-y); }
+.transform-none     { transform: none; }
+```
+
+So the override named a property the element never set. At >=768px the aside was
+still `translate: -100%` — **rendered, laid out, 224px wide, and entirely
+outside the viewport.** Measured in a browser: `left=-224, right=0`.
+
+✅ The fix is `md:translate-none`, which emits `translate: none` — the same
+property. ⚠️ NOT `md:translate-x-0`, which emits `translate: 0px 0px` and
+creates a containing block and a stacking context exactly as a zero transform
+would. The original comment was right to avoid that; only the property name was
+wrong.
+
+### ⚠⚠⚠ THE REAL FINDING: WHAT "VERIFIED FROM THE COMPILED CSS" MEANT
+
+The change was committed with this claim: *"The desktop path is unchanged …
+Verified from the compiled CSS, not from intent."* What was actually checked was
+that `.md\:transform-none` **had been emitted** into the stylesheet. It had.
+The output even printed the media-query block, with `transform:none` visible in
+it.
+
+⚠️ **IT COULD NOT HAVE FAILED.** The rule existed; the question was whether it
+cancelled anything, and nothing asked that. A check that confirms a rule is
+present, when the fault is that the rule addresses the wrong property, **passes
+on the broken code and the fixed code identically.**
+
+✅ **THE RULE, STATED SO IT IS USABLE:** "the rule is emitted" and "the rule
+takes effect" are separate claims. For CSS, effectiveness means **the override
+sets the same PROPERTY the base utility set** — which is readable from the
+declarations, not from the selector list.
+
+### ✅ HOW IT WAS VERIFIED THE SECOND TIME
+
+Two checks, both of which fail on the broken version:
+
+1. **Property comparison from the compiled CSS.** Parse each rule's declaration
+   block and compare property names. Output: `-translate-x-full` sets
+   `translate`; `md:transform-none` sets `transform` — **NO OVERLAP**;
+   `md:translate-none` sets `translate` — **EFFECTIVE**.
+2. **Computed style in a real browser.** A harness page loading the ACTUAL
+   compiled stylesheet with the ACTUAL class strings, read with
+   `getComputedStyle` at 360, 768 and 1280. ⚠️ **Including the broken class
+   string as a control**, because a verification that cannot reproduce the bug
+   proves nothing. Broken: `translate: -100%`, `left: -224`. Fixed:
+   `translate: none`, `left: 0`.
+
+⚠️ **AND IT NEEDED NO ADMIN SESSION**, which is why the first attempt settled
+for grepping: `proxy.ts` gates every admin route, so the real pages could not be
+opened without signing in as Micky. **The harness was available the whole time.**
+"I cannot open the app" was allowed to become "I will check the CSS instead"
+without noticing that the substitute answered a weaker question.
+
+### ⚠️ TWO THINGS MEASURED ALONG THE WAY, WORTH KEEPING
+
+* **`transition-transform` in v4 expands to `transform, translate, scale,
+  rotate`** (read from `getComputedStyle`). So the drawer animation works, and
+  the two admin toggle switches that pair `transition-transform` with
+  `translate-x-6` work for the same reason. ⚠️ Narrowing any of them to
+  `transition-[transform]` would silently stop the animation.
+* **A computed style read immediately after a viewport resize can catch a
+  transition in flight.** A reading taken straight after resizing reported
+  `translate: 0%` for the closed drawer; reloading at the target width gave
+  `-100%`. The first number was real and meant nothing.
+
+### The sweep
+
+Every `transform-*` / `translate-*` / `rotate-*` utility in `admin/` and `site/`
+was checked for the same cancel-mismatch shape. **Sidebar.tsx was the only
+instance**, and there is no reverse case (a `translate-*` cancelling a
+`transform-*`). The toggles at `moderation/page.tsx:574` and
+`settings/page.tsx:212` pair `transition-transform` with a conditional
+`translate-x-6` whose off state is an empty string — nothing is cancelled, so
+nothing can mismatch. `site/` needed no change.
+
+## 214. VERCEL'S "SKIP WHEN NO CHANGES TO THE ROOT DIRECTORY" DOES NOT SKIP
+### Measured 21 Oct 2026 on `cavy-admin`. ⚠️ A SETTING THAT IS ON AND DOES NOT DO WHAT ITS LABEL SAYS.
+
+**Plainly:** the built-in toggle is enabled and a push that touched nothing under
+the root directory built anyway.
+
+### The measurement
+
+Commit `5281e13` changed **exactly one file**: `audit-records-vs-reality.md`, at
+the repo root. Nothing under `admin/`, and nothing `admin/` depends on — it is
+self-contained (no imports leave it, no config references the repo root).
+
+**`cavy-admin` built it.** The setting *"Skip deployments when there are no
+changes to the root directory or its dependencies"* was on.
+
+### ⚠⚠ WHY THIS WAS BELIEVED RATHER THAN CHECKED
+
+An Ignored Build Step command was written for `cavy-admin` on 14 Oct and **never
+pasted in**, because the built-in toggle was said to already do the job. That was
+a reasonable reading of the label and it was wrong, and **nothing would have
+revealed it except a push that should have been skipped and was not.**
+
+⚠️ The cost is small and the shape is not: on the **hobby** plan
+`concurrentBuilds` is **1**, so an unnecessary `cavy-admin` build puts a push to
+the public site behind it in the queue.
+
+✅ **The command is going in**, and it does what the toggle claims to:
+
+```bash
+if [ -z "$VERCEL_GIT_PREVIOUS_SHA" ]; then exit 1; fi; git fetch --quiet --depth=100 origin "$VERCEL_GIT_PREVIOUS_SHA" 2>/dev/null; git cat-file -e "$VERCEL_GIT_PREVIOUS_SHA^{commit}" 2>/dev/null || exit 1; git diff --quiet "$VERCEL_GIT_PREVIOUS_SHA" HEAD -- ./
+```
+
+Vercel's rule is **exit 0 skips, exit 1 builds**, so every failure path above
+builds: no previous SHA (a branch's first deployment), a commit missing from a
+shallow clone, or `git diff` erroring. ⚠️ **It cannot skip a build it should
+have run** — the cost is an occasional unnecessary build, which is the right
+direction to fail.
+
+⚠️ IT USES `VERCEL_GIT_PREVIOUS_SHA`, NOT `HEAD^`. Vercel's own documented
+example is `git diff --quiet HEAD^ HEAD ./`, which compares only the LAST commit
+— so a push of several commits where only an earlier one touched `admin/` would
+skip a build it should have run. `VERCEL_GIT_PREVIOUS_SHA` is the last
+successfully deployed commit, so the window spans the whole push and keeps
+widening while builds are skipped.
+
+⚠️ **AND IT IS ONLY SAFE WHILE `admin/` IS SELF-CONTAINED.** If it ever imports
+from a shared folder, this command starts skipping builds it should run. That is
+the one edit that would make it unsafe.
+
+⚠️ NOTHING LIKE THIS GOES ON `cavy`. Its builds stay unconditional.
+
 ## Dated
 
 * **8 October** — the diarised selfie-orphan check. The only unarranged end-to-end

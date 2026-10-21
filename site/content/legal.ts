@@ -510,6 +510,15 @@ export const PRIVACY: LegalDoc = {
           // postcodes, and admin_district then supplies a COUNCIL area, which is
           // not a town. "The town" would be false on the fallback.
           //
+          // ⚠️ AND THE CLAUSE ENDS AT "are." ON PURPOSE. A first version ended
+          // "… without us holding a street address", which repeated the sentence
+          // that follows — "We never ask for or keep your street address." That
+          // sentence is the STRONGER of the two: it covers ASKING as well as
+          // keeping, where the clause only covered holding. So the clause was
+          // trimmed rather than the sentence dropped; the street-address point
+          // is made once, in the sentence that makes it properly. Micky,
+          // 21 Oct 2026.
+          //
           // Rewritten 23 Sep 2026 (audit item 90). It described asking the
           // device as the ONLY way we get a location, which was true for as
           // long as the website could not set one at all. The postcode box
@@ -518,7 +527,7 @@ export const PRIVACY: LegalDoc = {
           // it is a deliberate choice and not an implementation detail.
           // ~~'We ask your device for this and you can refuse; if you do, you
           // can still browse.'~~
-          text: 'Your location: your approximate location, so we can show you people nearby and sort results by distance. Stylists also have a location for their shop or working area. In the app we ask your device, and you can refuse. On the website you can type a postcode instead, and we keep the postcode, the point it refers to, and the name of the town or area it falls in — the postcode so you can check and change it, the point so we can work out distances, and the town or area so our team can see roughly where members are, without us holding a street address. We never ask for or keep your street address. It is optional either way, you can remove it at any time in Settings, and you can still browse without it.',
+          text: 'Your location: your approximate location, so we can show you people nearby and sort results by distance. Stylists also have a location for their shop or working area. In the app we ask your device, and you can refuse. On the website you can type a postcode instead, and we keep the postcode, the point it refers to, and the name of the town or area it falls in — the postcode so you can check and change it, the point so we can work out distances, and the town or area so our team can see roughly where members are. We never ask for or keep your street address. It is optional either way, you can remove it at any time in Settings, and you can still browse without it.',
         },
         {
           type: 'p',

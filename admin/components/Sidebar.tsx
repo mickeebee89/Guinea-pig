@@ -33,13 +33,40 @@ const nav = [
  *   fixed inset-y-0 left-0  →  md:static   (and inset has no effect when static)
  *   z-40                    →  left as-is; z-index does nothing on a STATIC box,
  *                              so there is no desktop stacking context to leak
- *   -translate-x-full       →  md:transform-none — NOT md:translate-x-0.
- *                              ⚠️ A zero transform still creates a containing
- *                              block and a stacking context; `transform-none`
- *                              removes it, so a `fixed` child inside any page
- *                              keeps behaving as it does today
+ *   -translate-x-full       →  md:translate-none — see the correction below
  *   transition-transform    →  md:transition-none, or the column would animate
  *                              on first paint at desktop width
+ *
+ * ⚠⚠⚠ CORRECTED 21 Oct 2026 — THIS BLOCK USED TO SAY `md:transform-none`, AND
+ * THAT MADE THE SIDEBAR INVISIBLE ON EVERY DESKTOP BROWSER FOR A WEEK.
+ *
+ * **Tailwind v4 implements translate utilities with the standalone `translate`
+ * property, not `transform`:**
+ *
+ *     .-translate-x-full  { --tw-translate-x: -100%;
+ *                           translate: var(--tw-translate-x) var(--tw-translate-y); }
+ *     .transform-none     { transform: none; }
+ *
+ * So `md:transform-none` cancelled a property this element never set. At
+ * >=768px the aside was still `translate: -100%` — rendered, laid out, and
+ * entirely outside the left edge of the viewport.
+ *
+ * ⚠⚠ AND THE VERIFICATION THAT PASSED IT IS THE REAL LESSON. The original
+ * change was reported as "verified from the compiled CSS, not from intent",
+ * on the strength of grepping that `.md\:transform-none` had been EMITTED. It
+ * had been. **What was never checked is whether it cancelled anything**, which
+ * it could not, because it names a different property from the one that was
+ * set. "The rule is emitted" and "the rule takes effect" are separate claims
+ * and only the second one matters. Micky compiled both rules and read them.
+ *
+ * ✅ `md:translate-none` emits `translate: none`, which removes the property —
+ * the same property `-translate-x-full` sets.
+ *
+ * ⚠️ DO NOT "SIMPLIFY" THIS TO md:translate-x-0. That emits
+ * `translate: 0px 0px`, and a zero translate creates a containing block and a
+ * stacking context exactly as a zero transform would — which would quietly
+ * change how a `fixed` child inside any admin page behaves. The original
+ * instinct here was right; only the property name was wrong.
  *
  * What is left at `md` and above is exactly today's box:
  * `w-56 min-h-screen flex flex-col shrink-0` with the same inline background.
@@ -137,7 +164,7 @@ export default function Sidebar() {
         className={`fixed inset-y-0 left-0 z-40 w-56 min-h-screen flex flex-col shrink-0
                     transition-transform duration-200 ease-out
                     ${open ? 'translate-x-0' : '-translate-x-full'}
-                    md:static md:transform-none md:transition-none`}
+                    md:static md:translate-none md:transition-none`}
         style={{ backgroundColor: '#3D2E2E' }}
       >
         <div className="px-5 py-6 border-b border-white/10">
