@@ -22140,6 +22140,108 @@ do".
 empty **moderation queue** or **reports** list, shown because a policy changed or
 a request failed, says there is nothing to moderate when there might be.
 
+## 211. `users.region` IS 'UK' ON EVERY ROW AND IS NOW DISPLAYED NOWHERE
+### Noticed 21 Oct 2026 while giving the admin console a Location column. ⚠️ DEAD COLUMN, DEAD MEANING. Item only — no change.
+
+**Plainly:** there is a column that says `'UK'` 35 times and nothing reads it.
+
+### Measured
+
+* `users.region` = `'UK'` on **all 35 rows**. `handle_new_auth_user` writes
+  `coalesce(new.raw_user_meta_data->>'region', 'UK')`, and
+  `site/lib/signup.ts:81` hardcodes `region: 'UK'` — so the metadata path can
+  never supply anything else either.
+* `providers.region` exists too, and until 21 Oct 2026 the admin Providers page
+  rendered it under a **"Region"** header: four rows of "UK".
+* ✅ **That column now shows a real location**, so `region` is displayed on no
+  admin screen and no public surface.
+
+### ⚠️ WHY IT IS NOT JUST UNUSED — IT IS MISLEADINGLY NAMED
+
+A column called `region` invites a future reader to filter or group by it. **It
+would return one group.** The honest name for what it holds is "the country this
+product operates in", which is a constant, not a per-row fact — and
+`postcodes.io` being UK-only (0054's header) is why it will stay one.
+
+⚠️ **AND THE REAL LOCATION DATA NOW SITS BESIDE IT**: `postcode`, `latitude`,
+`longitude`, `bua`, `admin_district`. A reader meeting `region` among those five
+would reasonably assume it is the coarsest of them rather than a constant.
+
+### What closing it would involve, and why it is not done today
+
+Dropping it reaches further than it looks: it is **NOT NULL with a default** and
+is written by `handle_new_auth_user` — which is 0002's body, brought forward
+through 0011. So it is a function change plus a column drop plus a types
+regeneration, to remove something that costs nothing but a wrong idea. ⚠️ It is
+also in `signup.ts`'s `SignupMetadata` and in the generated types in three apps.
+
+**Worth doing when something else touches that function. Not worth its own
+migration.**
+
+## 212. A FAILING CHECK NOBODY ACTED ON FOR NINE DAYS
+### Recorded 21 Oct 2026, after the fix. ⚠️ THE FIX IS NOT THE FINDING — the nine days are.
+
+**Plainly:** `npm run checks` failed in `site/` from 12 to 21 October and nothing
+happened.
+
+### What failed, and what it was telling us
+
+`check-types-freshness.mjs` exited 1 on every run: the generated types were
+stamped at **0091** while migrations **0092–0098** had been applied. It was right.
+Regenerating at 0099 closed it, and `npm run checks` now exits 0.
+
+⚠️ **AND IT WAS NOT SILENT.** I reported it on 12 Oct, stated it was
+pre-existing, confirmed it failed identically on HEAD, and **put it in a commit
+message**. It was read, understood, correctly diagnosed — and left.
+
+### ⚠⚠ THIS IS THE WORKFLOWS' OWN WARNING, HAPPENING
+
+All three workflow headers say it, verbatim:
+
+> ⚠️ **THIS IS A SIGNAL, NOT A GATE.**
+> It runs AFTER the commit is on main. Nothing here can stop a bad commit
+> landing; it can only tell you one did. …
+> **Do not let "CI is wired" get read later as "commits are checked".**
+
+✅ **The design is a considered choice and is not the defect.** Commit-direct-to-
+main suits a solo project, and branch protection to enforce a check that already
+arrives as a notification would change how the work is done to buy nothing.
+
+⚠⚠ **The defect is what happens to a signal with nobody obliged to clear it.**
+A gate blocks until it is dealt with. A signal is dealt with when somebody
+chooses to, and "somebody" is one person who was closing seven migrations that
+week. **Nine days is not negligence; it is the designed behaviour of a signal
+under load.**
+
+### ⚠️ WHY THIS ONE WAS SAFE AND THAT IS NOT REASSURING
+
+Stale types are a type-check against yesterday's schema — they cannot corrupt
+data, and `next build` stayed green throughout, so **every deploy in those nine
+days was fine**. ⚠️ **That is luck about WHICH check failed, not a property of
+the arrangement.** `check-admin-guards`, `check-handrun-drift` or
+`check-migration-tails` failing for nine days would mean something very
+different, and they fail into the same silence.
+
+### ⚠️ AND IT MASKED THE CHECKS BEHIND IT
+
+`npm run checks` is `&&`-chained. `check-types-freshness` runs **last**, so this
+particular failure masked nothing — but a failure in the FIRST link would have
+meant nine days with **none** of the ten later checkers running, reported as one
+red line. Item 28's shape: *"a signal you watch can hide a signal you don't."*
+
+### What would change it, stated as options rather than a recommendation
+
+1. **Make freshness non-blocking and move it last** — it is already last; make
+   it a warning so it cannot mask anything. ⚠️ Costs the only thing that noticed.
+2. **Split the chain** so every checker runs and reports independently.
+   A red line then names how many failed, not just that one did.
+3. **Accept it and close the loop by hand**, with a standing habit rather than a
+   mechanism. ⚠️ Which is what was in place, and it is what produced nine days.
+
+⚠️ **NOT DECIDED.** The honest summary is that the arrangement worked exactly as
+its own header says it works, and the question is whether that is acceptable now
+there are real members on the platform.
+
 ## Dated
 
 * **8 October** — the diarised selfie-orphan check. The only unarranged end-to-end

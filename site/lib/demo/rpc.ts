@@ -198,6 +198,12 @@ export function demoRpc(name: string, args: Row, store: DemoStore, user: DemoUse
         u.postcode = args.p_postcode ?? null
         u.latitude = args.p_lat ?? null
         u.longitude = args.p_lng ?? null
+        // ⚠️ MIRRORS 0099's `case when p_postcode is null then null`: the town
+        // cannot outlive the postcode. Clearing nulls both whatever is passed,
+        // so the demo cannot show a town with no postcode behind it — a state
+        // the real function makes impossible. Item 197.
+        u.admin_district = args.p_postcode == null ? null : (args.p_district ?? null)
+        u.bua            = args.p_postcode == null ? null : (args.p_bua ?? null)
       }
       for (const prov of store.tables.providers.filter(r => r.user_id === user.id)) {
         prov.latitude = args.p_lat ?? null

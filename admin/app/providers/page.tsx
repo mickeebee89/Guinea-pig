@@ -6,12 +6,69 @@ import { useLoader } from '@/lib/useLoader'
 import { adminErrorText, shopsNote } from '@/lib/adminActions'
 import type { ActionResult } from '@/lib/adminActions'
 
+/**
+ * What the Location column shows for one shop, and where it came from.
+ *
+ * ⚠️ FLATTENED OUT OF A THREE-DEEP JSX TERNARY. The first version nested
+ * `?:` inside `?:` inside `??`, which type-checked and was genuinely hard to
+ * verify by eye — and the whole point of this column is that a reader can tell
+ * which source an answer came from.
+ *
+ * ⚠⚠ location_text FIRST because it is the stylist's OWN words for where she
+ * works, which is what a reviewer is deciding about. The owner's town and
+ * postcode are a FALLBACK with a different meaning: derived from a postcode she
+ * set for distance maths, not a statement about the shop. The tooltip says so
+ * on every fallback, so the two are never read as the same claim.
+ */
+function locationCell(p: Provider) {
+  const own = p.location_text?.trim()
+  if (own) return own
+
+  // ⚠️ `p.user?.` throughout: a joined row hidden by RLS comes back NULL, not
+  // as an error — see the note at the Promise.all below.
+  const town = p.user?.bua ?? p.user?.admin_district
+  if (town) {
+    return (
+      <span title="From the owner's postcode, not the shop's own description of its area.">
+        {town}
+      </span>
+    )
+  }
+
+  // ⚠️ REACHABLE, NOT DEFENSIVE: 0099 refuses a postcode with no COORDINATE
+  // but allows one with no town, so a row can hold a postcode and neither name.
+  // Falling through to "Not set" here would hide a postcode we have.
+  if (p.user?.postcode) {
+    return (
+      <span className="font-mono text-xs"
+            title="From the owner's postcode. No town was returned for it, and the shop has no description of its own.">
+        {p.user.postcode}
+      </span>
+    )
+  }
+
+  return (
+    <span className="text-[#3D2E2E]/40 text-xs italic"
+          title="This shop has no description of its area, and its owner has set no postcode. Both are optional.">
+      Not set
+    </span>
+  )
+}
+
 interface Provider {
   id: string
   shop_handle: string
   region: string
   location_text: string | null
-  user: { id: string; first_name: string; last_initial: string | null; email: string; is_verified: boolean; fraud_flagged: boolean }
+  // ⚠️ OPTIONAL (`user?`) ALREADY IN THE CODE BELOW because a joined row hidden
+  // by RLS comes back NULL, not as an error — the comment at :46 records that it
+  // used to reject inside Promise.all and hang the page. The three location
+  // fields inherit that: every read of them goes through `p.user?.`.
+  user: {
+    id: string; first_name: string; last_initial: string | null; email: string
+    is_verified: boolean; fraud_flagged: boolean
+    postcode: string | null; bua: string | null; admin_district: string | null
+  }
   session_count: number
   avg_rating: number | null
   portfolio_count: number
@@ -37,8 +94,15 @@ export default function ProvidersPage() {
     try {
       const { data, error } = await supabase
         .from('providers')
+        // ⚠️ postcode/bua/admin_district ADDED to the joined user, because the
+        // shop's own location_text is free text she may never have filled in,
+        // and the owner's postcode is the only other thing that answers "where
+        // is this shop". region is still selected: the search filter at :71
+        // reads location_text, and region is kept only so removing it is a
+        // separate decision from this one.
         .select(`id, shop_handle, region, location_text,
-          user:users!user_id(id, first_name, last_initial, email, is_verified, fraud_flagged)`)
+          user:users!user_id(id, first_name, last_initial, email, is_verified, fraud_flagged,
+                             postcode, bua, admin_district)`)
         .order('shop_handle')
       if (error) { if (!stale()) setLoadError(error.message); return }
 
@@ -178,7 +242,7 @@ export default function ProvidersPage() {
               <tr className="border-b border-black/5 text-[#3D2E2E]/50 text-xs uppercase tracking-wide">
                 <th className="text-left px-4 py-3">Shop</th>
                 <th className="text-left px-4 py-3">Owner</th>
-                <th className="text-left px-4 py-3">Region</th>
+                <th className="text-left px-4 py-3">Location</th>
                 <th className="text-left px-4 py-3">Verified</th>
                 <th className="text-left px-4 py-3">Sessions</th>
                 <th className="text-left px-4 py-3">Rating</th>
@@ -195,7 +259,20 @@ export default function ProvidersPage() {
                   <td className="px-4 py-3 text-[#3D2E2E]/60">
                     {p.user ? `${p.user.first_name} ${p.user.last_initial ?? ''}.` : <span className="italic text-[#3D2E2E]/30">Not visible</span>}
                   </td>
-                  <td className="px-4 py-3">{p.region}</td>
+                  {/* ⚠⚠ THIS COLUMN SHOWED `region` UNTIL 21 Oct 2026, AND region
+                      IS 'UK' ON ALL 35 ROWS. It was four rows of "UK": a column
+                      that cost a header and told nobody anything, while the
+                      page was ALREADY selecting location_text and discarding it.
+                      So this is not a new column — it is the existing one being
+                      given something to say.
+
+                      ⚠️ location_text FIRST because it is the stylist's OWN words
+                      for where she works, which is what a reviewer is deciding
+                      about. The owner's town and postcode are the fallback: they
+                      are derived from a postcode she set for distance maths, not
+                      a statement about the shop. Both can be absent — four
+                      providers, and nothing requires either. */}
+                  <td className="px-4 py-3">{locationCell(p)}</td>
                   <td className="px-4 py-3">
                     <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${p.user?.is_verified ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
                       {p.user ? (p.user.is_verified ? 'Yes' : 'No') : '—'}

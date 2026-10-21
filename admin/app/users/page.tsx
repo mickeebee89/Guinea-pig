@@ -13,7 +13,21 @@ interface User {
   last_name: string | null
   last_initial: string | null
   role: string
+  // ⚠️ 'UK' ON EVERY ROW, so it is not displayed anywhere and the Location
+  // column does not fall back to it. Checked 21 Oct 2026: 35 of 35.
   region: string
+  // Set in Settings by the member, never at signup — so null is the NORMAL
+  // state, not missing data. latitude/longitude come back from the same
+  // select('*') and are typed here so nothing re-reads them later; the column
+  // shows the postcode, not the point.
+  postcode: string | null
+  latitude: number | null
+  longitude: number | null
+  // Written by set_my_postcode from the lookup (0099). Either may be null WITH
+  // a postcode present — ONS holds no built-up area for many postcodes — so the
+  // display falls through rather than treating null as missing data.
+  admin_district: string | null
+  bua: string | null
   is_verified: boolean
   fraud_flagged: boolean
   subscription_status: string
@@ -321,6 +335,20 @@ export default function UsersPage() {
     reload()
   }
 
+  /**
+   * The town to show, or null when neither name is held.
+   *
+   * ⚠⚠ bua FIRST, AND THAT IS THE WHOLE REASON 0099 STORES TWO COLUMNS. For
+   * ME5 8PQ, admin_district is "Medway" (the council) and bua is "Chatham" (the
+   * place). "Where are you?" is answered "Chatham". Measured 21 Oct 2026:
+   * ME5 8PQ is the only one of the five live postcodes where the two differ.
+   *
+   * ⚠️ WHICH ONE IS "THE TOWN" LIVES HERE, IN THE DISPLAY, ON PURPOSE — so it
+   * can change without a migration. That is why the columns are named after
+   * the source fields rather than one being called `town`.
+   */
+  const townOf = (u: User) => u.bua ?? u.admin_district ?? null
+
   // Age from the signup date of birth (18+ is enforced at signup). Null for
   // accounts created before the DOB field existed — shown as "—".
   const ageFrom = (dob: string | null) => {
@@ -388,6 +416,7 @@ export default function UsersPage() {
                 <th className="text-left px-4 py-2">Status</th>
                 <th className="text-left px-4 py-2">Email</th>
                 <th className="text-left px-4 py-2">Role</th>
+                <th className="text-left px-4 py-2">Location</th>
                 <th className="text-left px-4 py-2">Age</th>
                 <th className="text-left px-4 py-2">Verified</th>
                 <th className="text-left px-4 py-2">Fee</th>
@@ -415,6 +444,35 @@ export default function UsersPage() {
                   <td className="px-4 py-2 whitespace-nowrap">{statusBadge(u.suspension)}</td>
                   <td className="px-4 py-2 text-[#3D2E2E]/60">{u.email}</td>
                   <td className="px-4 py-2 capitalize">{u.role}</td>
+                  {/* ⚠⚠ "Not set" RATHER THAN AN EM DASH, AND THAT IS THE POINT OF
+                      THE COLUMN. Nothing asks for a postcode at signup — it is
+                      optional, set later in Settings — so most rows are empty and
+                      an em dash would read the same as the Fee and Age columns
+                      use it: data that should be there and is not. Measured
+                      21 Oct 2026: 7 of 35 users have one. A blank cell in a new
+                      column is also the first thing that looks like a rendering
+                      fault, which is what this wording exists to prevent.
+                      The title says WHY it is empty, so nobody goes looking.
+
+                      ⚠️ THREE WAYS DOWN, NOT TWO: bua, then admin_district, then
+                      the postcode alone. The last rung is reachable — a row can
+                      hold a postcode with neither name, because 0099 refuses a
+                      postcode without a COORDINATE but allows one without a
+                      town. Falling through to "Not set" there would hide a
+                      postcode we have. */}
+                  <td className="px-4 py-2 whitespace-nowrap">
+                    {u.postcode
+                      ? <span>
+                          {townOf(u) && <span className="font-medium">{townOf(u)}</span>}
+                          <span className={`font-mono text-xs ${townOf(u) ? 'ml-1.5 text-[#3D2E2E]/50' : ''}`}>
+                            {u.postcode}
+                          </span>
+                        </span>
+                      : <span className="text-[#3D2E2E]/40 text-xs italic"
+                              title="No postcode on record. It is optional and members set it themselves in Settings; nothing asks for one at signup.">
+                          Not set
+                        </span>}
+                  </td>
                   <td className="px-4 py-2 text-[#3D2E2E]/60" title={u.date_of_birth ? new Date(u.date_of_birth).toLocaleDateString('en-GB') : 'No date of birth on record'}>
                     {ageFrom(u.date_of_birth) ?? <span className="text-[#3D2E2E]/30">—</span>}
                   </td>

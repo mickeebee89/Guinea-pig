@@ -485,6 +485,31 @@ export const PRIVACY: LegalDoc = {
         },
         {
           type: 'p',
+          // ⚠️ WIDENED 21 Oct 2026 for migration 0099, which stores the town
+          // from the postcode lookup that was already running and discarding it
+          // (users.bua, falling back to users.admin_district).
+          //
+          // ⚠️ NO NEW CONSENT, decided deliberately: the town is DERIVED from a
+          // postcode she chose to give, is strictly LESS precise than the
+          // coordinate already stored and already disclosed in this sentence,
+          // and serves the purpose this paragraph already states. It was kept
+          // OUT of §7 for the same reason — calling a town name
+          // special-category data would weaken the section that exists for her
+          // identity selfie.
+          //
+          // ⚠⚠ "OUR TEAM" IS LOAD-BEARING AND MUST NOT BE SOFTENED. A first
+          // draft read "so we can say where someone is", which does not say TO
+          // WHOM and could fairly be read as other members seeing it. They do
+          // not: it is the admin console and nowhere else. **If the town is ever
+          // shown on a profile or in browse, THIS SENTENCE BECOMES FALSE and has
+          // to be rewritten** — which is the correct failure mode. A vaguer
+          // sentence would stay technically true while a reader drew the wrong
+          // conclusion. Micky's wording, 21 Oct 2026.
+          //
+          // ⚠️ "town or area", not "town": ONS holds no built-up area for many
+          // postcodes, and admin_district then supplies a COUNCIL area, which is
+          // not a town. "The town" would be false on the fallback.
+          //
           // Rewritten 23 Sep 2026 (audit item 90). It described asking the
           // device as the ONLY way we get a location, which was true for as
           // long as the website could not set one at all. The postcode box
@@ -493,7 +518,7 @@ export const PRIVACY: LegalDoc = {
           // it is a deliberate choice and not an implementation detail.
           // ~~'We ask your device for this and you can refuse; if you do, you
           // can still browse.'~~
-          text: 'Your location: your approximate location, so we can show you people nearby and sort results by distance. Stylists also have a location for their shop or working area. In the app we ask your device, and you can refuse. On the website you can type a postcode instead, and we keep the postcode along with the point it refers to — the postcode so you can check and change it, the point so we can work out distances. We never ask for or keep your street address. It is optional either way, you can remove it at any time in Settings, and you can still browse without it.',
+          text: 'Your location: your approximate location, so we can show you people nearby and sort results by distance. Stylists also have a location for their shop or working area. In the app we ask your device, and you can refuse. On the website you can type a postcode instead, and we keep the postcode, the point it refers to, and the name of the town or area it falls in — the postcode so you can check and change it, the point so we can work out distances, and the town or area so our team can see roughly where members are, without us holding a street address. We never ask for or keep your street address. It is optional either way, you can remove it at any time in Settings, and you can still browse without it.',
         },
         {
           type: 'p',

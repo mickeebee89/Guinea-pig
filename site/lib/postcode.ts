@@ -37,6 +37,25 @@ export interface PostcodePlace {
   postcode: string
   latitude: number
   longitude: number
+  /**
+   * The council area — "Medway" for ME4 4TR. Migration 0099.
+   *
+   * ⚠️ THE FALLBACK FOR DISPLAY, NOT THE ANSWER TO "where are you?". See
+   * `bua`. Both were in this response all along and were being discarded.
+   */
+  adminDistrict: string | null
+  /**
+   * The built-up area — "Chatham" for ME4 4TR, where adminDistrict says
+   * "Medway". ⚠️ THIS IS THE ONE A PERSON WOULD SAY, so every display prefers
+   * it.
+   *
+   * ⚠⚠ NULL IS A NORMAL ANSWER, NOT A FAILURE. ONS holds no built-up area for
+   * many postcodes, which is why 0099 stores two columns rather than one
+   * called `town`. Measured 21 Oct 2026: null on 0 of the 5 postcodes on this
+   * platform — **all five urban, so that is a first reading and not a rate.**
+   * The rural case is still unmeasured.
+   */
+  bua: string | null
 }
 
 export type PostcodeLookup =
@@ -113,7 +132,10 @@ export async function lookupPostcode(raw: string): Promise<PostcodeLookup> {
   const result = (body as { result?: unknown } | null)?.result
   if (!result || typeof result !== 'object') return { ok: false, reason: 'not_found' }
 
-  const r = result as { postcode?: unknown; latitude?: unknown; longitude?: unknown }
+  const r = result as {
+    postcode?: unknown; latitude?: unknown; longitude?: unknown
+    admin_district?: unknown; bua?: unknown
+  }
   // ⚠️ A 200 does not guarantee a coordinate. ONS holds some real postcodes
   // with no location — non-geographic ones, and new builds not yet placed.
   // Storing a postcode with no coordinate would put someone back in exactly
@@ -130,8 +152,32 @@ export async function lookupPostcode(raw: string): Promise<PostcodeLookup> {
       postcode: typeof r.postcode === 'string' ? r.postcode : canonical,
       latitude: r.latitude,
       longitude: r.longitude,
+      // ⚠️ A MISSING NAME IS NOT A FAILED LOOKUP. Unlike latitude above, these
+      // two are allowed to be absent: the postcode and its coordinate are what
+      // this function exists to guarantee, and a town is what it can add. So
+      // they are normalised to null rather than refused.
+      //
+      // ⚠️ `trim() !== ''` BEFORE ACCEPTING, because an empty string from the
+      // service is "no name" and would otherwise be stored as a town that
+      // renders as blank — which is the one state the Location column was
+      // written to avoid.
+      adminDistrict: nameOrNull(r.admin_district),
+      bua: nameOrNull(r.bua),
     },
   }
+}
+
+/**
+ * A place name from the response, or null.
+ *
+ * ⚠️ Not `String(x) || null`. That would turn 0 or false into null by accident
+ * and, worse, would accept a non-string as a name. The type is checked, then
+ * the whitespace, then it is kept.
+ */
+function nameOrNull(v: unknown): string | null {
+  if (typeof v !== 'string') return null
+  const t = v.trim()
+  return t === '' ? null : t
 }
 
 /**

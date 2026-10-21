@@ -39,10 +39,19 @@ export async function saveMyPostcode(raw: string): Promise<PostcodeSaveResult> {
   // setting it — and it must not require getting a valid postcode past the
   // lookup first.
   if (trimmed === '') {
-    // No arguments at all. All three parameters default to null in SQL (0054),
-    // which is what lets clearing be written without a cast — the generator
-    // marks a non-defaulted argument as required AND non-nullable, so `null`
-    // would not type-check. The defaults are there for exactly this call.
+    // No arguments at all. All FIVE parameters default to null in SQL (0054,
+    // widened by 0099), which is what lets clearing be written without a cast —
+    // the generator marks a non-defaulted argument as required AND non-nullable,
+    // so `null` would not type-check. The defaults are there for exactly this
+    // call.
+    //
+    // ⚠⚠ AND THIS CALL IS WHY 0099 DROPPED THE OLD FUNCTION INSTEAD OF ADDING
+    // AN OVERLOAD. Two functions both accepting zero arguments would make
+    // `set_my_postcode()` AMBIGUOUS (42725), and clearing your postcode — the
+    // thing Privacy promises can always be done — would be the first casualty.
+    //
+    // ⚠️ The towns are not passed and do not need to be: the function nulls
+    // both whenever the postcode is null, whatever the caller sends.
     const { error } = await supabase.rpc('set_my_postcode', {})
     if (error) {
       console.error('[postcode] clear failed', { code: error.code, message: error.message })
@@ -59,10 +68,31 @@ export async function saveMyPostcode(raw: string): Promise<PostcodeSaveResult> {
     return { ok: false, error: postcodeMessage(found.reason) }
   }
 
+  // ⚠️ FIVE NAMES, AND THIS REQUIRES MIGRATION 0099 TO BE APPLIED. Against the
+  // old 3-argument function PostgREST rejects the two it does not know, and
+  // every save fails. The reverse is safe — 0099 kept the three original names
+  // defaulted, so the previously deployed site worked unchanged until this
+  // shipped. Migration first, deploy second.
   const { error } = await supabase.rpc('set_my_postcode', {
     p_postcode: found.place.postcode,
     p_lat: found.place.latitude,
     p_lng: found.place.longitude,
+    // ⚠️ Either may be null and that is not an error. The town is what the
+    // lookup could add; the postcode and coordinate are what it had to get
+    // right, and those were already refused above if missing.
+    //
+    // ⚠⚠ `?? undefined` IS NOT A TIDY-UP, AND IT IS NOT A CAST. The generator
+    // types a DEFAULTED argument as optional but NOT nullable — `p_bua?: string`
+    // — so passing `null` does not type-check (TS2322, confirmed against the
+    // regenerated types at 0099). `undefined` omits the argument, PostgREST
+    // leaves it out of the call, and 0099's `default null` supplies the null.
+    //
+    // ✅ So the stored value is identical and nothing is silenced: a cast would
+    // have made the same row happen while hiding that the type was telling the
+    // truth about the RPC's shape. The existing comment on the clear path above
+    // describes the same generator behaviour from the other side.
+    p_district: found.place.adminDistrict ?? undefined,
+    p_bua: found.place.bua ?? undefined,
   })
 
   if (error) {

@@ -1,8 +1,8 @@
 // GENERATED FILE — DO NOT EDIT BY HAND.
 //
 // Written by scripts/gen-supabase-types.mjs from the live database.
-// TYPES_STAMP: 0098
-// TYPES_FILES_AT_GEN: 0098
+// TYPES_STAMP: 0099
+// TYPES_FILES_AT_GEN: 0099
 //
 // TYPES_STAMP is the migration the DATABASE was at when these were generated,
 // stated by whoever ran it (--applied). TYPES_FILES_AT_GEN is the newest
@@ -2000,6 +2000,8 @@ export type Database = {
       }
       users: {
         Row: {
+          admin_district: string | null
+          bua: string | null
           created_at: string
           date_of_birth: string | null
           email: string
@@ -2029,6 +2031,8 @@ export type Database = {
           terms_accepted_at: string | null
         }
         Insert: {
+          admin_district?: string | null
+          bua?: string | null
           created_at?: string
           date_of_birth?: string | null
           email: string
@@ -2058,6 +2062,8 @@ export type Database = {
           terms_accepted_at?: string | null
         }
         Update: {
+          admin_district?: string | null
+          bua?: string | null
           created_at?: string
           date_of_birth?: string | null
           email?: string
@@ -2673,7 +2679,13 @@ export type Database = {
       }
       run_retention_purge: { Args: { p_dry_run?: boolean }; Returns: Json }
       set_my_postcode: {
-        Args: { p_lat?: number; p_lng?: number; p_postcode?: string }
+        Args: {
+          p_bua?: string
+          p_district?: string
+          p_lat?: number
+          p_lng?: number
+          p_postcode?: string
+        }
         Returns: undefined
       }
       slot_contention: {
