@@ -22625,12 +22625,28 @@ inconsistency, and it is in the same three-table change.
 name, last initial, profile photo, instagram handle. The view has **no WHERE
 clause** (confirmed in 0098's preflight).
 
-> **Correction, 21 Oct 2026.** The count is **35**, not 36, read live while
-> writing 0100 — `public.users` 35 and `public_profiles` 35. Both numbers were
-> real reads; the membership moved between them. Nothing else in this item
-> changes, and the full definition is
+> **⚠️⚠️ A CORRECTION, THEN A CORRECTION TO IT — 21 Oct 2026.** I read 35 while
+> writing 0100 and amended this item from 36 to 35. Micky then read **36**
+> again: `ayesha.254@hotmail.com` signed up as a model at **18:29**, after 0100
+> was written. **36 was right, 35 was right, and 36 is right again** — three
+> true readings of a number that moves several times a day.
+>
+> ⚠️ **The fault was not the arithmetic, and that is the part worth keeping.**
+> It was recording a live population as a fixed fact, then "correcting" a
+> record to match a reading taken at a different minute. **A number a stranger
+> can change is not a finding about the system**, and treating it as one made
+> me overwrite a true line with another true line and call it a fix.
+>
+> So this item no longer states a membership count. It states that the view has
+> **no WHERE clause** and returns **every account** — which is the property, and
+> which no signup can move. Full definition:
 > `select id, first_name, last_initial, profile_pic_url, instagram_handle from users`
 > — ⚠️ every account, **not only models**, so a stylist is enumerable too.
+>
+> ✅ **And it was caught before it could do harm**: the same instinct then asked
+> whether 0100 asserts a member count anywhere. It does not — every assertion is
+> structural or names a viewer by id — but had it, a correct migration would
+> have rolled back because somebody signed up mid-read. See 0100's header.
 
 ✅ **This is what the view is for** — reviewer names, session participants, chat
 counterparties — and a first name plus an initial is what the schema snapshot
@@ -22654,7 +22670,7 @@ photos too.
 
 | # | step | measured |
 |---|---|---|
-| 1 | Any confirmed email address reads `public_profiles` | `relacl authenticated=rm`, **no WHERE clause**, **35 rows** — every account, not only models |
+| 1 | Any confirmed email address reads `public_profiles` | `relacl authenticated=rm`, **no WHERE clause**, **every row** — every account, not only models |
 | 2 | That view returns `profile_pic_url` | it is one of its five columns |
 | 3 | Those values are **public** URLs | all **4** non-null `users.profile_pic_url` values contain `/object/public/` |
 | 4 | A public URL needs no login and never expires | `storage.buckets`: `profile-pics` **public = TRUE**, `portfolio-photos` **public = TRUE** |
@@ -22729,7 +22745,7 @@ private means every read must be signed:
    change.** Cheap, no signing, no call-site churn — but a harvested URL still
    works until the object moves, so it fixes "for ever" only on change, and
    does not fix "no login" at all.
-3. **Narrow step 1 instead** — stop `public_profiles` returning all 35 rows to
+3. **Narrow step 1 instead** — stop `public_profiles` returning every row to
    any member. Does nothing about steps 3 and 4, so a URL obtained once is
    still public, but it removes the bulk-harvest.
 4. **Decide it is intended, and write that down.** Defensible for a face next
