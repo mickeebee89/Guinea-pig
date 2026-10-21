@@ -22625,6 +22625,13 @@ inconsistency, and it is in the same three-table change.
 name, last initial, profile photo, instagram handle. The view has **no WHERE
 clause** (confirmed in 0098's preflight).
 
+> **Correction, 21 Oct 2026.** The count is **35**, not 36, read live while
+> writing 0100 — `public.users` 35 and `public_profiles` 35. Both numbers were
+> real reads; the membership moved between them. Nothing else in this item
+> changes, and the full definition is
+> `select id, first_name, last_initial, profile_pic_url, instagram_handle from users`
+> — ⚠️ every account, **not only models**, so a stylist is enumerable too.
+
 ✅ **This is what the view is for** — reviewer names, session participants, chat
 counterparties — and a first name plus an initial is what the schema snapshot
 calls "what a stranger is allowed to see".
@@ -22635,6 +22642,99 @@ should exist on purpose rather than by default.** It is the same primitive item
 attributes, no filtering — but 36 rows of real people to anyone who signs up.
 **Recorded, not changed.** Narrowing it would need the same per-flow work as
 above, and the flows that read it are far wider.
+
+## 218. PROFILE PICTURES ARE READABLE BY ANYONE, WITH NO LOGIN, FOR EVER
+### Measured 21 Oct 2026 by Micky from the live data, with the bucket flags and the call-site count read in chat. ⚠⚠ LIVE. NOT FIXED and NO FIX PROPOSED — scoping it is a separate piece of work.
+
+**Plainly:** every member's profile picture can be fetched by anybody on the
+internet, signed in or not, and the link does not expire. A stylist's portfolio
+photos too.
+
+### The four links in the chain, each measured
+
+| # | step | measured |
+|---|---|---|
+| 1 | Any confirmed email address reads `public_profiles` | `relacl authenticated=rm`, **no WHERE clause**, **35 rows** — every account, not only models |
+| 2 | That view returns `profile_pic_url` | it is one of its five columns |
+| 3 | Those values are **public** URLs | all **4** non-null `users.profile_pic_url` values contain `/object/public/` |
+| 4 | A public URL needs no login and never expires | `storage.buckets`: `profile-pics` **public = TRUE**, `portfolio-photos` **public = TRUE** |
+
+⚠⚠ **So the exposure is wider than the enumeration that reaches it.** Step 1
+needs an account; steps 3 and 4 do not need anything. **One member harvests the
+list once and the URLs keep working for everyone afterwards** — including
+after that account is deleted, because nothing about the link is tied to it.
+There is no revocation: the only way to break a harvested link is to move or
+delete the object.
+
+### ✅ Measured for contrast: `model-photos` and `verification-selfies` are private
+
+`public = false` on both. Identity selfies were never public, and booking
+photos were made private by `storage-lockdown.sql`. **The two buckets left open
+are the two that file calls "out of scope".**
+
+### ⚠⚠ IT IS THE SAME DEFERRAL AS ITEM 217's, AND IT EXPIRED THE SAME WAY
+
+`supabase/storage-lockdown.sql:14-15` lists both buckets as *"(out of scope)"*,
+and its FOLLOW-UPS section says *"Decide separately whether portfolio-photos /
+profile-pics should be private."* That was written when the only accounts were
+test accounts. **A follow-up with no owner and no date is a decision deferred
+until something forces it**, and item 217 is the second instance of that in one
+file. Both were reasonable when written. Neither was re-read when the condition
+changed.
+
+### ⚠⚠ WHAT CURRENTLY LIMITS IT — AND IT IS LUCK ABOUT CONTENT, NOT DESIGN
+
+**All 4 profile pictures and all 11 model photos belong to Micky's own test
+accounts. Not one real member has uploaded a photo.** So today the chain
+harvests four pictures of the developer.
+
+⚠⚠ **That is a fact about the content, not a property of the arrangement, and
+it stops being true the first time a real model adds a profile picture.** It is
+the same sentence item 217 needed, and writing it twice in one day is the
+point: the mitigation in both cases is that nobody has used the product yet.
+
+### ⚠ AND THE ASYMMETRY IS WORTH NAMING, BECAUSE IT CUTS BOTH WAYS
+
+A profile picture is **meant** to be seen by other members — it is what
+`public_profiles` exists to serve, alongside a first name and an initial. So
+this is not the same kind of finding as a private gallery being open.
+
+What makes it a finding anyway is **"no login" and "for ever"**, neither of
+which the product needs. A member who deletes their account, or removes their
+picture, has no way to make an already-harvested URL stop resolving.
+
+### The cost of fixing it, measured so the scoping is not guesswork
+
+⚠⚠ **This is why it is NOT folded into 0100.** Flipping `profile-pics`
+private means every read must be signed:
+
+* **`profile_pic_url` is touched in 26 LIVE files** — 23 in `site/`, 3 in
+  `admin/` — **and 12 dormant in `mobile/`.** Avatars appear on browse,
+  dashboard, model and stylist profiles, settings, shop, review, conversations,
+  the salon floor, the verification queue and moderation.
+* **`portfolio-photos` is worse in a specific way: it has NO select policy on
+  `storage.objects` at all.** Reads work *only* because the bucket is public.
+  So flipping that one private makes every portfolio photo unreadable by
+  everyone until a policy is written — unlike `profile-pics`, which at least
+  has `"Allow public reads"` to the PUBLIC role to replace.
+* One live `getPublicUrl` call to replace for portfolio
+  (`site/app/(app)/portfolio/PortfolioManager.tsx:141`), plus the dormant
+  mobile one.
+
+### ✅ Options, for whenever this is scoped — not a recommendation
+
+1. **Sign profile pictures everywhere.** Correct, and the 26-file change above.
+   Needs a shared helper, or 26 places to get a TTL wrong.
+2. **Keep the bucket public, make the PATH unguessable and rotate it on
+   change.** Cheap, no signing, no call-site churn — but a harvested URL still
+   works until the object moves, so it fixes "for ever" only on change, and
+   does not fix "no login" at all.
+3. **Narrow step 1 instead** — stop `public_profiles` returning all 35 rows to
+   any member. Does nothing about steps 3 and 4, so a URL obtained once is
+   still public, but it removes the bulk-harvest.
+4. **Decide it is intended, and write that down.** Defensible for a face next
+   to a first name; **it would still need the deletion case answered**, because
+   a member who removes their picture reasonably expects it to stop resolving.
 
 ## Dated
 
