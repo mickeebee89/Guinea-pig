@@ -7,6 +7,7 @@ import { adminErrorText, humanError, shopsNote } from '@/lib/adminActions'
 import type { ActionResult } from '@/lib/adminActions'
 import { reviewerNames } from '@/lib/reviewers'
 import { ReviewerLine } from '@/components/ReviewerLine'
+import { SiteProfileLink } from '@/components/SiteProfileLink'
 
 interface VerificationRequest {
   id: string
@@ -80,6 +81,15 @@ export default function VerificationQueuePage() {
   const [notes, setNotes]       = useState<Record<string, string>>({})
   const [working, setWorking]   = useState<string | null>(null)
   const [names, setNames]       = useState<Record<string, string>>({})
+  /**
+   * user_id -> providers.id, for the link to the shop being verified.
+   *
+   * ⚠️ `null` MEANS NOT KNOWN, NOT "NO SHOP" — see SiteProfileLink. On this
+   * queue the distinction matters more than anywhere else: a stylist waiting
+   * to be verified has not been published yet, so "no shop" is a believable
+   * wrong answer rather than an obviously broken one.
+   */
+  const [providerByUser, setProviderByUser] = useState<Record<string, string> | null>(null)
 
   const { loading, reload } = useLoader(filter, async stale => {
     const { data, error } = await supabase
@@ -94,6 +104,28 @@ export default function VerificationQueuePage() {
     const resolved = await reviewerNames(rows.map(r => r.reviewed_by))
     if (stale()) return
     setNames(resolved)
+
+    // One read for the queue rather than one per card.
+    // ⚠️ `providers_select_admin` is what makes this work: every shop here is
+    // UNPUBLISHED by definition — it is waiting to be verified — and the other
+    // policy only exposes published shops or ones you have a session with.
+    const ids = rows.map(r => r.user?.id).filter((x): x is string => !!x)
+    if (ids.length > 0) {
+      const { data: provRows, error: provErr } = await supabase
+        .from('providers').select('id, user_id').in('user_id', ids)
+      if (stale()) return
+      if (provErr) {
+        setProviderByUser(null)
+      } else {
+        const map: Record<string, string> = {}
+        for (const r of (provRows ?? []) as unknown as { id: string; user_id: string }[]) {
+          map[r.user_id] = r.id
+        }
+        setProviderByUser(map)
+      }
+    } else {
+      setProviderByUser({})
+    }
 
     // verification-selfies is a PRIVATE bucket. selfie_url now holds a storage path;
     // sign it for ~5 minutes so the <img> can load. Old test rows hold full public
@@ -343,6 +375,18 @@ export default function VerificationQueuePage() {
                       )}
                       {req.user?.is_verified && (
                         <span className="ml-1 text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700 font-medium">Already verified</span>
+                      )}
+                      {/* ⚠️ COMPARING A SELFIE TO A PROFILE IS THE WHOLE JOB on
+                          this screen, so the profile is one click away rather
+                          than a copied id. New tab: the queue should still be
+                          here when the comparison is done. */}
+                      {req.user && (
+                        <SiteProfileLink
+                          className="ml-2 text-xs"
+                          role={req.user.role}
+                          userId={req.user.id}
+                          providerId={providerByUser ? (providerByUser[req.user.id] ?? null) : undefined}
+                        />
                       )}
                     </div>
                     <span className="text-xs text-[#3D2E2E]/40 shrink-0">{formatDate(req.created_at)}</span>

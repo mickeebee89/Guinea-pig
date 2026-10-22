@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase'
 import { useLoader } from '@/lib/useLoader'
 import { adminErrorText, shopsNote } from '@/lib/adminActions'
 import type { ActionResult } from '@/lib/adminActions'
+import { SiteProfileLink } from '@/components/SiteProfileLink'
 
 interface User {
   id: string
@@ -102,6 +103,15 @@ export default function UsersPage() {
    * person who reported her; publishing it would be the disclosure this
    * product refuses everywhere else. This box is written for her.
    */
+  /**
+   * user_id -> providers.id, for the "On the site" column.
+   *
+   * ⚠️ `null` MEANS NOT KNOWN, NOT "NOBODY HAS A SHOP". If the read fails the
+   * map stays null and every row renders "unknown" rather than claiming no
+   * shop exists — SiteProfileLink draws that distinction and this is the state
+   * that feeds it.
+   */
+  const [providerByUser, setProviderByUser] = useState<Record<string, string> | null>(null)
   const [message, setMessage] = useState('')
   const [duration, setDuration] = useState('7')
 
@@ -119,6 +129,24 @@ export default function UsersPage() {
       .from('suspensions')
       .select('user_id, banned, suspended_until')
       .in('user_id', data.map(u => u.id))
+
+    // One read for the whole page, same reasoning as the suspensions above.
+    // ⚠️ Scoped with .in() rather than fetching every provider, so the column
+    // cannot quietly become a list of shops that are not on this page.
+    const { data: provRows, error: provErr } = await supabase
+      .from('providers')
+      .select('id, user_id')
+      .in('user_id', data.map(u => u.id))
+    if (provErr) {
+      setProviderByUser(null)
+    } else {
+      const map: Record<string, string> = {}
+      for (const r of (provRows ?? []) as unknown as { id: string; user_id: string }[]) {
+        map[r.user_id] = r.id
+      }
+      setProviderByUser(map)
+    }
+
     // Shape copied from the select() three lines above, not assumed.
     type SuspRow = { user_id: string; banned: boolean | null; suspended_until: string | null }
     const suspByUser: Record<string, { banned: boolean | null; suspended_until: string | null }[]> = {}
@@ -417,6 +445,7 @@ export default function UsersPage() {
                 <th className="text-left px-4 py-2">Email</th>
                 <th className="text-left px-4 py-2">Role</th>
                 <th className="text-left px-4 py-2">Location</th>
+                <th className="text-left px-4 py-2">On the site</th>
                 <th className="text-left px-4 py-2">Age</th>
                 <th className="text-left px-4 py-2">Verified</th>
                 <th className="text-left px-4 py-2">Fee</th>
@@ -472,6 +501,13 @@ export default function UsersPage() {
                               title="No postcode on record. It is optional and members set it themselves in Settings; nothing asks for one at signup.">
                           Not set
                         </span>}
+                  </td>
+                  <td className="px-4 py-2 whitespace-nowrap">
+                    <SiteProfileLink
+                      role={u.role}
+                      userId={u.id}
+                      providerId={providerByUser ? (providerByUser[u.id] ?? null) : undefined}
+                    />
                   </td>
                   <td className="px-4 py-2 text-[#3D2E2E]/60" title={u.date_of_birth ? new Date(u.date_of_birth).toLocaleDateString('en-GB') : 'No date of birth on record'}>
                     {ageFrom(u.date_of_birth) ?? <span className="text-[#3D2E2E]/30">—</span>}

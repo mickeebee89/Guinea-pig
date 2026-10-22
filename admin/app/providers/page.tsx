@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase'
 import { useLoader } from '@/lib/useLoader'
 import { adminErrorText, shopsNote } from '@/lib/adminActions'
 import type { ActionResult } from '@/lib/adminActions'
+import { ShopLink } from '@/components/SiteProfileLink'
 
 /**
  * What the Location column shows for one shop, and where it came from.
@@ -243,6 +244,7 @@ export default function ProvidersPage() {
                 <th className="text-left px-4 py-3">Shop</th>
                 <th className="text-left px-4 py-3">Owner</th>
                 <th className="text-left px-4 py-3">Location</th>
+                <th className="text-left px-4 py-3">On the site</th>
                 <th className="text-left px-4 py-3">Verified</th>
                 <th className="text-left px-4 py-3">Sessions</th>
                 <th className="text-left px-4 py-3">Rating</th>
@@ -273,6 +275,14 @@ export default function ProvidersPage() {
                       a statement about the shop. Both can be absent — four
                       providers, and nothing requires either. */}
                   <td className="px-4 py-3">{locationCell(p)}</td>
+                  {/* ⚠️ `p.id` IS a providers.id, which is exactly what
+                      /stylist/[id] takes — so this link always resolves and
+                      needs none of SiteProfileLink's uncertainty handling.
+                      ⚠️ It may well open an UNPUBLISHED shop: measured 22 Oct,
+                      0 of 5 providers are published, and the page renders a
+                      "not published" notice rather than 404ing. That is the
+                      truth about the shop, not a broken link. */}
+                  <td className="px-4 py-3 whitespace-nowrap"><ShopLink providerId={p.id} /></td>
                   <td className="px-4 py-3">
                     <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${p.user?.is_verified ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
                       {p.user ? (p.user.is_verified ? 'Yes' : 'No') : '—'}
