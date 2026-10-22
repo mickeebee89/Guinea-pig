@@ -1,8 +1,8 @@
 // GENERATED FILE — DO NOT EDIT BY HAND.
 //
 // Written by scripts/gen-supabase-types.mjs from the live database.
-// TYPES_STAMP: 0099
-// TYPES_FILES_AT_GEN: 0099
+// TYPES_STAMP: 0101
+// TYPES_FILES_AT_GEN: 0101
 //
 // TYPES_STAMP is the migration the DATABASE was at when these were generated,
 // stated by whoever ran it (--applied). TYPES_FILES_AT_GEN is the newest
@@ -2469,6 +2469,14 @@ export type Database = {
         Args: { p_user_id: string }
         Returns: Json
       }
+      admin_signin_facts: {
+        Args: never
+        Returns: {
+          email_confirmed_at: string
+          last_sign_in_at: string
+          user_id: string
+        }[]
+      }
       apply_subscription_state: {
         Args: {
           p_amount_pence?: number
@@ -2490,6 +2498,18 @@ export type Database = {
       booking_when: {
         Args: { p_date: string; p_start: string }
         Returns: string
+      }
+      broadcast_as_admin: {
+        Args: {
+          p_body: string
+          p_broadcast_id: string
+          p_title: string
+          p_user_id: string
+        }
+        Returns: {
+          notification_id: string
+          was_new: boolean
+        }[]
       }
       cancel_booking: {
         Args: { p_reason?: string; p_session_id: string }
@@ -2687,6 +2707,10 @@ export type Database = {
           p_postcode?: string
         }
         Returns: undefined
+      }
+      shares_session_with_model: {
+        Args: { p_model_user_id: string }
+        Returns: boolean
       }
       slot_contention: {
         Args: { p_provider_id: string }

@@ -17,6 +17,7 @@ const nav = [
   { href: '/categories',     label: 'Categories',       icon: '🏷️' },
   { href: '/settings',       label: 'Settings',         icon: '⚙️' },
   { href: '/messages',       label: 'Messages',         icon: '💬' },
+  { href: '/broadcast',      label: 'Broadcast',        icon: '📣' },
   { href: '/audit-log',      label: 'Audit Log',        icon: '📋' },
 ]
 

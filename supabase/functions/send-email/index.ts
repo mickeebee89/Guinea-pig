@@ -139,6 +139,36 @@ function copyFor(
       return { subject: 'A message from Cavy', heading: 'A message from Cavy',
         cta: 'Read it in full', path: '/notifications' }
 
+    // ⚠️⚠️ THE ONE TYPE WHOSE SUBJECT IS THE ADMIN'S OWN WORDS, AND THE ONLY
+    // ONE THAT MAY BE. A broadcast goes to many people at once, so "A message
+    // from Cavy" in the inbox list tells nobody what arrived or whether it
+    // matters — the fixed subject that is right for one deliberate message to
+    // one person is wrong for the same words sent to everyone.
+    //
+    // ⚠️ WHAT MAKES IT SAFE IS A POLICY, NOT A PROMISE, AND IT IS ASSERTED IN
+    // 0101 RATHER THAN BELIEVED HERE. The case above drops its title because
+    // the notifications INSERT policy once let a MEMBER write an admin row.
+    // That is no longer so: `notifications_insert_denied` is RESTRICTIVE with
+    // check (false), so nothing writes this table directly and the only writer
+    // of this type is broadcast_as_admin, which checks is_admin() first.
+    // ⚠️ IF THAT POLICY EVER LOOSENS, THIS LINE IS THE HOLE. 0101's
+    // pre-condition refuses to apply without it, so the guard and the reason
+    // travel together.
+    //
+    // ⚠️ THE FALLBACK IS NOT DEAD CODE. broadcast_as_admin rejects an empty
+    // title, so an empty one should be impossible — but "impossible" here
+    // would mean an email with a blank subject line, and that is worth one
+    // `||` rather than an assumption about a caller in another process.
+    //
+    // The heading restates the subject, as admin_warning does. These are
+    // admin-to-member types where the admin's own words are the substance; a
+    // second line of our copy above them would read as commentary on someone
+    // else's message.
+    case 'admin_broadcast': {
+      const s = title.trim() || 'A message from Cavy'
+      return { subject: s, heading: s, cta: 'Read it in full', path: '/notifications' }
+    }
+
     // ── The three that used to fall through. Item 151, 3 Oct 2026. ─────────
     //
     // ⚠️ A HEADING SITS UNDER A FIXED SUBJECT AND ABOVE THE ROW'S BODY, so it
