@@ -22811,6 +22811,200 @@ private means every read must be signed:
    to a first name; **it would still need the deletion case answered**, because
    a member who removes their picture reasonably expects it to stop resolving.
 
+## 219. THE REASON copyFor HARDCODES THE ADMIN SUBJECT STOPPED BEING TRUE
+### Found 22 Oct 2026 while scoping the broadcast. ✅ The BEHAVIOUR is correct and is NOT changed. The stated REASON is stale.
+
+**Plainly:** a comment explains why a subject line is fixed, and the thing it
+names as the danger was closed weeks ago.
+
+`supabase/functions/send-email/index.ts`, the `admin_message` case:
+
+> ⚠️ AND THE HEADING IS FIXED, NOT THE ROW'S TITLE. For this type the title
+> IS admin-authored — but **until item 144's stage F, the open INSERT policy
+> means a MEMBER can write an admin_message row too.** Passing the title
+> through would hand them the heading, which is the hole 0081 just closed.
+
+**Stage F has landed.** Read live, 22 Oct 2026 — the only INSERT policy on
+`notifications`:
+
+```
+notifications_insert_denied   RESTRICTIVE   INSERT   authenticated   with check (false)
+```
+
+✅ Nothing writes that table directly any more. The only writer of
+`admin_message` is `notify_as_admin`, which checks `is_admin()` first. **So the
+title is provably admin-authored and the stated hole does not exist.**
+
+### Why it is recorded and not fixed
+
+The behaviour is still right. *"A message from Cavy"* is a reasonable subject
+for one deliberate message to one person, and a live single-send path is not
+something to change in passing for a comment's sake.
+
+⚠⚠ **What makes it worth an item is the failure mode of a stale reason, not
+the subject line.** 0101 needed to decide whether a broadcast's subject could
+be the admin's own words. The answer turned on this comment, and the comment
+said no. **A reader who trusted it would have built the wrong thing for a
+reason that expired** — the same shape as item 217's "POST-LAUNCH hardening"
+and item 205's deferred revoke, three in two days.
+
+✅ **0101 does not inherit the problem.** Its `admin_broadcast` case states the
+policy it depends on, and **the migration asserts that policy in its
+pre-condition** — so if `notifications_insert_denied` ever loosens, the
+migration refuses rather than the comment quietly going stale again. The guard
+and the reason travel together.
+
+## 220. THE EMAIL-TYPE SCANNER IS BLIND TO OUR OWN CRLF DEFENCE
+### Found 22 Oct 2026, by walking into it. ⚠️ A real blind spot, PAID FOR in 0101 rather than left open.
+
+**Plainly:** the check that stops email types drifting apart cannot read a
+migration written in the style every recent migration uses.
+
+### The mechanism
+
+`check-email-type-coverage.mjs` reads the **repo text** and finds its lists by
+regex:
+
+| axis | pattern |
+|---|---|
+| 1. the trigger | `/create trigger notify_email\b/` then the `when (...)` block |
+| 2. the reconciler | `/create or replace function public\.run_email_reconcile\b/` then `n.type in (...)` |
+| 4. every write | `/insert\s+into\s+public\.notifications\s*\(/` |
+
+⚠⚠ **Since item 190, function bodies are built from `chr(10)` fragments** so
+that the Supabase editor's LF-to-CRLF rewriting on paste cannot change what
+lands and break an md5 assertion. In that form the reconciler's list reads:
+
+```sql
+chr(10) || '      and n.type in (''session_applied'', ''session_accepted'',' ||
+```
+
+**None of the three patterns can see that.** Our defence against one trap makes
+us invisible to the check for another.
+
+### ✅ IT WAS FOUND BY WALKING INTO IT, AND IT FAILED LOUDLY
+
+0101's first draft built all three bodies from `chr(10)`. The checker said:
+
+> *found run_email_reconcile in 0101 … but not its type list. Shape changed —
+> read it before trusting this.*
+
+✅ **That refusal is the script working.** Its own header says *"The check
+cannot run, which is not a pass"*, and that line is the only reason this was a
+ten-minute detour instead of a silent gap.
+
+### ⚠⚠ AND THE SECOND ONE WAS WORSE, BECAUSE IT DID NOT REFUSE
+
+The same draft wrote `create or replace trigger notify_email`. The axis-1
+pattern is `create trigger`, which does not match — so the checker **silently
+fell back to 0082's older list** and reported:
+
+> `admin_broadcast`: RECONCILED but not emailed — the reconciler counts a type
+> the trigger never sends
+
+⚠⚠ **That is a true-sounding failure pointing at the wrong file.** Not a false
+pass — a **false diagnosis**, which costs the next person the same hour it cost
+this one, and is harder to disbelieve because it is specific. A check that
+reads a stale copy and names it confidently is worse than one that refuses.
+
+### What 0101 did about it
+
+**Bent towards the scanner, both times, rather than bending the scanner.**
+
+* All three bodies are **plain DDL**, so every pattern can read them. The md5
+  assertions went with them — a deliberate trade, written into the migration
+  header: what is given up is proof the bytes landed intact (worth little for
+  three objects nothing depends on byte-wise, and the reconciler's live body is
+  **already CRLF**, so CRLF is its normal state); what is kept is a check that
+  can read the file.
+* **drop-then-create** for the trigger instead of `create or replace`, so axis
+  1 matches. Both inside one transaction, so there is no window.
+* md5 is replaced by assertions on **shape and content** read from the
+  catalogue — including that the trigger's list and the reconciler's list hold
+  the **same thirteen types**, which md5 could never have shown.
+
+### ⚠️ WHAT IS STILL OPEN, STATED RATHER THAN IMPLIED
+
+**0101 paid the cost; it did not remove the trap.** The next migration that
+builds a body from `chr(10)` and touches any of these three lists hits it
+again. Three options, none taken yet:
+
+1. **Teach the scanner to strip the scaffolding** — reassemble `chr(10) || '…'`
+   runs before matching. ⚠️ The script's own 0028 note warns about exactly
+   this: *the artefact of a fix broke the test for the fix.*
+2. **Make plain DDL the convention for anything these lists live in**, and say
+   so where the chr(10) convention is written down.
+3. **Read the live definitions instead of the repo** — item 154's single source
+   of truth, which the script's header already argues for.
+
+## 221. "NEVER SIGNED IN" IS A REAL SIGNAL THAT SELECTS ONE PERSON
+### Built 22 Oct 2026 as part of the broadcast (0101). ✅ Working as intended. Recorded so it is not mistaken for a useful filter yet.
+
+**Plainly:** the broadcast screen can pick out members who have never signed
+in. Today that is one account, and it is the same one that never confirmed its
+email address.
+
+### Measured, 22 Oct 2026
+
+| | |
+|---|---|
+| members | 40 |
+| `last_sign_in_at` null | **1** |
+| `email_confirmed_at` null | 1 |
+| confirmed but never signed in | **0** |
+
+⚠️ **So the filter currently selects exactly the one person who never
+confirmed**, not a cohort of people who signed up and drifted away. The group
+it is FOR — "came in, never came back" — is empty.
+
+### ✅ Why it was built anyway, rather than faked or skipped
+
+The alternative on the table was deriving it from `users.created_at`. **That
+would have been inventing a signal**: an old row says nothing about whether
+anyone ever signed in. The only true source is `auth.users.last_sign_in_at`.
+
+⚠️ And the console could not read it. The admin app runs on the **anon key
+with the signed-in admin's own session**, so everything goes through RLS as
+`authenticated`, and `auth.users` is not exposed to PostgREST — confirmed
+live: **no view in `public` reads `auth.users`**. Hence a new function.
+
+### `admin_signin_facts()` — the most sensitive thing in 0101, built that way
+
+```
+returns table(user_id uuid, last_sign_in_at timestamptz, email_confirmed_at timestamptz)
+SECURITY DEFINER  |  stable  |  search_path = public, pg_temp
+is_admin() checked in the body  |  EXECUTE revoked from public and anon
+```
+
+**Three columns and no more.** It is the only read of `auth.users` in the
+product, so it returns the two timestamps the console asks about and nothing
+else — no address, no token, no provider identity, no recovery fields.
+
+✅ **And the three-column shape is ASSERTED, not just written.** 0101's
+post-condition compares `pg_get_function_result` to the exact signature,
+because a fourth column added later is the only change to this function that
+no other check in the file would catch. The `is_admin()` call is asserted
+present for the same reason: it is SECURITY DEFINER over `auth.users`, so
+without that line it is an open door, and *"we wrote it carefully"* is not a
+property anything can read back.
+
+### ⚠️ The UI says the number rather than leaving it to be discovered
+
+The broadcast page renders *"Never signed in currently matches 1 of 40"* under
+the quick filters, computed live. **A filter that silently selects one person
+looks broken; one that says it selects one person is honest** — and the line
+needs no maintenance, because it counts rather than claims.
+
+✅ It earns its place as the list grows. It is not useful today and nothing in
+the product pretends otherwise.
+
+### ⚠️ One consequence worth stating
+
+If the sign-in read fails, the page keeps working and disables that one
+button, saying so. **The broadcast does not depend on `auth.users` being
+readable** — which matters, because this is the one call in the screen that
+reaches outside `public`.
+
 ## Dated
 
 * **8 October** — the diarised selfie-orphan check. The only unarranged end-to-end
