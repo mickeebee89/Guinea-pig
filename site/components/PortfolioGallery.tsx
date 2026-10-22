@@ -80,7 +80,15 @@ export function PortfolioGallery({ items, stylistName }: { items: PortfolioMedia
         // Clicking the backdrop closes. The check is on the dialog itself
         // because the backdrop is not a separate element to listen on.
         onClick={e => { if (e.target === dialogRef.current) close() }}
-        className="max-h-[90dvh] max-w-[95vw] rounded-lg bg-transparent p-0 backdrop:bg-warm-dark/80"
+        /* ⚠️⚠️ SEPARATE FROM THE MODEL-GALLERY WORK THAT FOUND IT —
+           revert this one line if it should travel on its own.
+           This viewer has been opening in the TOP-LEFT CORNER on the live
+           site, not centred: a modal <dialog> relies on the UA's
+           `margin: auto`, and Tailwind preflight resets margin to 0. Measured
+           against the demo stylist profile — rect {top: 0, left: 0, w: 492}
+           in a 1024x768 viewport, computed margin 0px. Found only because
+           model/[id]'s new gallery copied this file and inherited it. */
+        className="m-auto max-h-[90dvh] max-w-[95vw] rounded-lg bg-transparent p-0 backdrop:bg-warm-dark/80"
       >
         {current && (
           <div className="relative flex flex-col items-center">

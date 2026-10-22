@@ -5,6 +5,10 @@ import { getModelProfile } from '@/lib/queries/model'
 import { Avatar, EmptyState } from '@/components/ui'
 import { SafetyMenu } from '@/components/SafetyMenu'
 import { isValidInstagramHandle } from '@/lib/instagram'
+// ⚠️ THE GRID IS A CLIENT COMPONENT, THE PAGE IS NOT. Only the grid needs
+// state (which photo is open), so only the grid crosses the boundary — the
+// page keeps reading the database on the server and sending HTML.
+import { PhotoGrid } from './PhotoGrid'
 
 export const metadata = { title: 'Model' }
 
@@ -125,7 +129,7 @@ export default async function ModelPage({
           {photosByCategory.map(g => (
             <div key={g.category.id} className="mt-4">
               <h3 className="text-sm font-bold text-muted">{g.category.name}</h3>
-              <PhotoGrid photos={g.photos} />
+              <PhotoGrid photos={g.photos} modelName={m.name} />
             </div>
           ))}
           {uncategorised.length > 0 && (
@@ -133,7 +137,7 @@ export default async function ModelPage({
               {photosByCategory.length > 0 && (
                 <h3 className="text-sm font-bold text-muted">Other</h3>
               )}
-              <PhotoGrid photos={uncategorised} />
+              <PhotoGrid photos={uncategorised} modelName={m.name} />
             </div>
           )}
         </section>
@@ -206,19 +210,5 @@ export default async function ModelPage({
         )}
       </section>
     </>
-  )
-}
-
-function PhotoGrid({ photos }: { photos: { id: string; url: string; caption: string | null }[] }) {
-  return (
-    <ul className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
-      {photos.map(p => (
-        <li key={p.id} className="overflow-hidden rounded-md border border-hairline">
-          {/* eslint-disable-next-line @next/next/no-img-element -- Supabase Storage, unknown dimensions */}
-          <img src={p.url} alt={p.caption ?? ''} className="h-40 w-full object-cover" />
-          {p.caption && <p className="px-2 py-1 text-xs text-muted">{p.caption}</p>}
-        </li>
-      ))}
-    </ul>
   )
 }
