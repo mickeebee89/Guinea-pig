@@ -609,11 +609,12 @@ export default async function DashboardPage({
                     <dd className="font-bold text-warm-dark">{data.portfolioCount}</dd>
                   </div>
                 </dl>
-                {data.isFoundingProvider && (
-                  <p className="mt-3 inline-flex rounded-[999px] bg-soft-pink px-3 py-1 text-xs font-bold text-rose">
-                    Founding Provider
-                  </p>
-                )}
+                {/* ⚠️ THE FOUNDING PROVIDER BADGE WAS HERE (0102). Founding status is
+                    still granted at signup and still recorded — handle_new_auth_user
+                    and founding_providers are untouched — it is simply no longer
+                    ADVERTISED, because it only ever meant "you don't pay the
+                    £14.99" and nobody pays that now. Restoring the badge is listed
+                    in supabase/FEE-REINSTATEMENT.md. */}
                 <p className="mt-3 flex flex-wrap gap-4">
                   <Link href="/shop" className="text-sm font-bold text-rose hover:underline">
                     Edit your shop &amp; treatments →

@@ -16,8 +16,12 @@ export const metadata: Metadata = {
  * ?role=stylist|model  — preselects the role, so /for-stylists and /for-models
  *                        can link straight in rather than asking twice.
  * ?ref=<code>          — cohort attribution. A course leader shares a link and
- *                        their tranche is identifiable, so Founding Provider
- *                        status can be honoured for the group.
+ *                        their tranche is identifiable.
+ *                        ⚠️ IT NO LONGER BUYS ANYTHING. Founding Provider
+ *                        status is still granted and recorded, but since 0102
+ *                        the stylist fee is switched off, so it waives a charge
+ *                        nobody is asked for. The link is attribution now, not
+ *                        an offer — and nothing about it is advertised.
  *
  * ATTRIBUTION ONLY. It records where a signup came from; it creates nothing on
  * anyone's behalf. Bulk-creating accounts for a cohort would mean the college

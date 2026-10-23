@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { hasActiveSubscription } from '@/lib/verification'
+import { isProviderFeeSettled } from '@/lib/fee'
 import { createSupabaseServerClient, requireUser } from '@/lib/supabase-server'
 import type { ConfirmOutcome } from '@/components/PayForm'
 
@@ -77,16 +78,19 @@ export async function submitSelfie(form: FormData): Promise<VerifyResult> {
   // It is the same membership test the apply gate uses — waived counts, and it
   // asks Stripe when our own row looks stale rather than refusing someone who
   // has paid.
-  const [{ data: provRow }, { data: userRow }, { data: payRow }] = await Promise.all([
+  const [{ data: provRow }, { data: userRow }, feeSettled] = await Promise.all([
     supabase.from('providers').select('id').eq('user_id', user.id).maybeSingle(),
     supabase.from('users')
-      .select('is_verified, is_founding_provider, provider_fee_waived, profile_pic_url')
+      .select('is_verified, profile_pic_url')
       .eq('id', user.id).maybeSingle(),
-    supabase.from('verification_payments').select('id').eq('user_id', user.id).limit(1).maybeSingle(),
+    // ⚠️ ASKED, NOT RECOMPUTED. 0102 — the rule lives in provider_fee_settled
+    // and nowhere else, so the founding and waiver columns are no longer read
+    // here at all.
+    isProviderFeeSettled(supabase, user.id),
   ])
 
   const u = (userRow ?? {}) as {
-    is_verified?: boolean; is_founding_provider?: boolean; provider_fee_waived?: boolean
+    is_verified?: boolean
     profile_pic_url?: string | null
   }
 
@@ -110,8 +114,9 @@ export async function submitSelfie(form: FormData): Promise<VerifyResult> {
   //
   // ⚠️ IT COULD NOT BE ADDED UNTIL BOTH ROLES HAD SOMEWHERE TO SET ONE.
   // Until today nothing in site/ wrote profile_pic_url at all, so this gate
-  // would have refused every web-only member with no way out — including
-  // stylists who had already paid the £14.99. A model got /profile (item 99)
+  // would have refused every web-only member with no way out — including, at
+  // the time, stylists who had already paid the fee. (It is switched off as of
+  // 0102, and no payment was ever actually taken.) A model got /profile (item 99)
   // and a stylist got /shop (item 101) first, deliberately, and the message
   // below names whichever one is hers.
   //
@@ -127,10 +132,12 @@ export async function submitSelfie(form: FormData): Promise<VerifyResult> {
   }
 
   if (provRow) {
-    // A stylist. "Settled" means paid OR Founding Provider OR waived, never
-    // just paid — getting that wrong is what had founding stylists staring at
-    // a £14.99 wall.
-    if (!payRow && !u.is_founding_provider && !u.provider_fee_waived) {
+    // ⚠️ UNREACHABLE WHILE THE FEE IS OFF, AND KEPT ANYWAY — the server-side
+    // half of the same gate, so switching the fee back on restores it without
+    // anyone having to remember this file. "Settled" has never meant merely
+    // "paid": founding and waived both count, and provider_fee_settled is now
+    // the only thing that knows that.
+    if (!feeSettled) {
       return { ok: false, error: 'The one-off fee needs settling before the ID check.' }
     }
   } else {

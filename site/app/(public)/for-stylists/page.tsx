@@ -104,15 +104,24 @@ export default async function ForStylists({
               the waitlist belonged to the old Guinea Pig App brand, was never
               carried over to Cavy, and its form, route and rate limiter went on
               22 Sep 2026 (audit item 71); the table was deleted 12 Oct 2026.
-              What replaces it describes the mechanism that actually exists: an
-              invite link, £14.99 waived, 200 places. Terms section 5. */}
-          <strong className="font-bold text-warm-dark">Cavy is open.</strong>{' '}
+              What replaced it described an invite link, £14.99 waived, 200
+              places.
+              ⚠️⚠️ AND THAT WENT ON 23 Oct 2026 (migration 0102): the stylist
+              verification fee is switched off, so "£14.99 waived" and "200
+              places" both describe a benefit against a charge nobody is asked
+              for. The invite link still works and still records where a signup
+              came from — it is simply no longer a discount, because there is
+              nothing to discount.
+              ⚠️ THE SENTENCE HAS TO SURVIVE BEING READ BY A COLLEGE. "We ask
+              nothing of your students" must be true with no footnote, so there
+              is no "free for now", no tranche and no cap. */}
+          <strong className="font-bold text-warm-dark">Cavy is open, and it’s free for stylists.</strong>{' '}
           <Link href={signUpHref} className="text-rose underline decoration-rose/30 underline-offset-2">
             Sign up as a stylist
           </Link>{' '}
-          to set up your shop. If you’ve been given an invite link, sign up through it: that makes
-          you a Founding Provider, so you won’t pay the £14.99 verification fee. Places are limited
-          to the first 200. The full terms are in{' '}
+          to set up your shop. There’s no sign-up fee, no verification fee and no subscription —
+          we don’t charge stylists anything. You’ll complete a quick identity check before your
+          shop goes live. The full terms are in{' '}
           <Link href="/terms#5" className="text-rose underline decoration-rose/30 underline-offset-2">
             section 5
           </Link>

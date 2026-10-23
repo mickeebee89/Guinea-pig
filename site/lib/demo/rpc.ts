@@ -16,6 +16,23 @@ export function demoRpc(name: string, args: Row, store: DemoStore, user: DemoUse
       return null
 
     /**
+     * ⚠️ TRUE, BECAUSE THE FEE IS SWITCHED OFF — and this mock has to agree
+     * with the real function about WHY, not just about the answer.
+     *
+     * `provider_fee_settled` short-circuits to true whenever
+     * `provider_fee_enabled` is false, which is the default since 0102. There
+     * is no settings table in demo mode, so the flag cannot be read; returning
+     * true reproduces the live default rather than inventing a payment.
+     *
+     * ⚠️ IF THE FEE IS EVER TURNED BACK ON, THIS STOPS MATCHING. A demo stylist
+     * would walk past a fee wall the real product shows her. Add the flag to
+     * the fixtures at that point rather than leaving this `true` behind —
+     * see supabase/FEE-REINSTATEMENT.md.
+     */
+    case 'provider_fee_settled':
+      return true
+
+    /**
      * ⚠⚠ WITHOUT THIS, EVERY STYLIST PAGE AND THE APPLY WIZARD THROW IN DEMO
      * MODE. 0090 added slot_contention and item 186's shared loader calls it on
      * both surfaces; demoRpc's default throws on an unknown name, deliberately,

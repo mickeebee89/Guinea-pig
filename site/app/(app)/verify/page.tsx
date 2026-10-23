@@ -3,7 +3,6 @@ import { createSupabaseServerClient, requireUser } from '@/lib/supabase-server'
 import { getStylistSetup } from '@/lib/queries/shop'
 import { EmptyState } from '@/components/ui'
 import { SelfieCapture } from '@/components/SelfieCapture'
-import { FeePanel } from './FeePanel'
 
 export const metadata = { title: 'ID check' }
 
@@ -86,26 +85,15 @@ export default async function VerifyPage() {
     )
   }
 
-  // The fee gate. Settled means paid OR Founding Provider OR waived — never
-  // just paid. Reading it as "paid" is what had founding stylists shown a
-  // £14.99 wall in the app until 19 Aug.
-  if (!setup.feeSettled) {
-    return (
-      <Wrap>
-        <h2 className="font-display text-xl text-warm-dark">The one-off fee comes first</h2>
-        <p className="mt-1 text-sm text-muted">
-          There’s a £14.99 one-off charge before the ID check, and it’s settled once, ever.
-        </p>
-        <div className="mt-5">
-          <FeePanel />
-        </div>
-        <p className="mt-4 text-xs text-muted">
-          Payments are handled by Stripe. Your card details are entered on Stripe’s own form and
-          never reach Cavy’s servers.
-        </p>
-      </Wrap>
-    )
-  }
+  // ⚠️⚠️ THE FEE GATE USED TO BE HERE AND IS GONE FROM THE FLOW (0102).
+  // Cavy is free for stylists: a stylist now goes straight from here to the ID
+  // check with nothing to pay and no mention of a price.
+  //
+  // ⚠️ GONE FROM THE FLOW, NOT GONE. `FeePanel.tsx` is still in this folder,
+  // `setup.feeSettled` is still computed, the server-side gate in actions.ts is
+  // still there, and Stripe's two paths are untouched. Putting the fee back is
+  // one settings row plus restoring this block — supabase/FEE-REINSTATEMENT.md
+  // has the exact text and every other site that has to move with it.
 
   // ══ NO PHOTO TO COMPARE AGAINST. Audit item 101. ════════════════════
   //

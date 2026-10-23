@@ -193,7 +193,22 @@ export const TERMS: LegalDoc = {
     },
     {
       n: '5',
-      heading: 'Founding Provider accounts',
+      // ⚠️⚠️ REWRITTEN AGAIN 23 Oct 2026 (migration 0102). The stylist
+      // verification fee is switched off: Cavy is free for stylists, with no
+      // sign-up fee, no verification fee and no subscription. This section
+      // described 200 Founding places that existed only to waive a £14.99
+      // charge nobody is now asked for, so it described a benefit with nothing
+      // to benefit from.
+      //
+      // ⚠️ THE NUMBER IS STILL LOAD-BEARING AND STILL MUST NOT MOVE. /terms#5
+      // is linked from the for-stylists CTA. The HEADING changes because the
+      // old one would name something this section no longer describes; the
+      // ANCHOR does not.
+      //
+      // ⚠️ FOUNDING STATUS IS STILL GRANTED AND RECORDED — handle_new_auth_user
+      // and founding_providers are untouched. It is no longer a published
+      // promise, which is a different thing from no longer existing.
+      heading: 'Stylist accounts',
       blocks: [
         // ⚠️ REWRITTEN 12 Oct 2026. This section was headed "The waitlist" and
         // described a personal sign-up link that would be emailed to people who
@@ -221,7 +236,7 @@ export const TERMS: LegalDoc = {
         // sentence is a statement of the gap, not a disclaimer.
         {
           type: 'p',
-          text: 'A limited number of stylist accounts are Founding Provider accounts, which means you won’t pay the £14.99 verification fee. You get one by creating your account through an invite or referral link we or a partner have shared — the link carries a code that marks where you came from, and typing the address in by hand instead won’t do it. There are 200 Founding places in total; if they have all been taken by the time you sign up, your account will be a standard stylist account. You’ll still need to complete the identity check before you can offer treatments (section 7).',
+          text: 'Cavy is free for stylists. There is no sign-up fee, no verification fee and no subscription — we will not ask you to pay us anything to create an account, be verified, or offer treatments. You will still need to complete the identity check before you can offer treatments (section 7). If we ever introduce a charge for stylists, we will tell you before it applies to your account, and you will be able to decide then.',
         },
       ],
     },
@@ -282,16 +297,22 @@ export const TERMS: LegalDoc = {
           type: 'p',
           // "in the app" until 23 Sep 2026 — untrue since 14 Sep, when
           // membership became payable on the website too.
-          text: 'Some features of Cavy require payment — a monthly membership subscription for models, and a one-off identity-verification fee for stylists. Current prices are shown on the website and in the app before you pay, and payments are handled by our payment provider (we don’t store your full card details).',
+          // ⚠️ THE STYLIST HALF OF THIS SENTENCE WAS REMOVED 23 Oct 2026
+          // (0102). Models still pay a membership; stylists pay nothing. See
+          // section 5, and supabase/FEE-REINSTATEMENT.md for what goes back.
+          text: 'Some features of Cavy require payment — a monthly membership subscription for models. Current prices are shown on the website and in the app before you pay, and payments are handled by our payment provider (we don’t store your full card details).',
         },
         {
           type: 'p',
           text: 'Model membership subscription. The membership renews automatically each month at the price shown until you cancel. You can cancel at any time from within the app to stop future renewals; when you cancel, your membership continues until the end of the month you’ve already paid for, and you won’t be charged again. We don’t provide partial refunds for the remainder of a month once it has started, except where the law requires otherwise.',
         },
-        {
-          type: 'p',
-          text: 'Stylist verification fee. The verification fee is a one-off charge for processing your identity verification. Because this is a service that begins as soon as you pay, by paying you ask us to start it straight away; once verification has been carried out, the fee is non-refundable except where the law requires otherwise.',
-        },
+        // ⚠️⚠️ THE "STYLIST VERIFICATION FEE … NON-REFUNDABLE" CLAUSE WAS
+        // DELETED HERE on 23 Oct 2026 (0102). It described the refund terms of
+        // a charge that can no longer happen, and softening it would have left
+        // a published document describing a fee while the site says there is
+        // none. The model subscription's own refund terms are separate and are
+        // unchanged. The exact deleted wording is quoted in
+        // supabase/FEE-REINSTATEMENT.md so it can be restored verbatim.
         {
           type: 'p',
           text: `Your cancellation rights. Where you are a consumer, you may have a legal right to cancel a purchase within 14 days. Because our paid features are digital services that you ask us to provide immediately, this right may end once the service has been provided. Nothing here affects your statutory rights as a consumer. If you think you’re entitled to a refund, or something has gone wrong with a payment, email us at ${SUPPORT_EMAIL} and we’ll deal with it in line with your rights and these terms.`,

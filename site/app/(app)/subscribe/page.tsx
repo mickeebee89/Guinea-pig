@@ -20,9 +20,10 @@ export const metadata = { title: 'Membership' }
  * hasActiveSubscription returns { active: true, waived: true } for a comped
  * account before it reads the subscriptions row at all. So `subscribed` means
  * paid OR comped, and there is nothing to compose here. That is NOT the shape
- * /verify uses for the £14.99 fee, where feeSettled is assembled at the call
- * site from paid-or-founding-or-waived — reading that one as "paid" is what
- * showed founding stylists a fee wall until 19 Aug. Two gates that look alike
+ * /verify uses for the stylist fee, where feeSettled now comes from
+ * provider_fee_settled rather than being assembled at the call site (0102) —
+ * reading that one as "paid" is what showed founding stylists a fee wall until
+ * 19 Aug, and it is no longer possible to read it wrong here. Two gates that look alike
  * and are built differently.
  */
 function Wrap({ children }: { children: React.ReactNode }) {

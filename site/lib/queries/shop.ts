@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { deriveIdCheck, type IdCheckState } from './idCheck'
+import { isProviderFeeSettled } from '@/lib/fee'
 
 /**
  * The stylist's own shop: what it says, what it offers, and how far through
@@ -199,15 +200,18 @@ export async function getStylistSetup(
   }
   if (!prov) return empty
 
-  const [treatRes, userRes, payRes, reqRes, bioRes, viewRes] = await Promise.all([
+  // ⚠️ THE verification_payments READ IS GONE, not forgotten: `feeSettled`
+  // now comes from provider_fee_settled (0102), which reads that table itself
+  // under the same RLS. A second read here would have been the third copy of
+  // the rule that 0102 exists to collapse.
+  const [treatRes, userRes, feeSettled, reqRes, bioRes, viewRes] = await Promise.all([
     // Rows, not a head count: publishing needs a treatment WITH a category
     // (provider_shop_is_publishable, 0016 / item 52), so both counts matter.
     supabase.from('provider_treatments').select('category').eq('provider_id', prov.id),
     supabase.from('users')
       .select('is_verified, is_founding_provider, provider_fee_waived, profile_pic_url')
       .eq('id', userId).maybeSingle(),
-    supabase.from('verification_payments')
-      .select('id').eq('user_id', userId).limit(1).maybeSingle(),
+    isProviderFeeSettled(supabase, userId),
     // Latest first: a rejected request is deleted before a fresh one is filed,
     // but ordering costs nothing and stops a stale row deciding the state.
     supabase.from('verification_requests')
@@ -311,7 +315,7 @@ export async function getStylistSetup(
     idCheck,
     idCheckNote,
     isVerified: !!u.is_verified,
-    feeSettled: !!payRes.data || !!u.is_founding_provider || !!u.provider_fee_waived,
+    feeSettled,
     isFoundingProvider: !!u.is_founding_provider,
     isPublished: !!prov.is_published,
     everPublished: prov.first_published_at !== null,
@@ -338,7 +342,13 @@ export function publishRefusal(setup: StylistSetup): string | null {
       ? 'Your ID check hasn’t been approved yet. Your shop goes live by itself as soon as it is.'
       : 'Your shop can go live once your ID check has passed.'
   }
-  if (!setup.feeSettled) return 'Pay the £14.99 fee first. You can do it on the ID check page.'
+  // ⚠️ UNREACHABLE WHILE THE FEE IS OFF, AND KEPT ANYWAY. feeSettled comes
+  // from provider_fee_settled, which short-circuits to true when
+  // provider_fee_enabled is false — so this branch cannot fire today. It stays
+  // because deleting it would silently remove the publish gate if the fee is
+  // ever switched back on, and the price is no longer written into the string
+  // for the same reason: it lives in settings.verification_price_pence.
+  if (!setup.feeSettled) return 'The one-off stylist fee needs settling first. You can do it on the ID check page.'
   if (setup.publishBlockers.length > 0) {
     return `Your shop still needs ${setup.publishBlockers.join(' and ')} before models can see it.`
   }

@@ -9,8 +9,12 @@ import { Elements, PaymentElement, useElements, useStripe } from '@stripe/react-
 /**
  * ── ONE FORM, BOTH PURCHASES ──────────────────────────────────────────────
  *
- * The £4.99/mo model subscription and the £14.99 one-off stylist fee differ
- * only in which edge action creates the intent and which one confirms it.
+ * The £4.99/mo model subscription and the one-off stylist verification fee
+ * differ only in which edge action creates the intent and which one confirms
+ * it. ⚠️ THE STYLIST FEE IS SWITCHED OFF as of 0102 (23 Oct 2026) and FeePanel
+ * is no longer rendered anywhere — this component is live for the MODEL
+ * subscription only. Nothing here changed to achieve that, and nothing here
+ * needs to change to undo it.
  * Everything a card needs — mounting Elements, confirming, and the three
  * things that can happen afterwards — is identical.
  *
@@ -57,8 +61,10 @@ export interface PayFormProps {
    * Optional. Rendered under the success body — a way onward from here.
    *
    * ⚠⚠ OPTIONAL SO THE FEE PATH IS UNCHANGED BY CONSTRUCTION, NOT BY AGREEMENT.
-   * This component is shared with verify/FeePanel.tsx, the LIVE £14.99 provider
-   * fee. FeePanel does not pass this prop, so it is `undefined` there and
+   * This component is shared with verify/FeePanel.tsx, the stylist fee — which
+   * is SWITCHED OFF since 0102 and no longer reachable, though the file and
+   * this contract both stand. FeePanel does not pass this prop, so it is
+   * `undefined` there and
    * `{successAction}` renders nothing — the fee's success block is byte-identical
    * to what it was. TypeScript proves FeePanel still compiles without it; a
    * required prop would have forced a change to the fee flow to add a feature it
