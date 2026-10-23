@@ -9,6 +9,15 @@ import { reviewerNames } from '@/lib/reviewers'
 import { ReviewerLine } from '@/components/ReviewerLine'
 import { SiteProfileLink } from '@/components/SiteProfileLink'
 
+/** What a reviewer needs to see about the shop they are about to publish. */
+interface ShopPreview {
+  providerId: string
+  name: string | null
+  bio: string | null
+  /** Approved images only — the ones publishing would actually make public. */
+  images: string[]
+}
+
 interface VerificationRequest {
   id: string
   selfie_url: string
@@ -90,6 +99,19 @@ export default function VerificationQueuePage() {
    * wrong answer rather than an obviously broken one.
    */
   const [providerByUser, setProviderByUser] = useState<Record<string, string> | null>(null)
+  /**
+   * The shop being approved: name, bio and approved portfolio images.
+   *
+   * ⚠️⚠️ THIS IS THE CONTENT APPROVAL MAKES PUBLIC, AND IT WAS NOT ON SCREEN.
+   * A reviewer could see a selfie and a name and decide to publish a shop whose
+   * bio and photographs they had never read. The selfie answers "is this a real
+   * person"; it says nothing about what that person has written.
+   *
+   * ⚠️ Keyed by USER id, because the card has a user and not a provider. Null
+   * means the read did not run, which is not the same as "no shop" — see
+   * SiteProfileLink for why that distinction is kept rather than collapsed.
+   */
+  const [shopByUser, setShopByUser] = useState<Record<string, ShopPreview> | null>(null)
 
   const { loading, reload } = useLoader(filter, async stale => {
     const { data, error } = await supabase
@@ -110,22 +132,61 @@ export default function VerificationQueuePage() {
     // UNPUBLISHED by definition — it is waiting to be verified — and the other
     // policy only exposes published shops or ones you have a session with.
     const ids = rows.map(r => r.user?.id).filter((x): x is string => !!x)
-    if (ids.length > 0) {
-      const { data: provRows, error: provErr } = await supabase
-        .from('providers').select('id, user_id').in('user_id', ids)
-      if (stale()) return
-      if (provErr) {
-        setProviderByUser(null)
-      } else {
-        const map: Record<string, string> = {}
-        for (const r of (provRows ?? []) as unknown as { id: string; user_id: string }[]) {
-          map[r.user_id] = r.id
-        }
-        setProviderByUser(map)
-      }
-    } else {
+    if (ids.length === 0) {
       setProviderByUser({})
+      setShopByUser({})
+      return
     }
+
+    // ⚠️ `providers_select_admin` is what makes this work: every shop here is
+    // UNPUBLISHED by definition — it is waiting to be verified — and the other
+    // policy only exposes published shops or ones you have a session with.
+    const { data: provRows, error: provErr } = await supabase
+      .from('providers').select('id, user_id, name, bio').in('user_id', ids)
+    if (stale()) return
+    if (provErr) {
+      setProviderByUser(null)
+      setShopByUser(null)
+      return
+    }
+
+    type ProvRow = { id: string; user_id: string; name: string | null; bio: string | null }
+    const provs = (provRows ?? []) as unknown as ProvRow[]
+    const map: Record<string, string> = {}
+    for (const r of provs) map[r.user_id] = r.id
+    setProviderByUser(map)
+
+    // One read for the whole queue, not one per card.
+    // ⚠️ APPROVED ONLY. Publishing makes the approved images public and leaves
+    // the rest in the moderation queue, so showing pending ones here would
+    // overstate what this decision releases — and reviewing images is the
+    // Moderation tab's job, not this one.
+    const provIds = provs.map(p => p.id)
+    const images: Record<string, string[]> = {}
+    if (provIds.length > 0) {
+      const { data: picRows } = await supabase
+        .from('portfolio_items')
+        .select('provider_id, media_url, media_type, moderation_status')
+        .in('provider_id', provIds)
+        .eq('moderation_status', 'approved')
+        .order('created_at', { ascending: false })
+      if (stale()) return
+      for (const r of (picRows ?? []) as unknown as
+           { provider_id: string; media_url: string; media_type: string | null }[]) {
+        // Video was removed from the product on 24 Sep 2026 (item 111) and
+        // nothing can play one, so an approved video row is not a thumbnail.
+        if (r.media_type === 'video') continue
+        ;(images[r.provider_id] ??= []).push(r.media_url)
+      }
+    }
+
+    const shops: Record<string, ShopPreview> = {}
+    for (const r of provs) {
+      shops[r.user_id] = {
+        providerId: r.id, name: r.name, bio: r.bio, images: images[r.id] ?? [],
+      }
+    }
+    setShopByUser(shops)
 
     // verification-selfies is a PRIVATE bucket. selfie_url now holds a storage path;
     // sign it for ~5 minutes so the <img> can load. Old test rows hold full public
@@ -413,6 +474,66 @@ export default function VerificationQueuePage() {
                         : ' This was decided with nothing to compare the selfie against.'}
                     </p>
                   )}
+
+                  {/* ⚠️⚠️ THE SHOP BEING APPROVED, ON THE SCREEN WHERE IT IS
+                      APPROVED. Until now the card showed a selfie and a name,
+                      and the line below said approval "makes their shop live"
+                      without showing what was about to go live.
+
+                      ⚠️ The images are from the PUBLIC portfolio-photos bucket,
+                      so the URLs need no signing — unlike the selfie above, and
+                      unlike a model's gallery. Audit item 218 is about that
+                      bucket being public; nothing here depends on it staying
+                      that way except the absence of a signing step.
+
+                      Shown for any stylist in the queue, not only pending ones:
+                      a decision already made is still worth being able to read
+                      back against what it released. */}
+                  {req.user && (req.user.role === 'provider' || req.user.role === 'both') && (() => {
+                    const shop = shopByUser ? shopByUser[req.user.id] : undefined
+                    if (shopByUser === null) {
+                      return (
+                        <p className="text-xs text-[#3D2E2E]/50 bg-black/[0.03] rounded-lg px-3 py-2 mb-3">
+                          The shop could not be loaded, so what approval would publish is unknown.
+                        </p>
+                      )
+                    }
+                    if (!shop) return null
+                    return (
+                      <div className="rounded-lg border border-black/5 bg-black/[0.02] px-3 py-2 mb-3">
+                        <div className="text-[11px] uppercase tracking-wide text-[#3D2E2E]/40 mb-1">
+                          The shop this would publish
+                        </div>
+                        <div className="font-medium text-[#3D2E2E]">
+                          {shop.name?.trim() || <span className="italic text-[#3D2E2E]/40">No shop name set</span>}
+                        </div>
+                        {shop.bio?.trim()
+                          ? <p className="mt-1 whitespace-pre-wrap text-sm text-[#3D2E2E]/70">{shop.bio}</p>
+                          : <p className="mt-1 text-sm italic text-[#3D2E2E]/40">No bio written.</p>}
+                        {shop.images.length > 0 ? (
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            {shop.images.map(url => (
+                              /* Same thumbnail shape as the selfie above, and the
+                                 same lightbox, so one click enlarges either. */
+                              /* eslint-disable-next-line @next/next/no-img-element */
+                              <img
+                                key={url}
+                                src={url}
+                                alt="Portfolio image"
+                                className="w-20 h-20 object-cover rounded-lg border border-black/5 cursor-pointer hover:opacity-90 transition-opacity"
+                                onClick={() => setLightbox(url)}
+                                onError={e => { (e.target as HTMLImageElement).src = NO_PHOTO_SVG }}
+                              />
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="mt-2 text-xs italic text-[#3D2E2E]/40">
+                            No approved portfolio images.
+                          </p>
+                        )}
+                      </div>
+                    )
+                  })()}
 
                   {req.user?.role === 'provider' && filter === 'pending' && (
                     <p className="text-xs text-amber-600 bg-amber-50 rounded-lg px-3 py-2 mb-3">

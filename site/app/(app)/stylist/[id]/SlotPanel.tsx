@@ -48,6 +48,7 @@ export function SlotPanel({
   date,
   slots,
   treatments,
+  readOnly = false,
 }: {
   providerId: string
   stylistName: string
@@ -56,6 +57,21 @@ export function SlotPanel({
   /** Every future slot for this stylist — the panel does its own filtering. */
   slots: LoadedSlot[]
   treatments: LoadedTreatment[]
+  /**
+   * Show the times without offering to book them.
+   *
+   * ⚠️⚠️ OPTIONAL, SO THE MEMBER PATH IS UNCHANGED BY CONSTRUCTION RATHER THAN
+   * BY AGREEMENT — the same reasoning as PayForm's `successAction`. Every
+   * existing call site omits it and gets exactly what it got before.
+   *
+   * It exists for ONE case: an admin reading an UNPUBLISHED shop. That shop is
+   * invisible to members, so an application against it would be a booking
+   * nobody could have made through the product — a state reachable only by the
+   * person reviewing it. The times still show, because what a stylist has
+   * posted and priced is part of what is being approved; the way to act on
+   * them does not.
+   */
+  readOnly?: boolean
 }) {
   const byId = new Map(treatments.map(t => [t.id, t]))
   const forDay = bookable(slots).filter(s => s.date === date)
@@ -120,12 +136,18 @@ export function SlotPanel({
                     <p className="mt-1 text-xs text-muted">{names.join(' · ')}</p>
                   )}
 
-                  <Link
-                    href={`/stylist/${providerId}/apply?step=3&date=${s.date}&slot=${s.id}`}
-                    className="mt-3 inline-flex min-h-11 items-center rounded-[999px] bg-rose px-5 text-sm font-bold text-white hover:bg-rose-dark"
-                  >
-                    Apply for this time
-                  </Link>
+                  {readOnly ? (
+                    <p className="mt-3 text-xs text-muted">
+                      Not bookable — this shop isn’t published.
+                    </p>
+                  ) : (
+                    <Link
+                      href={`/stylist/${providerId}/apply?step=3&date=${s.date}&slot=${s.id}`}
+                      className="mt-3 inline-flex min-h-11 items-center rounded-[999px] bg-rose px-5 text-sm font-bold text-white hover:bg-rose-dark"
+                    >
+                      Apply for this time
+                    </Link>
+                  )}
                 </li>
               )
             })}

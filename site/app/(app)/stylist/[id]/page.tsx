@@ -143,7 +143,34 @@ export default async function StylistPage({
           moderation outcome; publishing either to another member would be us
           disclosing something about them that they did not. The sentence is
           the same whichever it is, which is the point. */}
-      {!p.isPublished && !p.isOwner && (
+      {/* ⚠️⚠️ AN ADMIN GETS A DIFFERENT SENTENCE, because the member one is a
+          deliberate non-answer and a moderator needs the answer.
+
+          The member copy below says what is true for the reader — no new
+          bookings — and NOT why, because "hidden" is the stylist's business
+          decision and "suspended" is a moderation outcome, and publishing
+          either to another member discloses something they did not. An admin
+          is the person who decides those, so withholding it from them is
+          withholding it from the one reader it is for.
+
+          ⚠️⚠️ AND THIS IS THE SIGNED-IN MEMBER VIEW, NOT THE LOGGED-OUT PAGE
+          GOOGLE SEES. That one is a different route reading `public_stylists`,
+          which is published-only and has no admin concept in it. So an admin
+          reading this is seeing THE DATA as a member would — the bio, the
+          treatments, the portfolio, the calendar — and NOT a pixel-faithful
+          preview of the public listing. For "is this shop fit to publish" that
+          is the right thing. For "what exactly will a search engine show" it is
+          not, and nothing here pretends otherwise. */}
+      {!p.isPublished && !p.isOwner && p.isAdmin && (
+        <p className="mt-4 rounded-lg border border-rose/30 bg-soft-pink px-4 py-3 text-sm text-warm-dark">
+          <span className="font-bold">Admin view.</span>{' '}
+          This shop is <strong>not published</strong>, so no member can see it and it is absent
+          from the public site. Everything below is the data as it stands, including the
+          availability section, which members would not be shown.
+        </p>
+      )}
+
+      {!p.isPublished && !p.isOwner && !p.isAdmin && (
         <p className="mt-4 rounded-lg border border-hairline bg-input-bg px-4 py-3 text-sm text-muted">
           <span className="font-bold text-warm-dark">
             {p.name} isn’t taking new bookings at the moment.
@@ -189,8 +216,13 @@ export default async function StylistPage({
 
       {/* No calendar on a shop that is not taking bookings: offering days to
           pick from, and then refusing the application, would be worse than
-          not offering them. The owner still sees their own. */}
-      {(p.isPublished || p.isOwner) && (
+          not offering them. The owner still sees their own.
+          ⚠️ AND AN ADMIN SEES IT TOO, on any shop, published or not — this is
+          the one conditional that stood between a moderator and the thing they
+          are approving. `isAdmin` unlocks VISIBILITY and nothing else: the
+          owner-only affordances below and elsewhere on this page stay keyed on
+          `isOwner`, so an admin reads this shop and cannot act as it. */}
+      {(p.isPublished || p.isOwner || p.isAdmin) && (
       <section className="mt-6">
         <div className="mb-2 flex flex-wrap items-baseline justify-between gap-3">
           <h2 className="text-xs font-bold uppercase tracking-widest text-muted">Availability</h2>
@@ -255,6 +287,10 @@ export default async function StylistPage({
                 anything. */}
             {selectedDate && (
               <SlotPanel
+                /* ⚠️ Read-only for an admin on a shop no member can see. See
+                   SlotPanel's own note: an application against an unpublished
+                   shop would be a booking the product could not have produced. */
+                readOnly={p.isAdmin && !p.isPublished && !p.isOwner}
                 providerId={id}
                 stylistName={p.name}
                 date={selectedDate}

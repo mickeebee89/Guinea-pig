@@ -96,6 +96,18 @@ export interface StylistProfile {
   pendingPortfolio: { id: string; mediaUrl: string; mediaType: string | null }[]
   /** The viewer is this stylist. Changes wording and reveals pending uploads. */
   isOwner: boolean
+  /**
+   * The viewer is an admin.
+   *
+   * ⚠️⚠️ VISIBILITY ONLY. It must never stand in for `isOwner`. An admin is a
+   * READER of someone else's shop, not a second owner: the edit links, the
+   * pending-moderation uploads and the first-person "Treatments I do" voice all
+   * stay keyed on isOwner alone. The single thing this unlocks is the
+   * availability section, which is otherwise hidden on an unpublished shop —
+   * and that is the half a moderator needs to see before approving the person
+   * who owns it.
+   */
+  isAdmin: boolean
   reviews: {
     id: string
     rating: number | null
@@ -170,7 +182,11 @@ export async function getStylistProfile(
   }
 
 
-  const [treatRes, portRes, revRes, blocked, loaded, favRes] = await Promise.all([
+  // ⚠️ is_admin() JOINS THE EXISTING Promise.all RATHER THAN ADDING A ROUND
+  // TRIP. Every member loads this page, so a sequential extra call would cost
+  // every one of them a latency hop to answer a question about almost none of
+  // them. Folded in, it costs nothing but a column in a batch already running.
+  const [treatRes, portRes, revRes, blocked, loaded, favRes, adminRes] = await Promise.all([
     // Category is the only column edit-shop reliably fills; `name` holds a copy
     // and duration/price are never written. Same note as mobile.
     supabase.from('provider_treatments').select('category').eq('provider_id', providerId),
@@ -197,9 +213,16 @@ export async function getStylistProfile(
     supabase.from('favourites')
       .select('id').eq('user_id', viewerId).eq('provider_id', providerId)
       .maybeSingle(),
+    // ⚠️ ASKED OF POSTGRES, NOT OF THE CLIENT. is_admin() reads the admins
+    // table as the signed-in user; it is not a prop, a cookie or a role string
+    // that a browser could set. A failure answers "not an admin", which hides
+    // the extra section rather than revealing it.
+    supabase.rpc('is_admin'),
   ])
 
   const isOwner = !!prov.user_id && prov.user_id === viewerId
+  // Fails closed: an error, a null, or anything that is not exactly true.
+  const isAdmin = adminRes.data === true
   const portRows = (portRes.data ?? []) as {
     id: string; media_url: string; media_type: string | null; moderation_status: string | null
   }[]
@@ -249,6 +272,7 @@ export async function getStylistProfile(
           .map(i => ({ id: i.id, mediaUrl: i.media_url, mediaType: i.media_type }))
       : [],
     isOwner,
+    isAdmin,
     reviews: reviewRows.map(r => ({
       id: r.id,
       rating: r.overall_rating,

@@ -33,6 +33,24 @@ export function demoRpc(name: string, args: Row, store: DemoStore, user: DemoUse
       return true
 
     /**
+     * ⚠️ FALSE, SO DEMO MODE SHOWS THE MEMBER VIEW.
+     *
+     * The demo personas are a model and a stylist; neither is an admin, and
+     * there is no admin fixture. `/stylist/[id]` now asks this to decide
+     * whether to show the availability section on an UNPUBLISHED shop and
+     * which banner to render, so false is both true of the fixtures and the
+     * view worth being able to screenshot.
+     *
+     * ⚠️ CONSEQUENCE, STATED RATHER THAN DISCOVERED: the admin view of a shop
+     * cannot be demoed. Seeing it needs a real admin session against the real
+     * database. Adding an `as=admin` persona would mean fixtures for the
+     * admins table and a decision about what else that persona can reach,
+     * which is its own change.
+     */
+    case 'is_admin':
+      return false
+
+    /**
      * ⚠⚠ WITHOUT THIS, EVERY STYLIST PAGE AND THE APPLY WIZARD THROW IN DEMO
      * MODE. 0090 added slot_contention and item 186's shared loader calls it on
      * both surfaces; demoRpc's default throws on an unknown name, deliberately,
