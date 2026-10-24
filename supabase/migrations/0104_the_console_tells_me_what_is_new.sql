@@ -145,18 +145,32 @@ comment on table public.admin_activity_seen is
 
 alter table public.admin_activity_seen enable row level security;
 
--- ⚠️ ONE POLICY, THREE COMMANDS. Both halves are load-bearing and they are not
--- the same test: `admin_user_id = auth.uid()` stops an admin reading or moving
--- ANOTHER admin's watermark, and `is_admin()` stops a member who is not an
--- admin writing rows at all. Either alone leaves one of those open.
+-- ⚠️ THREE POLICIES RATHER THAN ONE `for all`, SO BOTH LAYERS SAY THE SAME
+-- THING. `for all` covers DELETE at the RLS layer while the grants withhold
+-- it — the outcome is right (a delete is refused for lack of privilege) but
+-- the two layers would be stating different intentions, and the next person to
+-- read one without the other gets a different answer about whether deleting is
+-- meant to be possible. Postgres has no `for select, insert, update`, so
+-- saying it precisely costs three policies.
 --
--- No DELETE policy, so nothing can remove a row: a deleted watermark would
--- re-seed at now() on the next read and silently skip everything in between.
-create policy admin_activity_seen_own
-  on public.admin_activity_seen
-  as permissive
-  for all
-  to authenticated
+-- ⚠️ DELETE NOW HAS NO POLICY AND NO GRANT. A removed watermark would re-seed
+-- at now() on the next read and silently skip everything in between, which
+-- looks exactly like a quiet week.
+--
+-- Both halves of every clause are load-bearing and they are not the same test:
+-- `admin_user_id = auth.uid()` stops an admin reading or moving ANOTHER
+-- admin's watermark, and `is_admin()` stops a member who is not an admin
+-- touching the table at all. Either alone leaves one of those open.
+create policy admin_activity_seen_select_own
+  on public.admin_activity_seen as permissive for select to authenticated
+  using (admin_user_id = auth.uid() and public.is_admin());
+
+create policy admin_activity_seen_insert_own
+  on public.admin_activity_seen as permissive for insert to authenticated
+  with check (admin_user_id = auth.uid() and public.is_admin());
+
+create policy admin_activity_seen_update_own
+  on public.admin_activity_seen as permissive for update to authenticated
   using (admin_user_id = auth.uid() and public.is_admin())
   with check (admin_user_id = auth.uid() and public.is_admin());
 
@@ -331,22 +345,63 @@ begin
       'other five and must not have a watermark of its own.';
   end if;
 
-  -- ⚠️ THE GRANT THAT MUST NOT EXIST. A client able to write last_seen_at could
-  -- hide or resurrect its own dots, which is the one thing this design refuses.
+  -- ⚠️⚠️ THE WRITE THAT MUST NOT EXIST, ASSERTED FROM pg_attribute AND NOT
+  -- FROM information_schema.
+  --
+  -- The first draft read `information_schema.column_privileges` for ANY
+  -- privilege on last_seen_at, and it could never have passed: that view
+  -- EXPANDS A TABLE-LEVEL GRANT INTO ONE ROW PER COLUMN, so the `grant select`
+  -- above gives last_seen_at a SELECT row and the exception would have raised
+  -- on a schema that was exactly right. 0104 would have rolled back every time.
+  --
+  -- Proved on a table with no column ACLs at all: `availability.note` has
+  -- attacl IS NULL, and information_schema still reports INSERT, REFERENCES,
+  -- SELECT and UPDATE for authenticated — every one of them from the table
+  -- grant. And on `users.is_verified`, which has no column grant either, it
+  -- reports INSERT, REFERENCES and SELECT while pg_attribute returns nothing.
+  --
+  -- ⚠️ THE OLD CHECK ALSO CONFLATED READ WITH WRITE. Reading last_seen_at is
+  -- fine and wanted; WRITING it is what this design refuses. pg_attribute
+  -- carries explicit column grants ONLY, so it answers that question directly
+  -- rather than through a view whose expansion rule has to be remembered.
   if exists (
-    select 1 from information_schema.column_privileges
-    where table_schema = 'public' and table_name = 'admin_activity_seen'
-      and column_name = 'last_seen_at' and grantee = 'authenticated'
+    select 1
+    from pg_attribute a, lateral aclexplode(a.attacl) x
+    where a.attrelid = 'public.admin_activity_seen'::regclass
+      and a.attname = 'last_seen_at'
+      and x.grantee = 'authenticated'::regrole
+      and x.privilege_type in ('INSERT', 'UPDATE')
   ) then
-    raise exception '0104: authenticated has a column grant on last_seen_at.';
+    raise exception '0104: authenticated can write last_seen_at. Only '
+      'admin_mark_activity_seen may move a watermark.';
   end if;
 
+  -- ⚠️ THIS ONE USES information_schema AND IS CORRECT — but only because this
+  -- table has NO table-wide INSERT or UPDATE grant. The only write privileges
+  -- that exist here are the three column grants above, so the expansion the
+  -- check before it had to avoid has nothing to expand.
+  -- ⚠️ If a table-wide write grant is ever added this stops meaning what it
+  -- says: every column would acquire a row and this would fail naming
+  -- last_seen_at — the right direction for an opaque reason. The fix then is
+  -- not to loosen this check; it is that the table-wide grant should not exist.
   select string_agg(distinct column_name, ',' order by column_name) into v_cols
   from information_schema.column_privileges
   where table_schema = 'public' and table_name = 'admin_activity_seen'
     and grantee = 'authenticated' and privilege_type in ('INSERT', 'UPDATE');
   if v_cols is distinct from 'admin_user_id,key,muted' then
     raise exception '0104: the writable columns are "%", expected "admin_user_id,key,muted".', v_cols;
+  end if;
+
+  -- The policies say what the grants say: three commands, and no DELETE.
+  if (select count(*) from pg_policy
+      where polrelid = 'public.admin_activity_seen'::regclass) <> 3 then
+    raise exception '0104: expected exactly three policies on admin_activity_seen.';
+  end if;
+  if exists (select 1 from pg_policy
+             where polrelid = 'public.admin_activity_seen'::regclass
+               and polcmd::text = 'd') then
+    raise exception '0104: a DELETE policy exists. Deleting a watermark would re-seed '
+      'it at now() and silently skip everything since.';
   end if;
 
   if exists (
@@ -371,7 +426,7 @@ end $mig$;
 
 -- MIGRATION FOOTER
 insert into public.schema_migrations (version, name, checksum)
-values ('0104', 'the_console_tells_me_what_is_new', '2f4cd1454a78871b9ba4a167f3aa6d3f1a51adf64b48c0eb37f69a40e9a66646');
+values ('0104', 'the_console_tells_me_what_is_new', 'f5c843e375c16551c75617adb3505f16e08f3c84d4155f8b6edbc372b9b62b70');
 
 commit;
 
