@@ -4,6 +4,7 @@ import { useCallback, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useLoader } from '@/lib/useLoader'
 import { logAction } from '@/lib/audit'
+import { ActivityDotSettings } from './ActivityDotSettings'
 
 interface Setting { key: string; value: string }
 
@@ -123,6 +124,14 @@ export default function SettingsPage() {
 
         <BannedWords initial={settings['banned_words'] ?? ''} onSave={handleSave} />
       </div>
+
+      {/* ⚠️ A SEPARATE CARD, NOT A ROW IN THE ONE ABOVE, AND THE SPLIT IS THE
+          POINT. Everything above changes how the PRODUCT behaves for members —
+          prices, whether images are held, which words hold a post. These change
+          nothing but what this one admin sees in their own sidebar. Mixing them
+          into the same list would invite reading a mute as a moderation
+          setting. */}
+      <ActivityDotSettings />
     </div>
   )
 }

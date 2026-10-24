@@ -4,11 +4,21 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import {
+  fetchActivityCounts, markActivitySeen, countPhrase,
+  NAV_KEY_BY_HREF, ACTIVITY_FEED_KEYS,
+  type ActivityCount,
+} from '@/lib/activity'
 
+// ⚠️ WAITLIST IS GONE FROM HERE AND STILL ON DISK. The table holds 0 rows and
+// the public route was removed on 22 Sep 2026 (item 71); the console page was
+// the last thing pointing at it. Unlinked rather than deleted so the page can
+// be read if anyone ever wants to know what it did, and /waitlist still
+// resolves if typed. Checked 24 Oct 2026: nothing else in admin/ links there.
 const nav = [
   { href: '/',               label: 'Dashboard',        icon: '📊' },
   { href: '/users',          label: 'Users',            icon: '👤' },
-  { href: '/waitlist',       label: 'Waitlist',         icon: '📝' },
+  { href: '/activity',       label: 'Activity',         icon: '🔔' },
   { href: '/verification',   label: 'Verification',     icon: '🛡️' },
   { href: '/reports',        label: 'Reports',          icon: '🚩' },
   { href: '/moderation',     label: 'Moderation Queue', icon: '🖼️' },
@@ -80,6 +90,7 @@ export default function Sidebar() {
   const pathname = usePathname()
   const router = useRouter()
   const [open, setOpen] = useState(false)
+  const [counts, setCounts] = useState<ActivityCount[]>([])
 
   // ⚠️ EVERY HOOK SITS ABOVE THE /login EARLY RETURN. React requires the same
   // hooks in the same order on every render, so a hook added below that return
@@ -102,6 +113,29 @@ export default function Sidebar() {
   // ⚠️ IF A PAGE EVER ADDS ITS OWN router.push, re-check this: the drawer could
   // then be left open over a page it does not belong to.
 
+  /**
+   * The dots. Fetched on mount and again whenever the route changes.
+   *
+   * ⚠️ ON NAVIGATION RATHER THAN ON A TIMER, and that is deliberate: this call
+   * WRITES on an admin's first ever load (it seeds the watermarks at now()), so
+   * polling it would be a background write loop. Navigation is also when the
+   * numbers can actually have changed from the reader's point of view.
+   *
+   * ⚠️ NOT A setState IN AN EFFECT BODY — the state is set inside an async
+   * function, which is what `react-hooks/set-state-in-effect` is about and the
+   * same shape the broadcast page uses. `cancelled` stops a slow response from
+   * a page you have already left overwriting a newer one.
+   */
+  useEffect(() => {
+    let cancelled = false
+    async function load() {
+      const rows = await fetchActivityCounts()
+      if (!cancelled) setCounts(rows)
+    }
+    load()
+    return () => { cancelled = true }
+  }, [pathname])
+
   // Escape closes it. Bound only while open, so the console has no stray
   // key listener the rest of the time.
   useEffect(() => {
@@ -110,6 +144,43 @@ export default function Sidebar() {
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
   }, [open])
+
+  /**
+   * How many unseen things sit behind a nav item, or 0.
+   *
+   * ⚠️ A MUTED KEY READS AS ZERO rather than being hidden, so "muted" and
+   * "nothing new" look the same in the sidebar. That is the point of a mute:
+   * the Settings page is where you find out which it is.
+   */
+  const dotFor = (href: string): number => {
+    // The Activity dot is the SUM of its five types — it has no key of its own.
+    if (href === '/activity') {
+      return counts
+        .filter(c => ACTIVITY_FEED_KEYS.includes(c.key) && !c.muted)
+        .reduce((n, c) => n + c.new_count, 0)
+    }
+    const key = NAV_KEY_BY_HREF[href]
+    if (!key) return 0
+    const row = counts.find(c => c.key === key)
+    return row && !row.muted ? row.new_count : 0
+  }
+
+  /**
+   * Opening a section marks it seen.
+   *
+   * ⚠️ THE ACTIVITY PAGE CLEARS FIVE KEYS, NOT ONE, because its dot is five
+   * counts added together — clearing one would leave the dot lit and look
+   * broken. Fired on click rather than on arrival so it also works when you tap
+   * the page you are already on.
+   */
+  const markSeenFor = (href: string) => {
+    if (href === '/activity') {
+      for (const k of ACTIVITY_FEED_KEYS) void markActivitySeen(k)
+      return
+    }
+    const key = NAV_KEY_BY_HREF[href]
+    if (key) void markActivitySeen(key)
+  }
 
   // No route gating yet — just don't render the admin shell on the login screen.
   // ⚠️ The hamburger and backdrop are inside this component precisely so that
@@ -183,7 +254,12 @@ export default function Sidebar() {
                 // tapping the link for the page you are already on does not
                 // change the pathname, so the effect would never fire and the
                 // drawer would sit there looking stuck.
-                onClick={() => setOpen(false)}
+                onClick={() => { setOpen(false); markSeenFor(href) }}
+                // ⚠️ THE DOT IS COLOUR ONLY, so the count goes in the
+                // accessible name as words. A red circle conveys nothing to a
+                // screen reader and nothing to anyone who cannot distinguish it
+                // from the maroon behind it.
+                aria-label={dotFor(href) > 0 ? `${label}, ${countPhrase(dotFor(href))}` : undefined}
                 className={`flex items-center gap-3 px-5 py-2.5 text-sm transition-colors ${
                   active
                     ? 'text-white font-medium'
@@ -193,6 +269,12 @@ export default function Sidebar() {
               >
                 <span className="text-base">{icon}</span>
                 {label}
+                {dotFor(href) > 0 && (
+                  <span
+                    aria-hidden="true"
+                    className="ml-auto h-2 w-2 shrink-0 rounded-full bg-red-500"
+                  />
+                )}
               </Link>
             )
           })}

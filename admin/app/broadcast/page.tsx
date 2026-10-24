@@ -54,6 +54,13 @@ interface Member {
  * not express nullability for `returns table(...)` columns; it is not lying on
  * purpose, it simply cannot say.
  *
+ * ⚠️ CORRECTION, 24 Oct 2026: that generated type never reached this call site
+ * at all. `admin/lib/supabase.ts` builds the client with no `<Database>`
+ * generic, so nothing in this console is type-checked against the schema and
+ * `database.types.ts` is imported by nothing here. The reasoning below was
+ * right and the mechanism named above was not — this interface is doing all of
+ * the work, rather than correcting something the generator got wrong.
+ *
  * ⚠️ IF THAT TYPE WERE TRUSTED, `m.last_sign_in_at === null` would read as
  * always-false and the "Never signed in" filter would silently match nobody —
  * worse, a later reader would be right to "simplify" the comparison away. Same
