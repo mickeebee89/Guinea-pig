@@ -504,10 +504,39 @@ const SENTINEL = 'PENDING_CHECKSUM'
  * of migrations whose checksums were already locked — and it exited 0 while
  * doing it. Scoped to the capture group below, prose cannot be reached: the
  * only replaceable thing is the third argument of the footer's insert.
+ *
+ * ⚠️⚠️ AND IT IS LINE-ANCHORED, WHICH IS NOT COSMETIC. The first version of
+ * this regex was unanchored and matched a COMMENTED-OUT EXAMPLE: 0000, the
+ * framework file, documents the convention by quoting a sample footer —
+ *
+ *   --     -- MIGRATION FOOTER
+ *   --     insert into public.schema_migrations (version, name, checksum)
+ *   --     values ('0001', 'consent_capture', '<sha256 of everything above…>');
+ *
+ * — so scoping to "below the first MIGRATION FOOTER marker" was not enough,
+ * because 0000 mentions the marker in prose BEFORE its real footer. The run
+ * then refused 0000 on every invocation, over a placeholder in a comment.
+ * That is the same fault as the original, one step narrower: reaching into
+ * documentation and treating it as code. `^[ \t]*values` requires the line to
+ * begin with the statement, so a `--` prefix cannot match.
  */
-const FOOTER_INSERT = /(values\s*\(\s*'(\d{4})'\s*,\s*'[^']*'\s*,\s*')([^']*)('\s*\))/
+const FOOTER_INSERT = /^([ \t]*values\s*\(\s*'(\d{4})'\s*,\s*'[^']*'\s*,\s*')([^']*)('\s*\))/m
 
 const isChecksum = v => /^[0-9a-f]{64}$/.test(v)
+
+/**
+ * Footer values that are deliberate and must never be stamped over.
+ *
+ * ⚠️ `bootstrap` is 0000's own. That file CREATES schema_migrations and records
+ * itself — "so the table is never empty and the mechanism is proven by its own
+ * first use" — and it cannot carry a checksum of the ordinary kind because the
+ * ledger it would be checked against does not exist until it has run.
+ *
+ * ⚠️ IT IS LISTED RATHER THAN PATTERN-MATCHED. "Anything that is not a
+ * checksum and not the sentinel is probably fine" is how a typo gets waved
+ * through; a named exception has to be added on purpose.
+ */
+const RESERVED_FOOTER_VALUES = new Set(['bootstrap'])
 
 if (STAMP) {
   /**
@@ -563,6 +592,7 @@ if (STAMP) {
     const footerVersion = match[2]
 
     if (isChecksum(current)) continue            // already stamped; never rewritten
+    if (RESERVED_FOOTER_VALUES.has(current)) continue   // 0000's 'bootstrap'
 
     if (current !== SENTINEL) {
       // ⚠️ REPORTED, NOT SKIPPED IN SILENCE. This is exactly how 0104 came to
