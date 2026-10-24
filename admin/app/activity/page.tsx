@@ -3,7 +3,10 @@
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useLoader } from '@/lib/useLoader'
-import { KEY_LABEL, type ActivityKey } from '@/lib/activity'
+import {
+  KEY_LABEL, isTestAccount, TEST_ACCOUNT_IDS, SLOT_BACKFILL_INSTANT,
+  type ActivityKey,
+} from '@/lib/activity'
 
 /**
  * What has been happening, in one list.
@@ -32,6 +35,8 @@ interface Row {
   type: ActivityKey
   who: string
   what: string
+  /** Made by one of Micky's QA accounts. Hidden unless "Show test accounts". */
+  isTest: boolean
 }
 
 const SINCE_DAYS = 7
@@ -63,8 +68,10 @@ const TYPE_STYLE: Record<ActivityKey, string> = {
 export default function ActivityPage() {
   const [rows, setRows] = useState<Row[]>([])
   const [problem, setProblem] = useState<string | null>(null)
+  const [showTest, setShowTest] = useState(false)
+  const [hiddenCount, setHiddenCount] = useState(0)
 
-  const { loading } = useLoader('activity', async stale => {
+  const { loading } = useLoader(`activity|${showTest}`, async stale => {
     const since = new Date(Date.now() - SINCE_DAYS * 86_400_000).toISOString()
 
     // ⚠️ NO EMBEDDED JOINS. PostgREST embeds are named after the FOREIGN KEY,
@@ -81,9 +88,15 @@ export default function ActivityPage() {
       // predate it carry the migration's own clock rather than when they were
       // posted. Inside a 7-day window that stops mattering a week after
       // applying; before then those rows show a time nothing happened at.
+      // ⚠️ `gt` THE BACKFILL INSTANT, not just `gte` the window. All 57 rows
+      // that predate 0104 carry the migration's own clock, so they would
+      // otherwise arrive as 57 simultaneous events that never happened. See
+      // SLOT_BACKFILL_INSTANT.
       supabase.from('availability')
         .select('id, created_at, provider_id, date, start_time')
-        .gte('created_at', since).order('created_at', { ascending: false }).limit(CAP),
+        .gte('created_at', since)
+        .gt('created_at', SLOT_BACKFILL_INSTANT)
+        .order('created_at', { ascending: false }).limit(CAP),
       supabase.from('sessions')
         .select('id, created_at, model_user_id, provider_id, date, status')
         .gte('created_at', since).order('created_at', { ascending: false }).limit(CAP),
@@ -134,7 +147,7 @@ export default function ActivityPage() {
         ? supabase.from('users').select('id, first_name, last_initial').in('id', userIds)
         : Promise.resolve({ data: [] }),
       provIds.length
-        ? supabase.from('providers').select('id, name').in('id', provIds)
+        ? supabase.from('providers').select('id, name, user_id').in('id', provIds)
         : Promise.resolve({ data: [] }),
     ])
     if (stale()) return
@@ -142,41 +155,60 @@ export default function ActivityPage() {
     const userById: Record<string, Named> = {}
     for (const u of (userRes.data ?? []) as unknown as (Named & { id: string })[]) userById[u.id] = u
     const provName: Record<string, string> = {}
-    for (const p of (provRes.data ?? []) as unknown as { id: string; name: string | null }[]) {
+    const provOwner: Record<string, string> = {}
+    for (const p of (provRes.data ?? []) as unknown as
+         { id: string; name: string | null; user_id: string }[]) {
       if (p.name?.trim()) provName[p.id] = p.name.trim()
+      provOwner[p.id] = p.user_id
     }
 
     const out: Row[] = []
     for (const r of signupRows) {
       out.push({ id: `signup-${r.id}`, at: r.created_at, type: 'signup', who: nameOf(r),
-        what: `joined as a ${r.role === 'provider' ? 'stylist' : r.role}` })
+        what: `joined as a ${r.role === 'provider' ? 'stylist' : r.role}`,
+        isTest: isTestAccount(r.id) })
     }
     for (const r of slotRows) {
       out.push({ id: `slot-${r.id}`, at: r.created_at, type: 'slot',
         who: provName[r.provider_id] ?? 'A stylist',
-        what: `posted a slot on ${r.date} at ${r.start_time?.substring(0, 5)}` })
+        what: `posted a slot on ${r.date} at ${r.start_time?.substring(0, 5)}`,
+        isTest: isTestAccount(provOwner[r.provider_id]) })
     }
     for (const r of bookingRows) {
       out.push({ id: `booking-${r.id}`, at: r.created_at, type: 'booking',
         who: nameOf(userById[r.model_user_id] ?? null),
-        what: `applied to ${provName[r.provider_id] ?? 'a stylist'} for ${r.date} — now ${r.status}` })
+        what: `applied to ${provName[r.provider_id] ?? 'a stylist'} for ${r.date} — now ${r.status}`,
+        // Either side being a test account makes the booking one.
+        isTest: isTestAccount(r.model_user_id) || isTestAccount(provOwner[r.provider_id]) })
     }
     for (const r of photoRows) {
       out.push({ id: `photo-${r.id}`, at: r.created_at, type: 'photo',
-        who: nameOf(userById[r.user_id] ?? null), what: 'added a photo to their gallery' })
+        who: nameOf(userById[r.user_id] ?? null), what: 'added a photo to their gallery',
+        isTest: isTestAccount(r.user_id) })
     }
     for (const r of favRows) {
       out.push({ id: `fav-${r.id}`, at: r.created_at, type: 'favourite',
         who: nameOf(userById[r.user_id] ?? null),
-        what: `favourited ${provName[r.provider_id] ?? 'a stylist'}` })
+        what: `favourited ${provName[r.provider_id] ?? 'a stylist'}`,
+        isTest: isTestAccount(r.user_id) || isTestAccount(provOwner[r.provider_id]) })
     }
+
+    /**
+     * ⚠️ FILTERED AFTER MERGING, NOT IN THE QUERIES, AND THAT IS DELIBERATE.
+     * Doing it in SQL would mean five `.not('user_id','in',...)` clauses that
+     * have to agree with each other, and the slot rows cannot be filtered that
+     * way at all — their account is the provider's OWNER, which this page only
+     * learns after the providers read. One place, one rule, visibly applied.
+     */
+    const kept = out.filter(r => showTest || !r.isTest)
+    setHiddenCount(out.length - kept.length)
 
     // ⚠️ CAPPED AGAIN AFTER MERGING. Five queries each capped at 200 can
     // produce 1000 rows, and taking the newest 200 of those is the only way the
     // cap means what the footnote says it means.
-    out.sort((a, b) => b.at.localeCompare(a.at))
+    kept.sort((a, b) => b.at.localeCompare(a.at))
     if (stale()) return
-    setRows(out.slice(0, CAP))
+    setRows(kept.slice(0, CAP))
   })
 
   const card = 'bg-white rounded-xl border border-black/5 shadow-sm'
@@ -190,6 +222,35 @@ export default function ActivityPage() {
           newest first. Opening this page clears its dot.
         </p>
       </div>
+
+      {/* ⚠️ NEITHER FILTER IS SILENT. A feed that quietly drops rows is a feed
+          you cannot trust to tell you a quiet week from a broken query, which
+          is the one thing this page is for. Both say what they removed and the
+          first can be switched off. */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+        <label className="flex items-center gap-2 text-[#3D2E2E]/70">
+          <input type="checkbox" checked={showTest}
+            onChange={e => setShowTest(e.target.checked)} />
+          Show test accounts
+        </label>
+        {!showTest && hiddenCount > 0 && (
+          <span className="text-[#3D2E2E]/50">
+            {hiddenCount} row{hiddenCount === 1 ? '' : 's'} hidden from{' '}
+            {Object.keys(TEST_ACCOUNT_IDS).length} test accounts.
+          </span>
+        )}
+      </div>
+
+      {/* ⚠️ THE SLOTS THAT ARE NOT EVENTS. Stated here rather than only in a
+          comment, because the gap it explains is visible: availability had no
+          created_at until 0104, so every slot posted before 24 Oct carries the
+          migration's clock and none of them appears below. */}
+      <p className="rounded-lg bg-black/[0.03] px-3 py-2 text-xs text-[#3D2E2E]/60">
+        Slots posted before 24 Oct aren’t shown. The column that records when a slot
+        was created was only added that day, so every older row carries the migration’s
+        timestamp rather than when the stylist actually posted it — showing them would
+        mean showing 57 things that all happened at once and none of which did.
+      </p>
 
       {problem && (
         <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-700">{problem}</p>

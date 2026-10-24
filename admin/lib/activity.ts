@@ -131,3 +131,60 @@ export const KEY_NOTE: Record<ActivityKey, string> = {
 
 /** "3 new" / "" — the words a screen reader gets, since a dot is colour only. */
 export const countPhrase = (n: number) => (n > 0 ? `${n} new` : '')
+
+/**
+ * Accounts whose activity is Micky testing the product, not a member using it.
+ *
+ * ── ⚠️ DECLARED BY ID, WITH THE ADDRESS AS THE REASON ───────────────────
+ * The id is stable and the email is readable, so both are here: a uuid alone
+ * is unauditable and an email alone changes. Each entry has to be ADDED ON
+ * PURPOSE — there is no pattern match on "looks like a test", because
+ * `samanthaflowersamaral221@gmail.com` is a real founding provider and
+ * `Fullrunthroughtest A` is not, and no rule reads those two correctly.
+ *
+ * ⚠️⚠️ THIS HIDES ROWS. IT DOES NOT DELETE THEM. Every slot, booking, photo
+ * and favourite these accounts made is still in the database and still visible
+ * on every other screen in the console. The Activity feed is a reading of
+ * what members are doing, and five accounts doing QA is not that.
+ *
+ * ⚠️ AND IT IS A FEED FILTER ONLY — the sidebar dots still count these
+ * accounts, because the counts come from `admin_activity_counts` in SQL and
+ * changing them is a migration. So a slot posted from a test account lights
+ * the Activity dot and then does not appear in the feed. Known, and the page
+ * says so rather than leaving it to be discovered.
+ */
+export const TEST_ACCOUNT_IDS: Record<string, string> = {
+  'ff06d568-8936-45fa-ad5f-0b88c150ec30': 'micky.buckfield@gmail.com — Micky B, the stylist account',
+  'b0df9c2f-02c5-4fef-afb0-9b184c3b9130': 'micky.buckfield@hotmail.co.uk — Model B, the model test account',
+  'a923c7cc-e5c1-403e-96c7-addbe8fc73d3': 'micky.buckfield+stylist@gmail.com — testest T',
+  '517c2853-50bb-4e8f-87fe-d79311bc37c0': 'nahitih259@bevriz.com — Fullrunthroughtest A',
+  '8788ed3d-40a6-44da-ad61-c38d0932b6d5': 'admin@guineapigapp.co.uk — the dedicated console admin',
+}
+
+export const isTestAccount = (userId: string | null | undefined) =>
+  !!userId && userId in TEST_ACCOUNT_IDS
+
+/**
+ * When 0104 stamped `availability.created_at` on every row that already
+ * existed.
+ *
+ * ⚠️⚠️ THE 57 ROWS AT THIS INSTANT ARE NOT EVENTS. `availability` had no
+ * created_at before 0104, and `default now()` gave every pre-existing row the
+ * migration's own clock — measured, all 57 share this exact timestamp. When
+ * a stylist actually posted those slots is not recorded anywhere and cannot be
+ * recovered.
+ *
+ * So the feed excludes them rather than presenting 57 simultaneous "events"
+ * that never happened. 0104's own header says these values are fiction; this
+ * is the first thing to act on it.
+ *
+ * ⚠️ A REAL SLOT POSTED IN THAT SAME SECOND WOULD ALSO BE HIDDEN. One second,
+ * once, against 57 permanent fictions — and anything posted after it is shown
+ * normally. The alternative is a feed that opens on a wall of made-up times
+ * for as long as the 7-day window reaches back to the migration.
+ *
+ * ⚠️ IT DOES NOT AFFECT THE DOTS, and that is not luck: the `slot` count
+ * measures against a watermark seeded at first load, which is later than this,
+ * so these rows were never going to be counted as new.
+ */
+export const SLOT_BACKFILL_INSTANT = '2026-10-24T20:07:16.386287Z'
