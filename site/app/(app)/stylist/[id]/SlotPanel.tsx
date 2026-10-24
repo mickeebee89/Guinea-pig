@@ -136,6 +136,19 @@ export function SlotPanel({
                     <p className="mt-1 text-xs text-muted">{names.join(' · ')}</p>
                   )}
 
+                  {/* ⚠️ HER WORDS, RENDERED AS TEXT AND NOTHING ELSE. 0103.
+                      whitespace-pre-wrap keeps her line breaks; no markdown is
+                      parsed and no URL is turned into a link, because this
+                      string is written by one member and read by another, and
+                      a clickable link in it would be a member-authored
+                      destination on our page. break-words so a long unbroken
+                      word cannot push the panel wider than the screen. */}
+                  {s.note && (
+                    <p className="mt-2 whitespace-pre-wrap break-words rounded-md bg-input-bg px-3 py-2 text-sm text-warm-dark">
+                      {s.note}
+                    </p>
+                  )}
+
                   {readOnly ? (
                     <p className="mt-3 text-xs text-muted">
                       Not bookable — this shop isn’t published.

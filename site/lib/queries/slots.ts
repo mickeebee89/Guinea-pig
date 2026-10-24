@@ -61,6 +61,17 @@ export interface LoadedSlot {
   endTime: string
   treatmentIds: string[]
   pricePence: number | null
+  /**
+   * What the stylist said this slot is for. 0103.
+   *
+   * ⚠️⚠️ DECORATION, NOT A FILTER. It is carried through this loader and must
+   * never reach `blockedBy` or any bookability test. This file's header lists
+   * the four filters and forbids a fifth: a slot with no note is exactly as
+   * bookable as one with a note, and a loader that quietly disagreed would be
+   * the second implementation of "bookable" that items 186/192/196 exist to
+   * prevent.
+   */
+  note: string | null
   /** null means bookable. See the note above on why this is not a boolean. */
   blockedBy: SlotBlock | null
 }
@@ -147,7 +158,7 @@ export async function loadSlots(
   const [slotRes, treatRes, contentionRes] = await Promise.all([
     supabase
       .from('availability')
-      .select('id, date, start_time, end_time, active_treatments, is_taken, price_pence')
+      .select('id, date, start_time, end_time, active_treatments, is_taken, price_pence, note')
       .eq('provider_id', providerId)
       .gte('date', today)
       .lte('date', horizon)
@@ -164,6 +175,7 @@ export async function loadSlots(
   const rawSlots = (slotRes.data ?? []) as {
     id: string; date: string; start_time: string; end_time: string
     active_treatments: string[] | null; is_taken: boolean | null; price_pence: number | null
+    note: string | null
   }[]
 
   /**
@@ -215,6 +227,7 @@ export async function loadSlots(
         endTime: hhmm(s.end_time),
         treatmentIds,
         pricePence: s.price_pence,
+        note: s.note,
         blockedBy,
       }
     }),

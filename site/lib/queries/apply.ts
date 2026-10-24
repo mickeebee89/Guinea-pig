@@ -23,6 +23,8 @@ export interface ApplySlot {
   endTime: string
   treatmentIds: string[]
   pricePence: number | null
+  /** What the stylist said this slot is for. 0103. Decoration, never a filter. */
+  note: string | null
   isTaken: boolean
 }
 
@@ -168,6 +170,7 @@ export async function getApplyContext(
         endTime: s.endTime,
         treatmentIds: s.treatmentIds,
         pricePence: s.pricePence,
+        note: s.note,
         isTaken: s.blockedBy !== null,
       })),
     // ⚠️ `name` IS THE LABEL, NOT THE COLUMN. ApplyTreatment.name is typed

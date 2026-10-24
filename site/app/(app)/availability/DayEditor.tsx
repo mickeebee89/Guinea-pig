@@ -185,6 +185,62 @@ export function DayEditor({
               </fieldset>
             )}
 
+            {/* ── What this slot is for ─────────────────────────────────
+                0103. `active_treatments` above says WHICH treatments are on
+                offer; this says what she actually wants, in her own words —
+                "colour correction, I need someone with box dye to lift" is the
+                difference between a model applying and scrolling past.
+
+                ⚠️ 280 IS ENFORCED IN THE DATABASE TOO (availability_note_len).
+                maxLength here is a convenience for the person typing; it is not
+                a constraint, and this text is rendered to other members. The
+                count below uses the same char_length the check does, so she is
+                never refused by a limit she was not shown reaching. */}
+            {!s.isBooked ? (
+              <div className="mt-2">
+                <label className="text-xs text-muted" htmlFor={`note-${i}`}>
+                  What’s this slot for?
+                </label>
+                <textarea
+                  id={`note-${i}`}
+                  rows={2}
+                  maxLength={280}
+                  value={s.note ?? ''}
+                  onChange={e => update(i, { note: e.target.value })}
+                  className="mt-1 w-full rounded-md border border-hairline px-2 py-1.5 text-sm"
+                />
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <p className="text-xs text-muted">
+                    Optional. Models see this before they apply.
+                  </p>
+                  {/* Only once it is close enough to matter: a counter on an
+                      empty box is noise, and one that appears at 240 is the
+                      first warning she needs. */}
+                  {(s.note?.length ?? 0) > 240 && (
+                    <p className={`text-xs font-bold ${
+                      (s.note?.length ?? 0) >= 280 ? 'text-danger' : 'text-muted'
+                    }`}>
+                      {s.note?.length ?? 0} / 280
+                    </p>
+                  )}
+                </div>
+              </div>
+            ) : (
+              /* ⚠️ SHOWN, NOT HIDDEN — and this differs from the price and the
+                 treatment picker above, which disappear entirely on a booked
+                 slot. Hiding a note she already wrote would mean she could not
+                 read what she had told the model who booked it, which is the
+                 one moment it matters most. Read-only, not invisible. */
+              s.note?.trim() && (
+                <div className="mt-2">
+                  <p className="text-xs text-muted">What this slot is for</p>
+                  <p className="mt-1 whitespace-pre-wrap rounded-md bg-input-bg px-2 py-1.5 text-sm text-warm-dark">
+                    {s.note}
+                  </p>
+                </div>
+              )
+            )}
+
             {/*
               ⚠⚠ THE AUTHORITATIVE PLACE SHE IS TOLD. Item 196 part 3.
 

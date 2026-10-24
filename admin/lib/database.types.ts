@@ -1,8 +1,8 @@
 // GENERATED FILE — DO NOT EDIT BY HAND.
 //
 // Written by scripts/gen-supabase-types.mjs from the live database.
-// TYPES_STAMP: 0101
-// TYPES_FILES_AT_GEN: 0101
+// TYPES_STAMP: 0103
+// TYPES_FILES_AT_GEN: 0103
 //
 // TYPES_STAMP is the migration the DATABASE was at when these were generated,
 // stated by whoever ran it (--applied). TYPES_FILES_AT_GEN is the newest
@@ -133,6 +133,7 @@ export type Database = {
           end_time: string
           id: string
           is_taken: boolean
+          note: string | null
           price_pence: number | null
           provider_id: string
           start_time: string
@@ -143,6 +144,7 @@ export type Database = {
           end_time: string
           id?: string
           is_taken?: boolean
+          note?: string | null
           price_pence?: number | null
           provider_id: string
           start_time: string
@@ -153,6 +155,7 @@ export type Database = {
           end_time?: string
           id?: string
           is_taken?: boolean
+          note?: string | null
           price_pence?: number | null
           provider_id?: string
           start_time?: string
@@ -2636,6 +2639,7 @@ export type Database = {
         Args: { p_role: string; p_shops: Json; p_user_id: string }
         Returns: undefined
       }
+      provider_fee_enabled: { Args: never; Returns: boolean }
       provider_fee_settled: { Args: { p_user_id: string }; Returns: boolean }
       provider_shop_is_publishable: {
         Args: { p_provider_id: string }

@@ -35,6 +35,16 @@ export interface Slot {
    * below it and a price sliding onto the wrong slot is worse than none.
    */
   priceInput?: string
+  /**
+   * What this particular slot is for, in the stylist's own words. 280
+   * characters, enforced by `availability_note_len` (0103) and not only by the
+   * textarea.
+   *
+   * null and '' both mean "nothing said" and are not distinguished anywhere —
+   * unlike pricePence, where null and 0 are different answers. A stylist who
+   * clears the box has not said "this slot is for nothing"; she has unsaid it.
+   */
+  note?: string | null
   /** True when a session references this slot. Not editable, not deletable. */
   isBooked?: boolean
 }
@@ -49,7 +59,7 @@ export async function loadDay(
 ): Promise<Slot[]> {
   const { data, error } = await supabase
     .from('availability')
-    .select('id, start_time, end_time, active_treatments, is_taken, price_pence')
+    .select('id, start_time, end_time, active_treatments, is_taken, price_pence, note')
     .eq('provider_id', providerId)
     .eq('date', date)
     .order('start_time')
@@ -58,7 +68,7 @@ export async function loadDay(
   const rows = (data ?? []) as {
     id: string; start_time: string; end_time: string
     active_treatments: string[] | null; is_taken: boolean | null
-    price_pence: number | null
+    price_pence: number | null; note: string | null
   }[]
   const booked = await bookedAmong(supabase, rows.map(r => r.id))
 
@@ -68,6 +78,10 @@ export async function loadDay(
     endTime: hhmm(r.end_time),
     treatmentIds: r.active_treatments ?? [],
     pricePence: r.price_pence,
+    // ⚠️ LOADED, NOT JUST SAVED. Without this the editor opens with an empty
+    // box over a note that exists, and the next save writes that emptiness
+    // back — a stylist would lose a note by opening the day and pressing save.
+    note: r.note,
     isBooked: booked.has(r.id) || !!r.is_taken,
   }))
 }
@@ -113,6 +127,15 @@ export async function saveDay(
       // "no price" slot would silently keep whatever was there before and
       // make clearing a price impossible.
       price_pence: s.pricePence ?? null,
+      // ⚠️ THE SAME RULE, FOR THE SAME REASON. Present in EVERY payload,
+      // including when it is null: a PostgREST upsert updates only the columns
+      // it is given, so omitting this on a slot with no note would keep
+      // whatever was there and make clearing one impossible.
+      //
+      // ⚠️ AND '' IS NORMALISED TO null ON THE WAY IN, so a box the stylist
+      // emptied does not become an empty string the model-facing code then has
+      // to decide whether to render. One representation of "nothing said".
+      note: s.note?.trim() ? s.note.trim() : null,
     }))
     const { error } = await supabase
       .from('availability')

@@ -333,6 +333,17 @@ export function ApplyWizard({ ctx }: { ctx: ApplyContext }) {
                     </span>
                   )}
                 </button>
+
+                {/* ⚠️ OUTSIDE THE BUTTON, DELIBERATELY. The button is the
+                    control that picks this time; a paragraph of someone else's
+                    prose inside it would be read out as part of its accessible
+                    name and make the thing she is choosing harder to hear.
+                    Plain text: no markdown, no link made clickable. 0103. */}
+                {s.note && (
+                  <p className="mt-1 whitespace-pre-wrap break-words px-4 text-xs text-muted">
+                    {s.note}
+                  </p>
+                )}
               </li>
             )
           })}
