@@ -474,17 +474,134 @@ const files = readdirSync(DIR)
     }
   })
 
+/**
+ * ── ⚠️⚠️ THE SENTINEL IS `PENDING_CHECKSUM`, AND IT IS AUTHORITATIVE ─────
+ *
+ * Two spellings were in use. This script looked for `PENDING_CHECKSUM`; the
+ * migrations written in October used `'PENDING'` and were stamped by hand.
+ * They disagreed, and the disagreement was SILENT in the worst direction: a
+ * file saying `'PENDING'` was skipped without a word, so a `--stamp` run
+ * reported success having not touched the one file that needed it.
+ *
+ * `PENDING_CHECKSUM` wins because it is what 0000 documents and what a dozen
+ * migration headers describe. `'PENDING'` is now REPORTED rather than ignored.
+ */
+const SENTINEL = 'PENDING_CHECKSUM'
+
+/**
+ * The footer's own insert statement, and nothing else.
+ *
+ * ⚠️⚠️ THIS REGEX IS THE WHOLE FIX. The previous version did
+ * `sql.replace('PENDING_CHECKSUM', checksum)` — a bare string replace, which
+ * takes the FIRST occurrence ANYWHERE in the file. Forty-one migrations
+ * mention the sentinel in PROSE, explaining what it is, and one `--stamp` run
+ * rewrote every one of them:
+ *
+ *   -- WHY THE ORDER MATTERS. A new file's footer says PENDING_CHECKSUM, and
+ *   +-- WHY THE ORDER MATTERS. A new file's footer says d02ddb2719…, and
+ *
+ * All forty-one were already applied, so the damage was to the documentation
+ * of migrations whose checksums were already locked — and it exited 0 while
+ * doing it. Scoped to the capture group below, prose cannot be reached: the
+ * only replaceable thing is the third argument of the footer's insert.
+ */
+const FOOTER_INSERT = /(values\s*\(\s*'(\d{4})'\s*,\s*'[^']*'\s*,\s*')([^']*)('\s*\))/
+
+const isChecksum = v => /^[0-9a-f]{64}$/.test(v)
+
 if (STAMP) {
+  /**
+   * ⚠️ THE LEDGER GUARD, IN TWO LAYERS, BECAUSE ONE OF THEM NEEDS A KEY.
+   *
+   * What is wanted: refuse to modify a migration whose version is already in
+   * `schema_migrations`. That needs the service-role key, and `--stamp` has
+   * always worked without one — making the key mandatory would break the
+   * offline use this flag exists for.
+   *
+   * So the ledger is consulted WHEN the key is present, and a cheaper rule
+   * that needs nothing always applies: never overwrite a footer that already
+   * holds a checksum. In practice the second is the stronger of the two, since
+   * every applied migration carries one. The first catches what the second
+   * cannot — a version in the ledger whose file was reset to the sentinel.
+   */
+  let appliedVersions = null
+  const stampKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (stampKey) {
+    const { createClient } = await import('@supabase/supabase-js')
+    const probe = createClient('https://ptluekkhiopowuyvkgnd.supabase.co', stampKey, {
+      auth: { persistSession: false },
+    })
+    const { data: rows, error: ledgerErr } = await probe
+      .from('schema_migrations').select('version')
+    if (ledgerErr) {
+      console.error(`Could not read the ledger to check what is applied: ${ledgerErr.message}`)
+      console.error('Refusing to stamp blind.')
+      process.exit(1)
+    }
+    appliedVersions = new Set((rows ?? []).map(r => r.version))
+  }
+
   let changed = 0
+  let refused = 0
   for (const m of files) {
-    if (!m.sql.includes('PENDING_CHECKSUM')) continue
-    writeFileSync(path.join(DIR, m.file), m.sql.replace('PENDING_CHECKSUM', m.checksum))
+    const i = m.sql.indexOf(FOOTER)
+    if (i === -1) {
+      console.warn(`skipped ${m.file}: no ${FOOTER} line, so there is no footer to stamp.`)
+      continue
+    }
+    // Only ever read, and only ever written, BELOW the footer marker.
+    const head = m.sql.slice(0, i)
+    const tail = m.sql.slice(i)
+
+    const match = tail.match(FOOTER_INSERT)
+    if (!match) {
+      console.warn(`skipped ${m.file}: the footer has no recognisable `
+        + `insert … values ('NNNN', 'name', 'checksum').`)
+      continue
+    }
+    const current = match[3]
+    const footerVersion = match[2]
+
+    if (isChecksum(current)) continue            // already stamped; never rewritten
+
+    if (current !== SENTINEL) {
+      // ⚠️ REPORTED, NOT SKIPPED IN SILENCE. This is exactly how 0104 came to
+      // look stamped by a run that had never touched it.
+      console.warn(`REFUSED ${m.file}: its footer checksum reads '${current}', which is `
+        + `neither a checksum nor ${SENTINEL}. Use ${SENTINEL} if it is unstamped.`)
+      refused++
+      continue
+    }
+
+    if (footerVersion !== m.version) {
+      console.warn(`REFUSED ${m.file}: the footer records version '${footerVersion}' but the `
+        + `filename says '${m.version}'. Fix the mismatch before stamping.`)
+      refused++
+      continue
+    }
+
+    if (appliedVersions?.has(m.version)) {
+      console.warn(`REFUSED ${m.file}: version ${m.version} is already in the ledger. `
+        + `Stamping it would rewrite the history of something already applied.`)
+      refused++
+      continue
+    }
+
+    const stampedTail = tail.replace(FOOTER_INSERT, `$1${m.checksum}$4`)
+    writeFileSync(path.join(DIR, m.file), head + stampedTail)
     console.log(`stamped ${m.file} -> ${m.checksum.slice(0, 16)}…`)
     changed++
   }
-  console.log(changed ? `\n${changed} file(s) stamped. Commit, then paste into the SQL editor.`
-                      : 'Nothing to stamp — no PENDING_CHECKSUM found.')
-  process.exit(0)
+
+  if (!appliedVersions) {
+    console.log('\n⚠️  The ledger was not consulted (no SUPABASE_SERVICE_ROLE_KEY). '
+      + 'Files already carrying a checksum were left alone regardless.')
+  }
+  console.log(changed
+    ? `\n${changed} file(s) stamped${refused ? `, ${refused} refused` : ''}. `
+      + 'Commit, then paste into the SQL editor.'
+    : `Nothing to stamp${refused ? ` — ${refused} refused, see above.` : '.'}`)
+  process.exit(refused ? 1 : 0)
 }
 
 const key = process.env.SUPABASE_SERVICE_ROLE_KEY
