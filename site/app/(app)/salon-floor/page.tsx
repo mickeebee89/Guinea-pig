@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { createSupabaseServerClient, requireUser } from '@/lib/supabase-server'
-import { getSalonFloor } from '@/lib/queries/salonFloor'
+import { getSalonFloor, DEFAULT_FLOOR_RADIUS_MILES } from '@/lib/queries/salonFloor'
 import { isStylist as isStylistRole } from '@/lib/roles'
 import { Avatar, EmptyState } from '@/components/ui'
 import { formatMiles } from '@/lib/distance'
@@ -33,7 +33,13 @@ export default async function SalonFloorPage({
   const supabase = await createSupabaseServerClient()
   const sp = await searchParams
 
-  const chosen = RADII.find(r => r.key === (sp.within ?? '20')) ?? RADII[2]
+  // ⚠️ THE DEFAULT COMES FROM THE CONSTANT THE DOT ALSO READS. Two literal
+  // 20s would be two defaults that can drift, and a dot computed at one radius
+  // for a page that opens at another is "'3' next to a list of four".
+  const defaultKey = String(DEFAULT_FLOOR_RADIUS_MILES)
+  const chosen = RADII.find(r => r.key === (sp.within ?? defaultKey))
+    ?? RADII.find(r => r.key === defaultKey)
+    ?? RADII[2]
   // Same source and same default as the layout: a failed role read falls back
   // to the MODEL shape, because showing a model a stylist's control is worse
   // than the reverse — the invite button would refuse her anyway.
@@ -42,6 +48,27 @@ export default async function SalonFloorPage({
     supabase.from('users').select('role').eq('id', user.id).maybeSingle(),
   ])
   const isProvider = isStylistRole((me as { role: string } | null)?.role ?? '')
+
+  /**
+   * ⚠️⚠️ AFTER THE FEED IS READ, AND THE ORDER IS THE WHOLE THING.
+   *
+   * This moves the watermark to now(). Doing it before `getSalonFloor` would
+   * not break this render — the feed is not filtered by the watermark — but it
+   * would break the NAV on this very page: the layout has already computed
+   * `floorHasNew` from the old watermark, and a visit that cleared the mark
+   * first would be racing its own dot. Read first, then mark, always.
+   *
+   * ⚠️ AWAITED, NOT FIRED AND FORGOTTEN. This is a server component, and a
+   * promise left dangling when the response is returned may never run — the
+   * same reason /auth/confirm awaits its postcode write.
+   *
+   * ⚠️ AND A FAILURE IS SWALLOWED. The worst case is the dot staying lit over
+   * a wall she has just read, which she can clear by opening it again. An
+   * error page instead of the floor, because a watermark would not move, would
+   * be much worse.
+   */
+  const { error: seenErr } = await supabase.rpc('mark_salon_floor_seen')
+  if (seenErr) console.warn('[salon-floor] mark_salon_floor_seen failed:', seenErr.message)
 
   const qs = (within: string) => `/salon-floor?within=${within}`
 

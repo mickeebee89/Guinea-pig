@@ -26,6 +26,16 @@ import { withinRadius } from '@/lib/distance'
  * that where somebody is about to type, rather than leaving it to be discovered.
  */
 
+/**
+ * The radius the page opens at, and therefore the radius the dot must use.
+ *
+ * ⚠️ ONE CONSTANT, READ BY BOTH, BECAUSE A DOT FOR A POST THE PAGE WILL NOT
+ * SHOW IS THE EXACT FAILURE AppNav WARNS ABOUT — "'3' next to a list of four
+ * is a bug report". If the page defaulted to 20 and the dot asked 'any', a
+ * member would tap a lit nav item and arrive at an empty wall.
+ */
+export const DEFAULT_FLOOR_RADIUS_MILES = 20
+
 export type FloorPost = {
   id: string
   body: string
@@ -152,4 +162,124 @@ export async function getSalonFloor(
     radiusApplied: placed.radiusApplied,
     unplaceableHidden: placed.unplaceableHidden,
   }
+}
+
+/**
+ * Is there anything new on the floor for this member?
+ *
+ * ── ⚠️ A BOOLEAN, AND THE EXPIRY IS WHY ─────────────────────────────────
+ * Posts go after 48 hours, so a count computed when the nav renders can be
+ * wrong by the time the member taps it. AppNav's own note: "a count also has
+ * to be right, and '3' next to a list of four is a bug report". Messages can
+ * carry a number because read_at is per-row and stable. This cannot.
+ *
+ * ── ⚠️⚠️ IT ANSWERS THE SAME QUESTION getSalonFloor ANSWERS ─────────────
+ * Same block list, same distance helper, same radius constant. That is not
+ * tidiness: slots.ts's header records what happened when two surfaces each
+ * decided "what can she see" for themselves — they agreed only by accident,
+ * and correcting one would have made the other advertise what it then refused
+ * (audit item 192). A dot is that same promise one step earlier.
+ *
+ * ── ⚠️⚠️ APPROVAL AND EXPIRY ARE FILTERED HERE, AND THAT IS A DELIBERATE
+ * ── DUPLICATION OF A RULE RLS ALREADY APPLIES ──────────────────────────
+ * `getSalonFloor` does NOT restate those predicates, and is right not to:
+ * `status_posts_read_visible` applies them on every read, and a second copy of
+ * a rule the database enforces uniformly is a second thing to drift.
+ *
+ * ⚠️ BUT IT IS NOT UNIFORM HERE. Three PERMISSIVE policies OR together:
+ *
+ *   status_posts_read_visible   approved AND expires_at > now()
+ *   status_posts_read_own       author_user_id = auth.uid()
+ *   status_posts_admin_all      is_admin()
+ *
+ * So RLS deliberately gives DIFFERENT ANSWERS TO DIFFERENT ROLES, and there is
+ * no single rule left to defer to. An admin is shown expired and unapproved
+ * posts; a member is not. Deferring would make this dot mean one thing for two
+ * accounts and another thing for everyone else — and those two accounts are
+ * the ones looking at it most, so they would be reading a signal nobody else
+ * gets and calibrating the product against it.
+ *
+ * ✅ AN ORDINARY MEMBER GETS THE SAME ANSWER EITHER WAY. The filter changes
+ * nothing for them; it exists so that an admin gets that answer too.
+ *
+ * ⚠️ The author exclusion below is a separate matter and stays regardless:
+ * `status_posts_read_own` means you always see your own posts, and without it
+ * posting something would light your own dot.
+ *
+ * ── ⚠️ NULL seenAt MEANS "NEVER LOOKED", WHICH IS 0104's RULE INVERTED ──
+ * The admin console seeds its watermarks at now() so a first load is not a
+ * wall of dots over data that was always there. Here a null means every
+ * visible post counts as new, and that is a decision rather than an
+ * inconsistency: the worst case is ONE dot for a post under 48 hours old that
+ * she may already have seen, and erring toward drawing attention is the whole
+ * point of a feature that says "somebody is on the floor". The cost of being
+ * wrong is opposite in the two places, so the rule is too.
+ *
+ * ⚠️ FAILS TO `false`. A dot invented by a broken read sends someone to an
+ * empty wall; a dot missed costs them nothing they can see. The nav's own
+ * try/catch is the second half of this.
+ */
+export async function hasNewFloorPosts(
+  supabase: SupabaseClient,
+  userId: string,
+  seenAt: string | null,
+): Promise<boolean> {
+  let q = supabase
+    .from('status_posts')
+    .select('id, created_at, author_user_id')
+    // ⚠️ THE DELIBERATE DUPLICATION. See the header: RLS is role-dependent on
+    // this table, so these two predicates are what make the dot mean the same
+    // thing for an admin as for everybody else. They are a no-op for an
+    // ordinary member, whose RLS has already applied them.
+    .eq('moderation_status', 'approved')
+    .gt('expires_at', new Date().toISOString())
+    // ⚠️ NOT MINE. See above — this is about somebody else having spoken.
+    .neq('author_user_id', userId)
+    .order('created_at', { ascending: false })
+    // Enough to survive the block and radius filters below without reading the
+    // whole wall. The answer is a boolean, so this only has to find ONE.
+    .limit(60)
+
+  // A null watermark means never looked, so no lower bound at all.
+  if (seenAt) q = q.gt('created_at', seenAt)
+
+  const [{ data: postRows, error }, { data: me }, blocked] = await Promise.all([
+    q,
+    supabase.from('users').select('latitude, longitude').eq('id', userId).maybeSingle(),
+    getBlockedIds(supabase, userId).catch(() => new Set<string>()),
+  ])
+  if (error) {
+    console.warn('[salonFloor] hasNewFloorPosts failed:', error.message)
+    return false
+  }
+
+  const rows = ((postRows ?? []) as Pick<PostRow, 'id' | 'created_at' | 'author_user_id'>[])
+    .filter(r => !blocked.has(r.author_user_id))
+  if (rows.length === 0) return false
+
+  const authorIds = [...new Set(rows.map(r => r.author_user_id))]
+  const { data: coords } = await supabase
+    .from('users').select('id, latitude, longitude').in('id', authorIds)
+
+  const coordOf = new Map<string, { latitude: number | null; longitude: number | null }>()
+  for (const c of (coords ?? []) as {
+    id: string; latitude: number | null; longitude: number | null
+  }[]) coordOf.set(c.id, { latitude: c.latitude, longitude: c.longitude })
+
+  // ⚠️ THE SAME HELPER, NOT THE SAME ARITHMETIC WRITTEN AGAIN. withinRadius
+  // also decides that a viewer with no coordinates gets NO filter — the rule
+  // is `radiusApplied = hasLoc ? radiusMiles : null` — so this inherits
+  // getSalonFloor's behaviour for a member who has set no postcode instead of
+  // reproducing it.
+  const placed = withinRadius(
+    rows,
+    (me ?? null) as { latitude: number | null; longitude: number | null } | null,
+    r => {
+      const c = coordOf.get(r.author_user_id)
+      return { lat: c?.latitude ?? null, lng: c?.longitude ?? null }
+    },
+    DEFAULT_FLOOR_RADIUS_MILES,
+  )
+
+  return placed.items.length > 0
 }

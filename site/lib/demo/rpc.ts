@@ -33,6 +33,19 @@ export function demoRpc(name: string, args: Row, store: DemoStore, user: DemoUse
       return true
 
     /**
+     * ⚠️ A NO-OP THAT RETURNS, RATHER THAN A THROW. The Salon Floor page calls
+     * this on every load to clear its nav dot, so an unknown-function throw
+     * would take the whole page down in demo mode — not the dot, the page.
+     *
+     * There is nothing to write: demo fixtures have no users table to move a
+     * watermark in, and `hasNewFloorPosts` reads `salon_floor_seen_at` through
+     * the fixtures rather than through this. Returning null is the honest
+     * shape of a function whose real return type is void.
+     */
+    case 'mark_salon_floor_seen':
+      return null
+
+    /**
      * ⚠️ FALSE, SO DEMO MODE SHOWS THE MEMBER VIEW.
      *
      * The demo personas are a model and a stylist; neither is an admin, and

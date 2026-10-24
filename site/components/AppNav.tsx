@@ -43,7 +43,7 @@ const LINKS = [
   // just published a shop has nothing else to do here — and the phone strip
   // scrolls from the left, so the leftmost item is the one that is always
   // visible. Item 141.
-  { href: '/salon-floor',   label: 'Salon Floor' },
+  { href: '/salon-floor',   label: 'Salon Floor', badgeKey: 'floor' as const },
   // Models browse. A stylist has no use for a list of other stylists.
   { href: '/browse',        label: 'Browse', modelOnly: true },
   // A model's own profile. Until 23 Sep she had NO route to anything she
@@ -77,9 +77,12 @@ const LINKS = [
  * nowhere.
  */
 export function AppNav({
-  unread = 0, unreadNotifications = 0, isProvider = false, isModel = true,
+  unread = 0, floorHasNew = false, unreadNotifications = 0,
+  isProvider = false, isModel = true,
 }: {
   unread?: number
+  /** Somebody else has posted on the floor since this member last opened it. */
+  floorHasNew?: boolean
   unreadNotifications?: number
   isProvider?: boolean
   isModel?: boolean
@@ -104,7 +107,7 @@ export function AppNav({
           {/* From sm up the links sit inline; below that they get their own row. */}
           <nav aria-label="Member area" className="hidden flex-1 sm:block">
             <ul className="flex flex-wrap items-center gap-1">
-              {links.map(l => <NavLink key={l.href} {...l} unread={unread} />)}
+              {links.map(l => <NavLink key={l.href} {...l} unread={unread} floorHasNew={floorHasNew} />)}
             </ul>
           </nav>
 
@@ -117,7 +120,7 @@ export function AppNav({
           {/* -mx-4 + px-4 lets the strip bleed to the screen edges, so a
               half-visible pill signals there is more to scroll to. */}
           <ul className="-mx-4 flex gap-0.5 overflow-x-auto px-4 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            {links.map(l => <NavLink key={l.href} {...l} unread={unread} />)}
+            {links.map(l => <NavLink key={l.href} {...l} unread={unread} floorHasNew={floorHasNew} />)}
           </ul>
         </nav>
       </div>
@@ -156,12 +159,20 @@ function NotificationBell({ unread }: { unread: number }) {
 }
 
 function NavLink({
-  href, label, badgeKey, unread,
+  href, label, badgeKey, unread, floorHasNew,
 }: {
   href: string
   label: string
-  badgeKey?: 'unread'
+  /**
+   * ⚠️ TWO TREATMENTS, NOT ONE REUSED. 'unread' renders a NUMBER; 'floor'
+   * renders a bare dot. They are not interchangeable: a floor post expires
+   * after 48 hours, so a count rendered here can be wrong before the tap that
+   * follows it — the "'3' next to a list of four" failure in the header above.
+   * Messages can carry a number because read_at is per-row and stable.
+   */
+  badgeKey?: 'unread' | 'floor'
   unread: number
+  floorHasNew: boolean
 }) {
   return (
     <li className="shrink-0">
@@ -170,6 +181,18 @@ function NavLink({
         className="inline-flex min-h-11 items-center gap-1.5 whitespace-nowrap rounded-[999px] px-2.5 text-[13px] font-bold text-muted transition-colors hover:bg-soft-pink hover:text-rose focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose sm:gap-2 sm:px-3 sm:text-sm"
       >
         {label}
+        {/* ⚠️ COLOUR ONLY, SO THE MEANING IS IN THE ACCESSIBLE NAME. There is
+            no number to announce here and no glance to save for someone who
+            cannot see the dot — the sr-only text IS the feature for them. */}
+        {badgeKey === 'floor' && floorHasNew && (
+          <>
+            <span
+              aria-hidden="true"
+              className="inline-block h-2 w-2 shrink-0 rounded-full bg-rose"
+            />
+            <span className="sr-only">new posts</span>
+          </>
+        )}
         {badgeKey === 'unread' && unread > 0 && (
           <>
             <span

@@ -2,6 +2,7 @@ import { createSupabaseServerClient, requireUser } from '@/lib/supabase-server'
 import { getConversations } from '@/lib/queries/conversations'
 import { getDashboardUser } from '@/lib/queries/dashboard'
 import { isStylist as isStylistRole, isModel as isModelRole } from '@/lib/roles'
+import { hasNewFloorPosts } from '@/lib/queries/salonFloor'
 import { getUnreadNotificationCount } from '@/lib/queries/notifications'
 import { AppNav } from '@/components/AppNav'
 import { SuspensionNotice, type ActiveSuspension } from '@/components/SuspensionNotice'
@@ -45,6 +46,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   let unread = 0
   let unreadNotifications = 0
+  // ⚠️ FALSE BY DEFAULT, so a failed read shows no dot rather than an invented
+  // one. A dot that is not there costs nothing visible; a dot that sends
+  // somebody to an empty wall is the thing that stops dots being believed.
+  let floorHasNew = false
   // Default to the MODEL nav if the role read fails: browsing and applying are
   // harmless to offer, where offering a shop editor to someone with no shop is
   // a link to a refusal.
@@ -61,18 +66,26 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   let suspension: ActiveSuspension | null = null
   try {
     const supabase = await createSupabaseServerClient()
-    const [convs, me, notes, susp] = await Promise.all([
+    const [convs, me, notes, susp, floorSeen] = await Promise.all([
       getConversations(supabase, user.id),
       getDashboardUser(supabase, user.id),
       getUnreadNotificationCount(supabase, user.id),
       // Read here rather than in each page: a suspension is a property of the
       // person, so it belongs where the auth gate is. Item 120.
       supabase.rpc('my_suspension'),
+      // The watermark. Read here rather than inside hasNewFloorPosts so the
+      // loader stays a pure question about posts and the layout keeps the one
+      // round trip it already pays for.
+      supabase.from('users').select('salon_floor_seen_at').eq('id', user.id).maybeSingle(),
     ])
     unread = convs.reduce((n, c) => n + c.unreadCount, 0)
     isProvider = isStylistRole(me.role)
     isModel = isModelRole(me.role)
     unreadNotifications = notes
+    floorHasNew = await hasNewFloorPosts(
+      supabase, user.id,
+      (floorSeen.data as { salon_floor_seen_at: string | null } | null)?.salon_floor_seen_at ?? null,
+    )
 
     const row = (susp.data as
       { banned: boolean; suspended_until: string | null; message: string | null }[] | null)?.[0]
@@ -93,6 +106,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     <div className="min-h-dvh bg-cream">
       <AppNav
         unread={unread}
+        floorHasNew={floorHasNew}
         unreadNotifications={unreadNotifications}
         isProvider={isProvider}
         isModel={isModel}
