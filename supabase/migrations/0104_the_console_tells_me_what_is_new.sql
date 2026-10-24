@@ -63,7 +63,15 @@
 -- first-run rule working, not the dot being dormant: the mechanism is live and
 -- the next shop to publish lights it.
 --
--- ── ⚠️ GRANTS ARE NAMED COLUMNS, NOT TABLE-WIDE ─────────────────────────
+-- ── ⚠️⚠️ GRANTS: REVOKE FIRST, THEN NAMED COLUMNS ───────────────────────
+-- ⚠️ A NEW TABLE IN `public` ARRIVES ALREADY GRANTED `arwdDxtm` TO anon,
+-- authenticated AND service_role, by Supabase's ALTER DEFAULT PRIVILEGES. A
+-- column grant is additive and cannot take that away, so the grants below mean
+-- nothing without the `revoke all` that precedes them. The long version is at
+-- that revoke; the short version is that the first draft of this migration
+-- omitted it and shipped a writable `last_seen_at` plus a silent breach of
+-- 0098. See also 0033 (views) and 0077 (functions) — same trap, third time.
+--
 -- What the console actually needs, and nothing else:
 --   SELECT                                   the settings page reads the mutes
 --   INSERT (admin_user_id, key, muted)       first toggle creates the row
@@ -142,6 +150,42 @@ comment on table public.admin_activity_seen is
   'One row per (admin, activity key): the watermark the dots are measured from '
   'and whether that dot is muted. last_seen_at moves only through '
   'admin_mark_activity_seen; the client may write muted and nothing else.';
+
+-- ⚠️⚠️ REVOKE BEFORE GRANTING. A NEW TABLE IS NOT EMPTY OF PRIVILEGES.
+--
+-- Supabase sets ALTER DEFAULT PRIVILEGES on `public`, so `create table` returns
+-- with the table ALREADY granted `arwdDxtm` to postgres, anon, authenticated
+-- AND service_role — read live from pg_default_acl, from two grantors
+-- (postgres and supabase_admin). A column grant is ADDITIVE: it cannot take
+-- away what the table grant has already given.
+--
+-- ⚠️ SO WITHOUT THIS LINE THE THREE COLUMN GRANTS BELOW ARE DECORATION, and
+-- `last_seen_at` is writable by the client — the one thing this design says
+-- must never be true. The first version of this migration did exactly that and
+-- its own post-condition caught it on the way in.
+--
+-- ⚠️⚠️ AND IT WOULD HAVE BROKEN 0098 SILENTLY. This is the first table created
+-- in `public` since "anon writes nothing in public", and anon's default
+-- `arwdDxtm` would have made that invariant false the moment the table existed.
+-- RLS would still have gated the rows, so nothing would have looked wrong.
+--
+-- ⚠️ THIRD TIME IN THIS REPO, AND THE FIRST ON A TABLE. 0033 says it of a view
+-- — "the only way to be sure of what is exposed is to revoke everything first
+-- and then grant back exactly what is intended" — and 0077 says it of a
+-- function. `public.users` is the proof that the pattern works: 0088 revoked
+-- table-wide UPDATE before granting ten named columns, which is why its relacl
+-- reads `authenticated=ardDxtm` with no `w`, and why
+-- has_column_privilege('authenticated', 'users', 'is_verified', 'UPDATE') is
+-- false today.
+--
+-- ⚠️ service_role IS KEPT, DELIBERATELY, NOT BY OMISSION. Nothing calls this
+-- table with the service key today, so revoking it would be defensible — but
+-- every other table in `public` grants it, this holds per-admin UI state rather
+-- than member data, and 0077's note is that a revoke takes real ACL entries
+-- with it and BYPASSRLS does not bring them back. Being the single exception
+-- would invite someone to "correct" it without knowing why, and the thing
+-- being protected here is a preference, not a person.
+revoke all on public.admin_activity_seen from public, anon, authenticated;
 
 alter table public.admin_activity_seen enable row level security;
 
@@ -376,14 +420,38 @@ begin
       'admin_mark_activity_seen may move a watermark.';
   end if;
 
-  -- ⚠️ THIS ONE USES information_schema AND IS CORRECT — but only because this
-  -- table has NO table-wide INSERT or UPDATE grant. The only write privileges
-  -- that exist here are the three column grants above, so the expansion the
-  -- check before it had to avoid has nothing to expand.
-  -- ⚠️ If a table-wide write grant is ever added this stops meaning what it
-  -- says: every column would acquire a row and this would fail naming
-  -- last_seen_at — the right direction for an opaque reason. The fix then is
-  -- not to loosen this check; it is that the table-wide grant should not exist.
+  -- ⚠️⚠️ anon WRITES NOTHING HERE — 0098's INVARIANT, ASSERTED ON THE FIRST
+  -- TABLE CREATED SINCE IT. Deliberately the same test 0098 itself applies to
+  -- every other table, so this one is covered by the same rule rather than by
+  -- a similar-looking one. Without the revoke above, all four of these are true
+  -- on a brand-new table and nothing else in this file would have noticed.
+  if has_table_privilege('anon', 'public.admin_activity_seen', 'INSERT')
+     or has_table_privilege('anon', 'public.admin_activity_seen', 'UPDATE')
+     or has_table_privilege('anon', 'public.admin_activity_seen', 'DELETE')
+     or has_table_privilege('anon', 'public.admin_activity_seen', 'TRUNCATE') then
+    raise exception '0104: anon can write admin_activity_seen. 0098 says anon writes '
+      'nothing in public, and a new table arrives granted by default.';
+  end if;
+
+  -- ⚠️ NO TABLE-WIDE WRITE TO authenticated. Read from pg_class.relacl, not
+  -- information_schema, for the same reason the last_seen_at check moved to
+  -- pg_attribute: relacl carries the TABLE's own grants and nothing else.
+  -- This is what makes the column list below mean what it says.
+  if exists (
+    select 1 from pg_class c, lateral aclexplode(c.relacl) x
+    where c.oid = 'public.admin_activity_seen'::regclass
+      and x.grantee = 'authenticated'::regrole
+      and x.privilege_type in ('INSERT', 'UPDATE')
+  ) then
+    raise exception '0104: authenticated holds a TABLE-wide INSERT or UPDATE. The '
+      'column grants are then additive decoration and last_seen_at is writable.';
+  end if;
+
+  -- ⚠️ THIS USES information_schema, WHICH EXPANDS TABLE GRANTS PER COLUMN —
+  -- and it is exact only because the assertion directly above has just proved
+  -- there is no table-wide write grant to expand. The two are a pair; neither
+  -- is sufficient alone, and separating them would leave this one quietly
+  -- reporting whatever the table grant happened to be.
   select string_agg(distinct column_name, ',' order by column_name) into v_cols
   from information_schema.column_privileges
   where table_schema = 'public' and table_name = 'admin_activity_seen'
@@ -426,7 +494,7 @@ end $mig$;
 
 -- MIGRATION FOOTER
 insert into public.schema_migrations (version, name, checksum)
-values ('0104', 'the_console_tells_me_what_is_new', 'f5c843e375c16551c75617adb3505f16e08f3c84d4155f8b6edbc372b9b62b70');
+values ('0104', 'the_console_tells_me_what_is_new', '261a0ded9cb77727767ae9cd310fc7dbb1b82d63c615ab6e93edd1f335a756ed');
 
 commit;
 
