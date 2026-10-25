@@ -98,6 +98,27 @@ function copyFor(
       return { subject: 'A warning from Cavy', heading: 'A warning from Cavy',
         cta: 'Read it in full', path: '/notifications' }
 
+    // ⚠️ THE SUBJECT IS FIXED AND THE NAME IS IN THE BODY, DELIBERATELY.
+    // `tg_favourite_notify` builds the title, and `notifications` is closed to
+    // direct INSERT, so the title IS trustworthy — admin_broadcast relies on
+    // exactly that. It is still kept out of the subject line here: a subject
+    // is the one string a person sees before deciding whether this is real,
+    // and there is no reason to put another member's name there when the body
+    // carries it one line later. session_applied makes the same choice.
+    //
+    // ⚠️ "Post some times" IS THE CTA BECAUSE THERE IS NOWHERE TO SEE
+    // FAVOURITES. No /favourites route exists, and the dashboard's Favourites
+    // panel is the MODEL's list of stylists SHE saved — checked, not assumed.
+    // Sending her to look for a list she cannot find is the "'3' next to a
+    // list of four" failure in another form.
+    //
+    // ✅ AND IT CLOSES A REAL LOOP: posting availability notifies her
+    // favouriters through new_availability, and a model's own dashboard
+    // already promises "we'll tell you when they post new times".
+    case 'shop_favourited':
+      return { subject: 'Someone saved your shop', heading: 'Someone saved your shop',
+        cta: 'Post your times', path: '/availability' }
+
     // ⚠️ THE ONLY CASE THAT READS `data`, AND THE WHOLE REASON `data` IS NOW
     // SELECTED. An invite carries no session, so until 2 Oct 2026 it fell
     // through to the default below and sent her to **/dashboard** — told that
