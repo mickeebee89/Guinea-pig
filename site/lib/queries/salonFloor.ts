@@ -33,8 +33,25 @@ import { withinRadius } from '@/lib/distance'
  * SHOW IS THE EXACT FAILURE AppNav WARNS ABOUT — "'3' next to a list of four
  * is a bug report". If the page defaulted to 20 and the dot asked 'any', a
  * member would tap a lit nav item and arrive at an empty wall.
+ *
+ * ── ⚠️⚠️ AN OBJECT, NOT A NUMBER, AND THAT IS THE POINT OF IT ───────────
+ * This was `= 20`, and the page picked its chip with
+ * `String(DEFAULT_FLOOR_RADIUS_MILES)`. Setting the number to null to mean
+ * "any distance" would make that `String(null)` → "null", which matches no
+ * chip key, so the selection would fall through to the 20-mile chip while the
+ * feed actually filtered at any-distance. The control would say one thing and
+ * the list would do another.
+ *
+ * ⚠️ AND WRITING 'any' INTO THE PAGE AS A LITERAL WOULD FIX THE SYMPTOM AND
+ * LOSE THE GUARANTEE: the key and the miles would then be two values that
+ * happen to agree, which is exactly what this constant exists to prevent. So
+ * it carries BOTH, from one literal — the page reads `.key`, the dot reads
+ * `.miles`, and they cannot disagree because there is nothing to disagree.
  */
-export const DEFAULT_FLOOR_RADIUS_MILES = 20
+export const DEFAULT_FLOOR_RADIUS = { key: 'any', miles: null } as const
+
+/** The miles half, for callers that only ask "how far". */
+export const DEFAULT_FLOOR_RADIUS_MILES: number | null = DEFAULT_FLOOR_RADIUS.miles
 
 export type FloorPost = {
   id: string

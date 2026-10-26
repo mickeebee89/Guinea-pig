@@ -60,8 +60,32 @@ export const RADII = [
 
 export type RadiusKey = typeof RADII[number]['key']
 
-/** The default, for a member we CAN place. 20 miles is a county, not a street. */
-export const DEFAULT_RADIUS = RADII[2]
+/**
+ * The default on arrival: ANY DISTANCE.
+ *
+ * ── ⚠️ IT WAS 20 MILES, AND THE CHANGE IS ABOUT A FIRST IMPRESSION ──────
+ * 20 miles is a county rather than a street, and that reasoning was sound when
+ * there were enough shops for a county to contain some. Measured 26 Oct 2026:
+ * THREE published shops — Welling, Woking, and one with no coordinates at all.
+ * A located model in Southwark saw exactly ONE of them.
+ *
+ * An almost-empty Browse is a worse first impression than a national list, and
+ * widening cannot bury anybody local: `browse.ts` sorts bookable-first then
+ * nearest, so a nearby stylist with open slots still comes first.
+ *
+ * ⚠️ THIS IS A DENSITY DECISION, NOT A PERMANENT ONE. When there are enough
+ * shops that a 20-mile view is full, the honest default moves back — and the
+ * thing to watch is whether a member ever has to NARROW to find somebody near
+ * her, which is the opposite complaint.
+ *
+ * ⚠️⚠️ THREE SURFACES READ THIS, NOT TWO. Browse and the model dashboard's
+ * stylist-updates feed both call radiusFromParam, so the feed widens with
+ * them. That is consistent — an empty feed is the same bad first impression —
+ * but it is a third page changing, and it is not obvious from the name.
+ * The Salon Floor has its own default (queries/salonFloor.ts) and is changed
+ * alongside this rather than by it.
+ */
+export const DEFAULT_RADIUS = RADII[3]
 
 /** Read a `within=` query parameter, falling back to the default. */
 export function radiusFromParam(within: string | undefined) {

@@ -164,11 +164,18 @@ export default async function BrowsePage({
             {/* ⚠️ WITHIN IS ALWAYS r.key, INCLUDING 'any'. Audit item 130.
 
                 This built the "Any distance" link with the parameter DROPPED,
-                and radiusFromParam(undefined) returns DEFAULT_RADIUS — twenty
-                miles. So the chip named "Any distance" linked to the
-                twenty-mile view, never showed as selected, and the sentence
-                printed directly above it, "Choose Any distance to include
-                them", named an action that could not be taken. */}
+                and radiusFromParam(undefined) returns DEFAULT_RADIUS. So the
+                chip named "Any distance" linked to whatever the default was,
+                never showed as selected, and the sentence printed directly
+                above it, "Choose Any distance to include them", named an
+                action that could not be taken.
+
+                ⚠️ THE EXAMPLE USED TO SAY "twenty miles" AND NO LONGER CAN:
+                DEFAULT_RADIUS became RADII[3] — 'any' — on 26 Oct 2026. The
+                bug this comment records is unchanged and the fix still holds;
+                only the number was a detail of the day it was written.
+                Corrected here rather than left to be discovered, which is the
+                failure item 219 is about. */}
             {RADII.map(r => (
               <li key={r.key}>
                 {result.viewerHasLocation ? (

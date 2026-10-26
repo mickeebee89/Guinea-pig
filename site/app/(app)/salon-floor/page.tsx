@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { createSupabaseServerClient, requireUser } from '@/lib/supabase-server'
-import { getSalonFloor, DEFAULT_FLOOR_RADIUS_MILES } from '@/lib/queries/salonFloor'
+import { getSalonFloor, DEFAULT_FLOOR_RADIUS } from '@/lib/queries/salonFloor'
 import { isStylist as isStylistRole } from '@/lib/roles'
 import { Avatar, EmptyState } from '@/components/ui'
 import { formatMiles } from '@/lib/distance'
@@ -33,10 +33,12 @@ export default async function SalonFloorPage({
   const supabase = await createSupabaseServerClient()
   const sp = await searchParams
 
-  // ⚠️ THE DEFAULT COMES FROM THE CONSTANT THE DOT ALSO READS. Two literal
-  // 20s would be two defaults that can drift, and a dot computed at one radius
-  // for a page that opens at another is "'3' next to a list of four".
-  const defaultKey = String(DEFAULT_FLOOR_RADIUS_MILES)
+  // ⚠️ THE KEY AND THE MILES COME FROM THE SAME CONSTANT THE DOT READS, so
+  // the selected chip and the filter cannot disagree. This was
+  // String(DEFAULT_FLOOR_RADIUS_MILES), which broke the moment the default
+  // became "any": String(null) is "null", matches no key, and the page would
+  // have shown "20 miles" selected while filtering at any-distance.
+  const defaultKey: string = DEFAULT_FLOOR_RADIUS.key
   const chosen = RADII.find(r => r.key === (sp.within ?? defaultKey))
     ?? RADII.find(r => r.key === defaultKey)
     ?? RADII[2]
