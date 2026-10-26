@@ -89,21 +89,21 @@ export function PostcodeField({
         >
           {pending ? 'Checking…' : 'Save'}
         </button>
-        {/* Clearing is its own control rather than "save an empty box", which
-            nobody would find. Location is optional and withdrawable, and a
-            right you cannot see is not one. */}
-        {saved && !pending && (
-          <button
-            onClick={() => { setValue(''); start(async () => {
-              const res = await attempt(() => saveMyPostcode(''), 'postcode:clear')
-              if (!res.ok) { setError(res.error ?? 'That didn’t save.'); return }
-              setSaved(null); setMsg('Removed.'); router.refresh()
-            }) }}
-            className="inline-flex min-h-11 items-center px-2 text-sm font-bold text-muted hover:text-warm-dark hover:underline"
-          >
-            Remove
-          </button>
-        )}
+        {/* ⚠️⚠️ THE "Remove" BUTTON WAS HERE AND IS GONE (26 Oct 2026).
+            It called saveMyPostcode('') and would have undone the signup
+            mandate a minute after the account was made.
+
+            ⚠️ saveMyPostcode STILL ACCEPTS '' and still clears, deliberately.
+            Nothing else in site/ calls it that way — this was the only caller —
+            but set_my_postcode's all-or-nothing clear is the correct behaviour
+            for a column that can be cleared by other means, and removing the
+            capability because one button went would be deleting a tool because
+            its last user left.
+
+            ⚠️ CHANGING IT IS STILL POSSIBLE. This is not a field she is locked
+            out of: Save overwrites, which is what somebody who moves needs.
+            What has gone is emptying it, which only ever made an account less
+            usable to the person holding it. */}
       </div>
 
       {error && <p role="alert" className="mt-2 text-sm text-danger">{error}</p>}

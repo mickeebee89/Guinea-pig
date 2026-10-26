@@ -129,10 +129,17 @@ export function SignUpForm({
         {err('email')}
       </div>
 
-      {/* ⚠⚠ OPTIONAL, AND IT SAYS SO IN THE LABEL. Privacy §5 calls location
-          optional and withdrawable; a box that looked required here would make
-          that sentence false on the one screen where nobody has read it yet.
-          No `required`, and an empty value is the normal case.
+      {/* ⚠️⚠️ REQUIRED SINCE 26 Oct 2026, AND THE LABEL SAYS SO BY NOT SAYING
+          OTHERWISE. A model with no postcode cannot be matched to anybody: she
+          is invisible to distance sorting, to Browse's radius and to the Salon
+          Floor, so an account without one is close to useless to her and to
+          the marketplace.
+
+          ⚠️ REQUIRED TO ENTER IS NOT "MUST RESOLVE". The action refuses a typo
+          — the box is still on screen, which is the whole difference from the
+          notice this replaces — but a postcodes.io OUTAGE still creates the
+          account and carries the raw text to /auth/confirm, which re-looks it
+          up. Somebody else's uptime does not get a veto over our signups.
 
           ⚠️ NOT PostcodeField. That component calls saveMyPostcode, which starts
           `await requireUser()` — and there is no session at signup: signUp()
@@ -147,19 +154,27 @@ export function SignUpForm({
           action, before signUp, and it cannot stop the account being created.
           See actions.ts. */}
       <div>
-        <label className={label} htmlFor="postcode">
-          Postcode <span className="font-normal text-muted">(optional)</span>
-        </label>
-        <input id="postcode" name="postcode" maxLength={8}
+        <label className={label} htmlFor="postcode">Postcode</label>
+        {/* ⚠️ THE INPUT ATTRIBUTES ARE UNCHANGED and every one is load-bearing:
+            postal-code autocomplete, characters autocapitalise, autocorrect and
+            spellcheck off so a phone keyboard does not "fix" BR1 into BRI, and
+            maxLength 8 for "AA9A 9AA". Only `required` is new. */}
+        <input id="postcode" name="postcode" maxLength={8} required
                placeholder="BR1 2AB"
                autoComplete="postal-code"
                autoCapitalize="characters"
                autoCorrect="off"
                spellCheck={false}
                className={`mt-1.5 ${field} uppercase placeholder:normal-case`} />
+        {/* ⚠️ THE SAME PLACE AS EVERY OTHER FIELD'S ERROR. The action returns
+            a typo on `errors.postcode`, so it lands against the box she typed
+            into — which is the entire reason this moved from a post-signup
+            notice to a refusal. */}
+        {err('postcode')}
         <p className="mt-1 text-xs text-muted">
-          So we can show you people nearby and sort by distance. You can add, change or remove
-          it later in Settings — and skip it entirely for now.
+          So we can show you people nearby and sort by distance. It’s never shown publicly —
+          other members only ever see roughly how far away you are, never your postcode or
+          address. You can change it later in Settings.
         </p>
       </div>
 

@@ -36,7 +36,13 @@ export interface SignupInput {
   dateOfBirth: Date
   /** Where this signup came from — a cohort link, a campaign. Optional. */
   source?: string | null
-  /** Optional. Absent, or the canonical postcode a successful lookup returned. */
+  /**
+   * REQUIRED at signup since 26 Oct 2026, though not by this type: either the
+   * canonical postcode a lookup returned, or the raw text when the lookup could
+   * not run. Still optional HERE because buildSignupMetadata is also the shape
+   * other callers use, and because the presence check belongs in
+   * validateSignup where it produces a message somebody can act on.
+   */
   signupPostcode?: string | null
 }
 
@@ -53,7 +59,19 @@ export interface SignupMetadata {
   signup_source?: string
   /**
    * The postcode she typed at signup, in the canonical form OUR lookup
-   * returned. Optional, and absent unless the lookup succeeded.
+   * returned, OR the raw text she typed when the lookup could not run.
+   *
+   * ⚠️ IT IS NO LONGER "ABSENT UNLESS THE LOOKUP SUCCEEDED", and the change is
+   * deliberate. A postcode is REQUIRED at signup since 26 Oct 2026, but
+   * postcodes.io being down is our problem and not hers — so on an outage the
+   * raw text travels here and /auth/confirm re-looks it up when she confirms,
+   * which is minutes to hours later and usually after the service is back.
+   * That route already returns quietly on a failed lookup, so a value that
+   * never resolves costs nothing.
+   *
+   * ⚠️ WHICH MEANS WHAT ARRIVES HERE MAY NOT BE CANONICAL. Nothing stores it:
+   * /auth/confirm uses it only as the INPUT to a lookup and writes
+   * found.place.postcode. It is a carrier, not a store — see below.
    *
    * ⚠⚠ IT IS A CARRIER, NOT A STORE. Nothing reads it except
    * `/auth/confirm`, which RE-LOOKS-IT-UP and writes through
@@ -120,8 +138,10 @@ export function buildSignupMetadata(input: SignupInput): SignupMetadata {
   }
   const source = input.source?.trim()
   if (source) meta.signup_source = source.slice(0, 120)
-  // ⚠️ Only ever set from a SUCCESSFUL lookup in the signup action, so this is
-  // already canonical; the cap is belt and braces on our own write.
+  // ⚠️ NO LONGER ONLY FROM A SUCCESSFUL LOOKUP: on a postcodes.io outage the
+  // signup action puts the RAW text here so /auth/confirm can resolve it later.
+  // The cap still applies, and matters more now that the value may not have
+  // been through a lookup at all.
   const postcode = input.signupPostcode?.trim()
   if (postcode) meta.signup_postcode = postcode.slice(0, POSTCODE_MAX)
   return meta
@@ -145,6 +165,14 @@ export function validateSignup(input: {
   dateOfBirth: Date | null
   ageConfirmed: boolean
   termsAccepted: boolean
+  /**
+   * ⚠️ REQUIRED SINCE 26 Oct 2026. Only PRESENCE is checked here — whether it
+   * is a real postcode is a question for the lookup in the action, which can
+   * tell "you typed it wrong" from "our lookup is down" and must treat those
+   * differently. Validating the shape here as well would be a third opinion on
+   * what a postcode is, after this file and postcodes.io.
+   */
+  postcode: string
 }): Record<string, string> {
   const e: Record<string, string> = {}
 
@@ -164,6 +192,10 @@ export function validateSignup(input: {
   } else if (ageOn(input.dateOfBirth) < 18) {
     e.dob = 'You must be 18 or over to use Cavy'
   }
+
+  // The same shape as every other missing field, so it lands in the same
+  // place on the form rather than as a notice after the account exists.
+  if (!input.postcode.trim()) e.postcode = 'Enter your postcode'
 
   if (!input.ageConfirmed)  e.age   = 'You must confirm you are 18 or over'
   if (!input.termsAccepted) e.terms = 'Please agree to the Terms and Privacy Policy'

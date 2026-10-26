@@ -64,7 +64,7 @@ export async function signUp(_prev: SignUpState | null, formData: FormData): Pro
 
   const errors = validateSignup({
     firstName, lastName, email, password, confirmPassword,
-    dateOfBirth, ageConfirmed, termsAccepted,
+    dateOfBirth, ageConfirmed, termsAccepted, postcode: postcodeRaw,
   })
   if (Object.keys(errors).length > 0) return { errors }
 
@@ -76,11 +76,29 @@ export async function signUp(_prev: SignUpState | null, formData: FormData): Pro
   const h = await headers()
   const origin = h.get('origin') ?? `https://${h.get('host') ?? 'cavybeauty.com'}`
 
-  // ═══ THE POSTCODE LOOKUP — BEFORE signUp, AND IT CANNOT STOP IT ══════════
+  // ═══ THE POSTCODE LOOKUP — BEFORE signUp, AND IT CAN NOW STOP IT ═════════
   //
-  // ⚠⚠ OPTIONAL MEANS A FAILED LOOKUP STILL CREATES THE ACCOUNT. Every outcome
-  // below falls through to signUp; none of them returns early. The notice is
-  // carried on `postcodeNotice`, not `errors`.
+  // ⚠️⚠️ TWO FAILURES, TWO ANSWERS, AND COLLAPSING THEM WOULD HAND
+  // postcodes.io A VETO OVER OUR OWN SIGNUPS.
+  //
+  //   unavailable                 → THEIR outage, OUR problem. The account is
+  //                                 created and the RAW text she typed travels
+  //                                 in the metadata, because /auth/confirm
+  //                                 re-looks it up when she confirms — minutes
+  //                                 to hours later, usually after the service
+  //                                 is back. That route already returns quietly
+  //                                 on a failed lookup, so this needed nothing
+  //                                 new to work.
+  //   malformed|not_found|
+  //   not_located                 → HER typo. Refused, with the box still on
+  //                                 screen so she can fix it. That is the whole
+  //                                 difference from the old post-signup notice,
+  //                                 which told her about a field that had
+  //                                 already gone.
+  //
+  // ⚠️ A postcode is REQUIRED as of 26 Oct 2026, but "required to enter" is not
+  // "must resolve before you may have an account". The first is a rule about
+  // her; the second would be a rule about somebody else's uptime.
   //
   // ⚠⚠ AND IT HAPPENS HERE RATHER THAN INSIDE THE SIGNUP TRANSACTION. The
   // alternative was to write the postcode in handle_new_auth_user from the
@@ -94,23 +112,40 @@ export async function signUp(_prev: SignUpState | null, formData: FormData): Pro
   // SignupMetadata.signup_postcode for why, and /auth/confirm for the write.
   let signupPostcode: string | null = null
   let postcodeNotice: string | undefined
-  if (postcodeRaw) {
-    const found = await lookupPostcode(postcodeRaw)
-    if (found.ok) {
-      signupPostcode = found.place.postcode
-    } else if (found.reason === 'unavailable') {
-      // ⚠️ OURS, NOT HERS. A service outage must never read as "your postcode
-      // is wrong" — the same distinction postcodeMessage() makes, reworded for
-      // a screen she cannot retype on.
-      postcodeNotice = 'We couldn’t check your postcode just now, so we haven’t saved it. You can add it in Settings once you’re signed in.'
-    } else {
-      // malformed | not_found | not_located — ONE WORDING FOR ALL THREE,
-      // deliberately. On the settings page "Check it and try again" is right
-      // because the box is still there; here the form is gone and the account
-      // is made, so there is nothing to retry and telling her to retry would
-      // send her looking for a box that no longer exists.
-      postcodeNotice = 'We couldn’t use that postcode, so we haven’t saved it. You can add it in Settings once you’re signed in.'
-    }
+
+  // validateSignup has already refused an empty one, so this is always set.
+  const found = await lookupPostcode(postcodeRaw)
+  if (found.ok) {
+    signupPostcode = found.place.postcode
+  } else if (found.reason === 'unavailable') {
+    // ⚠️⚠️ THE ACCOUNT IS STILL CREATED, AND THE RAW TEXT GOES WITH IT.
+    //
+    // /auth/confirm's storeSignupPostcode reads signup_postcode, re-looks it
+    // up and writes through set_my_postcode — and it already returns quietly
+    // when a lookup fails, for ANY reason including the service being down.
+    // So carrying the raw value is the entire fix: confirmation happens later,
+    // the outage is usually over, and it resolves then.
+    //
+    // ⚠️ IT MAY NOT BE CANONICAL, AND THAT IS FINE. Nothing stores this value;
+    // confirm uses it only as the INPUT to a lookup and writes
+    // found.place.postcode. If it never resolves she has an account with no
+    // postcode, which is exactly where a refusal would have left her, minus
+    // the refusal.
+    signupPostcode = postcodeRaw
+    // ⚠️ OURS, NOT HERS. A service outage must never read as "your postcode is
+    // wrong" — the same distinction postcodeMessage() makes.
+    postcodeNotice = 'We couldn’t check your postcode just now. Your account is made, and we’ll save it when you confirm your email.'
+  } else {
+    // ⚠️⚠️ malformed | not_found | not_located — REFUSED, NOT NOTICED, and
+    // this is the point of the change. The box is still on screen, so she can
+    // fix a typo in the place she made it. The old behaviour created the
+    // account and then told her about a field that had already gone, which is
+    // advice nobody can act on.
+    //
+    // One wording for all three: "not a postcode", "no such postcode" and "we
+    // cannot place it" are the same instruction to her, and distinguishing
+    // them would be telling her about our lookup rather than about her typing.
+    return { errors: { postcode: 'We couldn’t find that postcode. Check it and try again.' } }
   }
 
   const { error } = await supabase.auth.signUp({
