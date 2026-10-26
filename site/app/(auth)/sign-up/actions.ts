@@ -3,7 +3,7 @@
 import { headers } from 'next/headers'
 import { createSupabaseServerClient } from '@/lib/supabase-server'
 import { isRateLimited } from '@/lib/authErrors'
-import { lookupPostcode } from '@/lib/postcode'
+import { lookupPostcode, postcodeMessage } from '@/lib/postcode'
 import {
   buildSignupMetadata,
   validateSignup,
@@ -142,10 +142,26 @@ export async function signUp(_prev: SignUpState | null, formData: FormData): Pro
     // account and then told her about a field that had already gone, which is
     // advice nobody can act on.
     //
-    // One wording for all three: "not a postcode", "no such postcode" and "we
-    // cannot place it" are the same instruction to her, and distinguishing
-    // them would be telling her about our lookup rather than about her typing.
-    return { errors: { postcode: 'We couldn’t find that postcode. Check it and try again.' } }
+    // ⚠️⚠️ postcodeMessage, NOT A LITERAL, AND THE THREE ARE NOT THE SAME
+    // SENTENCE. A hardcoded "we couldn't find that postcode" tells somebody
+    // who typed "e164qwrk" that we LOOKED and failed, when the truth is it
+    // never looked like a postcode and no lookup happened. The distinctions
+    // already exist one file away:
+    //
+    //   malformed     "That doesn't look like a UK postcode..."
+    //   not_found     "We couldn't find that postcode. Check it and try again."
+    //   not_located   "That postcode exists, but we don't have a location..."
+    //
+    // The third is the one a literal destroys: being told to check a postcode
+    // she has typed correctly, when the real answer is to try a neighbouring
+    // street, is advice that cannot work.
+    //
+    // ⚠️ 'unavailable' MUST NOT REACH HERE, and it cannot: its message says
+    // "nothing has changed", which is FALSE at signup because the account IS
+    // created. The `else if` above narrows `found.reason` to the three
+    // refusing cases, so TypeScript refuses to pass it rather than a comment
+    // promising nobody will.
+    return { errors: { postcode: postcodeMessage(found.reason) } }
   }
 
   const { error } = await supabase.auth.signUp({
