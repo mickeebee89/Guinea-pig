@@ -91,9 +91,55 @@ type PostRow = {
  * and the web is not repeating it: a control that only hides somebody from one
  * list is the kind people stop trusting.
  *
- * Expiry and moderation are NOT filtered here. `status_posts_read_visible`
- * already enforces both in the database, and re-stating them in the query would
- * be a second copy of a rule that can drift from the first.
+ * ── ⚠️⚠️ EXPIRY AND APPROVAL ARE FILTERED HERE, AND THE DUPLICATION IS
+ * ── DELIBERATE. THIS COMMENT USED TO SAY THE OPPOSITE ───────────────────
+ * It said: "Expiry and moderation are NOT filtered here. status_posts_read_visible
+ * already enforces both in the database, and re-stating them would be a second
+ * copy of a rule that can drift." That is right when RLS applies a rule
+ * UNIFORMLY. It does not here. Three permissive policies OR together:
+ *
+ *   status_posts_read_visible   approved AND expires_at > now()
+ *   status_posts_read_own       author_user_id = auth.uid()
+ *   status_posts_admin_all      is_admin()
+ *
+ * So the database deliberately gives a DIFFERENT ANSWER PER ROLE, and there is
+ * no single rule left to defer to. Measured 27 Oct 2026: an ordinary member saw
+ * 0 posts on this wall and an admin saw 1 — Elisa's, expired the previous day.
+ * The person checking whether the product works was reading a page no member
+ * could see, which is the worst possible viewer for that to happen to.
+ *
+ * ── ⚠️ WHAT IS RESTATED IS THE TWO MEMBER-FACING POLICIES, NOT "EVERYTHING"
+ * The filter below is `expires_at > now()` AND `(approved OR mine)` — which is
+ * `read_visible OR read_own`, written out. The admin policy is the one thing
+ * left out, and leaving it out is the entire point.
+ *
+ * ⚠️⚠️ FILTERING APPROVAL OUTRIGHT WOULD HAVE BROKEN A PROMISE THAT IS ON
+ * SCREEN. When a post is held for review, Composer.tsx tells the author:
+ * "You'll see it on the floor once it's through, and ONLY YOU CAN SEE IT UNTIL
+ * THEN." A bare `moderation_status = 'approved'` makes that sentence false —
+ * she would not see it either — and for a MODEL author there is no second
+ * place to find it: the stylist dashboard surfaces a held post with its review
+ * note (queries/dashboard.ts:312), and nothing does that for a model. So
+ * `or mine` is not a nicety; it is what keeps a published sentence true.
+ *
+ * ── ⚠️ EXPIRY IS FILTERED FOR EVERYONE, INCLUDING THE AUTHOR ────────────
+ * That case WAS considered and it went the other way from approval. An expired
+ * post is gone for every other member, and showing it to its author among live
+ * ones presents it as though it still reaches people. dashboard.ts:312 already
+ * made exactly this call for a stylist's own post — it filters expiry while
+ * deliberately NOT filtering approval — so this matches a decision the codebase
+ * had already taken rather than inventing one.
+ *
+ * ⚠️ THE BETTER LONG-TERM ANSWER IS TO SHOW IT TO HER LABELLED "Expired", and
+ * somebody will want that back. It is not done here because the wall has no
+ * per-post state badge and adding one is a design change, not a predicate.
+ * Nobody holds an expired post today, so nothing changes for a real person.
+ *
+ * ── ⚠️ THE PREDICATE IS IN THE QUERY, NOT A .filter() AFTERWARDS ────────
+ * `limit(120)` is applied by PostgREST BEFORE anything we could do in
+ * JavaScript, so a post-fetch filter would let expired rows eat an admin's row
+ * budget and silently shorten the wall as they accumulate. In the query, the
+ * 120 counts only rows that can actually be shown.
  */
 export async function getSalonFloor(
   supabase: SupabaseClient,
@@ -104,6 +150,10 @@ export async function getSalonFloor(
     supabase
       .from('status_posts')
       .select('id, body, created_at, author_user_id, provider_id')
+      // ⚠️ See the header. `read_visible OR read_own`, written out, so the
+      // admin policy cannot widen this wall for one reader.
+      .gt('expires_at', new Date().toISOString())
+      .or(`moderation_status.eq.approved,author_user_id.eq.${userId}`)
       .order('created_at', { ascending: false })
       .limit(120),
     supabase.from('users').select('latitude, longitude').eq('id', userId).maybeSingle(),
