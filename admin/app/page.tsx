@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import Link from 'next/link'
+import { TEST_ACCOUNT_ID_LIST, hiddenNote } from '@/lib/testAccounts'
 
 interface Stats {
   openReports: number
@@ -10,6 +11,21 @@ interface Stats {
   totalProviders: number
   totalModels: number
   verifiedUsers: number
+  /**
+   * How much of each Platform count above is Micky's own QA accounts.
+   *
+   * ⚠️ COUNTED FROM THE ROWS, NOT SUBTRACTED FROM A CONSTANT. The list holds
+   * seven ids; how many of those are models, or verified, or own a shop is a
+   * fact about the data and changes without anyone editing this console. An
+   * account that has been deleted simply returns no row and contributes 0,
+   * which is the right answer rather than an off-by-one nobody would see.
+   */
+  testUsers: number
+  testProviders: number
+  testModels: number
+  testVerified: number
+  /** The test accounts could not be read, so nothing may be subtracted. */
+  testUnavailable: boolean
   failedVerifications: number
   failedLast7Days: number
   fraudFlagged: number
@@ -93,6 +109,27 @@ function StatCard({ label, value, sub, href, accent, alert }: {
     </div>
   )
   return href ? <Link href={href} className="block hover:opacity-90 transition-opacity">{card}</Link> : card
+}
+
+/**
+ * A count of REAL members: Micky's seven QA accounts taken out, with both
+ * figures on screen.
+ *
+ * ── ⚠️ NEVER A BARE FILTERED NUMBER ────────────────────────────────────────
+ * The headline is the real count and the sub says what was removed from what.
+ * A tile reading "52" with nothing else cannot be told apart from a tile that
+ * is simply wrong, and this console has already produced one number that was
+ * quietly a subset and read as a whole.
+ *
+ * ── ⚠️ AN UNREADABLE LIST SHOWS THE UNFILTERED TOTAL AND SAYS SO ───────────
+ * Same contract as every other tile here: "could not read" and "nothing to
+ * report" are different states and must look different. Subtracting a 0 we
+ * could not verify would show an inflated number while looking filtered,
+ * which is the one outcome worse than not filtering at all.
+ */
+function memberState(total: number, hidden: number, unavailable: boolean) {
+  if (unavailable) return { value: total, sub: 'test accounts NOT excluded — could not read them' }
+  return { value: total - hidden, sub: hiddenNote(hidden, total) }
 }
 
 /**
@@ -385,6 +422,8 @@ export default function Dashboard() {
         { data: reconcileRuns, error: reconcileErr },
         { data: billingOrphans, error: billingOrphansErr },
         { data: driftRuns, error: driftErr },
+        { data: testUserRows, error: testUserErr },
+        { data: testProvRows, error: testProvErr },
       ] = await Promise.all([
         supabase.from('reports').select('*', { count: 'exact', head: true }).eq('status', 'open'),
         supabase.from('users').select('*', { count: 'exact', head: true }),
@@ -435,6 +474,13 @@ export default function Dashboard() {
           .select('asked_at, answered_at, http_status, newest_run_at, newest_conclusion, note')
           .order('asked_at', { ascending: false })
           .limit(12),
+        // ⚠️ TWO SMALL READS RATHER THAN FOUR `.not(...in...)` FILTERS ON THE
+        // COUNTS ABOVE. The four tiles have four different predicates, so
+        // filtering in place would mean four id lists that have to stay in
+        // step with each other and with this file. Reading the seven rows and
+        // applying the SAME predicates to them in one place below cannot drift.
+        supabase.from('users').select('id, role, is_verified').in('id', TEST_ACCOUNT_ID_LIST),
+        supabase.from('providers').select('user_id').in('user_id', TEST_ACCOUNT_ID_LIST),
       ])
 
       // Revenue from Stripe (source of truth) so the dashboard matches Stripe + the Revenue page.
@@ -443,12 +489,24 @@ export default function Dashboard() {
       })
       const v = (summary?.verifications ?? { today: 0, week: 0, month: 0 }) as { today: number; week: number; month: number }
 
+      // ⚠️ THE PREDICATES ARE COPIED FROM THE COUNT QUERIES ABOVE, LINE FOR
+      // LINE. `role in ('model','both')` and `is_verified = true` are the two
+      // that matter; if either query is ever changed, this must change with it
+      // or a tile starts subtracting the wrong people from the right total.
+      const testUsers = (testUserRows ?? []) as unknown as
+        { id: string; role: string; is_verified: boolean }[]
+
       setStats({
         openReports:         openReports ?? 0,
         totalUsers:          totalUsers ?? 0,
         totalProviders:      totalProviders ?? 0,
         totalModels:         totalModels ?? 0,
         verifiedUsers:       verifiedUsers ?? 0,
+        testUsers:           testUsers.length,
+        testProviders:       (testProvRows ?? []).length,
+        testModels:          testUsers.filter(u => u.role === 'model' || u.role === 'both').length,
+        testVerified:        testUsers.filter(u => u.is_verified).length,
+        testUnavailable:     !!testUserErr || !!testProvErr,
         failedVerifications: (failedAll ?? []).length,
         failedLast7Days:     (failedRecent ?? []).length,
         fraudFlagged:        fraudFlagged ?? 0,
@@ -526,11 +584,24 @@ export default function Dashboard() {
 
       <section className="mb-8">
         <h2 className="text-xs font-semibold uppercase tracking-widest text-[#3D2E2E]/40 mb-3">Platform</h2>
+        {/* ⚠️ THESE FOUR ARE "HOW BIG IS THE MARKETPLACE", so they exclude
+            Micky's QA accounts — on 28 Oct that was 59 users down to 52, and
+            Verified from 9 down to 5. The Alerts below do NOT exclude them, on
+            purpose: those are work waiting to be done, and a test account
+            turning up in a queue is a thing to look at, not to hide. */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <StatCard label="Total Users"  value={stats?.totalUsers     ?? '—'} />
-          <StatCard label="Providers"    value={stats?.totalProviders ?? '—'} />
-          <StatCard label="Models"       value={stats?.totalModels    ?? '—'} />
-          <StatCard label="Verified"     value={stats?.verifiedUsers  ?? '—'} />
+          {([
+            ['Total Users', stats?.totalUsers,     stats?.testUsers],
+            ['Providers',   stats?.totalProviders, stats?.testProviders],
+            ['Models',      stats?.totalModels,    stats?.testModels],
+            ['Verified',    stats?.verifiedUsers,  stats?.testVerified],
+          ] as const).map(([label, total, hidden]) => {
+            if (!stats || total === undefined || hidden === undefined) {
+              return <StatCard key={label} label={label} value="—" />
+            }
+            const r = memberState(total, hidden, stats.testUnavailable)
+            return <StatCard key={label} label={label} value={r.value} sub={r.sub} />
+          })}
         </div>
       </section>
 

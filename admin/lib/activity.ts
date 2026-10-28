@@ -133,36 +133,18 @@ export const KEY_NOTE: Record<ActivityKey, string> = {
 export const countPhrase = (n: number) => (n > 0 ? `${n} new` : '')
 
 /**
- * Accounts whose activity is Micky testing the product, not a member using it.
+ * ⚠️ THE TEST-ACCOUNT LIST MOVED OUT OF THIS FILE on 28 Oct 2026, to
+ * `lib/testAccounts.ts`. It was never about the dots: it describes the
+ * ACCOUNTS, and the dashboard's member counts and the Users page need the
+ * same list. While it lived here, exactly one screen used it and the other
+ * two went on counting seven accounts that are all Micky.
  *
- * ── ⚠️ DECLARED BY ID, WITH THE ADDRESS AS THE REASON ───────────────────
- * The id is stable and the email is readable, so both are here: a uuid alone
- * is unauditable and an email alone changes. Each entry has to be ADDED ON
- * PURPOSE — there is no pattern match on "looks like a test", because
- * `samanthaflowersamaral221@gmail.com` is a real founding provider and
- * `Fullrunthroughtest A` is not, and no rule reads those two correctly.
- *
- * ⚠️⚠️ THIS HIDES ROWS. IT DOES NOT DELETE THEM. Every slot, booking, photo
- * and favourite these accounts made is still in the database and still visible
- * on every other screen in the console. The Activity feed is a reading of
- * what members are doing, and five accounts doing QA is not that.
- *
- * ⚠️ AND IT IS A FEED FILTER ONLY — the sidebar dots still count these
- * accounts, because the counts come from `admin_activity_counts` in SQL and
- * changing them is a migration. So a slot posted from a test account lights
- * the Activity dot and then does not appear in the feed. Known, and the page
- * says so rather than leaving it to be discovered.
+ * ⚠️ WHAT HAS NOT CHANGED: the sidebar dots still COUNT these accounts,
+ * because the counts come from `admin_activity_counts` in SQL and changing
+ * them is a migration. So a slot posted from a test account lights the
+ * Activity dot and then does not appear in the feed. Known, and the page says
+ * so rather than leaving it to be discovered.
  */
-export const TEST_ACCOUNT_IDS: Record<string, string> = {
-  'ff06d568-8936-45fa-ad5f-0b88c150ec30': 'micky.buckfield@gmail.com — Micky B, the stylist account',
-  'b0df9c2f-02c5-4fef-afb0-9b184c3b9130': 'micky.buckfield@hotmail.co.uk — Model B, the model test account',
-  'a923c7cc-e5c1-403e-96c7-addbe8fc73d3': 'micky.buckfield+stylist@gmail.com — testest T',
-  '517c2853-50bb-4e8f-87fe-d79311bc37c0': 'nahitih259@bevriz.com — Fullrunthroughtest A',
-  '8788ed3d-40a6-44da-ad61-c38d0932b6d5': 'admin@guineapigapp.co.uk — the dedicated console admin',
-}
-
-export const isTestAccount = (userId: string | null | undefined) =>
-  !!userId && userId in TEST_ACCOUNT_IDS
 
 /**
  * When 0104 stamped `availability.created_at` on every row that already

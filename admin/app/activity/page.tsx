@@ -3,10 +3,8 @@
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useLoader } from '@/lib/useLoader'
-import {
-  KEY_LABEL, isTestAccount, TEST_ACCOUNT_IDS, SLOT_BACKFILL_INSTANT,
-  type ActivityKey,
-} from '@/lib/activity'
+import { KEY_LABEL, SLOT_BACKFILL_INSTANT, type ActivityKey } from '@/lib/activity'
+import { isTestAccount, TEST_ACCOUNT_IDS } from '@/lib/testAccounts'
 
 /**
  * What has been happening, in one list.

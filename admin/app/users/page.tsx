@@ -6,6 +6,7 @@ import { useLoader } from '@/lib/useLoader'
 import { adminErrorText, shopsNote } from '@/lib/adminActions'
 import type { ActionResult } from '@/lib/adminActions'
 import { SiteProfileLink } from '@/components/SiteProfileLink'
+import { isTestAccount, TEST_ACCOUNT_IDS } from '@/lib/testAccounts'
 
 interface User {
   id: string
@@ -82,6 +83,16 @@ export default function UsersPage() {
   const [role, setRole]       = useState('all')
   const [verified, setVerified] = useState('all')
   const [status, setStatus]   = useState('all')
+  /**
+   * ⚠️ OFF BY DEFAULT, BUT NEVER SILENT. Seven of the 59 accounts are Micky's
+   * own, which is more than one row in nine — enough to make "how many members
+   * are there" unanswerable by scrolling. They are one click away and the
+   * count below always says how many went.
+   *
+   * ⚠️ AND THEY ARE STILL FULLY ACTIONABLE when shown: nothing about this
+   * toggle touches Verify, waive, suspend or any other button on the row.
+   */
+  const [showTest, setShowTest] = useState(false)
 
   const [modal, setModal] = useState<{ user: User; action: string } | null>(null)
   const [reason, setReason]   = useState('')
@@ -172,7 +183,7 @@ export default function UsersPage() {
     setUsers(enriched)
   })
 
-  const filtered = users.filter(u => {
+  const matched = users.filter(u => {
     const matchesSearch = !search || u.email.toLowerCase().includes(search.toLowerCase()) ||
       `${u.first_name} ${u.last_name ?? ''} ${u.last_initial ?? ''}`.toLowerCase().includes(search.toLowerCase())
     if (!matchesSearch) return false
@@ -184,6 +195,16 @@ export default function UsersPage() {
     if (status === 'restricted')return !!u.suspension
     return true
   })
+
+  /**
+   * ⚠️ TEST ACCOUNTS COME OUT LAST, AFTER THE SEARCH AND STATUS FILTERS, so
+   * `hiddenTest` counts what THIS view would otherwise have shown rather than
+   * the whole list of seven. Searching "nahitih" with the toggle off should
+   * say one hidden, not seven — a number that ignored the search would be
+   * true about the database and false about the screen.
+   */
+  const hiddenTest = matched.filter(u => isTestAccount(u.id)).length
+  const filtered = showTest ? matched : matched.filter(u => !isTestAccount(u.id))
 
   /**
    * ── ONE CALL. THE ACTION AND ITS RECORD COMMIT TOGETHER, OR NEITHER DOES ──
@@ -431,6 +452,28 @@ export default function UsersPage() {
           <option value="suspended">Suspended</option>
           <option value="banned">Banned</option>
         </select>
+      </div>
+
+      {/* ⚠️ BOTH FIGURES, ALWAYS. "52 members" alone is indistinguishable from
+          a broken query; "52 of 59 · 7 test accounts hidden" is not. Same
+          contract as the Activity feed, which hides the same seven accounts
+          from the same list. */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mb-4 text-sm">
+        <span className="text-[#3D2E2E]/70">
+          <strong className="font-semibold text-[#3D2E2E]">{filtered.length}</strong>
+          {' '}member{filtered.length === 1 ? '' : 's'} shown
+          {!showTest && hiddenTest > 0 && (
+            <span className="text-[#3D2E2E]/50">
+              {' '}· {hiddenTest} test account{hiddenTest === 1 ? '' : 's'} hidden
+              {' '}of {Object.keys(TEST_ACCOUNT_IDS).length}
+            </span>
+          )}
+        </span>
+        <label className="flex items-center gap-2 text-[#3D2E2E]/70">
+          <input type="checkbox" checked={showTest}
+            onChange={e => setShowTest(e.target.checked)} />
+          Show test accounts
+        </label>
       </div>
 
       {loading ? (
