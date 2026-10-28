@@ -19,6 +19,12 @@ const nav = [
   { href: '/',               label: 'Dashboard',        icon: '📊' },
   { href: '/users',          label: 'Users',            icon: '👤' },
   { href: '/activity',       label: 'Activity',         icon: '🔔' },
+  // ⚠️ NO ACTIVITY DOT, AND NOT BY OVERSIGHT. The map has no "new" state to
+  // report, and the eleven keys in admin_activity_seen are fixed by a CHECK
+  // constraint in 0104 — a twelfth is a migration, not a nav entry. `dotFor`
+  // returns 0 for any href absent from NAV_KEY_BY_HREF, so this needs nothing
+  // doing to it; the comment is here so the gap is not read as a bug later.
+  { href: '/map',            label: 'Map',              icon: '🗺️' },
   { href: '/verification',   label: 'Verification',     icon: '🛡️' },
   { href: '/reports',        label: 'Reports',          icon: '🚩' },
   { href: '/moderation',     label: 'Moderation Queue', icon: '🖼️' },
