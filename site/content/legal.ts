@@ -412,7 +412,7 @@ export const PRIVACY: LegalDoc = {
   metaTitle: 'Privacy Policy',
   metaDescription:
     'What Cavy does with your information across the website and the app, and your rights over it.',
-  updated: '23 September 2026',
+  updated: '30 October 2026',
   sections: [
     {
       n: '1',
@@ -744,6 +744,33 @@ export const PRIVACY: LegalDoc = {
           // user id is set, which this site never does. Query strings are
           // stripped before sending (components/SiteAnalytics.tsx).
           text: 'We measure page visits with Vercel Web Analytics, which doesn’t use cookies or identify individuals.',
+        },
+        {
+          type: 'p',
+          // ── ⚠️⚠️ ADDED 30 Oct 2026 BECAUSE THE SITE NOW DOES THIS ─────────
+          //
+          // components/CampaignCapture.tsx keeps the campaign parameters on an
+          // arriving URL in sessionStorage so they survive the walk to
+          // /sign-up. PECR regulation 6 covers storage on someone's device
+          // whether or not it is a cookie, and remembering which advert
+          // somebody clicked is not "strictly necessary" — so the accurate
+          // position is the lowest-risk end of a rule that arguably applies,
+          // not an exemption. lib/arrivalStore.ts argues that at length.
+          //
+          // ⚠️ WHAT THIS PARAGRAPH IS FOR: a policy that said nothing about it
+          // would be incomplete the moment the capture deployed, and sections 1,
+          // 3, 8 and 11 all make statements a reader could take to rule it out.
+          // None of those statements becomes false — no third party receives
+          // it, no cookie is set, no IP address is shared, nothing identifies
+          // anyone — but "no advertising or tracking software" is not the same
+          // sentence as "we never note which advert you clicked", and the
+          // second one needed saying out loud.
+          //
+          // ⚠️ IT ALSO STATES THE CLICK ID IS DROPPED, which is a real promise
+          // the code keeps: attribution.ts records the word `fbclid` and throws
+          // the identifier away in the browser. If anyone ever stores the
+          // value, this sentence becomes a lie, so it is the thing to grep for.
+          text: 'If you arrive by clicking an advert or a shared link, your browser notes which advert or link it was, so that if you go on to create an account we can tell that it worked. It is kept in your browser rather than in a cookie, it disappears when you close the tab, and it is never sent to the advertising platform or to anyone else. We don’t keep the click identifier that platforms add to the address, only the name of the advert or campaign.',
         },
       ],
     },

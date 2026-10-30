@@ -1,10 +1,11 @@
 'use client'
 
-import { useActionState, useState } from 'react'
+import { useActionState, useMemo, useState, useSyncExternalStore } from 'react'
 import Link from 'next/link'
 import { signUp, type SignUpState } from './actions'
 import { ResendConfirmation } from '../ResendConfirmation'
 import type { SignupRole } from '@/lib/signup'
+import { arrivalServerSnapshot, arrivalSnapshot, parseArrival, subscribeArrival } from '@/lib/arrivalStore'
 
 const ROLES: { value: SignupRole; label: string; blurb: string }[] = [
   { value: 'provider', label: 'I’m a stylist', blurb: 'I offer treatments and want to build my portfolio' },
@@ -29,6 +30,39 @@ export function SignUpForm({
 }) {
   const [role, setRole] = useState<SignupRole | null>(initialRole)
   const [state, formAction, pending] = useActionState<SignUpState | null, FormData>(signUp, null)
+
+  /**
+   * What the visitor arrived with — see lib/arrivalStore.ts.
+   *
+   * ⚠️⚠️ useSyncExternalStore, NOT A useEffect THAT CALLS setState, AND THE
+   * REASON IS A BUG RATHER THAN A STYLE RULE.
+   *
+   * React runs effects CHILD FIRST. CampaignCapture is mounted by the root
+   * layout and this form sits several levels beneath it, so a read in an effect
+   * here fires BEFORE the capture's write — and reads nothing. That loses the
+   * campaign for anybody landing straight on `/sign-up?utm_source=…`, which is
+   * the single most likely destination for an advert.
+   *
+   * Subscribing instead means the order cannot matter: the capture's write
+   * notifies and this re-renders with the value. The server snapshot is always
+   * '', because there is no server-side knowledge of it and pretending
+   * otherwise is a hydration mismatch on every signup page.
+   *
+   * ⚠️ THE SNAPSHOT IS THE RAW STRING AND IS PARSED HERE. An object snapshot
+   * is a fresh identity on every call, which useSyncExternalStore turns into an
+   * infinite render loop.
+   */
+  const stored = useSyncExternalStore(subscribeArrival, arrivalSnapshot, arrivalServerSnapshot)
+  const captured = useMemo(() => parseArrival(stored), [stored])
+
+  /**
+   * ⚠️ THE SERVER-RENDERED `ref` WINS. `source` is the prop, and it is set when
+   * THIS url carries `?ref=`, which is more direct evidence than something
+   * remembered from a page ago. The captured one is the fallback that makes a
+   * cohort link survive the walk from a landing page to here — the gap in
+   * lib/attribution.ts, point 2.
+   */
+  const sourceValue = source || captured.ref || ''
 
   const field =
     'w-full rounded-md border border-hairline bg-input-bg px-4 py-3 text-warm-dark placeholder:text-muted/70 outline-none transition-colors focus-visible:border-rose focus-visible:ring-2 focus-visible:ring-rose/30'
@@ -72,7 +106,12 @@ export function SignUpForm({
           it. Choosing is a real decision, so it is never defaulted — the
           database rejects a missing role, but nobody should reach that. */}
       <input type="hidden" name="role" value={role ?? ''} />
-      {source && <input type="hidden" name="source" value={source} />}
+      {/* ⚠️⚠️ TWO FIELDS, NOT ONE, AND MERGING THEM HANDS OUT A FEE WAIVER.
+          `source` is a cohort code and the database GRANTS Founding Provider
+          off it — see lib/attribution.ts. `campaign` is an advert label and
+          nothing acts on it. They are the same shape and different facts. */}
+      {sourceValue && <input type="hidden" name="source" value={sourceValue} />}
+      {captured.campaign && <input type="hidden" name="campaign" value={captured.campaign} />}
 
       <fieldset>
         <legend className={label}>I’m signing up as</legend>

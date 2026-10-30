@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import { getUser } from '@/lib/supabase-server'
 import { SignUpForm } from './SignUpForm'
 import type { SignupRole } from '@/lib/signup'
+import { cleanPart } from '@/lib/attribution'
 
 export const metadata: Metadata = {
   title: 'Create your account',
@@ -46,7 +47,24 @@ export default async function SignUpPage({
     : roleParam === 'model' ? 'model'
     : null
 
-  const source = ref?.trim().slice(0, 120) || null
+  /**
+   * ⚠️ cleanPart, NOT trim().slice() — SO THERE IS ONE DEFINITION OF THIS
+   * VALUE RATHER THAN TWO.
+   *
+   * A ref can now reach the form by two routes: rendered here from THIS url's
+   * `?ref=`, or remembered from the landing page by CampaignCapture. If this
+   * one trims and that one strips to `[a-z0-9_-]`, then `?ref=Course-21` and
+   * a remembered `course-21` are two rows in a count of the same cohort — and
+   * the value ends up in auth metadata, in a database column and on an admin
+   * screen, where only the stricter of the two definitions is safe everywhere.
+   *
+   * ⚠️ IT IS LOWER-CASED AND SHORTER THAN BEFORE (40, not 120). Visible
+   * change: the notice below echoes the cleaned code, so `?ref=FlowersAmaral`
+   * now reads "flowersamaral". Nothing keys on the case — the Founding Provider
+   * grant in handle_new_auth_user tests only that a value is PRESENT — so no
+   * behaviour moves, and 40 characters is ample for a cohort code.
+   */
+  const source = cleanPart(ref) || null
 
   return (
     <section className="mx-auto max-w-2xl px-6 py-12 sm:py-16">

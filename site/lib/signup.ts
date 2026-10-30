@@ -34,8 +34,23 @@ export interface SignupInput {
   firstName: string
   lastName: string
   dateOfBirth: Date
-  /** Where this signup came from — a cohort link, a campaign. Optional. */
+  /**
+   * The `?ref=` cohort code. Optional.
+   *
+   * ⚠️⚠️ THIS IS NOT "WHERE THEY CAME FROM" IN GENERAL, AND TREATING IT THAT
+   * WAY GRANTS A FEE WAIVER BY ACCIDENT. `handle_new_auth_user` reads the
+   * `signup_source` this becomes and, for a stylist, grants Founding Provider
+   * off the mere presence of a value — which `provider_fee_settled()` (0045)
+   * counts as the fee being settled. A campaign tag belongs in `campaign`
+   * below, which nothing in the database acts on. See lib/attribution.ts.
+   */
   source?: string | null
+  /**
+   * The campaign triple — `utm_source:utm_medium:utm_campaign`, built and
+   * sanitised by lib/attribution.ts. Optional, and a LABEL ONLY: no trigger,
+   * policy or RPC reads it.
+   */
+  campaign?: string | null
   /**
    * REQUIRED at signup since 26 Oct 2026, though not by this type: either the
    * canonical postcode a lookup returned, or the raw text when the lookup could
@@ -57,6 +72,26 @@ export interface SignupMetadata {
   age_confirmed: true
   terms_accepted: true
   signup_source?: string
+  /**
+   * Where an advert, post or link brought them from:
+   * `utm_source:utm_medium:utm_campaign`, each part reduced to
+   * `[a-z0-9_-]` and capped, joined by a separator the parts cannot contain.
+   *
+   * ⚠️ SEPARATE FROM signup_source ON PURPOSE, AND THE REASON IS NOT TIDINESS.
+   * `signup_source` is the Founding Provider trigger. This is not read by
+   * anything in the database, so a campaign cannot hand out a benefit.
+   *
+   * ⚠️ NO CLICK IDENTIFIER IS EVER IN HERE. `fbclid` is recorded as the literal
+   * word `fbclid` and its value discarded in the browser — see
+   * CLICK_ID_PARAMS. The identifier's only use is joining a conversion back to
+   * the person who clicked, which the Privacy policy rules out and no code here
+   * does.
+   *
+   * ⚠️ AND IT IS ABSENT, NOT 'direct', WHEN NOTHING ARRIVED. Most arrivals
+   * carry no parameters; "we do not know" and "she typed the address in" are
+   * different facts and only one of them is true.
+   */
+  signup_campaign?: string
   /**
    * The postcode she typed at signup, in the canonical form OUR lookup
    * returned, OR the raw text she typed when the lookup could not run.
@@ -138,6 +173,11 @@ export function buildSignupMetadata(input: SignupInput): SignupMetadata {
   }
   const source = input.source?.trim()
   if (source) meta.signup_source = source.slice(0, 120)
+  // Already sanitised by cleanCampaign() in the action — capped again here for
+  // the same reason signup_source is: this function must be safe to call from
+  // anywhere, not only from the one caller that happens to clean first.
+  const campaign = input.campaign?.trim()
+  if (campaign) meta.signup_campaign = campaign.slice(0, 120)
   // ⚠️ NO LONGER ONLY FROM A SUCCESSFUL LOOKUP: on a postcodes.io outage the
   // signup action puts the RAW text here so /auth/confirm can resolve it later.
   // The cap still applies, and matters more now that the value may not have

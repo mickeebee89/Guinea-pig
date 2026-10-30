@@ -4,6 +4,7 @@ import { headers } from 'next/headers'
 import { createSupabaseServerClient } from '@/lib/supabase-server'
 import { isRateLimited } from '@/lib/authErrors'
 import { lookupPostcode, postcodeMessage } from '@/lib/postcode'
+import { cleanCampaign } from '@/lib/attribution'
 import {
   buildSignupMetadata,
   validateSignup,
@@ -48,6 +49,21 @@ export async function signUp(_prev: SignUpState | null, formData: FormData): Pro
   const ageConfirmed = formData.get('ageConfirmed') === 'on'
   const termsAccepted = formData.get('termsAccepted') === 'on'
   const source = String(formData.get('source') ?? '') || null
+  /**
+   * ⚠️⚠️ RE-SANITISED HERE, AND THE CLIENT'S CLEAN IS NOT A SUBSTITUTE. This
+   * is a hidden input, so its value is whatever was POSTed — this action is a
+   * public endpoint and anyone can call it with `campaign` set to anything of
+   * any length. `cleanCampaign` reduces each part to `[a-z0-9_-]` and caps it,
+   * so what reaches auth metadata cannot carry a payload, a separator it should
+   * not have, or an unbounded string.
+   *
+   * ⚠️ null, NEVER 'direct'. Most arrivals carry nothing, and an invented
+   * default would make "we have no idea" indistinguishable from "she typed the
+   * address in". `cleanCampaign` returns null for an empty or junk value, and
+   * `buildSignupMetadata` then omits the key entirely rather than writing an
+   * empty string.
+   */
+  const campaign = cleanCampaign(String(formData.get('campaign') ?? ''))
   const postcodeRaw = String(formData.get('postcode') ?? '').trim()
 
   if (role !== 'model' && role !== 'provider') {
@@ -175,6 +191,7 @@ export async function signUp(_prev: SignUpState | null, formData: FormData): Pro
         lastName,
         dateOfBirth: dateOfBirth!,
         source,
+        campaign,
         signupPostcode,
       }),
     },
