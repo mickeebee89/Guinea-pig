@@ -230,6 +230,50 @@ historical, not by harm.
 
 ---
 
+## ⚠️ Before you change a price
+
+**A price lives in four places. They agree today. Changing any one of them
+means sourcing the copy in the same commit — nothing anywhere will tell you
+otherwise.** Measured 30 Oct 2026.
+
+| where | what it holds | is it what gets charged? |
+|---|---|---|
+| **A Stripe Price object** | the £4.99 subscription | **YES, and nothing in the repo can reveal it.** Resolved from the `STRIPE_MONTHLY_PRICE_ID` secret, set 17 Jul 2026 |
+| `amount: 1499` | the £14.99 stylist fee | **YES** — a PaymentIntent built in `supabase/functions/stripe-payment/index.ts` |
+| `settings.subscription_price_pence` / `verification_price_pence` | 499 / 1499 | **NO.** Read only by the admin console that edits them |
+| **11 hardcoded strings** across 7 files | "£4.99 a month" | **NO.** What a member actually reads |
+
+⚠️ **`unit_amount: 499` IN THE REPO IS A DEAD FALLBACK.** It runs only when
+`STRIPE_MONTHLY_PRICE_ID` is unset, and it has been set since the day Stripe
+went live. The repo cannot tell you the subscription price; the Stripe
+Dashboard can.
+
+⚠️ **TWO OF THE ELEVEN COPY STRINGS ARE ON STATICALLY PRERENDERED PAGES** —
+`app/(public)/for-models/page.tsx` and `app/(public)/how-it-works/page.tsx`.
+This is the part that will surprise whoever does it: the other nine are in
+`(app)` and can read a value per request, but a request-time read on those two
+makes them dynamic and silently costs them their prerender, which is the exact
+failure `site/scripts/check-client-boundary.mjs` exists to catch. They need a
+build-time value and a redeploy, not a query.
+
+⚠️ **Stripe Price objects are IMMUTABLE.** Changing the subscription price
+is not an edit — it is a new Price plus a per-subscriber migration of every
+existing subscription onto it, with a proration decision each. Pricing only
+new signups from a config value leaves existing ones on the old Price, which
+is a second divergence rather than a fix.
+
+**Why this is a note and not a job: nobody is paying.** Two subscription rows
+in the platform's whole history, both test accounts, both expired;
+`verification_payments` has never held a row; £0 charged, ever. Every way
+these four can disagree needs a price change first, so today they cannot.
+
+**When a price change is actually on the table**, the first move is a check
+that reads the live Stripe price and fails the build if it disagrees with the
+copy — it turns a silent divergence into a red build before any payments work
+starts. Not worth building before then.
+
+---
+
 ## Not blocking
 
 - **Banners cannot be set.** `providers.banner_url` is read in four places,
