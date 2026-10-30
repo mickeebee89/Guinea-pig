@@ -263,6 +263,63 @@ historical, not by harm.
 
 ## Before the app is submitted
 
+> ## ⚠️⚠️⚠️ DO THIS FIRST — MOBILE WOULD CHARGE £14.99 FOR A FEE THAT DOES NOT EXIST
+>
+> **One line, three call sites, and it takes real money if it is missed.**
+> Added 30 Oct 2026. Nothing else in this section can bill anybody.
+>
+> **The fix:**
+>
+> ```ts
+> const { data: settled } = await supabase.rpc('provider_fee_settled', { p_user_id: userId })
+> ```
+>
+> **Replacing the hand-derived rule at all three sites:**
+>
+> | file | line | what it does now |
+> |---|---|---|
+> | `mobile/src/app/(app)/provider-dashboard.tsx` | ~297 | `!!payRow \|\| !!is_founding_provider \|\| !!provider_fee_waived` |
+> | `mobile/src/app/(app)/provider-dashboard.tsx` | ~563 | the same expression again, on focus |
+> | `mobile/src/app/(app)/verify-payment.tsx` | ~83 | the same expression again, as `feeCovered` |
+>
+> **Why it is not merely dead code.** None of the three asks whether a fee
+> exists. `provider_fee_enabled()` has read **false since migration 0102**
+> (23 Oct 2026) — Cavy is free for stylists, `/for-stylists` says so and Terms
+> §5 commits to it — but mobile re-derives "settled" in TypeScript from
+> payments, founding status and waivers only. So it computes `false` for every
+> stylist who is not founding or waived.
+>
+> **Measured 30 Oct 2026:** 12 stylists → **4** pass mobile's check (1 founding
+> + 3 waived), **8 are shown a £14.99 wall — 6 of them real people, 2 test
+> accounts.** `verification_payments` has never held a row.
+>
+> ⚠️ **And it does not just display a wall — it routes into payment.**
+> `verify-payment.tsx` does `if (isProvider && !feeCovered) { setFeeOnly(true);
+> setStep('instructions') }`, sending a *verified* stylist into the pay flow
+> against **LIVE Stripe keys** and the hardcoded `amount: 1499` in
+> `supabase/functions/stripe-payment/index.ts`.
+>
+> ⚠️ **Migration 0108 (30 Oct 2026) made it worse on purpose, with that
+> accepted.** It gates the Founding Provider grant on `provider_fee_enabled()`,
+> so no new stylist can arrive already founding. The let-through set is frozen
+> at 4 and every stylist who joins from now on falls on the charged side. That
+> was the right call for the live web product and it is safe only while mobile
+> stays unpublished.
+>
+> **Why the RPC and not a fourth copy of the rule.** `provider_fee_settled()`
+> (migration 0045) short-circuits on `provider_fee_enabled()` before it looks at
+> payments, founding status or waivers, so a flag flip reaches every caller.
+> `site/lib/fee.ts` exists for exactly this reason — 0102 collapsed three copies
+> of the rule into one call, and mobile is the copy that was left behind.
+> `authenticated` already holds EXECUTE on it (verified 30 Oct 2026), so no
+> migration is needed. It is SECURITY INVOKER and reads under the caller's own
+> RLS, so it must be called as the signed-in user — which all three sites are.
+>
+> **Also fix the inverse.** `site/lib/fee.ts` fails *toward* settled when the
+> database is unreachable, deliberately: an unreachable database must not invent
+> a debt. Mobile currently fails toward **owing**, because an empty result makes
+> every term false. Match the web.
+
 **Not the general backlog.** These are gated on preparing a mobile build, and
 the general list is things that might never be scheduled. **Read this section
 when a submission is being prepared — that is the whole point of it existing
