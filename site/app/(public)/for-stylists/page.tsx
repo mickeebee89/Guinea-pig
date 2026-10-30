@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { RoleGate } from '@/components/RoleGate'
+import { PILL_PRIMARY_CONTROL } from '@/components/buttons'
 
 export const metadata: Metadata = {
   title: 'For stylists',
@@ -102,6 +102,26 @@ export default async function ForStylists({
           because you’re building your portfolio. You practise, they glow, and you both agreed the
           terms before anyone turned up.
         </p>
+        {/* ⚠️ THE PAGE HAD NO BUTTON UNTIL 30 Oct 2026 — only the text link
+            inside the box below, and a RoleGate at the very bottom asking a
+            visitor who had already picked a side to pick one again. A stylist
+            who read the first paragraph and was convinced had nothing to click
+            without reading on.
+
+            ⚠️ signUpHref, NEVER the literal '/sign-up?role=stylist'. This
+            route is dynamic precisely so the ?ref= is already in this href in
+            the first byte of HTML; a hardcoded string here would drop it on
+            the most likely click on the page. Same rule for the closing CTA. */}
+        <div className="mt-7">
+          <Link href={signUpHref} className={PILL_PRIMARY_CONTROL}>
+            Sign up as a stylist
+            {/* Matches RoleGate's pill, but hidden from screen readers: the
+                accessible name should be the label, not "right arrow". */}
+            <span aria-hidden="true" className="ml-1">
+              →
+            </span>
+          </Link>
+        </div>
         <p className="mt-4 rounded-md border border-hairline bg-white p-4 text-sm text-warm-dark/80">
           {/* Until 22 Sep 2026: "Join the waitlist as a stylist and you'll get the
               free early-stylist account when we launch."
@@ -147,8 +167,43 @@ export default async function ForStylists({
         </ul>
       </section>
 
+      {/* ⚠️ A CLOSING CTA, NOT <RoleGate />. RoleGate asks "stylist or
+          model?" — the right question on /, /how-it-works and /[treatment],
+          and a step backwards here, where the visitor answered it by arriving.
+          It also sent them to a fixed /sign-up?role=stylist with no ?ref=, so
+          the page's own forwarding was undone by its biggest link.
+
+          Both other routes are kept as quiet text rather than dropped: someone
+          who read this page and decided they are the model, not the stylist,
+          still needs the door. /for-models keeps the full RoleGate — it has
+          the same shape as this page did and is deliberately unchanged for
+          now. */}
       <section className="mx-auto max-w-3xl px-6 py-12">
-        <RoleGate />
+        <div className="rounded-lg border border-hairline bg-white p-6 text-center sm:p-8">
+          <p className="font-display text-2xl leading-snug text-warm-dark sm:text-[1.75rem]">
+            Set up your shop and start practising.
+          </p>
+          <p className="mx-auto mt-3 max-w-md text-muted">
+            It’s free for stylists, and you decide what you’re practising, when you’re free and
+            what it costs.
+          </p>
+          <Link href={signUpHref} className={`mt-6 ${PILL_PRIMARY_CONTROL}`}>
+            Sign up as a stylist
+            <span aria-hidden="true" className="ml-1">
+              →
+            </span>
+          </Link>
+          <p className="mt-6 text-sm text-muted">
+            Looking for treatments instead?{' '}
+            <Link href="/for-models" className="text-rose underline decoration-rose/30 underline-offset-2">
+              For models
+            </Link>
+            . Already have an account?{' '}
+            <Link href="/sign-in" className="font-bold text-rose underline decoration-rose/30 underline-offset-2">
+              Sign in
+            </Link>
+          </p>
+        </div>
       </section>
     </>
   )

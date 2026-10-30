@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { PILL_PRIMARY } from '@/components/buttons'
 
 /**
  * The two-sided choice IS the hero.
@@ -51,9 +52,11 @@ function Panel({ panel }: { panel: (typeof PANELS)[number] }) {
         {panel.deal}
       </span>
       <span className="mt-2 block text-sm text-muted">{panel.detail}</span>
-      <span className="mt-4 inline-flex min-h-11 items-center rounded-[999px] bg-rose px-5 text-sm font-bold text-white">
-        {panel.cta} →
-      </span>
+      {/* PILL_PRIMARY, not PILL_PRIMARY_CONTROL: the card is the link, so the
+          hover and the focus ring belong to it and not to this span. The pill
+          moved into components/buttons.ts on 30 Oct 2026 when /for-stylists
+          needed the same one — see that file for why there are two names. */}
+      <span className={`mt-4 ${PILL_PRIMARY}`}>{panel.cta} →</span>
     </Link>
   )
 }
