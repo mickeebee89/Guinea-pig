@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { deriveIdCheck, type IdCheckState } from './idCheck'
-import { isProviderFeeSettled } from '@/lib/fee'
+import { isProviderFeeEnabled, isProviderFeeSettled } from '@/lib/fee'
 
 /**
  * The stylist's own shop: what it says, what it offers, and how far through
@@ -142,6 +142,13 @@ export interface StylistSetup {
   isVerified: boolean
   /** Paid, waived, or founding — any of the three settles the £14.99. */
   feeSettled: boolean
+  /**
+   * Whether Cavy charges stylists at all. False since 0102.
+   *
+   * ⚠️ NOT THE SAME AS `feeSettled`, which is true for everybody while this is
+   * false. This is the one that decides whether the fee is MENTIONED.
+   */
+  feeEnabled: boolean
   isFoundingProvider: boolean
   isPublished: boolean
   /**
@@ -195,7 +202,7 @@ export async function getStylistSetup(
     detailsDone: false, treatmentCount: 0, publishBlockers: [], websiteBlockers: [],
     inPublicView: false,
     idCheck: 'none', idCheckNote: null,
-    isVerified: false, feeSettled: false, isFoundingProvider: false,
+    isVerified: false, feeSettled: false, feeEnabled: false, isFoundingProvider: false,
     isPublished: false, everPublished: false,
   }
   if (!prov) return empty
@@ -204,7 +211,7 @@ export async function getStylistSetup(
   // now comes from provider_fee_settled (0102), which reads that table itself
   // under the same RLS. A second read here would have been the third copy of
   // the rule that 0102 exists to collapse.
-  const [treatRes, userRes, feeSettled, reqRes, bioRes, viewRes] = await Promise.all([
+  const [treatRes, userRes, feeSettled, feeEnabled, reqRes, bioRes, viewRes] = await Promise.all([
     // Rows, not a head count: publishing needs a treatment WITH a category
     // (provider_shop_is_publishable, 0016 / item 52), so both counts matter.
     supabase.from('provider_treatments').select('category').eq('provider_id', prov.id),
@@ -212,6 +219,9 @@ export async function getStylistSetup(
       .select('is_verified, is_founding_provider, provider_fee_waived, profile_pic_url')
       .eq('id', userId).maybeSingle(),
     isProviderFeeSettled(supabase, userId),
+    // ⚠️ POSITION FOR POSITION WITH THE DESTRUCTURING ABOVE — see the note on
+    // the view read below, and audit item 128, for what happens when it slips.
+    isProviderFeeEnabled(supabase),
     // Latest first: a rejected request is deleted before a fresh one is filed,
     // but ordering costs nothing and stops a stale row deciding the state.
     supabase.from('verification_requests')
@@ -316,6 +326,7 @@ export async function getStylistSetup(
     idCheckNote,
     isVerified: !!u.is_verified,
     feeSettled,
+    feeEnabled,
     isFoundingProvider: !!u.is_founding_provider,
     isPublished: !!prov.is_published,
     everPublished: prov.first_published_at !== null,

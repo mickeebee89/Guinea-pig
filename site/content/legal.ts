@@ -146,7 +146,7 @@ export const TERMS: LegalDoc = {
   metaTitle: 'Terms of Service',
   metaDescription:
     'The terms that govern your use of the Cavy website and mobile app.',
-  updated: '23 September 2026',
+  updated: '30 October 2026',
   sections: [
     {
       n: '1',
@@ -256,11 +256,26 @@ export const TERMS: LegalDoc = {
     },
     {
       n: '7',
-      heading: 'Identity verification',
+      // ⚠️⚠️ WAS 'Identity verification', AND THE WORDS WERE THE PROBLEM.
+      // Renamed 30 Oct 2026 to match Privacy §5/§7, StylistCard.tsx:26-37 and
+      // for-stylists. Terms was the last surviving copy of the old wording —
+      // and it is the document people tick a box against, so it was the one
+      // place the claim still carried weight. "Someone who believes a passport
+      // was checked accepts a risk they would not otherwise accept."
+      //
+      // ⚠️ THE SECTION NUMBER DOES NOT MOVE. Only the heading text changed.
+      // Nothing links to /terms#7 today, but §5 and §9 are load-bearing and
+      // renumbering to tidy this would break them.
+      heading: 'Account checks',
       blocks: [
         {
           type: 'p',
-          text: 'To help keep the community safe, members complete an identity-verification step, which involves submitting a photograph of themselves. Stylists must complete verification before they can offer treatments. Verification helps confirm that members are real, individual adults; it is not a guarantee of any member’s identity, character, qualifications, or conduct, and you should still use your own judgement when arranging to meet anyone. We handle verification images as described in our Privacy Policy.',
+          // ⚠️⚠️ "real, individual adults" WAS TWO CLAIMS AND BOTH WERE WRONG.
+          // A selfie beside a profile photo says nothing about AGE — the date
+          // of birth field does that, and the database enforces it (0002). And
+          // "verification" invites a reader to think a document was checked.
+          // No document is requested, seen or kept.
+          text: 'To help keep the community safe, every member completes an account check: you send a selfie of yourself holding your name on a handwritten note, and a member of our team looks at it alongside your profile photo. Stylists must pass this check before they can offer treatments, and models before they can apply for one. It is not an identity check against a document — we do not ask for, see, or keep a passport or driving licence — and it does not confirm your age; we ask for your date of birth separately for that. What it tells us is that a real person is behind the account and that the profile photo has not been taken from somewhere else. It is not a guarantee of any member’s identity, character, qualifications, or conduct, and you should still use your own judgement when arranging to meet anyone. We handle these photographs as described in our Privacy Policy.',
         },
       ],
     },
@@ -304,7 +319,15 @@ export const TERMS: LegalDoc = {
         },
         {
           type: 'p',
-          text: 'Model membership subscription. The membership renews automatically each month at the price shown until you cancel. You can cancel at any time from within the app to stop future renewals; when you cancel, your membership continues until the end of the month you’ve already paid for, and you won’t be charged again. We don’t provide partial refunds for the remainder of a month once it has started, except where the law requires otherwise.',
+          // ⚠️⚠️ "from within the app" UNTIL 30 Oct 2026, AND THE FIX ABOVE
+          // MISSED IT. The sentence directly above was corrected on
+          // 23 Sep 2026 for exactly this reason — membership became payable on
+          // the website on 14 Sep — and the correction was applied to the
+          // PAYMENT sentence and not to the CANCEL one. The cancel control
+          // lives in settings/MembershipSection.tsx, on the website.
+          // settings/page.tsx:72 states the rule it breaks: "Cancel any time"
+          // has to be true for whoever is actually paying.
+          text: 'Model membership subscription. The membership renews automatically each month at the price shown until you cancel. You can cancel at any time in Settings on the website, or in the app, to stop future renewals; when you cancel, your membership continues until the end of the month you’ve already paid for, and you won’t be charged again. We don’t provide partial refunds for the remainder of a month once it has started, except where the law requires otherwise.',
         },
         // ⚠️⚠️ THE "STYLIST VERIFICATION FEE … NON-REFUNDABLE" CLAUSE WAS
         // DELETED HERE on 23 Oct 2026 (0102). It described the refund terms of
@@ -325,7 +348,7 @@ export const TERMS: LegalDoc = {
       blocks: [
         {
           type: 'p',
-          text: 'Cavy is an introduction platform. We help stylists and models find one another, but the treatments themselves are arranged and carried out directly between members, in person. Cavy does not provide beauty treatments, is not a party to the arrangement between a stylist and a model, does not employ or supervise stylists, and does not check the qualifications, insurance, or competence of any member beyond the identity-verification step described above.',
+          text: 'Cavy is an introduction platform. We help stylists and models find one another, but the treatments themselves are arranged and carried out directly between members, in person. Cavy does not provide beauty treatments, is not a party to the arrangement between a stylist and a model, does not employ or supervise stylists, and does not check the qualifications, insurance, or competence of any member beyond the account check described above.',
         },
         {
           type: 'p',
@@ -349,7 +372,7 @@ export const TERMS: LegalDoc = {
       blocks: [
         {
           type: 'p',
-          text: `Cavy is strictly for adults (18+) and has zero tolerance for child sexual abuse and exploitation (CSAE). Child sexual abuse material (CSAM) and any content or conduct that sexualises, grooms, endangers, exploits, or attempts to arrange contact with a person under 18 is absolutely prohibited. We remove such content and permanently remove the accounts involved, and we report CSAM and related conduct to the relevant authorities in line with UK law. You can report any concern in the app or to our child-safety point of contact at ${SUPPORT_EMAIL}. Our full child-safety standards are set out in our Community Guidelines.`,
+          text: `Cavy is strictly for adults (18+) and has zero tolerance for child sexual abuse and exploitation (CSAE). Child sexual abuse material (CSAM) and any content or conduct that sexualises, grooms, endangers, exploits, or attempts to arrange contact with a person under 18 is absolutely prohibited. We remove such content and permanently remove the accounts involved, and we report CSAM and related conduct to the relevant authorities in line with UK law. You can report any concern from any chat or profile, on the website or in the app, or to our child-safety point of contact at ${SUPPORT_EMAIL}. Our full child-safety standards are set out in our Community Guidelines.`,
         },
       ],
     },
@@ -443,7 +466,7 @@ export const PRIVACY: LegalDoc = {
           // Until 22 Sep 2026: "…and there is no analytics or tracking software
           // in the app or on this site." Untrue once Vercel Web Analytics was
           // added to the website (audit item 67).
-          text: 'We collect what we need to run a booking service between stylists and models, and nothing for advertising. We don’t sell your data, we don’t share it with advertisers, and there’s no advertising or tracking software in the app or on this site. The website counts page visits without cookies and without identifying anyone — section 11 explains.',
+          text: 'We collect what we need to run a booking service between stylists and models, and nothing for advertising. We don’t sell your data, we don’t share it with advertisers, and there’s no advertising or tracking software in the app or on this site. The website counts page visits without cookies and without identifying anyone, and notes which advert or link brought you here — section 11 explains both.',
         },
         {
           type: 'p',
@@ -475,7 +498,9 @@ export const PRIVACY: LegalDoc = {
         // 22 Sep 2026 (audit item 67).
         {
           type: 'p',
-          text: 'You can read our public pages — the home page, the treatment pages and our guides — without an account, and we don’t collect anything that identifies you when you do. We count page visits, without cookies and without identifying anyone, as section 11 explains. The next section lists what we hold once you create an account.',
+          // ⚠️ "our guides" went 30 Oct 2026: there is no /guides route and
+          // nothing links to one. Replaced with pages that exist.
+          text: 'You can read our public pages — the home page, the treatment pages, how it works and the pages for stylists and models — without an account, and we don’t collect anything that identifies you when you do. We count page visits, without cookies and without identifying anyone, as section 11 explains. The next section lists what we hold once you create an account.',
         },
       ],
     },
@@ -548,7 +573,7 @@ export const PRIVACY: LegalDoc = {
           // it is a deliberate choice and not an implementation detail.
           // ~~'We ask your device for this and you can refuse; if you do, you
           // can still browse.'~~
-          text: 'Your location: your approximate location, so we can show you people nearby and sort results by distance. Stylists also have a location for their shop or working area. In the app we ask your device, and you can refuse. On the website you can type a postcode instead, and we keep the postcode, the point it refers to, and the name of the town or area it falls in — the postcode so you can check and change it, the point so we can work out distances, and the town or area so our team can see roughly where members are. We never ask for or keep your street address. It is optional either way, you can remove it at any time in Settings, and you can still browse without it.',
+          text: 'Your location: your approximate location, so we can show you people nearby and sort results by distance. Stylists also have a location for their shop or working area. In the app we ask your device, and you can refuse. On the website you can type a postcode instead, and we keep the postcode, the point it refers to, and the name of the town or area it falls in — the postcode so you can check and change it, the point so we can work out distances, and the town or area so our team can see roughly where members are. We never ask for or keep your street address. On the website a postcode is required to create an account: you can change it later in Settings, but you cannot remove it, because without one we cannot show you anyone nearby or sort anything by distance.',
         },
         {
           type: 'p',
@@ -636,7 +661,7 @@ export const PRIVACY: LegalDoc = {
         },
         {
           type: 'p',
-          text: 'Where we rely on your consent for any of the above, you can withdraw it at any time by emailing us or by removing the information in the app.',
+          text: 'Where we rely on your consent for any of the above, you can withdraw it at any time by emailing us, or by removing the information in Settings on the website or in the app.',
         },
       ],
     },
@@ -731,7 +756,10 @@ export const PRIVACY: LegalDoc = {
     },
     {
       n: '11',
-      heading: 'Cookies',
+      // ⚠️ 'Cookies' until 30 Oct 2026. The third paragraph is about storage
+      // that is deliberately NOT a cookie, and says so — so the heading was
+      // inviting a reader to skip the one paragraph it does not cover.
+      heading: 'Cookies and similar storage',
       blocks: [
         {
           type: 'p',
@@ -770,7 +798,15 @@ export const PRIVACY: LegalDoc = {
           // the code keeps: attribution.ts records the word `fbclid` and throws
           // the identifier away in the browser. If anyone ever stores the
           // value, this sentence becomes a lie, so it is the thing to grep for.
-          text: 'If you arrive by clicking an advert or a shared link, your browser notes which advert or link it was, so that if you go on to create an account we can tell that it worked. It is kept in your browser rather than in a cookie, it disappears when you close the tab, and it is never sent to the advertising platform or to anyone else. We don’t keep the click identifier that platforms add to the address, only the name of the advert or campaign.',
+          // ⚠️⚠️ CORRECTED THE SAME DAY IT WAS WRITTEN. The first version said
+          // the value "is never sent to the advertising platform or to anyone
+          // else". The first half is true. The second was NOT: on signup it
+          // travels in a hidden field to our own server, is re-sanitised, and
+          // is stored in auth metadata — app/layout.tsx:110 says so plainly,
+          // and 0107 gives it a column. A privacy statement that is wrong in
+          // the direction of claiming less collection than happens is the worst
+          // kind to leave standing, whoever wrote it.
+          text: 'If you arrive by clicking an advert or a shared link, your browser notes which advert or link it was. It is kept in your browser rather than in a cookie, it disappears when you close the tab, and it is never sent to the advertising platform or to anyone outside Cavy. It only reaches us if you go on to create an account — then it is sent with your signup and kept with your account, so we can tell that the advert worked. We don’t keep the click identifier that platforms add to the address, only the name of the advert or campaign.',
         },
       ],
     },
@@ -890,7 +926,7 @@ export const COMMUNITY: LegalDoc = {
         },
         {
           type: 'p',
-          text: `How to report: you can report any account or message in one tap inside the app, or email our child-safety point of contact directly at ${SUPPORT_EMAIL}. We treat these reports as our highest priority. If a child is in immediate danger, contact the police on 999 (in the UK) first.`,
+          text: `How to report: you can report any account from any chat or profile, on the website or in the app, or email our child-safety point of contact directly at ${SUPPORT_EMAIL}. We treat these reports as our highest priority. If a child is in immediate danger, contact the police on 999 (in the UK) first.`,
         },
       ],
     },
@@ -908,7 +944,12 @@ export const COMMUNITY: LegalDoc = {
       blocks: [
         {
           type: 'p',
-          text: 'You’re always in control. You can block or report anyone in one tap, and our team reviews every report. Depending on what we find, we may warn, suspend, or permanently remove an account. Blocking someone stops them contacting you and hides you from each other.',
+          // ⚠️ "in one tap" went 30 Oct 2026. It is a menu, not a tap, and
+          // this file's own header lists "report anyone in one tap" among the
+          // sentences with nothing behind them. Both controls are real — see
+          // components/SafetyMenu.tsx, "Report and block, for chat and for
+          // profiles" — so what needed fixing was the count, not the claim.
+          text: 'You’re always in control. You can block or report anyone from any chat or profile, on the website or in the app, and our team reviews every report. Depending on what we find, we may warn, suspend, or permanently remove an account. Blocking someone stops them contacting you and hides you from each other.',
         },
       ],
     },
@@ -917,7 +958,7 @@ export const COMMUNITY: LegalDoc = {
       blocks: [
         {
           type: 'p',
-          text: `Report it in the app, or email us any time at ${SUPPORT_EMAIL} — we take every report seriously. If you’re ever in immediate danger, contact the police on 999 (in the UK) first.`,
+          text: `Report it on the website or in the app, or email us any time at ${SUPPORT_EMAIL} — we take every report seriously. If you’re ever in immediate danger, contact the police on 999 (in the UK) first.`,
         },
       ],
     },

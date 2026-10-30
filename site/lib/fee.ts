@@ -1,6 +1,40 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 
 /**
+ * Does Cavy charge stylists a fee AT ALL right now?
+ *
+ * ── ⚠️⚠️ A DIFFERENT QUESTION FROM isProviderFeeSettled, AND THE UI NEEDS
+ *    THIS ONE ──────────────────────────────────────────────────────────────
+ * `provider_fee_settled` answers "does she owe anything", and it short-circuits
+ * to TRUE whenever the fee is switched off. That is right for a GATE — nobody
+ * should be blocked — but it is wrong for COPY, because "settled" renders as a
+ * sentence about a debt that was cleared. Every stylist was being shown a setup
+ * step headed "The one-off fee" reading "Settled. Nothing to pay." Six of the
+ * seven were told Cavy has a fee that was somehow settled for them, and the
+ * seventh was thanked for a Founding Provider slot that confers nothing since
+ * 0102 — all of it contradicting the free-for-stylists pitch she had just read.
+ *
+ * ⚠️ SO THE STEP IS HIDDEN ON THIS FLAG, NOT DELETED. The fee can come back
+ * (supabase/FEE-REINSTATEMENT.md), and a deleted step comes back as an
+ * unannounced charge. Hidden on the flag, it returns the moment the flag does.
+ *
+ * ── ⚠️ FAILS TOWARD "OFF" ────────────────────────────────────────────────
+ * The opposite direction from isProviderFeeSettled below, and for the same
+ * reason: an unreachable database must not invent a debt. Off means the step
+ * is not drawn, which is what the live answer is anyway.
+ */
+export async function isProviderFeeEnabled(
+  supabase: SupabaseClient,
+): Promise<boolean> {
+  const { data, error } = await supabase.rpc('provider_fee_enabled')
+  if (error) {
+    console.warn('[fee] provider_fee_enabled failed, treating as off:', error.message)
+    return false
+  }
+  return data === true
+}
+
+/**
  * Has this stylist's one-off verification fee been settled?
  *
  * ── ⚠️⚠️ ONE PLACE. THIS IS THE WHOLE POINT OF THE FILE ──────────────────

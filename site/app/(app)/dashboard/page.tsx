@@ -24,9 +24,12 @@ function Panel({
 }: {
   title: string; href?: string; linkLabel?: string
   empty?: string
-  /** Passed explicitly, never inferred from children: a panel that also renders
-   *  an "in the app" note always HAS children, so inferring would silently
-   *  suppress the empty message — the one thing these panels exist to say. */
+  /** Passed explicitly, never inferred from children. The case that forced it
+   *  was a panel rendering an "in the app" note beside its list — it always HAD
+   *  children, so inferring would silently suppress the empty message, the one
+   *  thing these panels exist to say. That note is gone (30 Oct 2026, see
+   *  below), but the rule stands: `children` is about what is rendered and
+   *  `isEmpty` is about what the member has, and they are not the same question. */
   isEmpty?: boolean
   children?: React.ReactNode
 })  {
@@ -116,14 +119,27 @@ function GateItem({
   )
 }
 
-/** Something the app can do and web can't yet. Says so once, plainly. */
-function InApp({ what }: { what: string }) {
-  return (
-    <p className="mt-3 rounded-md bg-input-bg px-3 py-2 text-xs text-muted">
-      {what} is in the Cavy app for now — it’s coming to the web soon.
-    </p>
-  )
-}
+/**
+ * ⚠️⚠️ `InApp` WAS DELETED ON 30 Oct 2026, NOT MOVED. It rendered "… is in the
+ * Cavy app for now — it’s coming to the web soon." and it had one caller left,
+ * on the model's "Waiting on a reply" panel, saying that about APPLYING FOR A
+ * SESSION.
+ *
+ * Three things were wrong with that, compounding:
+ *   1. Applying works on the web and has for a while —
+ *      app/(app)/stylist/[id]/apply/ is a whole wizard with a subscribe gate.
+ *   2. There is no app to go to. Mobile is mothballed and was never published
+ *      to either store, so "it's in the app" is not a workaround, it is a
+ *      dead end.
+ *   3. It was shown to the one member who is PAYING £4.99 a month, about the
+ *      single action she is paying for, on the panel that exists to list what
+ *      she has applied for.
+ *
+ * The review panel below carried the identical staleness and was fixed on
+ * 22 Sep 2026 (item 70). This is the same fix, two panels up and two months
+ * later. Nothing replaces the component: a notice is the wrong shape when the
+ * answer is a link, so the empty state now sends her where applying starts.
+ */
 
 /* ── page ──────────────────────────────────────────────────────────────── */
 
@@ -479,10 +495,10 @@ export default async function DashboardPage({
 
               <Panel
                 title="Waiting on a reply" isEmpty={data.pending.length === 0}
-                empty="You haven’t applied for any sessions yet."
+                empty="You haven’t applied for any sessions yet. Browse stylists near you and apply for a time that suits."
+                href="/browse" linkLabel="Browse stylists"
               >
                 {data.pending.length > 0 && <ul>{data.pending.map(b => <BookingRow key={b.id} b={b} />)}</ul>}
-                <InApp what="Applying for a session" />
               </Panel>
 
               <Panel

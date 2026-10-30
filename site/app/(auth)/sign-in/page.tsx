@@ -22,7 +22,9 @@ export default async function SignInPage({
   return (
     <section className="mx-auto max-w-md px-6 py-12 sm:py-16">
       <h1 className="font-display text-4xl text-warm-dark">Sign in</h1>
-      <p className="mt-2 text-muted">Same account as the app.</p>
+      {/* ⚠️ "Same account as the app." went 30 Oct 2026 — mobile is mothballed
+          and in no store, so it pointed at something nobody can install. */}
+      <p className="mt-2 text-muted">Welcome back.</p>
       <SignInForm next={safeNext} />
     </section>
   )

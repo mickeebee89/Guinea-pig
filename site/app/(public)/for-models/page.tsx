@@ -12,15 +12,29 @@ export const metadata: Metadata = {
 const POINTS = [
   {
     title: 'You don’t need experience',
-    body: 'You’re not modelling. You’re the person in the chair. If you’re 18 or over and happy to sit for a treatment, you qualify.',
+    // ⚠️⚠️ "you qualify" WAS TRUE OF BROWSING AND FALSE OF APPLYING. She
+    // qualifies to look round for nothing. To apply she needs the £4.99/month
+    // membership AND a selfie a person has approved, and this page named
+    // neither until 30 Oct 2026. Browsing being free is the strongest thing on
+    // the page, so it is said first rather than used to hide the rest.
+    body: 'You’re not modelling. You’re the person in the chair. If you’re 18 or over and happy to sit for a treatment, you’re who stylists are looking for. Browsing is free — the £4.99/month membership and a quick account check only start when you apply for something.',
   },
   {
     title: 'The price is on the slot, before you apply',
-    body: 'Stylists can put a price on each time they offer — often nothing. You see it before you apply, and you agree the details with them in the chat.',
+    // ⚠️ "often nothing" DESCRIBED NOTHING. Measured 30 Oct 2026: one real
+    // stylist has ever posted one slot, and there are zero bookable slots
+    // today. "Often" is a frequency claim over a sample of one. What IS true
+    // is how the pricing works, so the sentence now describes the mechanism
+    // rather than a pattern that has not happened yet.
+    body: 'Stylists set a price on each time they offer, and most are practising, so it is usually free or heavily discounted. You see the price before you apply, and you agree the details with them in the chat.',
   },
   {
     title: 'You choose who',
-    body: 'Browse verified stylists near you, read what other models said about them, and only apply to the ones you like.',
+    // ⚠️⚠️ "read what other models said about them" CUT 30 Oct 2026. There
+    // are ZERO reviews in the database — not few, none — so this invited a
+    // visitor to look for something that is not on any page yet. Reviews are
+    // built and do work; the sentence comes back when there are some.
+    body: 'Browse verified stylists near you, see what they’re practising and where they are, and only apply to the ones you like.',
   },
   {
     title: 'You can say no to photos',

@@ -19,12 +19,20 @@ const STEPS = [
   {
     n: '1',
     title: 'Find each other',
-    body: 'Models browse verified stylists nearby and see what they’re practising. Stylists post when they need someone.',
+    // ⚠️ "Stylists post when they need someone" was a claim about habit.
+    // Measured 30 Oct 2026: one real stylist has ever posted one slot. The
+    // sentence now says what a stylist DOES rather than what they routinely do,
+    // which is true on day one and stays true as it fills up.
+    body: 'Models browse verified stylists nearby and see what they’re practising. Stylists post the times they’re looking for someone.',
   },
   {
     n: '2',
     title: 'Agree it in chat',
-    body: 'Sort out what the treatment involves, when, where, and what — if anything — it costs. All inside the app.',
+    // ⚠️ "All inside the app" — there is no app anyone can install. Mobile is
+    // mothballed and was never published to either store, so this told a web
+    // visitor to go somewhere that does not exist. The chat is the real place
+    // and naming it is more useful than naming a surface.
+    body: 'Sort out what the treatment involves, when, where, and what — if anything — it costs. All in the chat, before anyone travels.',
   },
   {
     n: '3',

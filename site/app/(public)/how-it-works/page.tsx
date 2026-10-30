@@ -18,7 +18,11 @@ const STEPS = [
   {
     n: '2',
     title: 'Apply, and get accepted',
-    body: 'Models apply for a specific slot. The stylist decides who to take. Nobody is matched automatically and nobody is obliged to accept.',
+    // ⚠️⚠️ THE MEMBERSHIP AND THE CHECK BELONG HERE, NOT IN A FOOTNOTE. The
+    // H1 above promises no surprises, and until 30 Oct 2026 this step described
+    // applying without mentioning that a model needs a paid membership and a
+    // passed account check before she can do it. Those were the surprise.
+    body: 'Browsing is free and always will be. To apply, a model needs the £4.99/month membership and a passed account check — a selfie a person looks at. Then she applies for a specific slot and the stylist decides who to take. Nobody is matched automatically and nobody is obliged to accept.',
   },
   {
     n: '3',
@@ -76,9 +80,19 @@ export default function HowItWorks() {
             usually why a treatment is free or discounted. It’s your choice, and worth agreeing in
             the chat first.
           </p>
+          {/* ⚠️⚠️ "and a one-off verification fee for stylists" UNTIL 30 Oct 2026,
+              AND IT WAS THE WORST-PLACED ERROR ON THE SITE. provider_fee_enabled()
+              reads false (0102, 23 Oct) — measured, not assumed — so it
+              contradicted for-stylists ("no verification fee") and Terms §5, and
+              the homepage links HERE labelled "What it costs". A trainee stylist
+              following the money link read that she owed £14.99, then clicked
+              through to /terms#9, which no longer mentions a stylist fee at all.
+              ⚠️ THE #9 LINK IS STILL RIGHT: §9 is where the MEMBERSHIP's refund
+              terms live, and that is now the only thing this paragraph claims. */}
           <p className="mt-5 text-sm text-muted">
-            Cavy itself has paid features — a membership for models and a one-off verification fee
-            for stylists. Prices are always shown before you pay, and the refund terms are in{' '}
+            Cavy itself has one paid feature: a monthly membership for models. Stylists pay
+            nothing — no sign-up fee, no verification fee, no subscription. The price is always
+            shown before you pay, and the refund terms are in{' '}
             <Link
               href="/terms#9"
               className="text-rose underline decoration-rose/30 underline-offset-2"

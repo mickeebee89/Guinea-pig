@@ -25,7 +25,14 @@ const POINTS = [
     // handwritten note against the profile photo. Describing that as identity
     // verification invites someone to accept a risk on the strength of a check
     // that did not happen. See app/(app)/verify/page.tsx for the rule.
-    body: 'Every member sends a selfie holding their name on a piece of paper, and a person checks it against their profile photo before they can offer or apply for treatments. It’s not an ID document check — but it means there’s a real person behind the profile and the photo isn’t lifted from somewhere else.',
+    // ⚠️ THE TURNAROUND IS THE POINT FOR A STYLIST READING THIS. She signs up,
+    // uploads a selfie, and then waits — and until 30 Oct 2026 nothing on this
+    // page told her a human was looking or roughly when. With zero bookable
+    // slots on the platform, that wait is her entire first experience.
+    // "usually within 24 hours" is the same promise StylistSetup.tsx already
+    // makes her once she is inside; saying it before she signs up costs us
+    // nothing and is the difference between a wait and an abandonment.
+    body: 'Every member sends a selfie holding their name on a piece of paper, and a real person — one of us, not software — checks it against their profile photo before they can offer or apply for treatments. It’s usually done within 24 hours, and you’ll get an email either way. It’s not an ID document check — but it means there’s a real person behind the profile and the photo isn’t lifted from somewhere else.',
   },
   {
     title: 'You set the terms',
@@ -120,8 +127,8 @@ export default async function ForStylists({
             Sign up as a stylist
           </Link>{' '}
           to set up your shop. There’s no sign-up fee, no verification fee and no subscription —
-          we don’t charge stylists anything. You’ll complete a quick identity check before your
-          shop goes live. The full terms are in{' '}
+          we don’t charge stylists anything. Before your shop goes live you’ll send a selfie for
+          one of us to check by hand, which usually takes under 24 hours. The full terms are in{' '}
           <Link href="/terms#5" className="text-rose underline decoration-rose/30 underline-offset-2">
             section 5
           </Link>

@@ -45,7 +45,17 @@ export default async function BrowsePage({
         <EmptyState title="This is for model accounts">
           Browsing is how models find a stylist to apply to. Your account is a stylist — this is
           the page models will find <em>you</em> on once your shop is live.
-          {' '}Finding models to invite is in the Cavy app for now.
+          {/* ⚠️ "Finding models to invite is in the Cavy app for now" until
+              30 Oct 2026. It is not: the Salon Floor invites models on the web,
+              through `invite_model` in salon-floor/actions.ts. And there is no
+              app to send her to — mobile is mothballed and in no store, so the
+              sentence offered a stylist a dead end instead of the feature she
+              was asking for, one click away. */}
+          {' '}Models you can invite are on the{' '}
+          <Link href="/salon-floor" className="font-bold text-rose hover:underline">
+            Salon Floor
+          </Link>
+          .
         </EmptyState>
       </>
     )

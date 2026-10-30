@@ -69,13 +69,22 @@ export default async function SignUpPage({
   return (
     <section className="mx-auto max-w-2xl px-6 py-12 sm:py-16">
       <h1 className="font-display text-4xl text-warm-dark">Create your account</h1>
+      {/* ⚠️ "sign up here, sign in there" went 30 Oct 2026. Mobile is
+          mothballed and was never published to either store, so it instructed a
+          new member to finish somewhere they cannot reach. */}
       <p className="mt-2 text-muted">
-        Same account on the web and in the app — sign up here, sign in there.
+        Free to join, and free to look around.
       </p>
 
+      {/* ⚠️ WAS "Signing up via flowersamaral." — a lowercased internal slug
+          shown to a person, with no explanation of what it meant or what it
+          did. And per the note above it now buys her nothing: the fee it used
+          to waive was switched off in 0102. So this no longer tries to describe
+          the code at all. It confirms the link worked, which is the only part
+          she has any use for, and the value is still recorded. */}
       {source && (
         <p className="mt-4 rounded-md border border-hairline bg-white px-4 py-3 text-sm text-muted">
-          Signing up via <strong className="text-warm-dark">{source}</strong>.
+          You’ve come through an invite link — we’ll note where you joined from.
         </p>
       )}
 

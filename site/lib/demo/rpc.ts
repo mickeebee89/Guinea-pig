@@ -33,6 +33,16 @@ export function demoRpc(name: string, args: Row, store: DemoStore, user: DemoUse
       return true
 
     /**
+     * ⚠️ FALSE, AND IT MUST AGREE WITH THE `provider_fee_settled` STUB ABOVE.
+     * That one returns true BECAUSE this is false — settled-by-absence, not
+     * settled-by-payment. A demo that said the fee was on while claiming every
+     * stylist had settled it would describe a product that does not exist.
+     * Both change together if the fee is ever reinstated.
+     */
+    case 'provider_fee_enabled':
+      return false
+
+    /**
      * ⚠️ A NO-OP THAT RETURNS, RATHER THAN A THROW. The Salon Floor page calls
      * this on every load to clear its nav dot, so an unknown-function throw
      * would take the whole page down in demo mode — not the dot, the page.

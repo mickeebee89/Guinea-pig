@@ -270,13 +270,29 @@ export function StylistSetupPanel({ setup }: { setup: StylistSetup }) {
             : 'Pick the treatments you do. Models filter on these, so an empty list means an empty diary.'}
         </Step>
 
-        <Step state={setup.feeSettled ? 'done' : 'todo'} title="The one-off fee">
-          {setup.feeSettled
-            ? setup.isFoundingProvider
-              ? 'Covered — you’re a Founding Provider, so there’s nothing to pay.'
-              : 'Settled. Nothing to pay.'
-            : <>£14.99, once, ever. You can pay it on the ID check page.</>}
-        </Step>
+        {/* ⚠️⚠️ NOT DRAWN AT ALL WHILE THE FEE IS OFF, WHICH IT HAS BEEN SINCE
+            0102 (23 Oct 2026). `feeSettled` is TRUE for everybody while the fee
+            is switched off, so this step used to render for every stylist as
+            "The one-off fee — Settled. Nothing to pay." Read by someone who has
+            never been asked for money, that says Cavy HAS a fee and that hers
+            was mysteriously cleared; the Founding Provider line thanked her for
+            a slot that confers nothing now. Both contradict the
+            free-for-stylists pitch on /for-stylists, and this is the first
+            screen a new stylist sees.
+
+            ⚠️ HIDDEN ON THE FLAG RATHER THAN DELETED. The fee can be switched
+            back on (supabase/FEE-REINSTATEMENT.md), and a deleted step comes
+            back as an unannounced charge. This returns the moment
+            provider_fee_enabled() does, with its original wording intact. */}
+        {setup.feeEnabled && (
+          <Step state={setup.feeSettled ? 'done' : 'todo'} title="The one-off fee">
+            {setup.feeSettled
+              ? setup.isFoundingProvider
+                ? 'Covered — you’re a Founding Provider, so there’s nothing to pay.'
+                : 'Settled. Nothing to pay.'
+              : <>£14.99, once, ever. You can pay it on the ID check page.</>}
+          </Step>
+        )}
 
         <Step
           state={
