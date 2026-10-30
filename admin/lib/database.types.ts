@@ -1,8 +1,8 @@
 // GENERATED FILE — DO NOT EDIT BY HAND.
 //
 // Written by scripts/gen-supabase-types.mjs from the live database.
-// TYPES_STAMP: 0106
-// TYPES_FILES_AT_GEN: 0106
+// TYPES_STAMP: 0107
+// TYPES_FILES_AT_GEN: 0107
 //
 // TYPES_STAMP is the migration the DATABASE was at when these were generated,
 // stated by whoever ran it (--applied). TYPES_FILES_AT_GEN is the newest
@@ -2052,6 +2052,8 @@ export type Database = {
           region: string
           role: string
           salon_floor_seen_at: string | null
+          signup_campaign: string | null
+          signup_source: string | null
           subscription_expires_at: string | null
           subscription_next_billing: string | null
           subscription_status: string
@@ -2084,6 +2086,8 @@ export type Database = {
           region: string
           role: string
           salon_floor_seen_at?: string | null
+          signup_campaign?: string | null
+          signup_source?: string | null
           subscription_expires_at?: string | null
           subscription_next_billing?: string | null
           subscription_status?: string
@@ -2116,6 +2120,8 @@ export type Database = {
           region?: string
           role?: string
           salon_floor_seen_at?: string | null
+          signup_campaign?: string | null
+          signup_source?: string | null
           subscription_expires_at?: string | null
           subscription_next_billing?: string | null
           subscription_status?: string
