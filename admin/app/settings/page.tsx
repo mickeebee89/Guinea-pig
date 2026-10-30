@@ -11,8 +11,23 @@ interface Setting { key: string; value: string }
 const KEYS = [
   'verification_price_pence',
   'subscription_price_pence',
-  'founding_provider_limit',
-  'founding_provider_offer_enabled',
+  // ⚠️⚠️ founding_provider_cap REPLACES founding_provider_limit, AND THE SWAP
+  // IS THE WHOLE POINT OF THIS CHANGE. The console wrote `_limit` and read it
+  // back to draw "n / 200 slots used". NOTHING ELSE IN THE DATABASE READ IT —
+  // handle_new_auth_user reads `founding_provider_cap`. So the number beside
+  // the counter was whatever this page had last been told, and setting it to 0
+  // to stop granting would have done nothing at all. That is the most dangerous
+  // shape a dead dial can take: it looked like the brake.
+  //
+  // `_cap` is the one signup actually reads, so the counter is now true.
+  // Migration 0108 deletes `_limit`, `founding_provider_offer_enabled` and
+  // `materials_cost_cap_pence`, and closes settings.key to a declared
+  // vocabulary. ⚠️ THIS CHANGE MUST DEPLOY BEFORE 0108 IS APPLIED — the other
+  // order leaves this page rendering controls for keys that no longer exist.
+  'founding_provider_cap',
+  // ⚠️ READ-ONLY HERE. See the Founding Provider row below for why it is not a
+  // toggle.
+  'provider_fee_enabled',
   'image_review_enabled',
   // ⚠️ banned_words GATES PUBLICATION as of migration 0032. It is no longer
   // just a search term list for the moderation tab: a BEFORE INSERT trigger on
@@ -90,23 +105,23 @@ export default function SettingsPage() {
         <PriceField
           label="Model Subscription Price" settingKey="subscription_price_pence"
           initial={settings['subscription_price_pence'] ?? ''} onSave={handleSave} />
-        <PriceField
-          label="Founding Provider Slot Limit" settingKey="founding_provider_limit" unit="slots"
-          initial={settings['founding_provider_limit'] ?? ''} onSave={handleSave} />
+        {/* ⚠️⚠️ THE "Founding Provider Slot Limit" FIELD WAS HERE AND IS GONE.
+            It wrote founding_provider_limit, which no function read. Editing it
+            moved a number on this page and nothing else. The real cap is
+            founding_provider_cap, and it is not editable here on purpose: it is
+            read inside the signup trigger, under an advisory lock, and the
+            place to change it is a migration where the change is recorded.
 
-        <div className="flex items-center justify-between py-4 border-b border-black/5">
-          <div>
-            <div className="font-medium text-[#3D2E2E]">Founding Provider Offer</div>
-            <div className="text-xs text-[#3D2E2E]/40">{foundingCount} / {settings['founding_provider_limit'] ?? '—'} slots used</div>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className={`text-xs font-medium ${settings['founding_provider_offer_enabled'] === 'true' ? 'text-[#8C4A58]' : 'text-gray-400'}`}>
-              {settings['founding_provider_offer_enabled'] === 'true' ? 'ON' : 'OFF'}
-            </span>
-            <Toggle settingKey="founding_provider_offer_enabled"
-              on={settings['founding_provider_offer_enabled'] === 'true'} onSave={handleSave} />
-          </div>
-        </div>
+            ⚠️ AND THE "Founding Provider Offer" TOGGLE WAS HERE AND IS GONE.
+            It wrote founding_provider_offer_enabled, which no function read; it
+            showed ON, and turning it off changed nothing. Whether the offer is
+            running is not a separate fact from whether stylists are charged —
+            the offer IS the waiver — so there is one switch now, and this row
+            reports it instead of pretending to be it. */}
+        <FoundingStatus
+          used={foundingCount}
+          cap={settings['founding_provider_cap'] ?? '—'}
+          feeOn={settings['provider_fee_enabled'] === 'true'} />
 
         <div className="flex items-center justify-between py-4 border-b border-black/5">
           <div>
@@ -204,10 +219,56 @@ function SaveNote({ state, error }: { state: string; error: string | null }) {
   return null
 }
 
+/**
+ * Founding Provider status. ⚠️ READ-ONLY, AND DELIBERATELY NOT A SWITCH.
+ *
+ * ── WHAT IT REPORTS ───────────────────────────────────────────────────────
+ * Slots used out of `founding_provider_cap` — the key the signup trigger
+ * actually reads — and whether granting is happening at all, which since
+ * migration 0108 is gated on `provider_fee_enabled`.
+ *
+ * ── ⚠️ WHY THE FEE IS NOT A TOGGLE HERE ──────────────────────────────────
+ * Switching the stylist fee on is not one row. supabase/FEE-REINSTATEMENT.md
+ * lists twelve steps: the /verify fee block, the Founding Provider badge, the
+ * price in publishRefusal, the /for-stylists CTA, Terms §5's body, the payment
+ * sentence, the non-refundable clause — and the advance notice to existing
+ * stylists that Terms §5 commits to in writing. On top of that,
+ * `verification_payments` has never held a row, so the Stripe path has never
+ * run end to end against a real card.
+ *
+ * A one-click toggle for that is a trap, not a control: it would charge people
+ * through an untested path while four published documents still said the
+ * opposite. So this reports the state and the switch stays in a migration,
+ * where turning it on is a decision somebody has written down.
+ *
+ * ⚠️ `feeOn` IS DERIVED THE SAME WAY provider_fee_enabled() DERIVES IT —
+ * value === 'true', and anything else including a missing row reads as OFF.
+ * The function coalesces a missing row to false because the safe reading of
+ * "the flag is gone" is "do not charge", and this page must not disagree with
+ * it.
+ */
+function FoundingStatus({ used, cap, feeOn }: { used: number; cap: string; feeOn: boolean }) {
+  return (
+    <div className="flex items-center justify-between py-4 border-b border-black/5">
+      <div>
+        <div className="font-medium text-[#3D2E2E]">Founding Provider slots</div>
+        <div className="text-xs text-[#3D2E2E]/40">
+          {used} / {cap} used · {feeOn
+            ? 'granting, because stylists are charged'
+            : 'not granting — the stylist fee is off, so there is nothing to waive'}
+        </div>
+      </div>
+      <span className={`text-xs font-medium ${feeOn ? 'text-[#8C4A58]' : 'text-gray-400'}`}>
+        {feeOn ? 'GRANTING' : 'PAUSED'}
+      </span>
+    </div>
+  )
+}
+
 function Toggle({
   settingKey, on, onSave,
 }: {
-  settingKey: 'founding_provider_offer_enabled' | 'image_review_enabled'
+  settingKey: 'image_review_enabled'
   on: boolean
   onSave: OnSave
 }) {
@@ -231,7 +292,7 @@ function PriceField({
   label, settingKey, unit = 'pence', initial, onSave,
 }: {
   label: string
-  settingKey: 'verification_price_pence' | 'subscription_price_pence' | 'founding_provider_limit'
+  settingKey: 'verification_price_pence' | 'subscription_price_pence'
   unit?: string
   initial: string
   onSave: OnSave
