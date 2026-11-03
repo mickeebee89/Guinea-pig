@@ -72,8 +72,8 @@ export interface Treatment {
 }
 
 /**
- * Every field below is written per treatment on purpose. Six pages that differ
- * only by a swapped noun is the doorway-page pattern Google penalises
+ * Every field below is written per treatment on purpose. A set of pages that
+ * differ only by a swapped noun is the doorway-page pattern Google penalises
  * site-wide, and it would also be useless to read: sitting for a 4-hour colour
  * is nothing like sitting for a 25-minute spray tan.
  *
@@ -162,6 +162,55 @@ export const TREATMENTS: readonly Treatment[] = [
       'The spray itself is 20 to 30 minutes, in a pop-up tent, in disposable underwear. You’ll need to exfoliate beforehand and skip moisturiser, deodorant and makeup on the day. You develop for a few hours, then rinse. It fades over about a week.',
     patchTest: null,
   },
+  // ── Added 3 Nov 2026 ────────────────────────────────────────────
+  // All three dbSlugs read back from treatment_categories, not guessed — see
+  // the spray_tan note above for what guessing costs. They are single words
+  // with no underscore, and `category` is the stored `name` character for
+  // character, because that is what provider_treatments.category holds.
+  {
+    slug: 'waxing-models',
+    dbSlug: 'waxing',
+    category: 'Waxing',
+    noun: 'waxing models',
+    summary:
+      'Leg, underarm, bikini and facial waxing from therapists building their portfolios — free or discounted, across the UK.',
+    why: 'Hair grows in several directions on the same leg, and wax that is right for a coarse underarm will lift the skin off a lip. Therapists have to judge the temperature, hold the skin taut and pull the right way, and none of that transfers from a practice pad — it needs real hair on real skin, including skin that has never been waxed before.',
+    expect:
+      'Fifteen minutes for a lip or underarms, up to about an hour for full legs. You can’t shave beforehand: the hair has to be long enough for the wax to grip, which is roughly two to three weeks of growth — so this is an appointment you plan a fortnight ahead rather than book for tomorrow. It hurts, most on the first pull of each area. Expect the skin to be red and bumpy for a few hours, and to skip hot baths, saunas, swimming and sunbeds for about a day afterwards. Agree exactly which area is being waxed in the chat beforehand, not when you get there.',
+    // Contraindications, not allergy, and the heading above this box says
+    // "Patch test" — so the first sentence answers that question before
+    // getting to the thing that actually matters.
+    patchTest:
+      'Waxing doesn’t normally need a patch test. What it needs is you disclosing medication and recent treatments, and that matters more. Tell the therapist in the chat if you use retinoids or acids on the area, have had a chemical peel recently, or are sunburnt: each of those thins the skin, and it can come away with the wax. Isotretinoin — Roaccutane — rules waxing out completely, during the course and for six months after it finishes. None of this is visible to a therapist. It is only safe if you say it.',
+  },
+  {
+    slug: 'facial-models',
+    dbSlug: 'facials',
+    category: 'Facials',
+    noun: 'facial models',
+    summary:
+      'Cleansing, exfoliation, extractions, massage and peels from therapists building their portfolios — free or discounted, across the UK.',
+    why: 'The skill is reading the skin in front of you and changing the plan, so a therapist needs oily skin, dry skin, congested skin and skin that reacts to everything — not six versions of the same face. Extractions especially can’t be practised on anyone whose pores are already clear.',
+    expect:
+      'Usually 45 minutes to an hour and a quarter, lying down with a bare face and your hair tied back. Extractions are the uncomfortable part: the therapist presses around blocked pores, and it can leave you red and blotchy. Skin can look worse before it looks better, so this isn’t one to book the day before something that matters. If actives are used you may be asked to stay out of the sun, and off your own acids and retinoids, for a few days afterwards.',
+    patchTest:
+      'It depends which facial. A cleanse, steam, extraction and massage doesn’t normally need a patch test. Anything with actives in it — a chemical peel, glycolic or salicylic acid, a strong vitamin C — normally does, 24 to 48 hours beforehand. So ask in the chat what is actually being used, and if the answer includes a peel or an acid, ask for the patch test rather than waiting to be offered one.',
+  },
+  {
+    slug: 'massage-models',
+    dbSlug: 'massage',
+    category: 'Massage',
+    noun: 'massage models',
+    summary:
+      'Swedish, deep tissue and sports massage from therapists building their portfolios — free or discounted, across the UK.',
+    why: 'Pressure is the whole skill and it can’t be learned on a cushion. A therapist needs to feel where a real back is tight, find out how differently the same pressure lands on a different body, and learn to notice when someone has gone quiet because it hurts rather than because they’re relaxed. Practising on strangers rather than friends is the part that’s hard to arrange.',
+    // ⚠️ The contraindications live HERE, not in patchTest, because there is
+    // no such thing as a massage patch test and the page would print the
+    // heading "Patch test" over them. Same reason nails and makeup are null.
+    expect:
+      'Usually 30 to 90 minutes. You undress to your underwear and stay covered with towels throughout, with only the area being worked on uncovered. Say at the start how much pressure you want, and say so again if it becomes too much — someone who is practising needs to hear that more than a paying client does. Deep tissue can leave you aching for a day or two. Tell the therapist beforehand if you’re pregnant, have a recent injury, or have a circulatory condition such as a clotting disorder or varicose veins: some of those mean they change what they do, some mean they decline, and some need a doctor to say yes first. Mention nut allergies too — a lot of massage oils are nut-based, sweet almond most of all.',
+    patchTest: null,
+  },
 ] as const
 
 export const getTreatment = (slug: string) => TREATMENTS.find((t) => t.slug === slug)
@@ -171,7 +220,7 @@ export const getTreatment = (slug: string) => TREATMENTS.find((t) => t.slug === 
  * free text with no city taxonomy behind it, so city pages are hand-picked and
  * matched with a LIKE against public_stylists.location_slug.
  *
- * Deliberately small. 6 treatments x N cities of near-identical templated pages
+ * Deliberately small. Every treatment x N cities of near-identical templated pages
  * on a brand-new domain is the doorway pattern Google penalises site-wide;
  * expand in tranches as real inventory appears, not all at once.
  */

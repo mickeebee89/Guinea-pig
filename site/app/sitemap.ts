@@ -21,7 +21,8 @@ export const revalidate = 3600
  * shared count are what stop those drifting — they were one judgement made in
  * one place, and that is the only reason they agree.
  *
- * Async now, because it asks the database. Six head-counts an hour.
+ * Async now, because it asks the database. One head-count per treatment, per
+ * hour — nine of them since 3 Nov 2026, and the number grows with the array.
  */
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // Preview deployments emit nothing at all, so a stray robots.txt edit can

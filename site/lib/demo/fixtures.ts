@@ -66,7 +66,15 @@ const PRICE_PENCE: Record<string, number> = {
   'Spray tan': 800,
 }
 
-// ── Treatments. Names match lib/site.ts TREATMENTS and treatment_categories. ─
+// ── Treatments. A DELIBERATE SUBSET, not the full set. ──────────────────
+// These six names and slugs are real — they match lib/site.ts TREATMENTS and
+// treatment_categories exactly — but they are no longer all of them. Waxing,
+// Facials and Massage were added on 3 Nov 2026 and are not seeded here, so
+// /waxing-models, /facial-models and /massage-models render the no-stylists
+// path in demo mode. That is the intended state, not drift: the demo exists
+// to show the product working, and it does that on six categories as well as
+// on nine. Anything added here needs stylists, photos and prices to go with
+// it, which is a seeding job rather than a list edit.
 const CATEGORIES = [
   { name: 'Hair', slug: 'hair' },
   { name: 'Makeup', slug: 'makeup' },

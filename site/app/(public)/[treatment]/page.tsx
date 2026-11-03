@@ -12,7 +12,7 @@ export const revalidate = 900
  * Root-level dynamic segment. Safe alongside /terms, /privacy, /for-stylists
  * and the rest because the App Router matches static segments before dynamic
  * ones — a literal folder always wins. `dynamicParams = false` then means only
- * the six known slugs resolve and anything else is a real 404, so this route
+ * the slugs in TREATMENTS resolve and anything else is a real 404, so this route
  * can never become a catch-all that swallows typos and soft-404s them.
  */
 export const dynamicParams = false
@@ -20,6 +20,31 @@ export const dynamicParams = false
 export function generateStaticParams() {
   return TREATMENTS.map((t) => ({ treatment: t.slug }))
 }
+
+/**
+ * ⚠️ EVERY HEADING THAT BOLTS "models" ONTO A NAME USES `noun`, NOT `category`.
+ *
+ * `category` is the stored `treatment_categories.name`, and four of the nine
+ * are plural — Nails, Lashes, Brows, Facials. `${t.category} models wanted`
+ * therefore shipped "Nails models wanted", "Lashes models wanted" and "Brows
+ * models wanted" to the live site, in the H1, the <title>, the OG title, the
+ * breadcrumb and the structured data. Facials made it four; it did not cause
+ * it. Corrected 3 Nov 2026.
+ *
+ * `noun` has existed for exactly this since the array was written ("hair
+ * models", "nail models", "lash models") and already read correctly in the
+ * one place that used it. It is lowercase because it also appears mid-sentence
+ * — "Why stylists need nail models" — so the five heading positions capitalise
+ * it here rather than a tenth field carrying the same words in title case.
+ *
+ * ⚠️ THE LOWERCASE `category` USES ARE CORRECT AND STAY. "No one is offering
+ * nails on Cavy yet" and "Stylists offering nails" want the plural, because
+ * there the word is the treatment and not the person.
+ *
+ * Not `text-transform: capitalize`: it cannot reach <title>, the OG title or
+ * the JSON-LD, and those are three of the five.
+ */
+const heading = (noun: string) => noun.charAt(0).toUpperCase() + noun.slice(1)
 
 export async function generateMetadata({
   params,
@@ -40,12 +65,12 @@ export async function generateMetadata({
   const thin = count < MIN_STYLISTS_TO_INDEX
 
   return {
-    title: `${t.category} models wanted`,
+    title: `${heading(t.noun)} wanted`,
     description: t.summary,
     alternates: { canonical: `/${t.slug}` },
     ...(thin ? { robots: { index: false, follow: true } } : {}),
     openGraph: {
-      title: `${t.category} models wanted · Cavy`,
+      title: `${heading(t.noun)} wanted · Cavy`,
       description: t.summary,
       url: `${SITE_URL}/${t.slug}`,
     },
@@ -83,7 +108,7 @@ export default async function TreatmentPage({
               {
                 '@type': 'ListItem',
                 position: 2,
-                name: `${t.category} models`,
+                name: heading(t.noun),
                 item: `${SITE_URL}/${t.slug}`,
               },
             ],
@@ -103,12 +128,12 @@ export default async function TreatmentPage({
         <span aria-hidden className="px-2 text-muted/50">
           /
         </span>
-        <span className="text-warm-dark">{t.category} models</span>
+        <span className="text-warm-dark">{heading(t.noun)}</span>
       </nav>
 
       <section className="mx-auto max-w-3xl px-6 pb-8 pt-6">
         <h1 className="font-display text-4xl leading-tight text-warm-dark sm:text-5xl">
-          {t.category} models wanted
+          {heading(t.noun)} wanted
         </h1>
         <p className="mt-5 text-lg leading-relaxed text-warm-dark/80">{t.summary}</p>
         <p className="mt-4 text-sm text-muted">
