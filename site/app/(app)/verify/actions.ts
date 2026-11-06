@@ -1,7 +1,6 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { hasActiveSubscription } from '@/lib/verification'
 import { isProviderFeeSettled } from '@/lib/fee'
 import { createSupabaseServerClient, requireUser } from '@/lib/supabase-server'
 import type { ConfirmOutcome } from '@/components/PayForm'
@@ -58,26 +57,27 @@ export async function submitSelfie(form: FormData): Promise<VerifyResult> {
     return { ok: false, error: 'That doesn’t look like a photo. Try again.' }
   }
 
-  // ── WHO IS ALLOWED TO SUBMIT ONE — TWO ANSWERS, NOT ONE ─────────────────
+  // ── ⚠️ THE MEMBERSHIP RULE FOR MODELS IS GONE. 6 Nov 2026. ───────────
   //
-  // Until 23 Sep this refused anyone without a provider row outright: "Only a
-  // stylist account can do the ID check here." That was right while the web
-  // had no way for a model to apply. It is wrong now that it does, and the
-  // fix is NOT to drop the guard — it is to give a model the one that belongs
-  // to her.
+  // This refused a model with no active membership, on the server, so that a
+  // UI mistake could not re-create the stranded verified-but-unsubscribed
+  // accounts the app's old "Get verified" buttons produced.
   //
-  // ⚠️ A MODEL MUST HAVE AN ACTIVE MEMBERSHIP TO SUBMIT ONE.
-  // The app once had standalone "Get verified" buttons for models and they
-  // were removed, because they produced accounts that were verified but not
-  // subscribed — people who had done the work and still could not apply
-  // (verify/page.tsx:25-27 records the decision). Keeping that rule in the UI
-  // only would mean this action re-created the same stranded accounts the
-  // moment anything called it directly. So the rule lives here, on the server,
-  // where the UI cannot route around it.
+  // That was a real problem when it was written. It is not the problem now.
+  // The gate order is reversed: the ID check comes first and is available from
+  // signup, and the £4.99 membership is the LAST gate before applying. A
+  // verified-but-unsubscribed account is the warmest lead on the platform
+  // rather than a dead end.
   //
-  // It is the same membership test the apply gate uses — waived counts, and it
-  // asks Stripe when our own row looks stale rather than refusing someone who
-  // has paid.
+  // ⚠️ THIS REFUSAL WAS THE ACTUAL GATE, NOT THE UI. Leaving it would have
+  // meant a model taking the photo and the server throwing it away — the exact
+  // shape of failure the change exists to remove. It is also the likeliest
+  // reason 0 of 57 model accounts have ever been verified: the admin queue has
+  // always accepted them (verification_requests is filtered on status, never
+  // role), so nothing a model submitted ever got as far as being reviewed.
+  //
+  // ⚠️ EVERY OTHER CHECK HERE STAYS, including the already-verified check, the
+  // profile-picture requirement and the stylist fee gate below.
   const [{ data: provRow }, { data: userRow }, feeSettled] = await Promise.all([
     supabase.from('providers').select('id').eq('user_id', user.id).maybeSingle(),
     supabase.from('users')
@@ -131,24 +131,17 @@ export async function submitSelfie(form: FormData): Promise<VerifyResult> {
     }
   }
 
-  if (provRow) {
-    // ⚠️ UNREACHABLE WHILE THE FEE IS OFF, AND KEPT ANYWAY — the server-side
-    // half of the same gate, so switching the fee back on restores it without
-    // anyone having to remember this file. "Settled" has never meant merely
-    // "paid": founding and waived both count, and provider_fee_settled is now
-    // the only thing that knows that.
-    if (!feeSettled) {
-      return { ok: false, error: 'The one-off fee needs settling before the ID check.' }
-    }
-  } else {
-    // A model. No fee — models have never had one — but membership first.
-    const { active } = await hasActiveSubscription(supabase, user.id).catch(() => ({ active: false }))
-    if (!active) {
-      return {
-        ok: false,
-        error: 'Your membership needs to be active before the ID check — the two go together when you apply.',
-      }
-    }
+  // ⚠️ UNREACHABLE WHILE THE FEE IS OFF, AND KEPT ANYWAY — the server-side
+  // half of the same gate, so switching the fee back on restores it without
+  // anyone having to remember this file. "Settled" has never meant merely
+  // "paid": founding and waived both count, and provider_fee_settled is now
+  // the only thing that knows that.
+  //
+  // There is no model equivalent any more, and that is the change. A model has
+  // never had a fee, and since 6 Nov 2026 she does not need a membership
+  // either — only a profile photo, which is checked above for both roles.
+  if (provRow && !feeSettled) {
+    return { ok: false, error: 'The one-off fee needs settling before the ID check.' }
   }
 
   const path = `${user.id}/selfie-${Date.now()}.jpg`

@@ -17,7 +17,7 @@ const POINTS = [
     // membership AND a selfie a person has approved, and this page named
     // neither until 30 Oct 2026. Browsing being free is the strongest thing on
     // the page, so it is said first rather than used to hide the rest.
-    body: 'You’re not modelling. You’re the person in the chair. If you’re 18 or over and happy to sit for a treatment, you’re who stylists are looking for. Browsing is free — the £4.99/month membership and a quick account check only start when you apply for something.',
+    body: 'You’re not modelling. You’re the person in the chair. If you’re 18 or over and happy to sit for a treatment, you’re who stylists are looking for. Browsing is free. To apply you need a quick account check — one selfie, which you can do as soon as you join — and the £4.99/month membership, which is the last thing we ask for.',
   },
   {
     title: 'The price is on the slot, before you apply',

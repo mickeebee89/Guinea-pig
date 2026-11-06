@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { createSupabaseServerClient, requireUser } from '@/lib/supabase-server'
 import { indexById, displayName, type ProfileRef } from '@/lib/queries/util'
 import { getStylistSetup } from '@/lib/queries/shop'
+import { getIdCheck } from '@/lib/queries/idCheck'
 import { BlockedList, type BlockedPerson } from './BlockedList'
 import { getGateState } from '@/lib/verification'
 import { MembershipSection, type MembershipView } from './MembershipSection'
@@ -36,6 +37,15 @@ export default async function SettingsPage() {
   // the pair in both directions precisely so neither person can tell which way
   // round it was.
   const setup = await getStylistSetup(supabase, user.id)
+
+  // ⚠️ getStylistSetup returns its EMPTY_SETUP for anyone with no provider
+  // row, and that carries `idCheck: 'none'` — the absence of a reading, not a
+  // reading. Harmless while this section was stylist-only; wrong the moment a
+  // model sees it, because a pending request would render as "not done yet"
+  // and invite a resubmission that deletes the one she is waiting on.
+  const idCheck = setup.providerId
+    ? { state: setup.idCheck, note: setup.idCheckNote }
+    : await getIdCheck(supabase, user.id)
 
   // ── TWO READS, TWO JOBS, KEPT APART ─────────────────────────────────────
   // getGateState DECIDES whether this account has a membership: it applies the
@@ -124,31 +134,41 @@ export default async function SettingsPage() {
     <>
       <h1 className="mb-6 font-display text-3xl text-warm-dark">Settings</h1>
 
-      {/* Stylists only. A model has no standalone ID check — theirs happens
-          inside the apply gate with the subscription, and offering it separately
-          is what produced verified-but-unsubscribed accounts in the app. */}
-      {setup.providerId && (
-        <section className="mb-8">
+      {/* ⚠️ BOTH ROLES SINCE 6 Nov 2026. This said "Stylists only. A model has
+          no standalone ID check — theirs happens inside the apply gate with the
+          subscription, and offering it separately is what produced
+          verified-but-unsubscribed accounts in the app."
+
+          The ID check is now on /verify for everyone and membership is the last
+          gate rather than the first, so a verified-but-unsubscribed account is
+          the warmest lead on the platform rather than a stranded one. Leaving
+          this stylist-only would hide from a model the one thing she can get on
+          with today. */}
+      <section className="mb-8">
           <h2 className="mb-2 font-display text-lg text-warm-dark">ID check</h2>
           <p className="mb-3 text-sm text-muted">
-            {setup.idCheck === 'approved'
+            {idCheck.state === 'approved'
               ? 'Passed. A person compared your photo against your profile picture.'
-              : setup.idCheck === 'pending'
+              : idCheck.state === 'pending'
                 ? 'Sent — a person reviews these, usually within 24 hours. Nothing for you to do.'
-                : setup.idCheck === 'rejected'
+                : idCheck.state === 'rejected'
                   ? 'The last one wasn’t accepted, so it needs doing again.'
-                  : 'Not done yet. It’s what makes your shop live.'}
+                  // Both halves are true, and which one matters depends on who
+                  // is reading: it makes a shop live, and for a model it is one
+                  // of the two things between her and a booking.
+                  : setup.providerId
+                    ? 'Not done yet. It’s what makes your shop live.'
+                    : 'Not done yet. You can do it now — it doesn’t need a membership first.'}
           </p>
           {/* No link while it is pending: there is nothing to do on that page
               but read the same sentence again. */}
-          {setup.idCheck !== 'pending' && (
+          {idCheck.state !== 'pending' && (
             <Link href="/verify" className="text-sm font-bold text-rose hover:underline">
-              {setup.idCheck === 'approved' ? 'See your ID check' :
-               setup.idCheck === 'rejected' ? 'Try again' : 'Do the ID check'} →
+              {idCheck.state === 'approved' ? 'See your ID check' :
+               idCheck.state === 'rejected' ? 'Try again' : 'Do the ID check'} →
             </Link>
           )}
-        </section>
-      )}
+      </section>
 
       {showMembership && (
         <section className="mb-8">

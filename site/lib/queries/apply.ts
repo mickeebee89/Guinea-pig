@@ -8,12 +8,19 @@ import { getBlockedIds } from '@/lib/blocks'
 /**
  * Everything the apply wizard needs, in one read. Audit item 83.
  *
- * ── THE ORDER OF THE GATES IS THE PRODUCT DECISION ────────────────────────
- * Membership, then ID check, then the booking. Mobile routes the same way
- * (apply-session.tsx:200-224) and the database now refuses anything else
- * (0049). This function reports both so the wizard can say which one is in
- * the way, rather than letting her fill in seven screens and be refused at
- * the end.
+ * ── THE ORDER OF THE GATES IS THE PRODUCT DECISION ──────────────────
+ * ID check, then consent, then membership — reversed on 6 Nov 2026, when the
+ * ID check moved to /verify and became something she can do from signup. This
+ * function reports both halves so the wizard can say which one is in the way,
+ * rather than letting her fill in seven screens and be refused at the end.
+ *
+ * ⚠️ MOBILE NO LONGER MATCHES. apply-session.tsx:207-236 still routes
+ * membership-first and is staying that way — mobile is mothballed and
+ * untouched, and HANDOVER.md's submission gate records the divergence. Do not
+ * "fix" this file to agree with it.
+ *
+ * The database refuses anything else either way (0049) and does not care which
+ * half was done first.
  */
 
 export interface ApplySlot {

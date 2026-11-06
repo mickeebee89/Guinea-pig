@@ -9,11 +9,17 @@ import { downscale, UNREADABLE_IMAGE_MESSAGE } from '@/lib/downscale'
  * Take the ID-check photo and send it.
  *
  * ── SHARED, SINCE 23 Sep 2026 ─────────────────────────────────────────────
- * It lived in app/(app)/verify/ while only a stylist could do this. A model's
- * ID check happens inside the apply flow, never on /verify (see that page's
- * own note on why models must not have a standalone entry), so the capture
- * moved here and the two surfaces share it. The action it posts to decides
- * which rules apply to whom — this component only takes a photo.
+ * It lived in app/(app)/verify/ while only a stylist could do this, then moved
+ * here so that /verify and the apply flow could share one capture.
+ *
+ * ⚠️ THIS SAID "a model's ID check happens inside the apply flow, never on
+ * /verify". NOT TRUE SINCE 6 Nov 2026 — the ID check is on /verify for both
+ * roles, any time after signup, and the £4.99 membership is the last gate
+ * before applying rather than the first. Recorded rather than deleted because
+ * it cross-referenced /verify's own note: a repo where one file says models are
+ * welcome there and another says they are never there is worse than either
+ * answer on its own. IdCheckStep is the only renderer now; this is still only
+ * the capture, and the action it posts to decides which rules apply to whom.
  *
  * ── A FILE INPUT, NOT getUserMedia ────────────────────────────────────────
  * `capture="user"` opens the front camera directly on a phone, which is where

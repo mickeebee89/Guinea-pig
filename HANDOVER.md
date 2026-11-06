@@ -364,6 +364,58 @@ starts. Not worth building before then.
 > a debt. Mobile currently fails toward **owing**, because an empty result makes
 > every term false. Match the web.
 
+> ## ⚠️⚠️ WEB AND MOBILE NO LONGER AGREE ON THE APPLY GATE
+>
+> **Recorded 6 Nov 2026 as a decision, not a bug.** Mobile is mothballed and
+> was deliberately left untouched; the divergence is written down here so that
+> whoever unmothballs it finds it before a model does.
+>
+> **1 live gate (`site/`), 1 dormant (`mobile/`).**
+>
+> **The order reversed on the web and did not move on mobile.**
+>
+> | | web (live) | mobile (dormant) |
+> |---|---|---|
+> | 1 | not published → blocked | — |
+> | 2 | **ID check** | membership → `/(app)/subscribe` |
+> | 3 | consent | **ID check** → `/(app)/verify-payment` |
+> | 4 | no open slots | — |
+> | 5 | **membership** | — |
+>
+> The web's ID check also left the apply flow entirely: it is on `/verify` for
+> both roles, available from signup, and `submitSelfie()` no longer requires a
+> model to hold a membership. **Mobile has no equivalent page** — a model's
+> only route to the check there is still to pick a slot first.
+>
+> **Four divergences that were already there, and are now worse rather than
+> new.** Measured 6 Nov 2026 from `mobile/src/app/(app)/apply-session.tsx`:
+>
+> 1. **Mobile redirects where the web renders in place.** `apply-session.tsx`
+>    `router.replace`s to `/(app)/subscribe` carrying only `providerId` and
+>    `providerName`; the web's wall renders on the apply URL, so `step`, `date`
+>    and `slot` survive and `applyReturnTo` carries them to `/subscribe`. On
+>    mobile the slot she chose is simply gone.
+> 2. **Mobile sends the ID check to `verify-payment.tsx`** — the same screen a
+>    stylist pays the fee on. See the fee entry above; these two interact.
+> 3. **Mobile's `catch` routes to `/(app)/subscribe` on any error** (`:231-234`),
+>    so a transient failure tells a paid-up member she is not subscribed. The
+>    web's `getGateState` fails closed but says which half, and never charges
+>    the wrong story to a network blip.
+> 4. **Mobile has no mutual-block check and no consent check at all.** The web
+>    has both, and the block test now runs before either gate on both the page
+>    and the action.
+>
+> ⚠️ **The database does not take sides and needs no migration.**
+> `tg_session_apply_gate` (0049, read live 6 Nov 2026) wants both halves and
+> does not care which was done first, raising CV003 with wording for each case.
+> So mobile is wrong about the *order it asks*, never about *what it enforces*
+> — a mobile build today would still be unable to create a session for an
+> unverified or unsubscribed model.
+>
+> **Do not "fix" `site/lib/queries/apply.ts` to agree with mobile.** Its header
+> used to cite `apply-session.tsx` as proof the two matched. It now records that
+> they do not, and points here.
+
 **Not the general backlog.** These are gated on preparing a mobile build, and
 the general list is things that might never be scheduled. **Read this section
 when a submission is being prepared — that is the whole point of it existing

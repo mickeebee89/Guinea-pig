@@ -124,7 +124,7 @@ export function SubscribePanel({
       onConfirm={() => confirmSubscription(state.subscriptionId)}
       submitLabel="Pay £4.99 and join"
       successTitle="You’re a member"
-      successBody="Your membership is active. You can apply for sessions as soon as your ID check is done."
+      successBody="Your membership is active. If your ID check is still outstanding, that is the only thing left before you can apply."
       successAction={backToApplication}
     />
   )

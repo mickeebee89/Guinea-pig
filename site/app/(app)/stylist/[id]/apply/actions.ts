@@ -122,14 +122,23 @@ export async function submitApplication(form: FormData): Promise<ApplyResult> {
     return { ok: false, error: 'Something was missing from your application. Start again from the slot.', code: 'fields_missing', refresh: true }
   }
 
-  // ── The gates, in the order the product states them ──────────────────────
-  const gate = await getGateState(supabase, user.id)
-  if (!gate.subscribed) {
-    return { ok: false, error: 'Your membership isn’t active, so this can’t be sent yet.', code: 'gate_membership', refresh: true }
-  }
-  if (!gate.verified) {
-    return { ok: false, error: 'Your ID check isn’t done yet, so this can’t be sent.', code: 'gate_idcheck', refresh: true }
-  }
+  // ── ⚠️ THE GATES, REORDERED 6 Nov 2026: ID CHECK, CONSENT, MEMBERSHIP ──
+  //
+  // It was membership, then ID check, both here, both before the block test.
+  // apply/page.tsx now shows them in the new order and THIS MUST AGREE: a
+  // reordered page with an unreordered action is a hole, and the action is the
+  // thing that protects it — the page decides what she is shown, this decides
+  // what is accepted.
+  //
+  // ⚠️ NOTHING IS REMOVED OR WEAKENED. Still one getGateState call answering
+  // both halves, still both tested, still re-checked by the database either way
+  // (0049 / CV003, which wants both and does not care which came first). Only
+  // which refusal she meets first has changed.
+  //
+  // ⚠️ BLOCKED NOW COMES BEFORE BOTH, which closes a disagreement that was
+  // already here: apply/page.tsx has always tested blocked FIRST ("before the
+  // gates, because it is not a thing she can fix by paying") while this ran the
+  // gates first. Someone a stylist had blocked was told to go and pay.
 
   // ── Blocked, either direction ────────────────────────────────────────────
   //
@@ -158,6 +167,15 @@ export async function submitApplication(form: FormData): Promise<ApplyResult> {
         code: 'blocked',
       }
     }
+  }
+
+  // ⚠️ Read once, tested twice — `verified` here, `subscribed` after the
+  // consent work. hasActiveSubscription can call Stripe, so asking after the
+  // block test means we do not ask it on behalf of someone who was never
+  // getting through.
+  const gate = await getGateState(supabase, user.id)
+  if (!gate.verified) {
+    return { ok: false, error: 'Your ID check isn’t done yet, so this can’t be sent.', code: 'gate_idcheck', refresh: true }
   }
 
   // ── The consent, BUILT FROM THE DOCUMENT ─────────────────────────
@@ -237,6 +255,12 @@ export async function submitApplication(form: FormData): Promise<ApplyResult> {
       code: 'consent_malformed',
       refresh: true,
     }
+  }
+
+  // ⚠️ MEMBERSHIP LAST, matching the page. The last refusal she can meet, and
+  // the only one she meets at all once everything else is done.
+  if (!gate.subscribed) {
+    return { ok: false, error: 'Your membership isn’t active, so this can’t be sent yet.', code: 'gate_membership', refresh: true }
   }
 
   // ── The booking ──────────────────────────────────────────────────────────

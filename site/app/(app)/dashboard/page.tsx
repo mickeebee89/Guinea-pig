@@ -267,10 +267,47 @@ export default async function DashboardPage({
       {gate && !gate.canApply && (
         <section className="mb-6 rounded-lg border border-rose/30 bg-white p-5 shadow-card">
           <h2 className="font-display text-xl text-warm-dark">Before you can book</h2>
+          {/* ⚠️ "Both are one-offs" WAS A PRICE CLAIM, AND IT WAS WRONG.
+              The ID check is once per account. The membership is £4.99 EVERY
+              MONTH. Directly above a list whose second item is the one people
+              scan to, "both are one-offs" reads as "£4.99, one off" — and the
+              reorder on 6 Nov 2026 put membership second, which is exactly
+              where the eye lands. HANDOVER's "Before you change a price"
+              exists because a price drifting from the truth is the expensive
+              kind of wrong; a price MISSTATED to the person being charged is
+              the same fault one step worse.
+
+              The reassurance is kept, because it is true and it is the point
+              of the panel: there are only two, one is permanent, the other is
+              not a commitment. The amount is left to the row that charges it,
+              which says "£4.99 a month, cancel any time." */}
           <p className="mt-1 text-sm text-muted">
-            Two things stand between you and your first treatment. Both are one-offs.
+            Two things stand between you and your first treatment — one is a one-off, and the
+            other you can cancel any time.
           </p>
           <ul className="mt-4 space-y-3">
+            {/* ⚠️ ID CHECK FIRST SINCE 6 Nov 2026, BECAUSE THAT IS THE ORDER SHE
+                MEETS THEM IN. This panel is what a model sees every time she
+                signs in, and it listed membership first while the apply flow
+                now asks for it last. A checklist that disagrees with the flow
+                it describes teaches her the wrong thing about her own account
+                before she ever reaches the flow.
+
+                The `action` link is new too. Its prop comment read "when the
+                web can do it" — the web can, as of today, and until today this
+                row named a task with nowhere to go and do it. */}
+            <GateItem
+              done={gate.verified}
+              title="ID check"
+              doneText="Verified"
+              todoText="A selfie holding a handwritten note, looked at by a person. It shows there
+                        is a real person behind the account and that the profile photo hasn’t been
+                        taken from somewhere else. It is not an identity check — nobody sees a
+                        passport or a driving licence."
+              action={!gate.verified
+                ? { href: '/verify', label: 'Do your ID check' }
+                : undefined}
+            />
             <GateItem
               done={gate.subscribed}
               title="Membership"
@@ -280,26 +317,23 @@ export default async function DashboardPage({
                 ? { href: '/subscribe', label: 'Join for £4.99 a month' }
                 : undefined}
             />
-            <GateItem
-              done={gate.verified}
-              title="ID check"
-              doneText="Verified"
-              todoText="A selfie holding a handwritten note, looked at by a person. It shows there
-                        is a real person behind the account and that the profile photo hasn’t been
-                        taken from somewhere else. It is not an identity check — nobody sees a
-                        passport or a driving licence."
-            />
           </ul>
           {/* This said "Both are in the Cavy app for now" until 14 Sep 2026, when
-              membership became payable here. Split rather than left standing: a
-              sentence that was true when written and quietly stops being true is
-              how "there is no webhook" survived in nine places for three weeks
-              (audit item 47), and this one would be telling someone the wrong
-              thing about their own account. */}
+              membership became payable here. Then it said the ID check happens
+              when you apply for your first session, together with membership —
+              false from 6 Nov 2026, when the check moved to /verify and
+              membership became the last gate instead of the first.
+
+              ⚠️ REWRITTEN BOTH TIMES RATHER THAN LEFT STANDING. A sentence that
+              was true when written and quietly stops being true is how "there
+              is no webhook" survived in nine places for three weeks (audit item
+              47) — and this one is rendered to exactly the people it would be
+              wrong about, on the page they land on when they sign in. */}
           {!gate.verified && (
             <p className="mt-4 rounded-md bg-input-bg px-3 py-2 text-xs text-muted">
-              You do the ID check when you apply for your first session — it’s one selfie, and
-              membership and the check happen together at that point.
+              You can do the ID check now — you don’t need a membership first, and you don’t
+              need to have chosen a stylist. It’s one selfie, and a person looks at it, usually
+              within 24 hours.
             </p>
           )}
         </section>
@@ -320,8 +354,8 @@ export default async function DashboardPage({
 
       {gate?.canApply && (
         <p className="mb-6 rounded-lg border border-hairline bg-white px-4 py-3 text-sm text-warm-dark">
-          <span className="font-bold text-rose">You’re all set.</span> Membership and ID check are
-          both done, so you can apply for any session you like.
+          <span className="font-bold text-rose">You’re all set.</span> Your ID check and your
+          membership are both done, so you can apply for any session you like.
         </p>
       )}
 

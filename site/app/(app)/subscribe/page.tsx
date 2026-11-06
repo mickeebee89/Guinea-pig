@@ -79,7 +79,7 @@ export default async function SubscribePage({
           {' '}
           {gate.verified
             ? 'You can apply for sessions now.'
-            : 'The ID check is the other half of applying — you do it in the flow, when you apply.'}
+            : 'Your ID check is the other half of applying, and it is still outstanding.'}
         </p>
         {/*
           ⚠️ THIS BRANCH NEEDS THE RETURN TOO, and it is easy to miss. A COMPED

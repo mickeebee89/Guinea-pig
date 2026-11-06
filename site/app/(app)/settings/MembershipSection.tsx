@@ -63,8 +63,9 @@ export function MembershipSection({ view }: { view: MembershipView }) {
   if (!view.subscribed) {
     return (
       <p className="text-sm text-muted">
-        No membership on this account. It’s £4.99 a month and it’s what lets you apply for
-        sessions — <Link href="/subscribe" className="font-bold text-rose hover:underline">join here</Link>.
+        No membership on this account. It’s £4.99 a month and it’s the last thing between you
+        and applying for sessions —{' '}
+        <Link href="/subscribe" className="font-bold text-rose hover:underline">join here</Link>.
       </p>
     )
   }

@@ -22,7 +22,7 @@ const STEPS = [
     // H1 above promises no surprises, and until 30 Oct 2026 this step described
     // applying without mentioning that a model needs a paid membership and a
     // passed account check before she can do it. Those were the surprise.
-    body: 'Browsing is free and always will be. To apply, a model needs the £4.99/month membership and a passed account check — a selfie a person looks at. Then she applies for a specific slot and the stylist decides who to take. Nobody is matched automatically and nobody is obliged to accept.',
+    body: 'Browsing is free and always will be. To apply, a model needs a passed account check — a selfie a person looks at, which she can do as soon as she joins — and the £4.99/month membership, which comes last. Then she applies for a specific slot and the stylist decides who to take. Nobody is matched automatically and nobody is obliged to accept.',
   },
   {
     n: '3',
