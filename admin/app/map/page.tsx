@@ -51,7 +51,12 @@ interface Row {
 const STYLIST = '#DB4B86'
 const MODEL = '#EAB308'
 /** A pin holding both kinds of member. Neither colour would be true. */
-const MIXED = '#3D2E2E'
+/**
+ * ⚠️ THERE IS NO THIRD COLOUR ANY MORE. `MIXED` was the fill for a numbered
+ * pin holding both kinds of member, and nothing holds more than one member
+ * since 6 Nov 2026. A mark is one person, so it is that person's colour, and a
+ * mark whose colour is a compromise cannot occur.
+ */
 
 const isStylist = (role: string) => role === 'provider' || role === 'both'
 const roleWord = (role: string) =>
@@ -64,28 +69,68 @@ const nameOf = (r: Row) =>
   `${r.first_name ?? 'Someone'}${r.last_initial ? ` ${r.last_initial}.` : ''}`
 
 /**
- * ── ⚠️⚠️ THE DOT SIZES, AND WHY MERGING IS DERIVED FROM THEM ──────────────
- * The map renders about 380 px wide for 598 units of viewBox, so one unit is
- * roughly 0.63 px and `DOT_R` of 5.5 is a dot about 7 px across. MEASURED by
- * rendering this exact path and these exact coordinates at that exact scale
- * before any of it was written: at 7 px, the nine members inside the M25 are
- * a pile in which about four are countable.
+ * ── ⚠️⚠️ ONE DOT, ONE PERSON. NOTHING IS MERGED AND NOTHING IS COUNTED ──
+ * The map renders 379 px wide for 598 units of viewBox, so one unit is 0.63 px
+ * and a `DOT_R` of 3 is a dot under 4 px across.
  *
- * So `MERGE` is not a tuned number. Two circles of radius r overlap when
- * their centres are closer than 2r, so merging at exactly 2r merges exactly
- * the dots that could not have been told apart anyway and nothing else. Change
- * `DOT_R` and the merge distance follows it, because it is the same fact.
+ * MEASURED, NOT ESTIMATED. Rendered from this exact path, these exact
+ * constants and the real plotted coordinates, at 70vh in a 1000 px-tall
+ * window, then magnified with nearest-neighbour so the pixels the eye actually
+ * receives could be looked at rather than imagined.
  *
- * ⚠️ IT IS A RENDERING CLAIM, NOT A GEOGRAPHIC ONE. A badge of 5 means "five
- * members within about 12 km of each other, which is under one dot at this
- * scale" — it does not mean they share a postcode, and the hover gives each
- * one's own town so the difference is always one movement away.
+ * ── ⚠️⚠️ WHAT WAS HERE BEFORE, AND WHY IT WENT. 6 Nov 2026. ─────────
+ * Dots within `2 × DOT_R` of each other were merged into one larger pin
+ * carrying a COUNT, on the principle that three people at one postcode must
+ * not look like one before anybody hovers. The merge distance was derived
+ * rather than tuned — two circles of radius r overlap when their centres are
+ * closer than 2r, so merging at exactly 2r merged exactly the dots that could
+ * not have been told apart anyway. That derivation was the best thing about
+ * the design and it is the reason this note is long: it was right, and it
+ * still did not work.
+ *
+ * ⚠️ IT DID NOT WORK BECAUSE THE PIN RADIUS WAS NOT DERIVED FROM ANYTHING.
+ * `GROUP_R` was a fixed 9 while the merge distance moved with `DOT_R`, so
+ * shrinking the dot pulled the merge distance below the pin radius and the
+ * pins began overlapping EACH OTHER. Rendered and looked at in inner London:
+ * two badges legible, one cut in half behind its neighbour, two more almost
+ * entirely hidden. A count that cannot be read is worse than no count, because
+ * it still occupies the space where the people were.
+ *
+ * ⚠️ AND THE COUNT WAS ALWAYS A SECOND CLAIM ON TOP OF THE DATA. A badge of
+ * five said "five members under one mark at this scale" — a rendering fact
+ * dressed as a geographic one, which had to be disclaimed in this comment
+ * every time it was described. A plain dot per member makes no claim that
+ * needs disclaiming: the mark is where somebody is, and a pile looks like a
+ * pile because it is one.
+ *
+ * ⚠️ SO THE PILE IN LONDON IS STILL A PILE. This is not a fix for density and
+ * must not be read as one — it removes a broken answer rather than supplying a
+ * working one. What the reader gets instead is the panel beside the map, which
+ * counts the overlap honestly, and the hover, which names everyone under the
+ * cursor. The real fix is a zoom or a separate London view, and neither exists.
+ *
+ * ⚠️ NOTHING IS MOVED, STILL. Jitter was refused when the badges were built
+ * and is refused again: nudging a dot off its postcode to stop it touching its
+ * neighbour makes the map say something false about where somebody lives, and
+ * there is no way to tell a jittered dot from a real one. An unreadable pile
+ * is honest. A readable lie is not.
  */
-const DOT_R = 5.5
-const GROUP_R = 9
-const MERGE = DOT_R * 2
+const DOT_R = 3
 
-/** Members close enough together to be drawn as one mark. */
+/**
+ * Centre-to-centre distance at which two dots touch — the same 2r fact the
+ * merge used, kept because it is still true and still derived. It no longer
+ * merges anything: it decides only who the hover reports as being UNDER the
+ * dot you are pointing at, so that a buried member is reachable rather than
+ * silently absent. Drawing does not consult it.
+ */
+const TOUCH = DOT_R * 2
+
+/**
+ * One member, one mark. `members` is that member FIRST, then anyone whose dot
+ * overlaps theirs — the hover list, not a group. Nothing in the drawing reads
+ * past `members[0]`.
+ */
 interface Pin {
   key: string
   x: number
@@ -127,43 +172,49 @@ export default function MapPage() {
     const hiddenTests = showTest ? [] : rows.filter(r => isTestAccount(r.id))
 
     /**
-     * ⚠️ SORTED BEFORE CLUSTERING, SO THE RESULT IS THE SAME EVERY LOAD.
-     * A greedy pass depends on the order it sees, and PostgREST makes no
-     * promise about row order without an ORDER BY. North to south, then west
-     * to east, so the first member of each pin — whose coordinate the pin
-     * uses — is a stable choice rather than whichever row came back first.
+     * ⚠️ SORTED FIRST, SO THE RESULT IS THE SAME EVERY LOAD. PostgREST makes
+     * no promise about row order without an ORDER BY, and the draw order
+     * decides which of two touching dots is on top. North to south, then west
+     * to east.
      */
     const ordered = [...plotted].sort(
       (a, b) => b.latitude! - a.latitude! || a.longitude! - b.longitude!,
     )
 
     /**
-     * ⚠️ THE PIN SITS ON A REAL MEMBER, NOT ON THE MIDDLE OF THE GROUP.
-     * A centroid would put the mark somewhere nobody lives — in the Thames,
-     * for the London group — and recomputing it as members join would make
-     * the pin wander. Anchoring to the first member means the mark is always
-     * a place where there is at least one of them, and the hover names the
-     * rest with their own towns.
-     *
-     * ⚠️ AND NOTHING IS MOVED. Jitter was the alternative and was refused:
-     * nudging a dot off its postcode to stop it touching its neighbour makes
-     * the map say something false about where somebody lives, and at 25
-     * members there would be no way to tell a jittered dot from a real one.
-     * A number inside the mark adds information; a nudge replaces it.
+     * ⚠️ EVERY MEMBER GETS A MARK, AT THEIR OWN COORDINATE. No merging, no
+     * anchoring one mark to one member and hiding the rest behind it, no
+     * centroid — a centroid would have put the London mark in the Thames.
+     * Where dots overlap they overlap, and `members[1..]` carries whoever is
+     * underneath so the hover can name them.
      */
-    const pins: Pin[] = []
-    for (const r of ordered) {
+    const pins: Pin[] = ordered.map(r => {
       const [x, y] = project(r.latitude!, r.longitude!)
-      const near = pins.find(p => Math.hypot(x - p.x, y - p.y) <= MERGE)
-      if (near) near.members.push(r)
-      else pins.push({ key: r.id, x, y, members: [r], colour: MODEL })
+      return {
+        key: r.id, x, y, members: [r],
+        colour: isStylist(r.role) ? STYLIST : MODEL,
+      }
+    })
+
+    // Who is underneath whom. O(n²) over a few dozen dots, which is nothing,
+    // and it reads the same both ways so no member is unreachable.
+    for (let i = 0; i < pins.length; i++) {
+      for (let j = i + 1; j < pins.length; j++) {
+        if (Math.hypot(pins[i].x - pins[j].x, pins[i].y - pins[j].y) <= TOUCH) {
+          pins[i].members.push(pins[j].members[0])
+          pins[j].members.push(pins[i].members[0])
+        }
+      }
     }
-    for (const p of pins) {
-      const stylists = p.members.filter(m => isStylist(m.role)).length
-      p.colour = stylists === p.members.length ? STYLIST : stylists === 0 ? MODEL : MIXED
-    }
-    // Single dots first, so a count badge is never buried under a plain one.
-    pins.sort((a, b) => a.members.length - b.members.length)
+
+    /**
+     * ⚠️ STYLISTS DRAW LAST, SO THEY DRAW ON TOP. Pink is the scarce half of
+     * the marketplace and the reason anyone opens this page; yellow is the
+     * plentiful half. When two dots overlap, the one worth seeing should be
+     * the one you can see. This replaces "single dots first, so a count badge
+     * is never buried" — there are no badges to bury now.
+     */
+    pins.sort((a, b) => Number(isStylist(a.members[0].role)) - Number(isStylist(b.members[0].role)))
 
     const stylistCount = plotted.filter(r => isStylist(r.role)).length
 
@@ -177,11 +228,13 @@ export default function MapPage() {
       unplotted: unplotted.length,
       hiddenTestsPlotted: hiddenTests.filter(plot).length,
       hiddenTests: hiddenTests.length,
-      /** Pins holding more than one person — the ones carrying a number. */
-      shared: pins.filter(p => p.members.length > 1).length,
-      /** How many members are inside those pins, which is the honest figure. */
-      sharedMembers: pins.filter(p => p.members.length > 1)
-                         .reduce((n, p) => n + p.members.length, 0),
+      /**
+       * ⚠️ MEMBERS WHOSE DOT TOUCHES ANOTHER — not groups, because there are
+       * no groups. This is the honest size of the problem the badges used to
+       * paper over, and the panel says it in words because the map no longer
+       * can.
+       */
+      overlapping: pins.filter(p => p.members.length > 1).length,
     }
   }, [rows, showTest])
 
@@ -274,8 +327,9 @@ export default function MapPage() {
                     strokeWidth={1.2} strokeLinejoin="round" />
 
               {view.pins.map(p => {
-                const many = p.members.length > 1
-                const r = many ? GROUP_R : DOT_R
+                /* ⚠️ members[0] IS THE PERSON THIS MARK IS. The rest are whoever
+                   is underneath, and they belong in the label and the panel —
+                   never in the mark, which would be a count again. */
                 const label = p.members
                   .map(m => `${nameOf(m)} — ${roleWord(m.role)} — ${townOf(m)}`)
                   .join('\n')
@@ -288,19 +342,27 @@ export default function MapPage() {
                         dots a mile apart from reading as one blob, which at
                         1 unit ≈ 1.11 km happens constantly in south-east
                         London. */}
-                    <circle cx={p.x} cy={p.y} r={r} fill={p.colour}
+                    {/* ⚠️ ONE RADIUS. There is no second size, because there is
+                        no second kind of mark — every circle on this map is one
+                        member at their own postcode.
+
+                        ⚠️ A COUNT USED TO BE DRAWN INSIDE THIS CIRCLE, on the
+                        rule that "three people at one postcode must not look
+                        like one BEFORE anybody hovers — a tooltip-only answer
+                        is an answer to a question the reader does not know to
+                        ask". That rule was right and the badge still failed it:
+                        rendered and looked at, the badges in inner London
+                        overlapped each other until two of them could not be
+                        read at all. An unreadable count answers nothing and
+                        occupies the space where the people were.
+
+                        ⚠️ SO THE QUESTION IS ANSWERED IN WORDS INSTEAD, in the
+                        panel beside the map, which says how many members sit
+                        under another member's dot. It is a worse answer than a
+                        working badge would have been. It is a better one than a
+                        badge nobody can read. */}
+                    <circle cx={p.x} cy={p.y} r={DOT_R} fill={p.colour}
                             stroke="#FFFFFF" strokeWidth={1.6} />
-                    {many && (
-                      /* ⚠️ THE NUMBER IS INSIDE THE DOT, NOT BESIDE IT. Three
-                         people at one postcode must not look like one BEFORE
-                         anybody hovers — a tooltip-only answer is an answer to
-                         a question the reader does not know to ask. */
-                      <text x={p.x} y={p.y} textAnchor="middle" dominantBaseline="central"
-                            fontSize={9} fontWeight={700} fill="#FFFFFF"
-                            style={{ pointerEvents: 'none' }}>
-                        {p.members.length}
-                      </text>
-                    )}
                     {/* Native tooltip as well as the panel, so the information is
                         reachable without a mouse-driven React state. */}
                     <title>{label}</title>
@@ -328,24 +390,27 @@ export default function MapPage() {
                 <strong className="font-semibold">{view.stylistCount}</strong> stylists
                 <span className="text-xs text-[#3D2E2E]/50">(incl. both)</span>
               </li>
-              <li className="flex items-center gap-2">
-                <span className="inline-block size-3 rounded-full ring-2 ring-white"
-                      style={{ backgroundColor: MIXED }} />
-                <span className="text-xs text-[#3D2E2E]/60">
-                  a numbered dot holding both kinds
-                </span>
-              </li>
+              {/* The third row was a dark swatch for "a numbered dot holding
+                  both kinds". Nothing holds both kinds now — a mark is one
+                  member, so it is one colour, and a legend entry for a mark
+                  that cannot occur is worse than no entry. */}
             </ul>
             <p className="mt-3 border-t border-black/5 pt-3 text-xs text-[#3D2E2E]/60">
-              {view.shared === 0
-                ? 'Every dot is one member — none are close enough to overlap.'
-                : `${view.sharedMembers} members sit under ${view.shared} numbered dot${view.shared === 1 ? '' : 's'}, because they are closer together than one dot is wide. The count is drawn inside, so a group never looks like a single member, and hovering lists them with their own towns.`}
+              {/* ⚠️ COMPUTED FROM THE DATA, NOT WRITTEN DOWN, so it stays true
+                  on its own as members join. It changed on 6 Nov 2026 only
+                  because what it describes changed: it used to say how many
+                  members sat under a NUMBERED dot, and there are none. */}
+              {view.overlapping === 0
+                ? 'Every dot is one member, and none of them touch.'
+                : `Every dot is one member. ${view.overlapping} of them overlap another, because those members are closer together than one dot is wide — so the pile in London is smaller than the number of people in it. Hover any dot and this panel names everyone underneath it, with their own towns.`}
             </p>
           </div>
 
           <div className={`${card} p-4`}>
             <h2 className="text-xs font-semibold uppercase tracking-widest text-[#3D2E2E]/40">
-              {hover ? (hover.members.length > 1 ? 'These members' : 'This member') : 'Hover a dot'}
+              {hover
+                ? (hover.members.length > 1 ? 'This member, and who is under them' : 'This member')
+                : 'Hover a dot'}
             </h2>
             {hover ? (
               <ul className="mt-3 space-y-2">
