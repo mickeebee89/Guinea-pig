@@ -59,17 +59,33 @@ import type { IdCheck } from '@/lib/queries/idCheck'
  * otherwise accept, on the strength of our wording.
  */
 
-/** Whose photo it is compared against, and where they go to set one. */
+/**
+ * Whose photo it is compared against, and where they go to set one.
+ *
+ * ── ⚠️⚠️ `alsoDoneBy` NAMED A CONDITION THAT NO LONGER EXISTS ────────
+ * It read "Stylists do this too, BEFORE THEIR SHOP CAN GO LIVE" and "Models do
+ * this too, BEFORE THEY CAN APPLY TO YOU". Both flags are off: a shop publishes
+ * unverified and a model applies unverified, so each sentence described a gate
+ * that would not refuse the other party.
+ *
+ * ⚠️ THE POINT OF THE SENTENCE SURVIVES THE CLAUSE. What it is really for is
+ * "the person you are meeting did this as well" — which is still true, is the
+ * reason anyone bothers, and needs no condition attached to it. So the clause
+ * is dropped per flag rather than the sentence, and the required wording stays
+ * in the file for the flag coming back.
+ */
 const PHOTO = {
   '/profile': {
     heading: 'Add a profile photo first',
     body: 'A person compares your ID check photo against your profile photo — so there has to be one to compare it with. It’s also the first thing a stylist sees of you.',
     alsoDoneBy: 'Stylists do this too, before their shop can go live. It’s once per account, and it’s the reason both of you can trust who you’re meeting.',
+    alsoDoneByOptional: 'Stylists do this too. It’s once per account, and it’s the reason both of you can trust who you’re meeting.',
   },
   '/shop': {
     heading: 'Add a photo of yourself first',
     body: 'A person compares your ID check photo against the photo on your shop — so there has to be one there to compare it with. It only takes a moment, and it’s the same photo models see when they’re deciding whether to apply to you.',
     alsoDoneBy: 'Models do this too, before they can apply to you. It’s once per account, and it’s the reason both of you can trust who you’re meeting.',
+    alsoDoneByOptional: 'Models do this too. It’s once per account, and it’s the reason both of you can trust who you’re meeting.',
   },
 } as const
 
@@ -96,6 +112,7 @@ export function IdCheckStep({
   hasProfilePic = true,
   surface = 'apply',
   photoHref = '/profile',
+  required = true,
 }: {
   check: IdCheck
   /**
@@ -109,6 +126,16 @@ export function IdCheckStep({
   surface?: keyof typeof SURFACE
   /** '/profile' for a model, '/shop' for a stylist. */
   photoHref?: keyof typeof PHOTO
+  /**
+   * Is the check a condition of anything right now? Read from
+   * `verification_required_to_apply()` / `verification_required_to_publish()`
+   * by the caller — this component never asks the database.
+   *
+   * ⚠️ DEFAULTS TRUE, WHICH IS THE FAIL-CLOSED SIDE. A caller that forgets
+   * to pass it says MORE is required than is, which is the safe direction for
+   * a safety gate: it over-asks rather than quietly dropping a condition.
+   */
+  required?: boolean
 }) {
   const photo = PHOTO[photoHref]
   const where = SURFACE[surface]
@@ -201,7 +228,9 @@ export function IdCheckStep({
         ))}
       </ol>
 
-      <p className="mt-4 text-sm text-muted">{photo.alsoDoneBy}</p>
+      <p className="mt-4 text-sm text-muted">
+        {required ? photo.alsoDoneBy : photo.alsoDoneByOptional}
+      </p>
 
       <p className="mt-3 text-xs text-muted">
         On a phone this opens the camera. On a computer it opens your files, so have the photo

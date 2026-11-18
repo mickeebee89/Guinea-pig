@@ -13,7 +13,13 @@ const STEPS = [
   {
     n: '1',
     title: 'Find each other',
-    body: 'Models browse verified stylists nearby and see which treatments they’re practising. Stylists set their availability and say when they’re looking.',
+    // ⚠️ "verified stylists" DROPPED. With
+    // `verification_required_to_publish` false, a shop can be live and
+    // bookable without a passed ID check, so "verified stylists" described
+    // the list as something it is not. The badge still exists and still shows
+    // on the stylists who have one — which is the honest version of this
+    // claim, and it belongs on the card rather than in a blanket sentence.
+    body: 'Models browse stylists nearby and see which treatments they’re practising. Stylists set their availability and say when they’re looking.',
   },
   {
     n: '2',
@@ -22,7 +28,30 @@ const STEPS = [
     // H1 above promises no surprises, and until 30 Oct 2026 this step described
     // applying without mentioning that a model needs a paid membership and a
     // passed account check before she can do it. Those were the surprise.
-    body: 'Browsing is free and always will be. To apply, a model needs a passed account check — a selfie a person looks at, which she can do as soon as she joins — and the £4.99/month membership, which comes last. Then she applies for a specific slot and the stylist decides who to take. Nobody is matched automatically and nobody is obliged to accept.',
+    // ── ⚠️⚠️ REWRITTEN 18 Nov 2026: THE GATES WERE SWITCHED OFF ───────
+    // `subscription_enabled`, `verification_required_to_apply` and
+    // `verification_required_to_publish` are all false in `settings`, so every
+    // sentence naming one of them as a condition stopped being true.
+    //
+    // ⚠⚠ THIS PAGE IS NOT FLAG-AWARE AND MUST NOT BECOME SO. It is a
+    // statically prerendered `(public)` route — adding a database read would
+    // make it dynamic and `scripts/check-client-boundary.mjs` would have to
+    // catch it, which is a worse trade than wording the page so it is true
+    // either way. Marketing copy that silently changes with a settings row is
+    // also harder to be honest about than copy that simply does not claim.
+    //
+    // ⚠️ SO THE CLAIMS ARE DROPPED, NOT INVERTED. Nothing here now says a
+    // check or a payment IS required, and nothing says it never will be —
+    // which is what lets the flags move again without this page lying in the
+    // other direction.
+    //
+    // ⚠️ IT NAMED BOTH GATES, WHICH WAS RIGHT WHEN BOTH WERE ON. Neither is
+    // asked today: `model_may_apply` and `tg_session_apply_gate` both read the
+    // flags and let an unverified, unsubscribed model straight through. A
+    // visitor reading this would have expected two obstacles that are not
+    // there — the same surprise this sentence was written to remove, pointing
+    // the other way.
+    body: 'Browsing and applying are both free at the moment. A model applies for a specific slot and the stylist decides who to take. Nobody is matched automatically and nobody is obliged to accept.',
   },
   {
     n: '3',
@@ -90,8 +119,14 @@ export default function HowItWorks() {
               ⚠️ THE #9 LINK IS STILL RIGHT: §9 is where the MEMBERSHIP's refund
               terms live, and that is now the only thing this paragraph claims. */}
           <p className="mt-5 text-sm text-muted">
-            Cavy itself has one paid feature: a monthly membership for models. Stylists pay
-            nothing — no sign-up fee, no verification fee, no subscription. The price is always
+            {/* ⚠️ WAS "Cavy itself has one paid feature: a monthly membership
+                for models". `subscription_enabled` is false, so there is no
+                paid feature at all right now — and this paragraph sits under a
+                heading about money, which is the one place a visitor is
+                entitled to a straight answer. "at the moment" is doing real
+                work: it is true today and does not promise it is permanent. */}
+            Cavy isn’t charging anyone at the moment — no sign-up fee, no verification fee and
+            no subscription, for models or for stylists. If that changes, the price is always
             shown before you pay, and the refund terms are in{' '}
             <Link
               href="/terms#9"

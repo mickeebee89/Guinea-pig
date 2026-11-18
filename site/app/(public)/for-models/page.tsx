@@ -5,7 +5,10 @@ import { RoleGate } from '@/components/RoleGate'
 export const metadata: Metadata = {
   title: 'For models',
   description:
-    'Get hair and beauty treatments free or discounted from verified stylists building their portfolios. No experience needed.',
+    // ⚠️ "verified stylists" dropped — see the note in the first POINT below.
+    // This one is the meta description, so it is also what a search result
+    // shows: the last place to make a safety claim the product cannot keep.
+    'Get hair and beauty treatments free or discounted from stylists building their portfolios. No experience needed.',
   alternates: { canonical: '/for-models' },
 }
 
@@ -17,7 +20,28 @@ const POINTS = [
     // membership AND a selfie a person has approved, and this page named
     // neither until 30 Oct 2026. Browsing being free is the strongest thing on
     // the page, so it is said first rather than used to hide the rest.
-    body: 'You’re not modelling. You’re the person in the chair. If you’re 18 or over and happy to sit for a treatment, you’re who stylists are looking for. Browsing is free. To apply you need a quick account check — one selfie, which you can do as soon as you join — and the £4.99/month membership, which is the last thing we ask for.',
+    // ── ⚠️⚠️ REWRITTEN 18 Nov 2026: THE GATES WERE SWITCHED OFF ───────
+    // `subscription_enabled`, `verification_required_to_apply` and
+    // `verification_required_to_publish` are all false in `settings`, so every
+    // sentence naming one of them as a condition stopped being true.
+    //
+    // ⚠⚠ THIS PAGE IS NOT FLAG-AWARE AND MUST NOT BECOME SO. It is a
+    // statically prerendered `(public)` route — adding a database read would
+    // make it dynamic and `scripts/check-client-boundary.mjs` would have to
+    // catch it, which is a worse trade than wording the page so it is true
+    // either way. Marketing copy that silently changes with a settings row is
+    // also harder to be honest about than copy that simply does not claim.
+    //
+    // ⚠️ SO THE CLAIMS ARE DROPPED, NOT INVERTED. Nothing here now says a
+    // check or a payment IS required, and nothing says it never will be —
+    // which is what lets the flags move again without this page lying in the
+    // other direction.
+    //
+    // ⚠️ THE OLD SENTENCE NAMED BOTH GATES, correctly, when both were on.
+    // Neither is asked now. "Browsing is free" became too weak rather than too
+    // strong — applying is free as well — and a page that still warns about a
+    // £4.99 membership is costing signups for a charge nobody makes.
+    body: 'You’re not modelling. You’re the person in the chair. If you’re 18 or over and happy to sit for a treatment, you’re who stylists are looking for. Browsing and applying are both free at the moment — you just need an account.',
   },
   {
     title: 'The price is on the slot, before you apply',
@@ -34,7 +58,9 @@ const POINTS = [
     // are ZERO reviews in the database — not few, none — so this invited a
     // visitor to look for something that is not on any page yet. Reviews are
     // built and do work; the sentence comes back when there are some.
-    body: 'Browse verified stylists near you, see what they’re practising and where they are, and only apply to the ones you like.',
+    // ⚠️ "verified stylists" dropped, same reason as the meta above: an
+    // unverified shop can be live, so this described the list wrongly.
+    body: 'Browse stylists near you, see what they’re practising and where they are, and only apply to the ones you like.',
   },
   {
     title: 'You can say no to photos',

@@ -43,6 +43,39 @@ export function demoRpc(name: string, args: Row, store: DemoStore, user: DemoUse
       return false
 
     /**
+     * ── ⚠️⚠️ THE OTHER THREE GATES, AND demoRpc's DEFAULT THROWS ──────
+     * `getGateFlags` (lib/verification.ts) calls two of these on the dashboard,
+     * /profile, /settings, /subscribe and the apply flow, and
+     * `getStylistSetup` calls the third on /shop and the dashboard. Without
+     * these cases every one of those screens throws in demo mode — not the
+     * panel, the page. Same class as `slot_contention`, and found the same way:
+     * by asking what the demo does with a newly added RPC.
+     *
+     * ⚠️ FALSE BECAUSE THAT IS WHAT THE LIVE PRODUCT SAYS, not because false
+     * is convenient. All three keys read 'false' in `settings` as of
+     * 18 Nov 2026, so a walkthrough shows what a real member sees: no
+     * membership wall, no ID step, a shop that publishes itself.
+     *
+     * ⚠⚠ AND THE FAIL DIRECTIONS DO NOT APPLY HERE. In the real code an
+     * unreadable verification flag means REQUIRED — it fails closed. These
+     * return a value rather than an error, so that arm is never taken. A stub
+     * that threw would be a stub that silently switched the gates ON for every
+     * demo, which is the opposite of what a walkthrough should show.
+     *
+     * ⚠️ IF ANY FLAG IS SWITCHED BACK ON, THESE STOP MATCHING, exactly as the
+     * `provider_fee_settled` note above warns. A demo model would walk past a
+     * wall the real product shows her. Change them together with the flag.
+     */
+    case 'subscription_enabled':
+      return false
+
+    case 'verification_required_to_apply':
+      return false
+
+    case 'verification_required_to_publish':
+      return false
+
+    /**
      * ⚠️ A NO-OP THAT RETURNS, RATHER THAN A THROW. The Salon Floor page calls
      * this on every load to clear its nav dot, so an unknown-function throw
      * would take the whole page down in demo mode — not the dot, the page.

@@ -264,7 +264,18 @@ export default async function DashboardPage({
       {/* Put the blocker ABOVE the feed. A list of stylists you cannot book is
           a tease, and "I'm signed in and nothing works" is the state this panel
           exists to replace. */}
-      {gate && !gate.canApply && (
+      {/* ⚠⚠ `anyGateLive`, NOT `!canApply`, AND THE WHOLE PANEL TURNS ON IT.
+          With `subscription_enabled` and `verification_required_to_apply` both
+          false, `canApply` is true for everybody, so `!gate.canApply` already
+          hides this — but only by accident of how the gate composes. Testing
+          the flags directly is what makes it IMPOSSIBLE to render a heading
+          reading "Before you can book" above a list of nothing: if one flag
+          comes back on, the panel returns with only the live half in it.
+
+          ⚠️ AND IT IS ALL OR NOTHING. Heading, intro, list and the trailing
+          note are inside this one conditional, so there is no arrangement of
+          flags that leaves an empty heading or an orphaned note behind. */}
+      {gate && gate.anyGateLive && !gate.canApply && (
         <section className="mb-6 rounded-lg border border-rose/30 bg-white p-5 shadow-card">
           <h2 className="font-display text-xl text-warm-dark">Before you can book</h2>
           {/* ⚠️ "Both are one-offs" WAS A PRICE CLAIM, AND IT WAS WRONG.
@@ -281,9 +292,22 @@ export default async function DashboardPage({
               of the panel: there are only two, one is permanent, the other is
               not a commitment. The amount is left to the row that charges it,
               which says "£4.99 a month, cancel any time." */}
+          {/* ⚠️ IT COUNTS THE LIVE GATES, IT DOES NOT ASSERT TWO. "Two things
+              stand between you" was written when both were on and would be
+              false the moment either flag moved — the same class of error as
+              the "Both are one-offs" price claim this sentence replaced, and
+              in the same sentence. A number on screen has to be computed from
+              the thing it is counting.
+
+              The reassurance is kept where it is still true: the ID check is
+              permanent, the membership is not a commitment. The amount stays
+              with the row that charges it. */}
           <p className="mt-1 text-sm text-muted">
-            Two things stand between you and your first treatment — one is a one-off, and the
-            other you can cancel any time.
+            {gate.verificationRequired && gate.subscriptionRequired
+              ? 'Two things stand between you and your first treatment — one is a one-off, and the other you can cancel any time.'
+              : gate.verificationRequired
+                ? 'One thing stands between you and your first treatment, and it’s a one-off.'
+                : 'One thing stands between you and your first treatment, and you can cancel it any time.'}
           </p>
           <ul className="mt-4 space-y-3">
             {/* ⚠️ ID CHECK FIRST SINCE 6 Nov 2026, BECAUSE THAT IS THE ORDER SHE
@@ -296,6 +320,10 @@ export default async function DashboardPage({
                 The `action` link is new too. Its prop comment read "when the
                 web can do it" — the web can, as of today, and until today this
                 row named a task with nowhere to go and do it. */}
+            {/* ⚠️ EACH ROW ASKS ABOUT ITS OWN FLAG. A list is a claim about
+                what is required, so a row for a gate nobody is applying is a
+                false claim however it is worded. */}
+            {gate.verificationRequired && (
             <GateItem
               done={gate.verified}
               title="ID check"
@@ -308,6 +336,8 @@ export default async function DashboardPage({
                 ? { href: '/verify', label: 'Do your ID check' }
                 : undefined}
             />
+            )}
+            {gate.subscriptionRequired && (
             <GateItem
               done={gate.subscribed}
               title="Membership"
@@ -317,6 +347,7 @@ export default async function DashboardPage({
                 ? { href: '/subscribe', label: 'Join for £4.99 a month' }
                 : undefined}
             />
+            )}
           </ul>
           {/* This said "Both are in the Cavy app for now" until 14 Sep 2026, when
               membership became payable here. Then it said the ID check happens
@@ -329,7 +360,10 @@ export default async function DashboardPage({
               is no webhook" survived in nine places for three weeks (audit item
               47) — and this one is rendered to exactly the people it would be
               wrong about, on the page they land on when they sign in. */}
-          {!gate.verified && (
+          {/* ⚠️ ALSO ASKS ABOUT THE FLAG, because its subject is the ID check.
+              Without the flag test this note would be the "orphaned trailing
+              note" — a paragraph about a gate whose row is not on the screen. */}
+          {gate.verificationRequired && !gate.verified && (
             <p className="mt-4 rounded-md bg-input-bg px-3 py-2 text-xs text-muted">
               You can do the ID check now — you don’t need a membership first, and you don’t
               need to have chosen a stylist. It’s one selfie, and a person looks at it, usually
@@ -352,10 +386,23 @@ export default async function DashboardPage({
         </div>
       )}
 
-      {gate?.canApply && (
+      {/* ⚠⚠ THIS WAS THE WORST ONE, AND IT IS WHY `anyGateLive` EXISTS.
+          `canApply` is true for everybody while both flags are off, so this
+          rendered "Your ID check and your membership are both done" to a model
+          who had done neither and had never been asked to — a sentence that is
+          false about her account AND teaches her she has paid for something.
+
+          With no gate live there is nothing to be all set about, so nothing is
+          said. The clear-run reassurance belongs to the state where somebody
+          actually cleared something. */}
+      {gate?.anyGateLive && gate.canApply && (
         <p className="mb-6 rounded-lg border border-hairline bg-white px-4 py-3 text-sm text-warm-dark">
-          <span className="font-bold text-rose">You’re all set.</span> Your ID check and your
-          membership are both done, so you can apply for any session you like.
+          <span className="font-bold text-rose">You’re all set.</span>{' '}
+          {gate.verificationRequired && gate.subscriptionRequired
+            ? 'Your ID check and your membership are both done, so you can apply for any session you like.'
+            : gate.verificationRequired
+              ? 'Your ID check is done, so you can apply for any session you like.'
+              : 'Your membership is active, so you can apply for any session you like.'}
         </p>
       )}
 

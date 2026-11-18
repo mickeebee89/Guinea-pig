@@ -3,6 +3,7 @@ import { createSupabaseServerClient, requireUser } from '@/lib/supabase-server'
 import { getMyProfile } from '@/lib/queries/my-profile'
 import { getDashboardUser } from '@/lib/queries/dashboard'
 import { getIdCheck } from '@/lib/queries/idCheck'
+import { getGateFlags } from '@/lib/verification'
 import { isModel as isModelRole } from '@/lib/roles'
 import { EmptyState, LoadError } from '@/components/ui'
 import { AvatarUpload } from '@/components/AvatarUpload'
@@ -57,7 +58,14 @@ export default async function ProfilePage() {
 
   // ⚠️ getIdCheck, not getStylistSetup — she has no provider row, and that
   // function answers EMPTY_SETUP (idCheck: 'none') for anyone who has not.
-  const idCheck = await getIdCheck(supabase, user.id)
+  // ⚠️ TWO DIFFERENT QUESTIONS, AND THE CARD NEEDS BOTH. `getIdCheck` is
+  // whether she has passed; the flag is whether anyone is asking her to. With
+  // the flag off the card is an offer, and with it on the card is a gate.
+  const [idCheck, flags] = await Promise.all([
+    getIdCheck(supabase, user.id),
+    getGateFlags(supabase),
+  ])
+  const idCheckRequired = flags.verificationRequired
 
   return (
     <>
@@ -82,20 +90,54 @@ export default async function ProfilePage() {
           until today a model had no reason to arrive at all. The dashboard
           checklist is the other route; this is the one that sits beside the
           profile photo her check is compared against. */}
+      {/* ── ⚠️⚠️ KEPT AND REWORDED, NOT DROPPED, AND THE REASON IS REACH ──
+          With `verification_required_to_apply` false, nothing on this website
+          asks a model to verify — the dashboard checklist row is gone with the
+          gate. /verify is in no nav for either role, so THIS CARD IS THE ONLY
+          WAY A MODEL CAN FIND IT. Dropping it while the flag is off would make
+          voluntary verification unreachable for the role it matters most to,
+          which is the opposite of keeping the route open.
+
+          ⚠️ SO THE CARD CHANGES REGISTER, NOT PRESENCE. While the flag is off:
+          the rose border goes (it is the styling this file uses for something
+          that needs attention), the heading says "optional" in the first word,
+          and the body sells the badge instead of naming a condition. Nothing
+          in it may imply anything is owed.
+
+          ⚠️ "it doesn’t need a membership first" IS GONE EITHER WAY. There is
+          no membership to need: `subscription_enabled` is false, so the
+          sentence reassures her about an obstacle that does not exist and
+          tells her there is one. */}
       {idCheck.state !== 'approved' && (
-        <section className="mb-8 rounded-lg border border-rose/30 bg-white p-5 shadow-card">
+        <section className={`mb-8 rounded-lg border bg-white p-5 shadow-card ${
+          idCheckRequired ? 'border-rose/30' : 'border-hairline'
+        }`}>
           <h2 className="font-display text-lg text-warm-dark">
             {idCheck.state === 'pending' ? 'Your ID check is with us'
               : idCheck.state === 'rejected' ? 'Your ID check needs doing again'
-              : 'Your ID check'}
+              : idCheckRequired ? 'Your ID check'
+              : 'Optional: the ID check'}
           </h2>
           <p className="mt-1 text-sm text-muted">
             {idCheck.state === 'pending'
               ? 'A person looks at these — not a computer — usually within 24 hours. Nothing for you to do.'
-              : 'One selfie holding a handwritten note, looked at by a person. You can do it now — it doesn’t need a membership first, and you don’t need to have chosen a stylist.'}
+              : idCheckRequired
+                ? 'One selfie holding a handwritten note, looked at by a person. You can do it now — you don’t need to have chosen a stylist first.'
+                : 'One selfie holding a handwritten note, looked at by a person. It puts a “photo checked” badge on your profile, which is what a stylist looks for when she’s deciding who to take. You don’t need it to apply for anything — it just makes it easier for someone to say yes.'}
           </p>
           {idCheck.state !== 'pending' && (
-            <Link href="/verify" className="mt-4 inline-flex min-h-11 items-center rounded-[999px] bg-rose px-6 text-sm font-bold text-white">
+            <Link
+              href="/verify"
+              className={`mt-4 inline-flex min-h-11 items-center rounded-[999px] px-6 text-sm font-bold ${
+                idCheckRequired
+                  ? 'bg-rose text-white'
+                  // Not the primary pink pill while it is optional: on a page
+                  // whose own intro says "you don't have to fill any of it in",
+                  // the loudest button should not be the one thing nobody is
+                  // asking for.
+                  : 'bg-input-bg text-rose hover:bg-soft-pink'
+              }`}
+            >
               {idCheck.state === 'rejected' ? 'Try again' : 'Do your ID check'}
             </Link>
           )}

@@ -372,6 +372,11 @@ export async function setShopPublished(publish: boolean): Promise<VisibilityResu
     if (error.code === '23514') {
       return { ok: false, error: 'Your shop still needs a name and at least one treatment before models can see it.' }
     }
+    // ⚠️ UNREACHABLE WHILE verification_required_to_publish IS FALSE, AND
+    // KEPT ANYWAY — same reasoning as publishRefusal's matching branch.
+    // `enforce_publish_requires_verified` reads that flag, so it cannot raise
+    // this today. It is an error-mapping arm, not copy anybody is shown: it
+    // only ever renders if the database refuses, which means the flag is on.
     if (/not verified/i.test(error.message)) {
       return { ok: false, error: 'Your shop can go live once your ID check has passed.' }
     }

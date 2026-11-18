@@ -14,6 +14,22 @@ import { cancelMembership } from './actions'
  * what we hold. They are NOT recomputed into a second opinion about whether
  * someone is a member: audit item 48 is a catalogue of what happens when a
  * surface starts deciding that for itself.
+ *
+ * ── ⚠️⚠️ WHO CAN REACH THIS AT ALL, SINCE subscription_enabled WENT OFF
+ * `subscribed` is now the EFFECTIVE gate answer, which is true for everybody
+ * while nobody is being charged. Read straight, this component would then tell
+ * every model "Active. £4.99 a month." — a statement about a payment that was
+ * never taken.
+ *
+ * ⚠️ IT IS THE CALLER THAT STOPS THAT, AND ON PURPOSE. settings/page.tsx only
+ * renders this section for a model while the flag is ON, or for anyone actually
+ * HOLDING an unexpired subscriptions row. So everything below is reached only
+ * by somebody who really is being billed, and `status` / `renewsOn` — which
+ * come from the row and know nothing about flags — are the words they see.
+ *
+ * ⚠️ WHICH IS WHY THE CANCEL CONTROL IS NOT FLAG-GATED. "Cancel any time"
+ * has to stay true for a payer whatever the flag says; switching a gate off
+ * must never strand somebody mid-subscription with no way out.
  */
 export interface MembershipView {
   subscribed: boolean

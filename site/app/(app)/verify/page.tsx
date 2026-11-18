@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { createSupabaseServerClient, requireUser } from '@/lib/supabase-server'
 import { getStylistSetup } from '@/lib/queries/shop'
 import { getIdCheck } from '@/lib/queries/idCheck'
+import { getGateFlags } from '@/lib/verification'
 import { IdCheckStep } from '@/components/IdCheckStep'
 
 export const metadata = { title: 'ID check' }
@@ -46,6 +47,21 @@ export const metadata = { title: 'ID check' }
  *
  * The server half moved with it: submitSelfie() no longer requires a model to
  * have an active membership. Every other check it makes is unchanged.
+ *
+ * ── ⚠️⚠️ AND NOW NOBODY IS BEING ASKED AT ALL ────────────────────
+ * `verification_required_to_apply` and `verification_required_to_publish` are
+ * both false. A model applies unverified; a stylist's shop publishes unverified.
+ *
+ * ⚠️ THE ROUTE STAYS, AND IT STAYS REACHABLE. That is deliberate and it is
+ * the harder half: a page nobody is sent to may as well not exist, so the
+ * entry points are kept — /profile for a model, the setup panel and Settings
+ * for a stylist — and each of them now offers the check instead of demanding
+ * it. `submitSelfie` is untouched: a selfie still uploads, still files a
+ * request, and the admin queue still decides it.
+ *
+ * ⚠️ WHAT CHANGES IS THE REGISTER, NOT THE CONTENT. The four numbered steps
+ * are what a reviewer looks for and must not move. The intro says whether the
+ * thing is owed, which is the one fact the flags changed.
  */
 
 /** Shared chrome for every state of this page. Defined at module scope, not
@@ -57,10 +73,31 @@ export const metadata = { title: 'ID check' }
  *  Back to your shop" unconditionally, and only missed her because the
  *  no-provider branch returned without this wrapper. The moment she reached
  *  any other state she was pointed at a page that does not exist for her. */
-function Wrap({ children, isStylist }: { children: React.ReactNode; isStylist: boolean }) {
+function Wrap({
+  children, isStylist, required,
+}: {
+  children: React.ReactNode; isStylist: boolean
+  /** Whether anything is actually waiting on this. Decides the intro only. */
+  required: boolean
+}) {
   return (
     <>
-      <h1 className="mb-6 font-display text-3xl text-warm-dark">ID check</h1>
+      <h1 className="mb-2 font-display text-3xl text-warm-dark">ID check</h1>
+      {/* ⚠️ THE INTRO IS THE WHOLE DIFFERENCE BETWEEN AN OFFER AND A DEMAND,
+          and this page had neither — it went straight from the heading to the
+          four steps, so the register came entirely from the surrounding copy.
+          Said out loud here, once, for both roles.
+
+          ⚠️ IT DOES NOT OVERSELL THE BADGE. "Say less than is true" governs
+          every sentence on this page: it tells a stylist what it does for her
+          (models see it) and stops. */}
+      <p className="mb-6 max-w-2xl text-sm text-muted">
+        {required
+          ? 'This is the one thing we ask of every member before they can offer or apply for a treatment.'
+          : isStylist
+            ? 'This is optional. Your shop goes live without it — but it puts a “photo checked” badge on your shop, which is what a model looks for when she’s deciding whether to apply to you.'
+            : 'This is optional. You can apply for treatments without it — but it puts a “photo checked” badge on your profile, which is what a stylist looks for when she’s deciding who to take.'}
+      </p>
       <section>{children}</section>
       <p className="mt-4 text-sm">
         <Link
@@ -77,7 +114,10 @@ function Wrap({ children, isStylist }: { children: React.ReactNode; isStylist: b
 export default async function VerifyPage() {
   const user = await requireUser()
   const supabase = await createSupabaseServerClient()
-  const setup = await getStylistSetup(supabase, user.id)
+  const [setup, flags] = await Promise.all([
+    getStylistSetup(supabase, user.id),
+    getGateFlags(supabase),
+  ])
 
   // ══ A MODEL. ════════════════════════════════════════════════════════════
   //
@@ -98,12 +138,17 @@ export default async function VerifyPage() {
     const hasProfilePic = !!(userRow as { profile_pic_url?: string | null } | null)?.profile_pic_url
 
     return (
-      <Wrap isStylist={false}>
+      // ⚠️ THE MODEL ASKS THE APPLY FLAG; THE STYLIST BELOW ASKS THE PUBLISH
+      // FLAG. Two flags, two roles, and they are allowed to differ — reading
+      // one for both would mean switching the gate back on for one role and
+      // silently for the other.
+      <Wrap isStylist={false} required={flags.verificationRequired}>
         <IdCheckStep
           check={check}
           hasProfilePic={hasProfilePic}
           surface="page"
           photoHref="/profile"
+          required={flags.verificationRequired}
         />
       </Wrap>
     )
@@ -130,12 +175,13 @@ export default async function VerifyPage() {
   // only thing that would ever tell her why. The role differences that were
   // real (which photo, which page to set it on) are props.
   return (
-    <Wrap isStylist>
+    <Wrap isStylist required={setup.verifyRequiredToPublish}>
       <IdCheckStep
         check={{ state: setup.idCheck, note: setup.idCheckNote }}
         hasProfilePic={!!setup.profilePicUrl}
         surface="page"
         photoHref="/shop"
+        required={setup.verifyRequiredToPublish}
       />
     </Wrap>
   )

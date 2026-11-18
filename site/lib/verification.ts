@@ -8,14 +8,106 @@ import type { SupabaseClient } from '@supabase/supabase-js'
  * carry rules that are easy to drop silently and expensive to get wrong — a
  * model who has paid being told they have not is a support ticket and a refund
  * argument.
+ *
+ * ── ⚠️⚠️ BOTH GATES ARE SWITCHED OFF, AND A FLAG IS WHY ─────────────
+ * `subscription_enabled` and `verification_required_to_apply` are both false in
+ * `settings`, so NOTHING is asked of a model today: she signs up and the apply
+ * button is the next thing she touches.
+ *
+ * ⚠️ THE GATES ARE NOT DELETED, THEY ARE UNASKED. Every check below still
+ * exists and still runs the moment its flag returns true — which is the whole
+ * reason this is a flag and not a deletion. `tg_session_apply_gate` (0049) reads
+ * the same two functions, so the database and this file cannot disagree about
+ * whether a gate is live.
+ *
+ * ── ⚠️⚠️ THE TWO FAIL DIRECTIONS ARE OPPOSITE ON PURPOSE ─────────────
+ * They look inconsistent and must not be made consistent:
+ *
+ *   subscription_enabled            a REVENUE gate. Unreadable means DO NOT
+ *                                   CHARGE, so it fails OPEN (not required).
+ *                                   Wrongly charging somebody is worse than
+ *                                   wrongly letting them in free.
+ *   verification_required_to_apply  a SAFETY gate. Unreadable means REQUIRED,
+ *                                   so it fails CLOSED. A model decides whether
+ *                                   to be alone with a stranger partly on this;
+ *                                   an outage must not quietly lower the bar.
+ *
+ * The SQL coalesces to `false` and `true` respectively, and `getGateFlags`
+ * below mirrors each one rather than picking a house style.
+ *
+ * ⚠️ `verified` BELOW MEANS "THE GATE IS SATISFIED", NOT "SHE PASSED THE ID
+ * CHECK". With the flag off it is true for everybody. Anything that wants the
+ * FACT — a badge, a status card, the setup panel — must ask
+ * `getIdCheck()` (lib/queries/idCheck.ts), which reads `users.is_verified` and
+ * the request row and knows nothing about flags.
  */
 
+/**
+ * Which gates are live at all, read once and passed down.
+ *
+ * ⚠️ ONE READ PER REQUEST, NOT ONE PER CALL. A page that renders two
+ * gate-aware things used to be able to ask twice; two answers inside one render
+ * is a panel that contradicts the button underneath it.
+ */
+export interface GateFlags {
+  /** subscription_enabled() — is a membership being asked of anyone? */
+  subscriptionRequired: boolean
+  /** verification_required_to_apply() — is the ID check a condition of applying? */
+  verificationRequired: boolean
+}
+
+export async function getGateFlags(supabase: SupabaseClient): Promise<GateFlags> {
+  const [sub, ver] = await Promise.all([
+    supabase.rpc('subscription_enabled'),
+    supabase.rpc('verification_required_to_apply'),
+  ])
+
+  // ⚠️ THE ERROR ARMS ARE THE FAIL DIRECTIONS, and they differ. See the
+  // header: money fails open, safety fails closed. Logged either way, because a
+  // flag that cannot be read is a real fault even when the fallback is right.
+  if (sub.error) {
+    console.warn('[verification] subscription_enabled failed, treating as OFF:', sub.error.message)
+  }
+  if (ver.error) {
+    console.warn('[verification] verification_required_to_apply failed, treating as REQUIRED:', ver.error.message)
+  }
+
+  return {
+    // `=== true` so a null — which is what a missing settings row returns —
+    // reads as off, matching the function's own coalesce.
+    subscriptionRequired: sub.error ? false : sub.data === true,
+    // `!== false` for the mirror reason: only an explicit false lowers it.
+    verificationRequired: ver.error ? true : ver.data !== false,
+  }
+}
+
 export interface GateState {
+  /**
+   * ⚠️ THE EFFECTIVE ANSWER, NOT THE FACT. True when she is subscribed OR
+   * comped OR nobody is being asked to subscribe. Every consumer that asks
+   * "may she apply" wants exactly this and needed no change when the flag went
+   * off; anything that wants to TALK about money must check
+   * `subscriptionRequired` first.
+   */
   subscribed: boolean
+  /** The same shape for the ID check. See the header's warning. */
   verified: boolean
   canApply: boolean
   /** True when access comes from an admin waiver rather than a payment. */
   waived: boolean
+  /** Is a membership asked of anyone at all right now? */
+  subscriptionRequired: boolean
+  /** Is the ID check a condition of applying right now? */
+  verificationRequired: boolean
+  /**
+   * Neither gate is live, so nothing is owed and nothing should be said.
+   *
+   * ⚠️ THIS IS WHAT A PANEL SHOULD TEST, NOT `canApply`. With both flags off
+   * `canApply` is true for everybody, so "you're all set — your ID check and
+   * your membership are both done" would render to a member who has done
+   * neither and was never asked to.
+   */
+  anyGateLive: boolean
 }
 
 /** users.is_verified — the ID check passed, independent of any subscription. */
@@ -67,12 +159,33 @@ export async function isIdentityVerified(
 export async function hasActiveSubscription(
   supabase: SupabaseClient,
   userId: string,
+  /**
+   * Read once by the caller. Omitted, this reads them itself — correct, but a
+   * second round trip, which is what `getGateState` exists to avoid.
+   */
+  flags?: GateFlags,
 ): Promise<{ active: boolean; waived: boolean }> {
+  // ⚠️ THE WAIVER SHORT-CIRCUIT IS KEPT, AND IT IS STILL FIRST. A comped
+  // account is WAIVED, which is not the same fact as "nobody is being charged":
+  // /subscribe and Settings word those two differently, and the comp survives
+  // the flag being switched back on. Losing it here would turn a deliberate
+  // admin decision into an accident of configuration.
   const { data: u } = await supabase
     .from('users').select('subscription_waived').eq('id', userId).maybeSingle()
   if ((u as { subscription_waived?: boolean } | null)?.subscription_waived) {
     return { active: true, waived: true }
   }
+
+  // ⚠⚠ THE FLAG, BEFORE THE ROW AND BEFORE STRIPE. With subscription_enabled
+  // false there is nothing to be active or lapsed about — and everything below
+  // this line can end in a LIVE Stripe call (sync_subscription). Asking Stripe
+  // about a product nobody is being sold is a real request on behalf of a gate
+  // that is not running.
+  //
+  // `waived: false` deliberately: she is not comped, she is simply not being
+  // asked. The caller that needs to know which is which has the flag.
+  const required = (flags ?? await getGateFlags(supabase)).subscriptionRequired
+  if (!required) return { active: true, waived: false }
 
   const { data, error } = await supabase
     .from('subscriptions')
@@ -116,19 +229,40 @@ export async function hasActiveSubscription(
   }
 }
 
-/** Both halves, in one call. Fails closed: an error means "cannot apply". */
+/**
+ * Both halves, in one call. Fails closed: an error means "cannot apply".
+ *
+ * ⚠️ THE FLAGS ARE READ ONCE, HERE, AND HANDED DOWN. Both halves take the
+ * same object, so one render cannot see them disagree — and the Stripe path
+ * inside hasActiveSubscription is skipped without a second round trip to ask
+ * whether it should be.
+ */
 export async function getGateState(
   supabase: SupabaseClient,
   userId: string,
 ): Promise<GateState> {
+  const flags = await getGateFlags(supabase)
+
   const [sub, verified] = await Promise.all([
-    hasActiveSubscription(supabase, userId).catch(() => ({ active: false, waived: false })),
-    isIdentityVerified(supabase, userId).catch(() => false),
+    hasActiveSubscription(supabase, userId, flags)
+      .catch(() => ({ active: false, waived: false })),
+    // ⚠️ NOT ASKED AT ALL WHEN IT IS NOT A CONDITION. `isIdentityVerified`
+    // reads users.is_verified, which is still the right answer to a different
+    // question — but the answer to THIS one is "the gate is satisfied", and
+    // reading the column would make an unverified member fail a gate that is
+    // switched off.
+    flags.verificationRequired
+      ? isIdentityVerified(supabase, userId).catch(() => false)
+      : Promise.resolve(true),
   ])
+
   return {
     subscribed: sub.active,
     verified,
     waived: sub.waived,
+    subscriptionRequired: flags.subscriptionRequired,
+    verificationRequired: flags.verificationRequired,
+    anyGateLive: flags.subscriptionRequired || flags.verificationRequired,
     canApply: sub.active && verified,
   }
 }

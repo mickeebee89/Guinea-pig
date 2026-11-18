@@ -59,6 +59,10 @@ export default async function SettingsPage() {
   // `status = 'active'` test under the same name as the real gate and disagreed
   // with it about every cancelling, past_due and comped account.
   const gate = await getGateState(supabase, user.id)
+  // ⚠️ FROM THE GATE STATE THAT WAS ALREADY READ, not a second RPC. The
+  // model half of the ID-check copy below turns on it, and getGateState has
+  // already paid for the answer.
+  const idCheckRequired = gate.verificationRequired
   const { data: subRow } = await supabase
     .from('subscriptions')
     .select('status, current_period_end')
@@ -104,7 +108,27 @@ export default async function SettingsPage() {
   // the web that ever checked for 'both'. Same test, shared name now.
   const isModel = isModelRole(role)
   const holdsSubscription = !!membership.status && membership.status !== 'expired'
-  const showMembership = isModel || holdsSubscription
+
+  /*
+   * ── ⚠️⚠️ NOT SHOWN TO A MODEL WHILE NOBODY IS BEING CHARGED ────────
+   *
+   * `subscription_enabled` is false, and `membership.subscribed` is
+   * `gate.subscribed`, which is TRUE for everybody while that flag is off. So
+   * this section would have rendered "Active. £4.99 a month." under a heading
+   * reading Membership — to a member who has never paid Cavy anything. A false
+   * statement about her money, on the page where she would go to cancel it.
+   *
+   * ⚠️ THE SUBSCRIPTION ARM IS KEPT, AND IT IS WHAT MAKES THIS SAFE. Anyone
+   * who actually HOLDS an unexpired row still sees the section whatever the
+   * flag says, because "cancel any time" has to stay true for whoever is being
+   * billed — the same reason it was never role-gated alone. Switching the flag
+   * off must not strand a payer with no cancel button.
+   *
+   * Measured 18 Nov 2026: `subscriptions` holds 2 rows, both `expired`, so
+   * nobody is stranded by this today. The arm is there for the case where
+   * somebody is.
+   */
+  const showMembership = (isModel && gate.subscriptionRequired) || holdsSubscription
 
   const { data: rows } = await supabase
     .from('blocks')
@@ -143,7 +167,12 @@ export default async function SettingsPage() {
           gate rather than the first, so a verified-but-unsubscribed account is
           the warmest lead on the platform rather than a stranded one. Leaving
           this stylist-only would hide from a model the one thing she can get on
-          with today. */}
+          with today.
+
+          ⚠️ AND IT IS STILL SHOWN NOW THAT NOTHING REQUIRES IT. Both
+          verification flags are off, so this section and /profile's card are
+          the only places either role can find /verify — it is in no nav. The
+          heading stays; the sentence under it stops naming a consequence. */}
       <section className="mb-8">
           <h2 className="mb-2 font-display text-lg text-warm-dark">ID check</h2>
           <p className="mb-3 text-sm text-muted">
@@ -153,12 +182,22 @@ export default async function SettingsPage() {
                 ? 'Sent — a person reviews these, usually within 24 hours. Nothing for you to do.'
                 : idCheck.state === 'rejected'
                   ? 'The last one wasn’t accepted, so it needs doing again.'
-                  // Both halves are true, and which one matters depends on who
-                  // is reading: it makes a shop live, and for a model it is one
-                  // of the two things between her and a booking.
+                  // ⚠⚠ BOTH SENTENCES NAMED A CONSEQUENCE THAT NO LONGER
+                  // FOLLOWS. "It’s what makes your shop live" — a shop
+                  // publishes without it now. "it doesn’t need a membership
+                  // first" — there is no membership to need, so the
+                  // reassurance invents the obstacle it dismisses.
+                  //
+                  // ⚠️ THE REQUIRED WORDING IS KEPT PER FLAG, not deleted:
+                  // each role asks its own flag, because the apply gate and
+                  // the publish gate can be switched independently.
                   : setup.providerId
-                    ? 'Not done yet. It’s what makes your shop live.'
-                    : 'Not done yet. You can do it now — it doesn’t need a membership first.'}
+                    ? setup.verifyRequiredToPublish
+                      ? 'Not done yet. It’s what makes your shop live.'
+                      : 'Not done yet, and nothing is waiting on it — your shop goes live without it. It puts a “photo checked” badge on your shop.'
+                    : idCheckRequired
+                      ? 'Not done yet. You can do it now — you don’t need to have chosen a stylist first.'
+                      : 'Not done yet, and nothing is waiting on it. It puts a “photo checked” badge on your profile, which is what a stylist looks for when she’s deciding who to take.'}
           </p>
           {/* No link while it is pending: there is nothing to do on that page
               but read the same sentence again. */}

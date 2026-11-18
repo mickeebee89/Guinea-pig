@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createSupabaseServerClient, requireUser } from '@/lib/supabase-server'
+import { getGateFlags } from '@/lib/verification'
 import type { ConfirmOutcome } from '@/components/PayForm'
 
 /**
@@ -33,6 +34,33 @@ export type StartResult =
 export async function startSubscription(): Promise<StartResult> {
   await requireUser()
   const supabase = await createSupabaseServerClient()
+
+  // ── ⚠️⚠️ REFUSED HERE, BECAUSE STRIPE IS LIVE ──────────────────
+  //
+  // `subscription_enabled` is false, so no member is being asked to pay — and
+  // the page below no longer offers the form. HIDING THE LINK IS NOT THE SAME
+  // AS CLOSING THE DOOR: this is a server action, so anything that can POST to
+  // this app can call it directly, and the next line after this check invokes
+  // `stripe-payment` against LIVE KEYS. Real cards are charged (CLAUDE.md, live
+  // since 17 Jul 2026). A stale tab, a double-submit, a bookmarked /subscribe,
+  // or a crafted request would each have created a real subscription for a
+  // product that is currently switched off.
+  //
+  // ⚠️ BEFORE THE INVOKE, NOT AFTER. The point is that no Stripe object is
+  // created, so there is nothing to refund, cancel or reconcile afterwards.
+  //
+  // ⚠️ THE REVENUE FAIL DIRECTION APPLIES HERE TOO. getGateFlags treats an
+  // unreadable flag as OFF, so a database wobble refuses a charge rather than
+  // taking one. That is the right way round for money, and it is the opposite
+  // of how the verification flags fail — see lib/verification.ts.
+  const { subscriptionRequired } = await getGateFlags(supabase)
+  if (!subscriptionRequired) {
+    console.warn('[subscribe] startSubscription called while subscription_enabled is false')
+    return {
+      ok: false,
+      error: 'Membership isn’t needed at the moment, so there’s nothing to pay. Nothing has been charged.',
+    }
+  }
 
   // ── ⚠️ ASSUMPTION: functions.invoke carries this user's session ───────────
   //
@@ -99,6 +127,17 @@ export async function startSubscription(): Promise<StartResult> {
  *
  * That is what `pending` means to the person: charged, not finished, nothing
  * for you to do, do not pay again.
+ *
+ * ── ⚠️⚠️ DELIBERATELY *NOT* GATED ON subscription_enabled ───────────
+ * `startSubscription` refuses while the flag is off, so in the ordinary case
+ * nothing can reach this. The flag is still not tested here, and that is a
+ * decision rather than an omission: this function runs AFTER Stripe has taken
+ * the money. Its only job is to record a charge that has already happened.
+ *
+ * Refusing it on a flag would mean a member whose card was charged — by a
+ * payment started before the flag moved, or in flight while it moved — has
+ * paid and we have no record of it. That is strictly the worst outcome
+ * available: the gate exists to stop charges, not to lose them.
  */
 export async function confirmSubscription(subscriptionId: string): Promise<ConfirmOutcome> {
   await requireUser()

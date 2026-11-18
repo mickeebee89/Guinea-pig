@@ -23,7 +23,12 @@ const STEPS = [
     // Measured 30 Oct 2026: one real stylist has ever posted one slot. The
     // sentence now says what a stylist DOES rather than what they routinely do,
     // which is true on day one and stays true as it fills up.
-    body: 'Models browse verified stylists nearby and see what they’re practising. Stylists post the times they’re looking for someone.',
+    // ⚠️ "verified stylists" DROPPED 18 Nov 2026. A shop publishes without a
+    // passed ID check since `verification_required_to_publish` went false, so
+    // the homepage was describing every stylist on the site as verified when
+    // some are not. The badge is still real and still shown per stylist; the
+    // blanket claim is the part that stopped being true.
+    body: 'Models browse stylists nearby and see what they’re practising. Stylists post the times they’re looking for someone.',
   },
   {
     n: '2',

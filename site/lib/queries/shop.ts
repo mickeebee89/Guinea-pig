@@ -149,6 +149,23 @@ export interface StylistSetup {
    * false. This is the one that decides whether the fee is MENTIONED.
    */
   feeEnabled: boolean
+  /**
+   * Whether a passed ID check is a condition of a shop going live.
+   * `verification_required_to_publish()`, false in `settings` today.
+   *
+   * ⚠⚠ NOT THE SAME QUESTION AS `isVerified`, AND THE PAIR IS THE POINT.
+   * `isVerified` is whether she passed; this is whether anyone is asking. While
+   * this is false the panel and `publishRefusal` must stop naming the ID check
+   * as a blocker — the database has already stopped treating it as one
+   * (`enforce_publish_requires_verified` and `publish_provider_if_eligible`
+   * both read this function), so copy that still demands it is describing a
+   * gate that would not refuse her.
+   *
+   * ⚠️ A SAFETY FLAG, SO IT FAILS CLOSED. Unreadable means REQUIRED, which
+   * is the opposite of `feeEnabled` above — see lib/verification.ts for why the
+   * two directions must not be made to match.
+   */
+  verifyRequiredToPublish: boolean
   isFoundingProvider: boolean
   isPublished: boolean
   /**
@@ -202,7 +219,13 @@ export async function getStylistSetup(
     detailsDone: false, treatmentCount: 0, publishBlockers: [], websiteBlockers: [],
     inPublicView: false,
     idCheck: 'none', idCheckNote: null,
-    isVerified: false, feeSettled: false, feeEnabled: false, isFoundingProvider: false,
+    isVerified: false, feeSettled: false, feeEnabled: false,
+    // ⚠️ TRUE in the empty shape, unlike the other two. This is the
+    // fail-closed default for a safety flag, and the empty setup is returned
+    // for a member with no provider row — who has no shop to publish either
+    // way, so nothing reads it. Set to match the flag's direction rather than
+    // to match its neighbours.
+    verifyRequiredToPublish: true, isFoundingProvider: false,
     isPublished: false, everPublished: false,
   }
   if (!prov) return empty
@@ -211,7 +234,8 @@ export async function getStylistSetup(
   // now comes from provider_fee_settled (0102), which reads that table itself
   // under the same RLS. A second read here would have been the third copy of
   // the rule that 0102 exists to collapse.
-  const [treatRes, userRes, feeSettled, feeEnabled, reqRes, bioRes, viewRes] = await Promise.all([
+  const [treatRes, userRes, feeSettled, feeEnabled, reqRes, bioRes, viewRes,
+         verifyPubRes] = await Promise.all([
     // Rows, not a head count: publishing needs a treatment WITH a category
     // (provider_shop_is_publishable, 0016 / item 52), so both counts matter.
     supabase.from('provider_treatments').select('category').eq('provider_id', prov.id),
@@ -253,7 +277,21 @@ export async function getStylistSetup(
     // which is harmless here because the only row asked for is her own
     // provider id and the only column taken is its existence.
     supabase.from('public_stylists').select('id').eq('id', prov.id).maybeSingle(),
+    // ⚠️ LAST, AND THE DESTRUCTURING ABOVE NAMES IT LAST. See the invariant
+    // note on bio_publish_problem: alignment is the rule, not position.
+    supabase.rpc('verification_required_to_publish'),
   ])
+
+  // ⚠️ FAILS CLOSED, and not through the `feeEnabled` helper's habit of
+  // swallowing. An unreadable SAFETY flag means the gate is on: `!== false`
+  // keeps a null — and an error — on the required side, mirroring the SQL's
+  // `coalesce(..., true)`.
+  if (verifyPubRes.error) {
+    console.warn('[shop] verification_required_to_publish failed, treating as REQUIRED:',
+      verifyPubRes.error.message)
+  }
+  const verifyRequiredToPublish =
+    verifyPubRes.error ? true : verifyPubRes.data !== false
 
   const u = (userRes.data ?? {}) as {
     is_verified?: boolean; is_founding_provider?: boolean; provider_fee_waived?: boolean
@@ -327,6 +365,7 @@ export async function getStylistSetup(
     isVerified: !!u.is_verified,
     feeSettled,
     feeEnabled,
+    verifyRequiredToPublish,
     isFoundingProvider: !!u.is_founding_provider,
     isPublished: !!prov.is_published,
     everPublished: prov.first_published_at !== null,
@@ -348,7 +387,17 @@ export async function getStylistSetup(
  */
 export function publishRefusal(setup: StylistSetup): string | null {
   if (!setup.providerId) return 'Only a stylist account has a shop to publish.'
-  if (!setup.isVerified) {
+  // ⚠⚠ ASKED ONLY WHILE ANYONE IS ASKING. `verification_required_to_publish`
+  // is false, so the ID check refuses nobody — and the database agrees:
+  // `enforce_publish_requires_verified` reads the same function and lets an
+  // unverified shop through. Leaving this unconditional would have made the
+  // WEB the only thing still refusing, with a sentence naming a gate that
+  // would have accepted her.
+  //
+  // ⚠️ NOT DELETED. The two sentences below are exactly what should be said
+  // the moment the flag comes back, including the pending case, which is the
+  // one that reads as reassurance rather than as a refusal.
+  if (setup.verifyRequiredToPublish && !setup.isVerified) {
     return setup.idCheck === 'pending'
       ? 'Your ID check hasn’t been approved yet. Your shop goes live by itself as soon as it is.'
       : 'Your shop can go live once your ID check has passed.'

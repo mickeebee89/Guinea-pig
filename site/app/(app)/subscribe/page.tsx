@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { createSupabaseServerClient, requireUser } from '@/lib/supabase-server'
 import { getGateState } from '@/lib/verification'
+import { SUPPORT_EMAIL } from '@/lib/site'
 import { safeReturnTo } from '@/lib/return-to'
 import { SubscribePanel } from './SubscribePanel'
 
@@ -46,6 +47,44 @@ export default async function SubscribePage({
   const user = await requireUser()
   const supabase = await createSupabaseServerClient()
   const gate = await getGateState(supabase, user.id)
+
+  /*
+   * ── ⚠️⚠️ FIRST, AND IT HAS TO BE FIRST ───────────────────────
+   *
+   * `gate.subscribed` is TRUE for everybody while `subscription_enabled` is
+   * false — that is what makes the apply flow let her straight through. So
+   * without this branch above it, every visitor would fall into the
+   * "You’re already a member — your membership is active" panel below, which
+   * is a statement about a payment that was never taken. The most confusing
+   * possible wrong answer: it tells her she is paying for something.
+   *
+   * ⚠️ IT DOES NOT redirect. A member who followed a bookmark, an old email
+   * or the apply flow’s return path deserves a sentence saying why there is
+   * nothing here, not a silent bounce to a page she did not ask for.
+   *
+   * ⚠️ THE COMP IS STILL NAMED. A waived account is a deliberate admin
+   * decision that survives the flag, and that one member should not read
+   * "nothing to pay" and wonder whether her comp went away.
+   */
+  if (!gate.subscriptionRequired) {
+    return (
+      <Wrap>
+        <h2 className="font-display text-xl text-warm-dark">You don’t need a membership</h2>
+        <p className="mt-1 text-sm text-muted">
+          Cavy isn’t charging models at the moment, so there’s nothing to pay and nothing to
+          set up. You can apply for any session you like.
+          {gate.waived && ' Your account also has complimentary access on it, which stays as it is.'}
+        </p>
+        <p className="mt-3 text-xs text-muted">
+          If anything on Cavy asks you for money, don’t pay it — email{' '}
+          <a href={`mailto:${SUPPORT_EMAIL}`} className="font-bold text-rose hover:underline">
+            {SUPPORT_EMAIL}
+          </a>{' '}
+          and tell us where you saw it.
+        </p>
+      </Wrap>
+    )
+  }
 
   /**
    * ⚠⚠ VALIDATED HERE, WHERE IT ARRIVES FROM OUTSIDE. `?next=` is part of a URL

@@ -51,6 +51,25 @@ export const dynamic = 'force-dynamic'
  * the last GATE, not literally the last screen — asking £4.99 of someone whose
  * chosen stylist has nothing bookable is the wrong order whichever way the
  * gates run.
+ *
+ * ── ⚠️⚠️ BOTH GATES ARE SWITCHED OFF, SO NEITHER SCREEN RENDERS ──────
+ * `subscription_enabled` and `verification_required_to_apply` are both false,
+ * so a model who opens this page goes straight to the wizard: no ID step, no
+ * membership wall, nothing asked of her between the stylist's profile and the
+ * apply button.
+ *
+ * ⚠⚠ AND THE TWO BRANCHES BELOW ARE UNCHANGED, WHICH IS THE DESIGN. Neither
+ * tests a flag. `ctx.verified` and `ctx.subscribed` come from `getGateState`,
+ * which is where the flags are read — with a gate off its half reads true and
+ * the branch simply never fires. ONE PLACE DECIDES WHETHER A GATE IS LIVE. A
+ * second test here would be a second opinion, and the day the two disagree is
+ * the day a model is shown a wall the server will not enforce or walks past one
+ * it will.
+ *
+ * ⚠️ SO THEY ARE KEPT, WORD FOR WORD, for the flag coming back. What is NOT
+ * kept anywhere is copy on other pages promising she will meet these screens:
+ * that had to change, because an unreachable screen is harmless and a sentence
+ * describing it is not.
  */
 export default async function ApplyPage({
   params,

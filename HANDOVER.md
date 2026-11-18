@@ -415,6 +415,58 @@ starts. Not worth building before then.
 > **Do not "fix" `site/lib/queries/apply.ts` to agree with mobile.** Its header
 > used to cite `apply-session.tsx` as proof the two matched. It now records that
 > they do not, and points here.
+>
+> ### ⚠⚠ 18 Nov 2026 — ALL FOUR GATES ARE SWITCHED OFF ON THE WEB, AND MOBILE READS NONE OF THE FLAGS
+>
+> This is now a bigger divergence than the order, and a different KIND of one.
+> The order table above is about which wall a model meets first. This is about
+> whether there is a wall at all.
+>
+> **Measured 18 Nov 2026.** `settings` holds all four as `'false'`:
+> `provider_fee_enabled`, `subscription_enabled`,
+> `verification_required_to_apply`, `verification_required_to_publish`. Six SQL
+> functions read them (`provider_fee_settled`, `model_may_apply`,
+> `tg_session_apply_gate`, `enforce_publish_requires_verified`,
+> `publish_provider_if_eligible`, `unpublish_on_verification_lost`) and `site/`
+> now reads them in `lib/verification.ts` (`getGateFlags`) and
+> `lib/queries/shop.ts`.
+>
+> **A repo-wide grep of `mobile/src` for all four flag names returns ZERO
+> hits.** `mobile/src/lib/verification.ts` exports `isIdentityVerified`,
+> `hasActiveSubscription` and `canApply`, and not one of them asks whether the
+> gate it enforces is live.
+>
+> | | web (live) | mobile (dormant) |
+> |---|---|---|
+> | model: ID check to apply | **not asked** (flag off) | demanded, `/(app)/verify-payment` |
+> | model: £4.99 membership to apply | **not asked** (flag off) | demanded, `/(app)/subscribe` |
+> | stylist: £14.99 fee before the ID check | **not asked** (flag off) | demanded, `verify-payment.tsx` |
+> | stylist: ID check before publishing | **not asked** (flag off) | demanded, provider dashboard |
+>
+> **1 live surface (`site/`), 1 dormant (`mobile/`) — and the dormant one is
+> the only one still asking for money.**
+>
+> ⚠️ **THIS IS WORSE THAN THE ORDER DIVERGENCE, BECAUSE THE DATABASE NO LONGER
+> BACKS MOBILE UP.** The note above says mobile "is wrong about the order it
+> asks, never about what it enforces", because `tg_session_apply_gate` refused
+> an unverified model either way. That is no longer true: with the flags off the
+> trigger returns early and permits the insert. So a mobile build today would
+> **ask a model for £4.99 and an ID check that the database would not require,
+> and refuse to let her apply until she produced them** — the client enforcing a
+> gate nothing else enforces. Stripe is LIVE, so the £4.99 and the £14.99 would
+> be real charges for access she already has.
+>
+> ⚠️ **AND THE FEE IS THE SHARPEST CASE.** `verification_payments` has never
+> held a row — that Stripe path has never run end to end against a real card —
+> so the first stylist to meet mobile's fee screen would be testing it, in
+> production, for a charge `/for-stylists` and `/how-it-works` both say does not
+> exist.
+>
+> **What unmothballing has to include, then:** mobile reading the four flags
+> before any of its gate screens render, not just reordering them. The fix is
+> the same shape as `site/lib/verification.ts` — one reader, flags fetched once,
+> money failing open and safety failing closed — and the two fail directions
+> must not be collapsed into one on the way across.
 
 **Not the general backlog.** These are gated on preparing a mobile build, and
 the general list is things that might never be scheduled. **Read this section

@@ -19,7 +19,12 @@ const POINTS = [
     body: 'Most stylists are here to build a book. Agree the photos in chat before the appointment and the work is yours to post.',
   },
   {
-    title: 'Everyone does the ID check',
+    // ⚠️ WAS 'Everyone does the ID check'. `verification_required_to_apply`
+    // and `verification_required_to_publish` are both false, so "everyone"
+    // became a claim about a check nobody is required to take — and this is a
+    // SAFETY claim: a stylist decides whether to let a stranger into a chair
+    // partly on it. See the note below on why this page is not flag-aware.
+    title: 'The ID check',
     // Was "Every member completes identity verification". No document is
     // requested, seen or kept — a person compares a selfie holding a
     // handwritten note against the profile photo. Describing that as identity
@@ -32,7 +37,29 @@ const POINTS = [
     // "usually within 24 hours" is the same promise StylistSetup.tsx already
     // makes her once she is inside; saying it before she signs up costs us
     // nothing and is the difference between a wait and an abandonment.
-    body: 'Every member sends a selfie holding their name on a piece of paper, and a real person — one of us, not software — checks it against their profile photo before they can offer or apply for treatments. It’s usually done within 24 hours, and you’ll get an email either way. It’s not an ID document check — but it means there’s a real person behind the profile and the photo isn’t lifted from somewhere else.',
+    // ── ⚠️⚠️ REWRITTEN 18 Nov 2026: THE GATES WERE SWITCHED OFF ───────
+    // `subscription_enabled`, `verification_required_to_apply` and
+    // `verification_required_to_publish` are all false in `settings`, so every
+    // sentence naming one of them as a condition stopped being true.
+    //
+    // ⚠⚠ THIS PAGE IS NOT FLAG-AWARE AND MUST NOT BECOME SO. It is a
+    // statically prerendered `(public)` route — adding a database read would
+    // make it dynamic and `scripts/check-client-boundary.mjs` would have to
+    // catch it, which is a worse trade than wording the page so it is true
+    // either way. Marketing copy that silently changes with a settings row is
+    // also harder to be honest about than copy that simply does not claim.
+    //
+    // ⚠️ SO THE CLAIMS ARE DROPPED, NOT INVERTED. Nothing here now says a
+    // check or a payment IS required, and nothing says it never will be —
+    // which is what lets the flags move again without this page lying in the
+    // other direction.
+    //
+    // ⚠️ "before they can offer or apply for treatments" WAS THE UNTRUE
+    // CLAUSE and it is gone. A shop publishes unverified and a model applies
+    // unverified, so the sentence described a gate that would not refuse
+    // either of them. What replaces it is what the check actually buys now:
+    // a badge on the profile, which is a weaker thing, said plainly.
+    body: 'Members can send a selfie holding their name on a piece of paper, and a real person — one of us, not software — checks it against their profile photo. It’s usually done within 24 hours, you’ll get an email either way, and a passed check shows on the profile. It’s not an ID document check — but it means there’s a real person behind the profile and the photo isn’t lifted from somewhere else.',
   },
   {
     title: 'You set the terms',
@@ -147,8 +174,16 @@ export default async function ForStylists({
             Sign up as a stylist
           </Link>{' '}
           to set up your shop. There’s no sign-up fee, no verification fee and no subscription —
-          we don’t charge stylists anything. Before your shop goes live you’ll send a selfie for
-          one of us to check by hand, which usually takes under 24 hours. The full terms are in{' '}
+          we don’t charge stylists anything.{' '}
+          {/* ⚠️ WAS "Before your shop goes live you’ll send a selfie for one of
+              us to check by hand". `verification_required_to_publish` is false
+              and `publish_provider_if_eligible` reads it, so the shop goes
+              live on a name and one treatment — the selfie holds nothing up.
+              Telling a stylist she must wait for us before she is findable
+              would add a delay the product no longer has. */}
+          Your shop goes live as soon as it has a name and one treatment. You can also send a
+          selfie for one of us to check by hand, which puts a “photo checked” badge on your
+          shop — it isn’t needed to go live. The full terms are in{' '}
           <Link href="/terms#5" className="text-rose underline decoration-rose/30 underline-offset-2">
             section 5
           </Link>

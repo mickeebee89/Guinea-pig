@@ -21,6 +21,24 @@ import type { StylistSetup } from '@/lib/queries/shop'
  * Someone who believes we checked a passport accepts a risk they would not
  * otherwise accept, on the strength of our wording. Say less than is true,
  * never more.
+ *
+ * ── ⚠️⚠️ THE ID CHECK NO LONGER HOLDS A SHOP BACK ─────────────────
+ * `verification_required_to_publish` is false, so a shop publishes itself the
+ * moment it has a name and a categorised treatment, verified or not —
+ * `publish_provider_if_eligible` and `enforce_publish_requires_verified` both
+ * read that flag and neither refuses an unverified stylist any more.
+ *
+ * ⚠️ SO THE STEP MOVES OUT OF THE LIST RATHER THAN CHANGING ITS WORDS. A row
+ * in an ordered list headed "Getting your shop live", with an empty circle
+ * beside it, IS a claim that the shop is not going live until it is ticked —
+ * whatever the sentence underneath says. While the flag is off the ID check is
+ * rendered below the list as an optional badge; while it is on, the list is
+ * exactly what it always was. Same reasoning as the fee step, which has been
+ * hidden on `feeEnabled` since 0102 rather than deleted.
+ *
+ * ⚠️ AND IT IS NOT HIDDEN ALTOGETHER, because a stylist can still choose to
+ * do it and a model still reads the badge. "Not required" is not "not worth
+ * doing", and deleting it would take away the only reason she has to.
  */
 
 type StepState = 'done' | 'todo' | 'waiting' | 'attention'
@@ -156,11 +174,22 @@ export function StylistSetupPanel({ setup }: { setup: StylistSetup }) {
     )
   }
 
-  // Hidden by the stylist: everything done, verified, been live before, and
-  // not live now. Without this branch the panel read "Getting your shop live"
-  // over four ticked steps and promised "there's no switch for you to flip",
-  // which stopped being true when the web gained one (audit item 66).
-  if (setup.everPublished && setup.isVerified && setup.feeSettled && setup.publishBlockers.length === 0) {
+  // ⚠️ THE ID CHECK NO LONGER HOLDS A SHOP BACK, so the panel's own branches
+  // must stop asking about it. One name, read in five places below, so the
+  // flag cannot be honoured in some of them and forgotten in others.
+  const verifyGates = setup.verifyRequiredToPublish
+
+  // Hidden by the stylist: everything done, been live before, and not live now.
+  // Without this branch the panel read "Getting your shop live" over four
+  // ticked steps and promised "there's no switch for you to flip", which
+  // stopped being true when the web gained one (audit item 66).
+  //
+  // ⚠️ `isVerified` WAS AN UNCONDITIONAL CONDITION HERE. With the flag off an
+  // unverified stylist CAN have been published and CAN have hidden it, so she
+  // would have fallen through to "Getting your shop live" over a shop that was
+  // already finished — told to set up something she had set up and then hidden.
+  if (setup.everPublished && (!verifyGates || setup.isVerified)
+      && setup.feeSettled && setup.publishBlockers.length === 0) {
     return (
       <section className="rounded-lg border border-hairline bg-white p-5 shadow-card">
         <h2 className="font-display text-xl text-warm-dark">Your shop is hidden</h2>
@@ -188,20 +217,36 @@ export function StylistSetupPanel({ setup }: { setup: StylistSetup }) {
   // all four steps and still reads "Not published" will assume it is broken,
   // and the honest answer — a person has not looked at it yet — is nowhere on
   // the screen unless it is put there.
-  const waitingOnUs =
-    setup.publishBlockers.length === 0 && setup.feeSettled && setup.idCheck === 'pending'
+  // ⚠️ IMPOSSIBLE WHILE THE FLAG IS OFF, AND THAT IS THE POINT. "Waiting on us"
+  // means a finished shop is being held by a person's decision. Nothing is
+  // held by that decision now, so a stylist whose selfie is in the queue is NOT
+  // waiting on us — her shop is already live. Saying otherwise would be the
+  // panel inventing a delay the product no longer has.
+  const waitingOnUs = verifyGates
+    && setup.publishBlockers.length === 0 && setup.feeSettled && setup.idCheck === 'pending'
 
-  // The opposite state, and the one 0016 created: the ID check has PASSED and
-  // publication is now waiting on the stylist. Before auto-publish existed this
-  // was a dead end only an admin could notice. Now it resolves itself the
-  // moment the list below is empty — so the list has to be on the screen.
-  const verifiedButIncomplete = setup.isVerified && setup.publishBlockers.length > 0
+  // Publication is waiting on the STYLIST and on nothing else — the state 0016
+  // created, which before auto-publish was a dead end only an admin could
+  // notice. It now resolves itself the moment the list below is empty, so the
+  // list has to be on the screen.
+  //
+  // ⚠️ TRUE FOR EVERYONE WHILE THE FLAG IS OFF, not just the verified. That is
+  // the honest reading: if the ID check cannot hold a shop back then every
+  // stylist with an incomplete shop is in exactly this state, and the heading
+  // and the note below are worded for both cases rather than claiming she is
+  // verified when she is not.
+  const nothingLeftButHer = !verifyGates || setup.isVerified
+  const verifiedButIncomplete = nothingLeftButHer && setup.publishBlockers.length > 0
 
   return (
     <section className="rounded-lg border border-rose/30 bg-white p-5 shadow-card">
       <h2 className="font-display text-xl text-warm-dark">
         {waitingOnUs ? 'Waiting on us'
-          : verifiedButIncomplete ? 'You’re verified — one thing left'
+          : verifiedButIncomplete
+            // ⚠️ ONLY CLAIMS THE ID CHECK WHEN THE ID CHECK IS WHY. With the
+            // flag off this branch is reached by unverified stylists too, and
+            // "You're verified" would be false for most of them.
+            ? (verifyGates ? 'You’re verified — one thing left' : 'Nearly there')
           : 'Getting your shop live'}
       </h2>
       <p className="mt-1 text-sm text-muted">
@@ -214,9 +259,10 @@ export function StylistSetupPanel({ setup }: { setup: StylistSetup }) {
           </>
         ) : verifiedButIncomplete ? (
           <>
-            Your ID check has passed. Your shop goes live{' '}
+            {verifyGates && 'Your ID check has passed. '}
+            Your shop goes live{' '}
             <span className="font-bold text-warm-dark">by itself, the moment</span> it has
-            everything a model needs — no one has to approve anything again.
+            everything a model needs — no one has to approve anything.
           </>
         ) : (
           <>
@@ -294,46 +340,100 @@ export function StylistSetupPanel({ setup }: { setup: StylistSetup }) {
           </Step>
         )}
 
-        <Step
-          state={
-            setup.idCheck === 'approved' ? 'done'
-            : setup.idCheck === 'pending' ? 'waiting'
-            : setup.idCheck === 'rejected' ? 'attention'
-            : 'todo'
-          }
-          title="The ID check"
-          // Only offered once the fee is settled, matching what /verify itself
-          // will do. A link that lands on "the fee comes first" is a link that
-          // wasted the tap.
-          href={setup.feeSettled && setup.idCheck !== 'approved' && setup.idCheck !== 'pending'
-            ? '/verify' : undefined}
-          linkLabel={setup.idCheck === 'rejected' ? 'Try again' : 'Do the ID check'}
-        >
-          {setup.idCheck === 'approved' && 'Passed.'}
-          {setup.idCheck === 'pending' &&
-            'Sent. A person looks at these, usually within 24 hours — nothing for you to do.'}
-          {setup.idCheck === 'rejected' && (
-            <>
-              We couldn’t accept the last one, so it needs doing again.
-              {setup.idCheckNote && <> The reviewer said: “{setup.idCheckNote}”</>}
-            </>
-          )}
-          {setup.idCheck === 'none' && (
-            <>
-              A selfie holding a handwritten note, looked at by a person. It shows there’s a real
-              person behind the shop and that the profile photo hasn’t been taken from somewhere
-              else — it isn’t an identity check, and nobody sees a passport or a driving licence.
-            </>
-          )}
-        </Step>
+        {/* ⚠⚠ IN THE LIST ONLY WHILE IT GATES PUBLICATION. An unticked row in
+            an ordered list headed "Getting your shop live" is itself a claim
+            that the shop is waiting on it — the sentence underneath cannot
+            take that back. While the flag is off the same information is
+            rendered below the list, as an optional badge. */}
+        {verifyGates && (
+          <Step
+            state={
+              setup.idCheck === 'approved' ? 'done'
+              : setup.idCheck === 'pending' ? 'waiting'
+              : setup.idCheck === 'rejected' ? 'attention'
+              : 'todo'
+            }
+            title="The ID check"
+            // Only offered once the fee is settled, matching what /verify itself
+            // will do. A link that lands on "the fee comes first" is a link that
+            // wasted the tap.
+            href={setup.feeSettled && setup.idCheck !== 'approved' && setup.idCheck !== 'pending'
+              ? '/verify' : undefined}
+            linkLabel={setup.idCheck === 'rejected' ? 'Try again' : 'Do the ID check'}
+          >
+            {setup.idCheck === 'approved' && 'Passed.'}
+            {setup.idCheck === 'pending' &&
+              'Sent. A person looks at these, usually within 24 hours — nothing for you to do.'}
+            {setup.idCheck === 'rejected' && (
+              <>
+                We couldn’t accept the last one, so it needs doing again.
+                {setup.idCheckNote && <> The reviewer said: “{setup.idCheckNote}”</>}
+              </>
+            )}
+            {setup.idCheck === 'none' && (
+              <>
+                A selfie holding a handwritten note, looked at by a person. It shows there’s a real
+                person behind the shop and that the profile photo hasn’t been taken from somewhere
+                else — it isn’t an identity check, and nobody sees a passport or a driving licence.
+              </>
+            )}
+          </Step>
+        )}
       </ol>
 
+      {/* ⚠️ OUTSIDE THE LIST, AND NOT NUMBERED. Offered, never owed: it earns
+          a badge models can see, and it holds nothing up. The description of
+          what the check IS is the same sentence as everywhere else — a
+          stylist told to write something different from what the reviewer is
+          looking for gets rejected for following our own instructions. */}
+      {!verifyGates && setup.idCheck !== 'approved' && (
+        <div className="mt-4 rounded-md border border-hairline bg-white px-3 py-3">
+          <p className="text-sm font-bold text-warm-dark">
+            {setup.idCheck === 'pending' ? 'Your ID check is with us'
+              : setup.idCheck === 'rejected' ? 'Your ID check needs doing again'
+              : 'Optional: the ID check'}
+          </p>
+          <p className="mt-1 text-sm text-muted">
+            {setup.idCheck === 'pending'
+              ? 'A person looks at these, usually within 24 hours. Nothing for you to do, and your shop isn’t waiting on it.'
+              : setup.idCheck === 'rejected'
+                ? <>
+                    We couldn’t accept the last one. Your shop isn’t affected — have another go
+                    whenever you like.
+                    {setup.idCheckNote && <> The reviewer said: “{setup.idCheckNote}”</>}
+                  </>
+                : <>
+                    A selfie holding a handwritten note, looked at by a person. It puts a
+                    &ldquo;photo checked&rdquo; badge on your shop, which is the thing a model
+                    looks for when she’s deciding whether to apply. It isn’t needed to go live
+                    and nothing is waiting on it — and it isn’t an identity check: nobody sees
+                    a passport or a driving licence.
+                  </>}
+          </p>
+          {setup.idCheck !== 'pending' && (
+            <p className="mt-1">
+              <Link href="/verify" className="text-sm font-bold text-rose hover:underline">
+                {setup.idCheck === 'rejected' ? 'Try again' : 'Do the ID check'} →
+              </Link>
+            </p>
+          )}
+        </div>
+      )}
+
       <p className="mt-4 rounded-md bg-input-bg px-3 py-2 text-xs text-muted">
+        {/* ⚠️ THE THIRD ARM WAS THE UNTRUE ONE. It read "a person here looks
+            at your ID selfie — if it passes we publish your shop for you",
+            which described the ID check as the last thing between her and
+            going live. With the flag off nobody is looking and nothing is
+            held: the shop publishes on its own two requirements. Kept for the
+            flag coming back, not deleted. */}
         {waitingOnUs
           ? 'We’ll send you a notification the moment it’s approved, and your shop goes live at the same time — there’s no switch for you to flip.'
           : verifiedButIncomplete
             ? 'Fill in what’s listed above and your shop publishes itself — you won’t need to ask anyone or wait again.'
-            : 'When the other steps are done, a person here looks at your ID selfie — usually within 24 hours. If it passes we publish your shop for you and send you a notification, so there’s no switch for you to flip.'}
+            : verifyGates
+              ? 'When the other steps are done, a person here looks at your ID selfie — usually within 24 hours. If it passes we publish your shop for you and send you a notification, so there’s no switch for you to flip.'
+              : 'Your shop publishes itself as soon as it has a name and one treatment — nobody has to approve it, and there’s no switch for you to flip.'}
       </p>
     </section>
   )

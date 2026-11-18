@@ -25,9 +25,20 @@ const KEYS = [
   // vocabulary. ⚠️ THIS CHANGE MUST DEPLOY BEFORE 0108 IS APPLIED — the other
   // order leaves this page rendering controls for keys that no longer exist.
   'founding_provider_cap',
-  // ⚠️ READ-ONLY HERE. See the Founding Provider row below for why it is not a
-  // toggle.
+  // ⚠️ NO LONGER READ-ONLY. It was, deliberately — see the GateToggles card
+  // at the bottom of this file for what changed and what the risk is. The
+  // FoundingStatus row still reports it as well, because "are we charging" and
+  // "are slots being granted" are two facts and only one of them is a switch.
   'provider_fee_enabled',
+  // ── THE OTHER THREE GATES, ADDED 18 Nov 2026 ─────────────────────
+  // All three already existed in `settings` and were readable by four SQL
+  // functions and by site/, and this console could neither see nor change
+  // them. A flag that only a hand-written UPDATE can move is the mirror of the
+  // dead dial 0108 removed: not a switch wired to nothing, but a live switch
+  // with no handle.
+  'subscription_enabled',
+  'verification_required_to_apply',
+  'verification_required_to_publish',
   'image_review_enabled',
   // ⚠️ banned_words GATES PUBLICATION as of migration 0032. It is no longer
   // just a search term list for the moderation tab: a BEFORE INSERT trigger on
@@ -146,6 +157,8 @@ export default function SettingsPage() {
           nothing but what this one admin sees in their own sidebar. Mixing them
           into the same list would invite reading a mute as a moderation
           setting. */}
+      <GateToggles settings={settings} onSave={handleSave} />
+
       <ActivityDotSettings />
     </div>
   )
@@ -265,10 +278,18 @@ function FoundingStatus({ used, cap, feeOn }: { used: number; cap: string; feeOn
   )
 }
 
+/** Every key this file renders as an on/off switch. */
+type ToggleKey =
+  | 'image_review_enabled'
+  | 'provider_fee_enabled'
+  | 'subscription_enabled'
+  | 'verification_required_to_apply'
+  | 'verification_required_to_publish'
+
 function Toggle({
   settingKey, on, onSave,
 }: {
-  settingKey: 'image_review_enabled'
+  settingKey: ToggleKey
   on: boolean
   onSave: OnSave
 }) {
@@ -284,6 +305,129 @@ function Toggle({
       {/* `on` comes from the parent and the parent only updates on success, so
           a refused write leaves the switch where it was AND says why. */}
       {state !== 'saved' && <SaveNote state={state} error={error} />}
+    </div>
+  )
+}
+
+/**
+ * ── ⚠️⚠️ THE FOUR GATES, AND THE TWO GROUPS ARE NOT COSMETIC ─────────
+ *
+ * All four are false today, which is why nothing in the web app asks a model or
+ * a stylist to pay or verify. Each one is read by SQL (`provider_fee_settled`,
+ * `model_may_apply`, `tg_session_apply_gate`,
+ * `enforce_publish_requires_verified`, `publish_provider_if_eligible`,
+ * `unpublish_on_verification_lost`) AND by site/, so a switch here moves the
+ * product for everyone at once.
+ *
+ * ── ⚠️ WHY MONEY AND SAFETY ARE DRAWN APART ──────────────────────
+ * They fail in OPPOSITE directions, deliberately, and the grouping is how an
+ * admin is told that without reading four function bodies:
+ *
+ *   MONEY   an unreadable flag means DO NOT CHARGE. Fails OPEN. Turning one ON
+ *           starts taking real money from real cards.
+ *   SAFETY  an unreadable flag means REQUIRED. Fails CLOSED. Turning one OFF
+ *           lowers a bar a member is relying on; turning it ON is the safe
+ *           direction and can strand people who have not verified.
+ *
+ * Two lists, two headings, and the fail direction written next to each. A
+ * single list of four identical switches would invite reading them as one kind
+ * of thing, which is the one thing they are not.
+ *
+ * ── ⚠️⚠️ THE FEE TOGGLE OVERTURNS A WRITTEN DECISION. READ THIS FIRST. ──
+ * `provider_fee_enabled` was deliberately READ-ONLY on this page (see
+ * FoundingStatus above, which still reports it). Migration 0108's header argued
+ * the case at length and it has not stopped being true: switching the stylist
+ * fee ON is a twelve-step checklist in supabase/FEE-REINSTATEMENT.md — the
+ * /verify fee block, Terms §5's body, the non-refundable clause, the
+ * free-for-stylists copy on /for-stylists and /how-it-works, and the ADVANCE
+ * NOTICE to existing stylists that Terms §5 commits to in writing — on top of
+ * a Stripe path that has never run end to end against a real card
+ * (`verification_payments` has never held a row).
+ *
+ * It is a toggle now because it was asked for, and the warning that used to be
+ * a reason not to build it is rendered next to the control instead, where the
+ * person about to click it will see it. Flipping either money gate ON without
+ * working that list is how a stylist gets charged while four published pages
+ * still say Cavy is free.
+ */
+function GateToggles({
+  settings, onSave,
+}: {
+  settings: SettingsMap
+  onSave: OnSave
+}) {
+  const on = (k: ToggleKey) => settings[k] === 'true'
+
+  const rows: {
+    key: ToggleKey; label: string; help: string
+  }[][] = [
+    [
+      {
+        key: 'provider_fee_enabled',
+        label: 'Stylist one-off fee',
+        help: 'When ON, a stylist must settle £14.99 before her ID check. ⚠️ Reinstating this is a twelve-step checklist — see supabase/FEE-REINSTATEMENT.md — and the Stripe path has never taken a real payment.',
+      },
+      {
+        key: 'subscription_enabled',
+        label: 'Model membership',
+        help: 'When ON, a model needs an active £4.99/month membership to apply. ⚠️ Stripe is LIVE: this charges real cards.',
+      },
+    ],
+    [
+      {
+        key: 'verification_required_to_apply',
+        label: 'ID check required to apply',
+        help: 'When ON, a model cannot apply for a session until her ID check has passed.',
+      },
+      {
+        key: 'verification_required_to_publish',
+        label: 'ID check required to publish',
+        help: 'When ON, a stylist’s shop stays hidden until her ID check has passed, and loses verification unpublishes it.',
+      },
+    ],
+  ]
+
+  return (
+    <div className="mt-6 bg-white rounded-xl border border-black/5 shadow-sm px-6 py-4">
+      <div className="font-medium text-[#3D2E2E]">Gates</div>
+      <div className="text-xs text-[#3D2E2E]/40 mt-0.5">
+        All four are OFF, so nothing on the website asks a member to pay or verify.
+      </div>
+
+      {[
+        {
+          heading: 'Money gates',
+          note: 'A missing or unreadable flag means DO NOT CHARGE — these fail OPEN. Turning one ON takes real money.',
+          tone: 'text-[#8C4A58]',
+        },
+        {
+          heading: 'Safety gates',
+          note: 'A missing or unreadable flag means REQUIRED — these fail CLOSED, the opposite way round from the money gates above. That is on purpose and must not be "tidied".',
+          tone: 'text-[#3D2E2E]',
+        },
+      ].map((group, gi) => (
+        <section key={group.heading} className="mt-5">
+          <div className={`text-sm font-semibold ${group.tone}`}>{group.heading}</div>
+          <div className="text-xs text-[#3D2E2E]/40 mt-0.5 mb-1">{group.note}</div>
+          {rows[gi].map(r => (
+            <div key={r.key} className="flex items-start justify-between gap-6 py-3 border-b border-black/5 last:border-0">
+              <div>
+                <div className="font-medium text-[#3D2E2E]">{r.label}</div>
+                <div className="text-xs text-[#3D2E2E]/40">{r.help}</div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <span className={`text-xs font-medium ${on(r.key) ? 'text-[#8C4A58]' : 'text-gray-400'}`}>
+                  {on(r.key) ? 'ON' : 'OFF'}
+                </span>
+                {/* Same Toggle as Image Review: `on` comes from the parent and
+                    the parent only updates on success, so a refused write
+                    leaves the switch where it was and says why. */}
+                <Toggle settingKey={r.key} on={on(r.key)} onSave={onSave} />
+              </div>
+            </div>
+          ))}
+        </section>
+      ))}
     </div>
   )
 }

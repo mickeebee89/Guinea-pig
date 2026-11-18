@@ -139,6 +139,22 @@ export async function submitApplication(form: FormData): Promise<ApplyResult> {
   // already here: apply/page.tsx has always tested blocked FIRST ("before the
   // gates, because it is not a thing she can fix by paying") while this ran the
   // gates first. Someone a stylist had blocked was told to go and pay.
+  //
+  // ── ⚠️⚠️ BOTH GATES ARE SWITCHED OFF, AND THIS CODE DID NOT CHANGE ───
+  // `subscription_enabled` and `verification_required_to_apply` are false, so
+  // `gate.verified` and `gate.subscribed` are both true and neither refusal
+  // below can fire. That is the correct amount of change for a server action:
+  // the flags are read in ONE place (lib/verification.ts) and every caller
+  // inherits the answer, so the page and this action cannot drift apart.
+  //
+  // ⚠⚠ THE REFUSALS ARE NOT DELETED, AND DELETING THEM WOULD BE THE REAL
+  // DANGER. This is the layer that decides what is ACCEPTED, not what is shown.
+  // If a flag is switched back on, the gate has to be enforced here from that
+  // moment — and the database agrees independently either way
+  // (tg_session_apply_gate reads the same two functions, 0049 / CV003), so a
+  // hole here would be caught as a row-security error instead of a sentence.
+  // The BLOCK and CONSENT checks are untouched and gate nothing on a flag:
+  // neither has one, and consent still fails closed.
 
   // ── Blocked, either direction ────────────────────────────────────────────
   //
