@@ -68,6 +68,7 @@ site/.next-demo/
 
 # Promo screenshots — AI faces, large binaries, regenerable from demo mode.
 promo/
+!site/public/promo/
 
 # Playwright MCP run artefacts (page snapshots, console logs).
 .playwright-mcp/
