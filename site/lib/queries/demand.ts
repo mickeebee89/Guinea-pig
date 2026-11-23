@@ -8,13 +8,25 @@ import type { SupabaseClient } from '@supabase/supabase-js'
  * empty screen. Seven did that and never came back. 85 models have signed up;
  * no surface on the website said so.
  *
- * The obvious build was model browse, and it is the wrong one — not on privacy
- * appetite but on mechanics. **A stylist cannot contact a model at all.** The
- * sessions RLS policy "model can create session" requires
- * `auth.uid() = model_user_id`, and a message needs a session that already
- * exists, so no provider-initiated path exists anywhere in the product. A
- * directory would publish 85 people's names, photos and physical attributes to
- * power a button nobody has.
+ * The obvious build was model browse, and it is the wrong one — not on
+ * privacy appetite but on how much exposure the question needs. An aggregate
+ * answers "is anyone here?"; a directory publishes 85 people's names, photos
+ * and physical attributes to answer it.
+ *
+ * ⚠⚠ THIS PARAGRAPH USED TO SAY SOMETHING FALSE, and it is worth knowing
+ * what. It read: "**A stylist cannot contact a model at all.** The sessions
+ * RLS policy 'model can create session' requires `auth.uid() =
+ * model_user_id`… so no provider-initiated path exists anywhere in the
+ * product. A directory would power a button nobody has."
+ *
+ * The button exists, and has since **20 June 2026** — `invite_model` is
+ * called from `salon-floor/actions.ts` on this website. The sessions sentence
+ * is true and was the wrong thing to generalise from: a stylist cannot start
+ * a BOOKING, which is not the same as cannot make CONTACT.
+ *
+ * Corrected 23 Nov 2026. The conclusion is unchanged because it never needed
+ * that premise — migration 0113's header carries the retraction in full and
+ * names 0112, where the claim was first written down.
  *
  * So this answers one question — "is anyone here?" — and returns nothing that
  * could identify a person. See migration 0112 for the threshold argument.

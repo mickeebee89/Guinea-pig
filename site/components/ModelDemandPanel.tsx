@@ -19,9 +19,13 @@ import { postcodeAreaName } from '@/lib/postcodeAreas'
  * What is true and worth saying: this many people have signed up looking for
  * treatments, and here is roughly where the nearest groups of them are.
  *
- * ⚠️ IT IS NOT A DIRECTORY AND CANNOT BECOME ONE. A stylist cannot contact a
- * model — there is no provider-initiated path in the product (see
- * lib/queries/demand.ts). Names and photos here would be look-only exposure.
+ * ⚠️ IT IS NOT A DIRECTORY AND SHOULD NOT BECOME ONE. Counts answer "is
+ * anyone here?"; names and photos are more exposure than that question needs.
+ *
+ * ⚠⚠ THIS SAID "a stylist cannot contact a model — there is no
+ * provider-initiated path in the product", AND THAT WAS FALSE: invites have
+ * been live since 20 June 2026. Corrected 23 Nov 2026; the full retraction is
+ * in migration 0113's header, which names 0112 as where it started.
  *
  * ── ⚠️ THE ORDER OF THIS CARD IS LOAD-BEARING. CHANGED 23 Nov 2026. ────────
  * It used to lead with "85 models have signed up" and then say, four lines

@@ -1,8 +1,8 @@
 // GENERATED FILE — DO NOT EDIT BY HAND.
 //
 // Written by scripts/gen-supabase-types.mjs from the live database.
-// TYPES_STAMP: 0112
-// TYPES_FILES_AT_GEN: 0112
+// TYPES_STAMP: 0113
+// TYPES_FILES_AT_GEN: 0113
 //
 // TYPES_STAMP is the migration the DATABASE was at when these were generated,
 // stated by whoever ran it (--applied). TYPES_FILES_AT_GEN is the newest
@@ -530,6 +530,72 @@ export type Database = {
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      invites: {
+        Row: {
+          created_at: string
+          declined_at: string | null
+          id: string
+          message: string | null
+          model_user_id: string
+          provider_id: string
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          declined_at?: string | null
+          id?: string
+          message?: string | null
+          model_user_id: string
+          provider_id: string
+          status?: string
+        }
+        Update: {
+          created_at?: string
+          declined_at?: string | null
+          id?: string
+          message?: string | null
+          model_user_id?: string
+          provider_id?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invites_model_user_id_fkey"
+            columns: ["model_user_id"]
+            isOneToOne: false
+            referencedRelation: "public_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invites_model_user_id_fkey"
+            columns: ["model_user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invites_provider_id_fkey"
+            columns: ["provider_id"]
+            isOneToOne: false
+            referencedRelation: "providers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invites_provider_id_fkey"
+            columns: ["provider_id"]
+            isOneToOne: false
+            referencedRelation: "public_stylist_reviews"
+            referencedColumns: ["provider_id"]
+          },
+          {
+            foreignKeyName: "invites_provider_id_fkey"
+            columns: ["provider_id"]
+            isOneToOne: false
+            referencedRelation: "public_stylists"
             referencedColumns: ["id"]
           },
         ]
@@ -2031,6 +2097,7 @@ export type Database = {
           bua: string | null
           created_at: string
           date_of_birth: string | null
+          discoverable: boolean
           email: string
           first_name: string
           fraud_flagged: boolean
@@ -2065,6 +2132,7 @@ export type Database = {
           bua?: string | null
           created_at?: string
           date_of_birth?: string | null
+          discoverable?: boolean
           email: string
           first_name: string
           fraud_flagged?: boolean
@@ -2099,6 +2167,7 @@ export type Database = {
           bua?: string | null
           created_at?: string
           date_of_birth?: string | null
+          discoverable?: boolean
           email?: string
           first_name?: string
           fraud_flagged?: boolean
@@ -2633,7 +2702,44 @@ export type Database = {
         Returns: boolean
       }
       install_email_hook_secret: { Args: { p_secret: string }; Returns: string }
-      invite_model: { Args: { p_model_user_id: string }; Returns: undefined }
+      invitable_models: {
+        Args: { p_lat?: number; p_lng?: number; p_radius_mi?: number }
+        Returns: {
+          bio: string
+          distance_mi: number
+          eye_colour: string
+          eye_shape: string
+          first_name: string
+          hair_colour: string
+          hair_condition: string
+          hair_length: string
+          hair_type: string
+          id: string
+          last_initial: string
+          nail_condition: string
+          profile_pic_url: string
+          skin_tone: string
+          skin_type: string
+        }[]
+      }
+      invite_model: {
+        Args: { p_message?: string; p_model_user_id: string }
+        Returns: {
+          created_at: string
+          declined_at: string | null
+          id: string
+          message: string | null
+          model_user_id: string
+          provider_id: string
+          status: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "invites"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       is_admin: { Args: never; Returns: boolean }
       is_blocked_pair: { Args: { a: string; b: string }; Returns: boolean }
       is_suspended: { Args: { uid: string }; Returns: boolean }

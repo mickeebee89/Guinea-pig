@@ -103,6 +103,43 @@ export function demoRpc(name: string, args: Row, store: DemoStore, user: DemoUse
       }]
 
     /**
+     * Who the demo stylist could invite (0113).
+     *
+     * ⚠️ THE REAL FUNCTION RETURNS NOTHING WITHOUT A PUBLISHED SHOP, and
+     * this mock cannot reproduce that — it has no idea what the demo
+     * stylist's shop looks like. So demo mode shows the POPULATED case and
+     * the unpublished one has to be read on a real account. Said out loud
+     * because a demo that only ever shows the happy path is how a gate goes
+     * untested: check-demo-rpc-coverage proves a mock EXISTS, never that it
+     * behaves like the function.
+     *
+     * ⚠️ MODEST, INVENTED PEOPLE. These feed screenshots, and a demo list
+     * of thirty would imply a platform that does not exist — the same rule
+     * the promo brief set for counts.
+     */
+    case 'invitable_models':
+      return [
+        {
+          id: 'd0000000-0000-4000-8000-000000000022',
+          first_name: 'Leah', last_initial: 'B', profile_pic_url: null,
+          distance_mi: 2.4,
+          hair_colour: 'Dark brown', hair_type: 'Wavy', hair_length: 'Shoulder',
+          hair_condition: 'Healthy', skin_tone: 'Medium', skin_type: 'Combination',
+          eye_colour: 'Brown', eye_shape: 'Almond', nail_condition: 'Short and strong',
+          bio: 'Happy to be a model for colour work — weekday evenings suit me best.',
+        },
+        {
+          id: 'd0000000-0000-4000-8000-000000000023',
+          first_name: 'Jess', last_initial: 'W', profile_pic_url: null,
+          distance_mi: 6.1,
+          hair_colour: 'Blonde', hair_type: 'Straight', hair_length: 'Long',
+          hair_condition: null, skin_tone: 'Fair', skin_type: null,
+          eye_colour: 'Blue', eye_shape: null, nail_condition: null,
+          bio: null,
+        },
+      ]
+
+    /**
      * ⚠️ A NO-OP THAT RETURNS, RATHER THAN A THROW. The Salon Floor page calls
      * this on every load to clear its nav dot, so an unknown-function throw
      * would take the whole page down in demo mode — not the dot, the page.

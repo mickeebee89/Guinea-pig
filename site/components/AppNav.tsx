@@ -50,7 +50,15 @@ const LINKS = [
   // owns, while a stylist had three (Shop, Availability, Portfolio) - and the
   // nine attributes behind this link are what a stylist picks on. Item 99.
   { href: '/profile',       label: 'Profile', modelOnly: true },
+  // Invitations she has been sent. modelOnly, and it is the only place a
+  // decline lives -- a notification cannot carry a verb (0113).
+  { href: '/invites',       label: 'Invites', modelOnly: true },
   { href: BOOKINGS_PATH,    label: 'Bookings' },
+  // Who she can invite. providerOnly, and the DATA gate is stricter than
+  // this nav entry: invitable_models returns nothing unless her shop is
+  // actually published, so an unpublished stylist sees the link and an
+  // explanation rather than a list (0113).
+  { href: '/models',        label: 'Models',       providerOnly: true },
   { href: '/shop',          label: 'Shop',         providerOnly: true },
   { href: '/availability',  label: 'Availability', providerOnly: true },
   // ⚠️ PORTFOLIO IS NOT IN THE NAV, AND THAT IS HOW THE SALON FLOOR FITS.

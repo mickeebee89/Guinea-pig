@@ -181,11 +181,19 @@ export default async function BrowsePage({
                 action that could not be taken.
 
                 ⚠️ THE EXAMPLE USED TO SAY "twenty miles" AND NO LONGER CAN:
-                DEFAULT_RADIUS became RADII[3] — 'any' — on 26 Oct 2026. The
-                bug this comment records is unchanged and the fix still holds;
-                only the number was a detail of the day it was written.
-                Corrected here rather than left to be discovered, which is the
-                failure item 219 is about. */}
+                DEFAULT_RADIUS became 'any' on 26 Oct 2026. The bug this
+                comment records is unchanged and the fix still holds; only the
+                number was a detail of the day it was written. Corrected here
+                rather than left to be discovered, which is the failure item
+                219 is about.
+
+                ⚠️ AND IT NO LONGER SAYS "RADII[3]" EITHER, because that
+                stopped being true on 23 Nov 2026 when a 15-mile option went
+                into the shared list for the stylist-side invite page.
+                DEFAULT_RADIUS is now found BY KEY — had it stayed positional,
+                inserting 15 would have silently narrowed this page and the
+                model dashboard's updates feed from "any" to 20 miles, with
+                nothing on screen to say why. */}
             {RADII.map(r => (
               <li key={r.key}>
                 {result.viewerHasLocation ? (

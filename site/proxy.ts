@@ -91,6 +91,12 @@ export const config = {
     // the whole point of that check existing.
     '/subscribe/:path*',
     '/browse/:path*',
+    // The stylist side of browse: who she can invite. Added 23 Nov 2026 with
+    // the route (0113). The data gate is inside invitable_models, not here --
+    // this entry only keeps her session cookie fresh while she reads it.
+    '/models/:path*',
+    // Her own invites, the model side. Same commit.
+    '/invites/:path*',
     // The profile page a model owns, added 23 Sep 2026 with the route (99).
     '/profile/:path*',
     '/verify/:path*',

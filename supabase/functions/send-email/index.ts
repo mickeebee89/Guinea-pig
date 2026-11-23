@@ -134,10 +134,34 @@ function copyFor(
     // like the feature working and fails later, in front of her.
     case 'stylist_invite': {
       const id = data?.provider_id
-      const subject = 'A stylist would like you as a model'
+      // ⚠⚠ THE SUBJECT NOW CARRIES THE SHOP NAME, AND THAT REVERSES THE RULE
+      // STATED FOR shop_favourited ABOVE — "the name is in the body,
+      // deliberately". Written down rather than quietly departed from:
+      //
+      //   * That rule is about ANOTHER MEMBER'S NAME. A shop name is a trading
+      //     identity a stylist publishes on purpose, which is a different kind
+      //     of thing from a model's first name.
+      //   * The invite is the one notification that is an APPROACH FROM A
+      //     STRANGER. "A stylist would like you as a model" is exactly the
+      //     shape of subject a person deletes unread; the shop's name is what
+      //     makes it legible as a real approach from a real salon.
+      //
+      // ⚠️ THE NAME IS MID-SENTENCE, NOT THE WHOLE SUBJECT, and that is the
+      // mitigation rather than an accident of phrasing. providers.name is text
+      // a stylist chooses, so a subject that were ONLY that name could be made
+      // to impersonate us. "<name> would like to invite you for an
+      // appointment" cannot: whatever is substituted, the sentence around it
+      // still says what this email is.
+      //
+      // The title is built by invite_model (0113) from providers.name, and
+      // `notifications` is closed to direct INSERT — the same property
+      // admin_broadcast already relies on — so the title is not attacker-
+      // supplied in the sense that matters: only that one function writes it.
+      const fallback = 'A stylist would like to invite you for an appointment'
+      const subject = title.trim() !== '' ? title.trim() : fallback
       return typeof id === 'string' && id.length > 0
         ? { subject, heading: subject, cta: 'See their shop', path: `/stylist/${id}` }
-        : { subject, heading: subject, cta: 'Open Cavy', path: '/notifications' }
+        : { subject, heading: subject, cta: 'Open Cavy', path: '/invites' }
     }
 
     // ⚠️ ADMIN MESSAGE NOW EMAILS (0082, 4 Oct 2026). It was in 0047's "not
@@ -530,9 +554,25 @@ Deno.serve(async (req) => {
       }
 
       const c = copyFor(note.type, note.title ?? '', note.session_id, note.data)
+
+      // ⚠⚠ THE STYLIST'S OWN MESSAGE, QUOTED, AND ONLY FOR stylist_invite.
+      // It lives in `data.message` rather than in `body` precisely so that it
+      // arrives as HERS and not as ours: `body` is Cavy's sentence, and the
+      // two must not read as one voice in an email from a stranger.
+      //
+      // ⚠️ REPLIES HAPPEN IN THE APP. Nothing here invites a reply by email
+      // — the From address is no-reply@ and receives nothing (CLAUDE.md), so a
+      // reply would vanish silently. The CTA is the only way back.
+      const invite = note.type === 'stylist_invite'
+        ? (note.data as { message?: unknown } | null)?.message
+        : null
+      const quoted = typeof invite === 'string' && invite.trim() !== ''
+        ? `\n\n“${invite.trim()}”\n\nReply in the app — this address doesn’t receive messages.`
+        : ''
+
       const sent = await send({
         to: who.email, subject: c.subject, heading: c.heading,
-        body: note.body ?? note.title ?? '', cta: c.cta, path: c.path,
+        body: (note.body ?? note.title ?? '') + quoted, cta: c.cta, path: c.path,
         unsubscribeToken: await unsubscribeTokenFor(note.user_id),
       })
       await log({

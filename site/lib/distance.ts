@@ -54,6 +54,11 @@ export function haversineMiles(lat1: number, lon1: number, lat2: number, lon2: n
 export const RADII = [
   { key: '5',   label: '5 miles',      miles: 5 as number | null },
   { key: '10',  label: '10 miles',     miles: 10 as number | null },
+  // ⚠️ 15 ADDED 23 Nov 2026 for the stylist-side invite list, and it lands in
+  // the SHARED list on purpose: a stylist filtering to 15 miles and a model
+  // finding no 15 on Browse would be two vocabularies for one idea, which is
+  // the reason this list is shared at all (see above).
+  { key: '15',  label: '15 miles',     miles: 15 as number | null },
   { key: '20',  label: '20 miles',     miles: 20 as number | null },
   { key: 'any', label: 'Any distance', miles: null as number | null },
 ] as const
@@ -85,7 +90,46 @@ export type RadiusKey = typeof RADII[number]['key']
  * The Salon Floor has its own default (queries/salonFloor.ts) and is changed
  * alongside this rather than by it.
  */
-export const DEFAULT_RADIUS = RADII[3]
+// ⚠⚠ BY KEY, NOT BY INDEX. This read RADII[3] and meant "Any distance";
+// inserting 15 above would silently have made it 20 miles, narrowing Browse and
+// the model dashboard's updates feed for everybody, with nothing on screen to
+// say why. A positional reference into a list other people add to is a bug
+// waiting for the next addition.
+export const DEFAULT_RADIUS = RADII.find(r => r.key === 'any') ?? RADII[RADII.length - 1]
+
+/**
+ * The default for the stylist-side invite list — 15 miles, not "any".
+ *
+ * ⚠️ IT IS A DIFFERENT DEFAULT FROM BROWSE BECAUSE IT IS A DIFFERENT
+ * QUESTION. Browse widens because an almost-empty list is a bad first
+ * impression for a model choosing a stylist. This list is a stylist deciding
+ * who to invite to come to her premises, where "anywhere in the UK" is not a
+ * useful starting point and the people at the top of a national list are not
+ * the ones she can realistically see.
+ *
+ * MEASURED 23 Nov 2026, models within N miles of each of the 7 published
+ * shops, out of 58 placed models:
+ *
+ *   Flowers Mobile   17 at 15mi, 26 at 20
+ *   Mayera           14          22
+ *   Nadia            28          30
+ *   Nhi @ SKINDUSTRY 20          28
+ *   Petra Pekarik     3          11
+ *   SimpliciTee       0           0   (4 at 30)
+ *   Taty Tint studio 28          30
+ *
+ * ⚠️ 20 IS STRICTLY BETTER FOR THE TWO WORST-OFF SHOPS and costs the others
+ * nothing — Petra goes 3 to 11. 15 is here because it was the decision; the
+ * numbers are here so the decision can be revisited against them rather than
+ * inherited. SimpliciTee sees nobody at either, which is the argument for this
+ * being a filter she can widen rather than a cap.
+ */
+export const DEFAULT_INVITE_RADIUS = RADII.find(r => r.key === '15') ?? DEFAULT_RADIUS
+
+/** Read a `within=` parameter for the invite list, defaulting to 15 miles. */
+export function inviteRadiusFromParam(within: string | undefined) {
+  return RADII.find(r => r.key === within) ?? DEFAULT_INVITE_RADIUS
+}
 
 /** Read a `within=` query parameter, falling back to the default. */
 export function radiusFromParam(within: string | undefined) {

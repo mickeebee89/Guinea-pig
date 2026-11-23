@@ -199,8 +199,11 @@ export default async function DashboardPage({
   const setup = isProvider ? await getStylistSetup(supabase, user.id) : null
 
   // How many models have signed up, and roughly where. Counts only, never a
-  // person — a stylist cannot contact a model, so a directory would be
-  // look-only exposure. See lib/queries/demand.ts.
+  // person. A directory is more exposure than "is anyone here?" needs.
+  //
+  // ⚠⚠ THIS SAID "a stylist cannot contact a model" UNTIL 23 Nov 2026, AND
+  // THAT WAS FALSE — invites have been live since 20 June 2026. See migration
+  // 0113's header for the retraction; the reason for aggregates is unchanged.
   //
   // ⚠️ Keyed on `isProvider`, which is strict (role === 'provider') for the
   // reason documented above, so a 'both' account does not get this panel. That

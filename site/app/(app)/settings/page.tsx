@@ -7,6 +7,7 @@ import { BlockedList, type BlockedPerson } from './BlockedList'
 import { getGateState } from '@/lib/verification'
 import { MembershipSection, type MembershipView } from './MembershipSection'
 import { EmailNotificationsSection } from './EmailNotificationsSection'
+import { DiscoverableSection } from './DiscoverableSection'
 import { DeleteAccountSection } from './DeleteAccountSection'
 import { PostcodeField } from '@/components/PostcodeField'
 import { NameSection } from './NameSection'
@@ -87,7 +88,7 @@ export default async function SettingsPage() {
   // for whoever is actually paying.
   const { data: me } = await supabase
     .from('users')
-    .select('role, notification_preferences, postcode, first_name, last_initial')
+    .select('role, notification_preferences, postcode, first_name, last_initial, discoverable')
     .eq('id', user.id).maybeSingle()
 
   // The last change drives the cooldown note, so she is told the rule BEFORE
@@ -104,6 +105,12 @@ export default async function SettingsPage() {
   const emailNotifications =
     (me as { notification_preferences?: { email?: { enabled?: boolean } } } | null)
       ?.notification_preferences?.email?.enabled !== false
+  // ⚠️ DEFAULT ON, and read as "anything but an explicit false" — the same
+  // shape as emailNotifications directly above, for the same reason. The
+  // column is NOT NULL DEFAULT true (0113), so null should be impossible;
+  // treating it as on anyway means a column that somehow arrives null does
+  // not quietly hide every model from every stylist.
+  const discoverable = (me as { discoverable?: boolean | null } | null)?.discoverable !== false
   // This file had it right before item 116 existed — it is the only place on
   // the web that ever checked for 'both'. Same test, shared name now.
   const isModel = isModelRole(role)
@@ -259,6 +266,21 @@ export default async function SettingsPage() {
           }
         />
       </section>
+
+      {/* ⚠️ MODELS ONLY, AND isModelRole — true for 'model' AND 'both'. A
+          'both' account has a model profile that stylists can find, so hiding
+          the switch from her would be hiding a control over her own
+          visibility. role === 'model' would have done exactly that, which is
+          the slip lib/roles.ts exists to stop.
+
+          Placed ABOVE Emails deliberately: it governs who may contact her at
+          all, which is a bigger decision than how she hears about it. */}
+      {isModel && (
+        <section className="mb-8">
+          <h2 className="mb-2 font-display text-lg text-warm-dark">Invitations</h2>
+          <DiscoverableSection enabled={discoverable} />
+        </section>
+      )}
 
       <section className="mb-8">
         <h2 className="mb-2 font-display text-lg text-warm-dark">Emails</h2>
