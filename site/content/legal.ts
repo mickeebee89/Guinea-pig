@@ -146,7 +146,11 @@ export const TERMS: LegalDoc = {
   metaTitle: 'Terms of Service',
   metaDescription:
     'The terms that govern your use of the Cavy website and mobile app.',
-  updated: '30 October 2026',
+  // ⚠️ §15 PROMISES THIS MOVES: "If we make significant changes to these
+  // terms, we'll update the date above." Changing a published statement of
+  // what members must do while leaving the date would break that clause in
+  // the same edit that fixes another. 23 Nov 2026: §5, §7 and §9.
+  updated: '23 November 2026',
   sections: [
     {
       n: '1',
@@ -236,7 +240,18 @@ export const TERMS: LegalDoc = {
         // sentence is a statement of the gap, not a disclaimer.
         {
           type: 'p',
-          text: 'Cavy is free for stylists. There is no sign-up fee, no verification fee and no subscription — we will not ask you to pay us anything to create an account, be verified, or offer treatments. You will still need to complete the identity check before you can offer treatments (section 7). If we ever introduce a charge for stylists, we will tell you before it applies to your account, and you will be able to decide then.',
+          // ⚠️ "You will still need to complete the identity check before you
+          // can offer treatments" UNTIL 23 Nov 2026, AND IT HAD BEEN FALSE
+          // SINCE 18 Nov — migration 0111 set verification_required_to_publish
+          // to false and rewired the four pieces of machinery that enforced it.
+          // A shop publishes on a name and one treatment.
+          //
+          // ⚠️ "account check", NOT "identity check". §7 was renamed from
+          // 'Identity verification' on 30 Oct for the reason recorded there,
+          // and §7's own text says "It is not an identity check against a
+          // document" — so a cross-reference calling it one contradicts the
+          // section it points at.
+          text: 'Cavy is free for stylists. There is no sign-up fee, no verification fee and no subscription — we will not ask you to pay us anything to create an account, be verified, or offer treatments. The account check in section 7 is optional. If we ever introduce a charge for stylists, we will tell you before it applies to your account, and you will be able to decide then.',
         },
       ],
     },
@@ -275,7 +290,22 @@ export const TERMS: LegalDoc = {
           // of birth field does that, and the database enforces it (0002). And
           // "verification" invites a reader to think a document was checked.
           // No document is requested, seen or kept.
-          text: 'To help keep the community safe, every member completes an account check: you send a selfie of yourself holding your name on a handwritten note, and a member of our team looks at it alongside your profile photo. Stylists must pass this check before they can offer treatments, and models before they can apply for one. It is not an identity check against a document — we do not ask for, see, or keep a passport or driving licence — and it does not confirm your age; we ask for your date of birth separately for that. What it tells us is that a real person is behind the account and that the profile photo has not been taken from somewhere else. It is not a guarantee of any member’s identity, character, qualifications, or conduct, and you should still use your own judgement when arranging to meet anyone. We handle these photographs as described in our Privacy Policy.',
+          // ⚠️⚠️ TWO SENTENCES CHANGED 23 Nov 2026, AND THE FIRST IS WHY THIS
+          // COULD NOT BE A ONE-LINE SWAP. The section opened "every member
+          // completes an account check" and went on "Stylists must pass this
+          // check before they can offer treatments, and models before they can
+          // apply for one." Both stopped being true on 18 Nov (0110, 0111).
+          // Replacing only the second would have left "every member completes"
+          // three sentences above "the account check is optional".
+          //
+          // ⚠️ THE NOTICE REFERENCE IS §15, NOT §5. §5 is "Stylist accounts"
+          // and its notice promise is about introducing a CHARGE, for stylists
+          // only; this section binds models too. §15 "Changes to the service
+          // and these terms" is the general mechanism.
+          //
+          // ⚠️ AND IT SAYS "account check" THROUGHOUT. Calling it an identity
+          // check here would contradict this section's own next sentence.
+          text: 'To help keep the community safe, members can complete an account check: you send a selfie of yourself holding your name on a handwritten note, and a member of our team looks at it alongside your profile photo. The account check is optional. We may ask you to complete it, and we may make it a requirement in future by giving notice under section 15. It is not an identity check against a document — we do not ask for, see, or keep a passport or driving licence — and it does not confirm your age; we ask for your date of birth separately for that. What it tells us is that a real person is behind the account and that the profile photo has not been taken from somewhere else. It is not a guarantee of any member’s identity, character, qualifications, or conduct, and you should still use your own judgement when arranging to meet anyone. We handle these photographs as described in our Privacy Policy.',
         },
       ],
     },
@@ -306,36 +336,41 @@ export const TERMS: LegalDoc = {
     },
     {
       n: '9',
-      heading: 'Payments, subscriptions and refunds',
+      // ⚠️⚠️ HEADING CHANGED 23 Nov 2026, NUMBER DELIBERATELY NOT.
+      // /how-it-works links to /terms#9 by number and by the words "section 9"
+      // for refund terms, so the anchor is load-bearing exactly as §5's is.
+      // The word "subscriptions" left the heading because the section no
+      // longer describes one — the same move §5 made on 23 Oct, for the same
+      // reason: a heading that names something the body dropped is the next
+      // false sentence waiting to be quoted back at us.
+      heading: 'Payments and refunds',
       blocks: [
+        // ⚠⚠ THE TWO MEMBERSHIP CLAUSES WERE DELETED HERE on 23 Nov 2026,
+        // the same way the stylist verification fee clause was deleted on
+        // 23 Oct. `subscription_enabled` was set false by migration 0109 on
+        // 18 Nov, and measured the day of this edit EVERY ONE of the 104 user
+        // rows reads subscription_status = 'none'. Nobody is asked to pay and
+        // nobody is paying, so "Some features of Cavy require payment" named a
+        // requirement that does not run, and a renewal-and-cancellation clause
+        // set out billing terms for a product with no live customer.
+        //
+        // ⚠️ IT WAS NOT QUITE "never bought", AND THE RECORD SHOULD SAY SO:
+        // `subscriptions` holds TWO rows, both `expired`, created 20 Jun and
+        // 14 Sep 2026, and both belong to Micky's own test accounts
+        // (micky.buckfield@hotmail.co.uk and +model2@gmail.com). No third
+        // party has ever been billed, and nobody is mid-term, so nothing here
+        // is being withdrawn from under a paying member.
+        //
+        // The exact deleted wording is in supabase/FEE-REINSTATEMENT.md beside
+        // the fee text, with the flag to flip to bring it back.
         {
           type: 'p',
-          // "in the app" until 23 Sep 2026 — untrue since 14 Sep, when
-          // membership became payable on the website too.
-          // ⚠️ THE STYLIST HALF OF THIS SENTENCE WAS REMOVED 23 Oct 2026
-          // (0102). Models still pay a membership; stylists pay nothing. See
-          // section 5, and supabase/FEE-REINSTATEMENT.md for what goes back.
-          text: 'Some features of Cavy require payment — a monthly membership subscription for models. Current prices are shown on the website and in the app before you pay, and payments are handled by our payment provider (we don’t store your full card details).',
+          // ⚠️ THIS MIRRORS /how-it-works DELIBERATELY. That page already
+          // says "Cavy isn't charging anyone at the moment" and then sends the
+          // reader HERE for the refund terms. Two documents answering the same
+          // money question had to agree, and the public one was already right.
+          text: 'Cavy is not charging anyone at the moment — there is no sign-up fee, no verification fee and no subscription, for models or for stylists. If that changes, we will give you notice under section 15, the price will be shown before you pay, and payments will be handled by our payment provider (we don’t store your full card details).',
         },
-        {
-          type: 'p',
-          // ⚠️⚠️ "from within the app" UNTIL 30 Oct 2026, AND THE FIX ABOVE
-          // MISSED IT. The sentence directly above was corrected on
-          // 23 Sep 2026 for exactly this reason — membership became payable on
-          // the website on 14 Sep — and the correction was applied to the
-          // PAYMENT sentence and not to the CANCEL one. The cancel control
-          // lives in settings/MembershipSection.tsx, on the website.
-          // settings/page.tsx:72 states the rule it breaks: "Cancel any time"
-          // has to be true for whoever is actually paying.
-          text: 'Model membership subscription. The membership renews automatically each month at the price shown until you cancel. You can cancel at any time in Settings on the website, or in the app, to stop future renewals; when you cancel, your membership continues until the end of the month you’ve already paid for, and you won’t be charged again. We don’t provide partial refunds for the remainder of a month once it has started, except where the law requires otherwise.',
-        },
-        // ⚠️⚠️ THE "STYLIST VERIFICATION FEE … NON-REFUNDABLE" CLAUSE WAS
-        // DELETED HERE on 23 Oct 2026 (0102). It described the refund terms of
-        // a charge that can no longer happen, and softening it would have left
-        // a published document describing a fee while the site says there is
-        // none. The model subscription's own refund terms are separate and are
-        // unchanged. The exact deleted wording is quoted in
-        // supabase/FEE-REINSTATEMENT.md so it can be restored verbatim.
         {
           type: 'p',
           text: `Your cancellation rights. Where you are a consumer, you may have a legal right to cancel a purchase within 14 days. Because our paid features are digital services that you ask us to provide immediately, this right may end once the service has been provided. Nothing here affects your statutory rights as a consumer. If you think you’re entitled to a refund, or something has gone wrong with a payment, email us at ${SUPPORT_EMAIL} and we’ll deal with it in line with your rights and these terms.`,

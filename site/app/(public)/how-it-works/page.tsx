@@ -116,8 +116,17 @@ export default function HowItWorks() {
               the homepage links HERE labelled "What it costs". A trainee stylist
               following the money link read that she owed £14.99, then clicked
               through to /terms#9, which no longer mentions a stylist fee at all.
-              ⚠️ THE #9 LINK IS STILL RIGHT: §9 is where the MEMBERSHIP's refund
-              terms live, and that is now the only thing this paragraph claims. */}
+              ⚠️ THE #9 LINK IS STILL RIGHT, FOR A NARROWER REASON SINCE
+              23 Nov 2026. It used to be "§9 is where the MEMBERSHIP's refund
+              terms live" — those two clauses were cut that day, because
+              `subscription_enabled` has been false since 18 Nov and all 104
+              user rows read subscription_status = 'none'. What §9 still holds,
+              and what this paragraph actually promises, is the CANCELLATION
+              RIGHTS block: a statutory-rights clause that reads correctly
+              whether or not anything is currently for sale. §9 also now opens
+              by saying Cavy is not charging anyone, which is this paragraph's
+              own first sentence — the two documents were made to agree rather
+              than left to drift. */}
           <p className="mt-5 text-sm text-muted">
             {/* ⚠️ WAS "Cavy itself has one paid feature: a monthly membership
                 for models". `subscription_enabled` is false, so there is no

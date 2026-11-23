@@ -1,4 +1,21 @@
-# Putting the stylist verification fee back
+# Putting a charge back
+
+**This file now covers TWO switched-off charges**, because they were turned off
+the same way and have to be turned back on the same way:
+
+| charge | flag | off since | section here |
+|---|---|---|---|
+| stylist verification fee, £14.99 one-off | `provider_fee_enabled` | 23 Oct 2026 (`0102`) | everything below, to §6 |
+| model membership, £4.99/mo | `subscription_enabled` | 18 Nov 2026 (`0109`) | §7, at the end |
+
+The second was added on 23 November 2026, when Terms §9 was cut back for the
+model membership exactly as it had been cut back for the fee. Keeping both
+records in one file is deliberate: the next person to ask "what did we used to
+charge, and what did we publish about it?" should find one answer, not two.
+
+---
+
+## Putting the stylist verification fee back
 
 The one-off stylist verification fee was **switched off, not removed**, by
 migration `0102_cavy_is_free_for_stylists_and_the_code_says_so_too` on
@@ -224,3 +241,128 @@ See the discussion in the commit that added this file.
 - [ ] Update the comments that now say the fee is off
 - [ ] ⚠️ **Walk a real stylist account through `/verify` with a Stripe test card — this path has never run**
 - [ ] Confirm `verification_payments` gains a row and the webhook writes it
+
+
+---
+
+# 7. Putting the model membership subscription back
+
+The £4.99/mo model membership was **switched off, not removed**, by migration
+`0109_subscription_enabled_global_flag` on **18 November 2026**. The same
+shape as the fee: a flag, a function that reads it, and published copy that
+had to stop describing a charge nobody is asked for.
+
+> ## ⚠️⚠️ READ THIS FIRST: TWO TEST SUBSCRIPTIONS, NO REAL CUSTOMER
+>
+> Measured 23 Nov 2026, the day Terms §9 was cut:
+>
+> * `public.subscriptions` holds **2 rows, both `expired`** — created
+>   20 Jun 2026 and 14 Sep 2026, belonging to `micky.buckfield@hotmail.co.uk`
+>   and `micky.buckfield+model2@gmail.com`. Both are Micky's own accounts.
+> * **All 104 `public.users` rows read `subscription_status = 'none'`.**
+>
+> So, unlike the fee (which had never run at all), the subscription path HAS
+> run end to end — twice, on test accounts. No third party has ever been
+> billed, and nobody was mid-term when §9 was cut, which is why cutting it
+> withdrew nothing from under a paying member.
+>
+> That is still not the same as "proven in production". Walk a real card
+> through it before telling anyone the membership is back.
+
+## 7.1 The switch
+
+```sql
+update public.settings set value = 'true', updated_at = now()
+where key = 'subscription_enabled';
+```
+
+`public.subscription_enabled()` reads that row. ⚠️ **A missing row reads as
+OFF (free)** — same polarity and same reasoning as `provider_fee_enabled()`:
+the safe reading of "the flag is gone" is "do not charge". If the row has been
+deleted, insert it:
+
+```sql
+insert into public.settings (key, value) values ('subscription_enabled', 'true')
+on conflict (key) do update set value = 'true', updated_at = now();
+```
+
+Check it as a member, not as `postgres` (which has `bypassrls`):
+
+```sql
+select public.subscription_enabled();                  -- expect true
+select public.model_may_apply('<an unsubscribed model uuid>'); -- expect false
+```
+
+⚠️ **Never write `users.subscription_status` or `subscriptions.status`
+directly** — call `apply_subscription_state(...)`, which writes both in one
+transaction so they cannot disagree (migrations `0023`–`0025`).
+
+## 7.2 Terms §9 — the exact deleted wording
+
+Both blocks were deleted on 23 Nov 2026 and replaced with a single sentence
+saying Cavy is not charging anyone at the moment. ⚠️ **The section NUMBER must
+not move**: `/how-it-works` links to `/terms#9` and names "section 9" in its
+own copy.
+
+**Block 1**, the opening sentence of the section. Verbatim:
+
+> Some features of Cavy require payment — a monthly membership subscription for
+> models. Current prices are shown on the website and in the app before you
+> pay, and payments are handled by our payment provider (we don't store your
+> full card details).
+
+**Block 2**, its own `{ type: 'p' }` block. Verbatim:
+
+> Model membership subscription. The membership renews automatically each month
+> at the price shown until you cancel. You can cancel at any time in Settings
+> on the website, or in the app, to stop future renewals; when you cancel, your
+> membership continues until the end of the month you've already paid for, and
+> you won't be charged again. We don't provide partial refunds for the
+> remainder of a month once it has started, except where the law requires
+> otherwise.
+
+**The heading** changed from `Payments, subscriptions and refunds` to
+`Payments and refunds`. Put the word back when the subscription comes back.
+
+**What was NOT deleted:** the "Your cancellation rights" block. It is a
+statutory-rights clause, it is what `/how-it-works` sends readers to §9 for,
+and it reads correctly whether or not anything is currently for sale.
+
+⚠️ **Terms are published and dated.** §15 says significant changes update the
+date and, where appropriate, are notified. Reinstating a charge is a change in
+what members are asked to pay, so it needs that treatment — not a silent edit.
+The 23 Nov 2026 cut moved the date from 30 October to 23 November for exactly
+this reason.
+
+## 7.3 Copy that would have to change back
+
+* `site/app/(public)/how-it-works/page.tsx` — "Cavy isn't charging anyone at
+  the moment — no sign-up fee, no verification fee and no subscription, for
+  models or for stylists." Written when the flag went off; it names BOTH
+  charges, so reinstating either one makes it false.
+* `site/content/legal.ts` §5 — "There is no sign-up fee, no verification fee
+  and no subscription" is about stylists and is unaffected by the model
+  membership. Read it before assuming.
+
+## 7.4 What is already in place and needs nothing
+
+| piece | state |
+|---|---|
+| `subscriptions` table, `users.subscription_status`, the CHECK constraint | untouched |
+| `apply_subscription_state(...)` | untouched — still the only correct writer |
+| `stripe-payment` / `stripe-webhook` edge functions | untouched |
+| `settings.subscription_price_pence` | untouched — the price is still where it was |
+| `site/components/PayForm.tsx`, `/subscribe`, `settings/MembershipSection.tsx` | untouched |
+| `model_may_apply`, `tg_session_apply_gate` | untouched — both read the flag already |
+
+## 7.5 Reversal checklist
+
+- [ ] Decide whether reinstating needs advance notice (§15 says a significant change does)
+- [ ] `update public.settings … subscription_enabled = 'true'`
+- [ ] `select public.subscription_enabled()` → true
+- [ ] `select public.model_may_apply('<unsubscribed model>')` → false
+- [ ] Restore Terms §9 blocks 1 and 2 and the heading, verbatim from §7.2
+- [ ] Move the Terms `updated:` date
+- [ ] Fix the `/how-it-works` "isn't charging anyone" paragraph
+- [ ] ⚠️ Walk a real model account through `/subscribe` on a Stripe test card
+- [ ] Confirm `subscriptions` gains a row and `users.subscription_status` agrees with it
