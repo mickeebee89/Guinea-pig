@@ -402,12 +402,19 @@ export function StylistSetupPanel({ setup }: { setup: StylistSetup }) {
                     whenever you like.
                     {setup.idCheckNote && <> The reviewer said: “{setup.idCheckNote}”</>}
                   </>
+                /* ⚠️ THE BADGE SENTENCE IS GONE (23 Nov 2026) AND MUST NOT
+                   COME BACK — lib/verification.ts, above isIdentityVerified,
+                   has the measurement. What is KEPT is the last clause: "it
+                   isn't an identity check, nobody sees a passport" is the
+                   oldest rule on this feature and the one most worth saying,
+                   because it is the claim a reader supplies for herself if we
+                   stay quiet. */
                 : <>
-                    A selfie holding a handwritten note, looked at by a person. It puts a
-                    &ldquo;photo checked&rdquo; badge on your shop, which is the thing a model
-                    looks for when she’s deciding whether to apply. It isn’t needed to go live
-                    and nothing is waiting on it — and it isn’t an identity check: nobody sees
-                    a passport or a driving licence.
+                    A selfie holding a handwritten note, looked at by a person. It isn’t needed
+                    to go live, nothing is waiting on it, and your shop looks no different
+                    afterwards — we keep the result on your account and show it nowhere on
+                    Cavy. It isn’t an identity check either: nobody sees a passport or a
+                    driving licence.
                   </>}
           </p>
           {setup.idCheck !== 'pending' && (

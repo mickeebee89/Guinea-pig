@@ -56,16 +56,14 @@ export default async function ModelPage({
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="font-display text-2xl text-warm-dark">{m.name}</h1>
-              {/* Mobile has shown this since it was built (model/[id].tsx:479)
-                  and the web never had it (item 96). It is the same claim the
-                  stylist page makes about a stylist, worded the same way — the
-                  ID check is the one thing a stranger can be told about another
-                  stranger before they agree to be in a room together. */}
-              {m.isVerified && (
-                <span className="inline-flex items-center rounded-[999px] bg-soft-pink px-2.5 py-0.5 text-xs font-bold text-rose">
-                  Verified
-                </span>
-              )}
+              {/* ⚠️ A "Verified" pill stood here from item 96 until 23 Nov
+                  2026, matching the stylist page. The argument for it was
+                  that "the ID check is the one thing a stranger can be told
+                  about another stranger before they agree to be in a room
+                  together" — which is exactly why it had to go once it was
+                  measured. A signal carrying that much weight cannot be
+                  wrong about six of the seven people it is pinned to. See
+                  lib/verification.ts, above isIdentityVerified. */}
             </div>
             {/* ⚠️ CHECKED ON THE WAY OUT, NOT JUST ON THE WAY IN (item 102).
                 Nothing validated this field for four months and an EMAIL

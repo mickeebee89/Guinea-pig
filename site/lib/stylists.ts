@@ -1,8 +1,12 @@
 import { supabase, type PublicStylist } from './supabase-public'
 import { BuildQueryError, onQueryFailure } from './query-failure'
 
+// ⚠️ `is_verified` IS NOT FETCHED. Its only reader was StylistCard's rose ✓,
+// removed 23 Nov 2026 — see lib/verification.ts above isIdentityVerified. The
+// column still exists on public_stylists (and so stays on the PublicStylist
+// interface, which mirrors the view); this list is the subset the cards use.
 const CARD_COLUMNS =
-  'id, slug, name, location, categories, rating, review_count, is_verified, profile_pic_url'
+  'id, slug, name, location, categories, rating, review_count, profile_pic_url'
 
 /**
  * Every stylist read on the public site goes through here, so that a missing

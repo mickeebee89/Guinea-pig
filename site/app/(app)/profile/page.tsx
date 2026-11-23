@@ -123,7 +123,15 @@ export default async function ProfilePage() {
               ? 'A person looks at these — not a computer — usually within 24 hours. Nothing for you to do.'
               : idCheckRequired
                 ? 'One selfie holding a handwritten note, looked at by a person. You can do it now — you don’t need to have chosen a stylist first.'
-                : 'One selfie holding a handwritten note, looked at by a person. It puts a “photo checked” badge on your profile, which is what a stylist looks for when she’s deciding who to take. You don’t need it to apply for anything — it just makes it easier for someone to say yes.'}
+                /* ⚠️ THIS PROMISED A BADGE THAT NO LONGER EXISTS, and closed
+                   with "it just makes it easier for someone to say yes" —
+                   which was the badge's effect restated, so it had to go with
+                   it rather than survive as the reason. Nothing replaced it:
+                   see lib/verification.ts above isIdentityVerified. */
+                /* "It's optional" is NOT repeated here: the heading two lines
+                   up already reads "Optional: the ID check", and saying it
+                   twice in six words reads as persuading rather than telling. */
+                : 'One selfie holding a handwritten note, looked at by a person. You don’t need it to apply for anything, and your profile looks no different afterwards. We keep the result on your account; it isn’t shown anywhere on Cavy.'}
           </p>
           {idCheck.state !== 'pending' && (
             <Link

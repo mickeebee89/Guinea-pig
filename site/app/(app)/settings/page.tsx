@@ -194,10 +194,19 @@ export default async function SettingsPage() {
                   : setup.providerId
                     ? setup.verifyRequiredToPublish
                       ? 'Not done yet. It’s what makes your shop live.'
-                      : 'Not done yet, and nothing is waiting on it — your shop goes live without it. It puts a “photo checked” badge on your shop.'
+                      // ⚠️ AND IT HAPPENED AGAIN, 23 Nov 2026, IN THE SAME TWO
+                      // SENTENCES. Both ended "It puts a 'photo checked' badge
+                      // on your shop/profile" — a consequence that stopped
+                      // following when every badge was removed, exactly as
+                      // "It's what makes your shop live" had stopped following
+                      // above. A sentence naming a consequence is a sentence
+                      // that has to be re-read every time the consequence
+                      // moves. See lib/verification.ts above
+                      // isIdentityVerified.
+                      : 'Not done yet, and nothing is waiting on it — your shop goes live without it and looks no different afterwards. We keep the result on your account; it isn’t shown anywhere on Cavy.'
                     : idCheckRequired
                       ? 'Not done yet. You can do it now — you don’t need to have chosen a stylist first.'
-                      : 'Not done yet, and nothing is waiting on it. It puts a “photo checked” badge on your profile, which is what a stylist looks for when she’s deciding who to take.'}
+                      : 'Not done yet, and nothing is waiting on it — your profile looks no different afterwards. We keep the result on your account; it isn’t shown anywhere on Cavy.'}
           </p>
           {/* No link while it is pending: there is nothing to do on that page
               but read the same sentence again. */}

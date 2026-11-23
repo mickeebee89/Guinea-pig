@@ -22,7 +22,6 @@ export interface DashboardUser {
   firstName: string | null
   lastInitial: string | null
   role: string
-  isVerified: boolean
   avatarUrl: string | null
 }
 
@@ -113,7 +112,11 @@ export async function getDashboardUser(
 ): Promise<DashboardUser> {
   const { data } = await supabase
     .from('users')
-    .select('first_name, last_initial, role, is_verified, profile_pic_url, is_founding_provider')
+    // ⚠️ `is_verified` IS NOT SELECTED, DELIBERATELY. Its only consumer was the
+    // "· Verified" badge in the dashboard header, removed 23 Nov 2026 — see
+    // lib/verification.ts above isIdentityVerified. Fetching it with nothing
+    // to render it is how a removed badge comes back by accident.
+    .select('first_name, last_initial, role, profile_pic_url, is_founding_provider')
     .eq('id', userId)
     .maybeSingle()
   const u = (data ?? {}) as Record<string, unknown>
@@ -125,7 +128,6 @@ export async function getDashboardUser(
     firstName: (u.first_name as string) ?? null,
     lastInitial: (u.last_initial as string) ?? null,
     role: (u.role as string) ?? 'model',
-    isVerified: !!u.is_verified,
     avatarUrl: (u.profile_pic_url as string) ?? null,
   }
 }

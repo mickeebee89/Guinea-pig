@@ -58,21 +58,16 @@ import { indexById, displayName, type ProfileRef } from './util'
  */
 
 /**
- * ⚠️ THE EMBED'S SHAPE IS NOT AGREED, SO BOTH ARE HANDLED. Item 176.
+ * ⚠️ A `users!user_id(is_verified)` EMBED AND AN `embeddedVerified` HELPER
+ * STOOD HERE UNTIL 23 Nov 2026, removed with the Verified pill they fed — see
+ * lib/verification.ts above isIdentityVerified.
  *
- * `users!user_id(is_verified)` is a many-to-one FK, and PostgREST returns a
- * single object for it at runtime — admin/app/providers/page.tsx types it that
- * way and has worked in production. But the GENERATED TYPES model it as an
- * ARRAY, so TypeScript and the runtime disagree about which it is.
- *
- * Reading `.is_verified` off the wrong one yields `undefined`, which is falsy,
- * which is a badge that silently does not show — the exact failure this change
- * exists to end. So neither shape is assumed.
+ * ⚠️ THE GOTCHA IS KEPT FOR THE NEXT EMBED. A many-to-one FK embed returns a
+ * SINGLE OBJECT at runtime while the GENERATED TYPES call it an ARRAY; reading
+ * a field off the wrong one yields `undefined`, which is falsy, plausible and
+ * silent. Item 176 was that exact bug. lib/queries/browse.ts carries the same
+ * note, and admin/app/providers/page.tsx still has a live embed.
  */
-function embeddedVerified(u: unknown): boolean {
-  const row = Array.isArray(u) ? u[0] : u
-  return !!(row as { is_verified?: boolean | null } | null | undefined)?.is_verified
-}
 
 export interface StylistProfile {
   id: string
@@ -80,7 +75,6 @@ export interface StylistProfile {
   name: string
   bio: string | null
   location: string | null
-  isVerified: boolean
   /**
    * False when the shop is hidden. Since 0048 a member holding a booking can
    * read the row, so this page now has to render a shop that is not taking
@@ -155,18 +149,16 @@ export async function getStylistProfile(
   const { data: p } = await supabase
     .from('providers')
     .select(
-      // ⚠️ users!user_id(is_verified), NOT providers.is_verified — item 176,
-      // 6 Oct 2026. providers.is_verified defaults to false and nothing has
-      // ever written it, so the badge on this page had never once shown for a
-      // stylist who passed her ID check. admin_decide_verification writes
-      // users.is_verified; that is the authoritative one.
+      // ⚠️ THE `users!user_id(is_verified)` EMBED WAS REMOVED 23 Nov 2026 with
+      // the Verified pill it fed. `user_id` STAYS: it is read below and is not
+      // available on the view named next.
       //
       // This page cannot read public_stylists instead: that view withholds
       // user_id and is_published (both used below), and it is a definer view
       // granted to anon, so a signed-in page reading it would bypass RLS.
       // The embed is the same shape admin/app/providers/page.tsx already uses.
       'id, user_id, name, bio, location_text, location, is_published, ' +
-      'rating, review_count, profile_pic_url, users!user_id(is_verified)',
+      'rating, review_count, profile_pic_url',
     )
     .eq('id', providerId)
     .maybeSingle()
@@ -176,7 +168,6 @@ export async function getStylistProfile(
     id: string; user_id: string | null; name: string | null
     bio: string | null; location_text: string | null; location: string | null
     is_published: boolean | null
-    users: unknown
     rating: number | null; review_count: number | null
     profile_pic_url: string | null
   }
@@ -248,7 +239,6 @@ export async function getStylistProfile(
     bio: prov.bio,
     // See the header: location_text is the live column, location is the dead one.
     location: prov.location_text ?? prov.location ?? null,
-    isVerified: embeddedVerified(prov.users),
     isPublished: !!prov.is_published,
     rating: prov.rating,
     reviewCount: prov.review_count ?? 0,

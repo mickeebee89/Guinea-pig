@@ -62,13 +62,10 @@ export type ModelProfile = {
   }[]
   /** The mean of the ratings that have one. Null when there are none. */
   averageRating: number | null
-  /**
-   * Her identity check has passed.
-   *
-   * Read from `users.is_verified`, the same source mobile's isIdentityVerified
-   * uses. NOT on public_profiles, so it needs its own read.
-   */
-  isVerified: boolean
+  /* ⚠️ `isVerified` STOOD HERE UNTIL 23 Nov 2026, with a second round trip
+     to `users` to fill it, because it is not on public_profiles. Both went
+     with the Verified pill on model/[id] — see lib/verification.ts above
+     isIdentityVerified. This page no longer reads the flag at all. */
   isSelf: boolean
   isBlocked: boolean
 }
@@ -131,7 +128,7 @@ export async function getModelProfile(
 
   const [
     { data: attrData }, { data: photoData }, { data: catData }, blocked,
-    { data: revData }, { data: verifiedData },
+    { data: revData },
   ] = await Promise.all([
     supabase.from('model_attributes')
       .select('hair_colour, hair_type, hair_length, hair_condition, skin_tone, skin_type, ' +
@@ -150,10 +147,6 @@ export async function getModelProfile(
       .eq('reviewee_id', modelUserId)
       .order('created_at', { ascending: false })
       .limit(20),
-    // is_verified is not on public_profiles. users RLS permits reading this
-    // row only where a policy allows it; a refusal yields null, which reads as
-    // "not verified" — the safe direction, since the badge is a claim.
-    supabase.from('users').select('is_verified').eq('id', modelUserId).maybeSingle(),
   ])
 
   const attrs = (attrData ?? null) as ModelAttrRow | null
@@ -222,7 +215,6 @@ export async function getModelProfile(
     // Averaged over the ones that HAVE a rating, not over all of them — a
     // null counted as zero would drag an honest score down.
     averageRating: rated.length > 0 ? rated.reduce((a, b) => a + b, 0) / rated.length : null,
-    isVerified: !!(verifiedData as { is_verified?: boolean } | null)?.is_verified,
     isSelf: p.id === viewerId,
     isBlocked: blocked.has(p.id),
   }

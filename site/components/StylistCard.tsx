@@ -21,31 +21,35 @@ export function StylistCard({ stylist }: { stylist: PublicStylist }) {
         </span>
       )}
       <div className="min-w-0">
-        <p className="truncate font-display text-lg text-warm-dark">
-          {stylist.name}
-          {/* ── SAY LESS THAN IS TRUE ─────────────────────────────────────
-              This read "Identity verified", on pages served to logged-out
-              visitors and indexed by search engines. Nothing of the sort
-              happens: a person compares a selfie holding a handwritten note
-              against the profile photo. No document is requested, seen or kept.
+        {/* ── ⚠️ SAY LESS THAN IS TRUE, AND THEN SAY NOTHING ───────────────
+            A rose ✓ stood here, titled "Photo checked — a person compared
+            their selfie to their profile photo", on pages served to
+            logged-out visitors and indexed by search engines.
 
-              A model weighs this when deciding whether to be alone with a
-              stranger. Someone who believes a passport was checked accepts a
-              risk they would not otherwise accept, on the strength of our
-              wording — which makes it a safety claim, not marketing copy. The
-              rule is stated in full at app/(app)/verify/page.tsx; this was the
-              last place still breaking it, and the most public. */}
-          {stylist.is_verified && (
-            <span
-              className="ml-1.5 text-sm text-rose"
-              title="Photo checked — a person compared their selfie to their profile photo. Not an ID document check."
-              aria-label="Photo checked"
-              role="img"
-            >
-              ✓
-            </span>
-          )}
-        </p>
+            It was fixed once, in September, by SOFTENING it: the tooltip had
+            said "Identity verified", which invited a reader to think a
+            passport had been checked. That fix was aimed at the wrong thing.
+            The wording was never the fault — the SENTENCE WAS UNTRUE ABOUT
+            THE PERSON IT WAS PINNED TO.
+
+            Measured on production 23 Nov 2026, counting rendered instances in
+            the served HTML: NINE badges across /hair-models, /makeup-models,
+            /lash-models and /brow-models, covering all seven published
+            stylists. EIGHT of the nine sat on a stylist who had never
+            submitted a verification request, so no person had compared
+            anything. `is_verified` is an admin flag; across the platform 14
+            users carry it and 3 earned it.
+
+            A model weighs this when deciding whether to be alone with a
+            stranger. That is what makes it a safety claim rather than
+            marketing copy, and it is why a mostly-wrong one is worse than
+            none: she cannot tell which seventh she is looking at.
+
+            ⚠️ DO NOT REPLACE IT WITH A BADGE DRIVEN OFF
+            `verification_requests` EITHER. Three approved rows exist in all.
+            A mark almost nobody carries reads as a mark against everyone
+            else. See lib/verification.ts, above isIdentityVerified. */}
+        <p className="truncate font-display text-lg text-warm-dark">{stylist.name}</p>
         {stylist.location && <p className="truncate text-sm text-muted">{stylist.location}</p>}
         {stylist.categories.length > 0 && (
           <p className="mt-1 truncate text-xs text-rose">{stylist.categories.join(' · ')}</p>

@@ -88,15 +88,24 @@ function Wrap({
           four steps, so the register came entirely from the surrounding copy.
           Said out loud here, once, for both roles.
 
-          ⚠️ IT DOES NOT OVERSELL THE BADGE. "Say less than is true" governs
-          every sentence on this page: it tells a stylist what it does for her
-          (models see it) and stops. */}
+          ⚠️⚠️ THERE IS NO BADGE ANY MORE, AND THESE SENTENCES USED TO SELL
+          ONE. Until 23 Nov 2026 both read "it puts a 'photo checked' badge on
+          your shop/profile, which is what a model/stylist looks for" — written
+          when the badge existed, and left standing when every rendering of it
+          was removed. See lib/verification.ts above isIdentityVerified for the
+          measurement that removed them: the badge was pinned to seven stylists
+          and only one had ever submitted anything.
+
+          ⚠️ NOTHING WAS INVENTED TO REPLACE IT. The honest answer to "what do
+          I get for this?" is, today, nothing visible — so that is what it
+          says. A substitute benefit written to keep the paragraph persuasive
+          would be the same fault as the badge, one step earlier. */}
       <p className="mb-6 max-w-2xl text-sm text-muted">
         {required
           ? 'This is the one thing we ask of every member before they can offer or apply for a treatment.'
           : isStylist
-            ? 'This is optional. Your shop goes live without it — but it puts a “photo checked” badge on your shop, which is what a model looks for when she’s deciding whether to apply to you.'
-            : 'This is optional. You can apply for treatments without it — but it puts a “photo checked” badge on your profile, which is what a stylist looks for when she’s deciding who to take.'}
+            ? 'This is optional, and nothing is waiting on it — your shop goes live without it and looks no different afterwards. It leaves a record on your account that a person has looked at your selfie. It doesn’t put a mark on your shop.'
+            : 'This is optional, and nothing is waiting on it — you can apply for treatments without it and your profile looks no different afterwards. It leaves a record on your account that a person has looked at your selfie. It doesn’t put a mark on your profile.'}
       </p>
       <section>{children}</section>
       <p className="mt-4 text-sm">

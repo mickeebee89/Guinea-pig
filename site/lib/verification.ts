@@ -110,7 +110,37 @@ export interface GateState {
   anyGateLive: boolean
 }
 
-/** users.is_verified — the ID check passed, independent of any subscription. */
+/**
+ * users.is_verified — the ID check passed, independent of any subscription.
+ *
+ * ══════════════════════════════════════════════════════════════════════════
+ *  ⚠️⚠️ THIS IS A GATE INPUT. IT IS NOT A BADGE, AND IT MUST NOT BE RENDERED
+ *  AS ONE. Every user-facing badge driven off it was removed on 23 Nov 2026.
+ * ══════════════════════════════════════════════════════════════════════════
+ *
+ * Measured live the same day, against the seven stylists the public site
+ * actually shows: ALL SEVEN carried `is_verified = true`, and SIX OF THEM had
+ * never submitted a verification request. Across the whole platform 14 users
+ * are verified; 3 earned it by sending a selfie and 11 were set by an admin.
+ *
+ * So the badge was false six times out of seven, in a place where being wrong
+ * costs something real: a model reads it while deciding whether to travel to
+ * a stranger's address. StylistCard.tsx already carries the rule it broke —
+ * "say less than is true" — and softening the WORDING from "Identity verified"
+ * to "Photo checked" did not help, because the problem was never the wording.
+ * The claim was untrue about the specific person it was attached to.
+ *
+ * ⚠️ AND DO NOT REPLACE IT WITH A BADGE DRIVEN OFF `verification_requests`.
+ * Three approved rows exist on the entire platform. A mark almost nobody
+ * carries does not read as "these three are checked"; it reads as "everyone
+ * else is not", which is a claim about 100-odd people that nothing supports.
+ *
+ * What this value is still FOR, and where it is still correct to read it:
+ *   * the apply/publish gates (`getGateState`, `tg_session_apply_gate`),
+ *     which are off today but must keep working if a flag is turned back on;
+ *   * `getIdCheck()`, which tells a member about HER OWN submission;
+ *   * admin/, which is moderation tooling and should see the flag plainly.
+ */
 export async function isIdentityVerified(
   supabase: SupabaseClient,
   userId: string,

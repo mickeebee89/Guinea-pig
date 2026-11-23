@@ -30,7 +30,9 @@ export async function FeaturedStylists() {
   try {
     const { data, error } = await supabase
       .from('public_stylists')
-      .select('id, slug, name, location, categories, rating, review_count, is_verified, profile_pic_url')
+      // `is_verified` dropped 23 Nov 2026: this card never rendered it, and
+      // StylistCard — which did — no longer does either.
+      .select('id, slug, name, location, categories, rating, review_count, profile_pic_url')
       .order('review_count', { ascending: false })
       .limit(6)
 

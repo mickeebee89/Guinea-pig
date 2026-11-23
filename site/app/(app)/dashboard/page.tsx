@@ -267,9 +267,15 @@ export default async function DashboardPage({
           <h1 className="font-display text-2xl text-warm-dark">
             {greeting}{me.firstName ? `, ${me.firstName}` : ''}
           </h1>
+          {/* ⚠️ "· Verified" STOOD HERE UNTIL 23 Nov 2026. It is not coming
+              back: see lib/verification.ts above isIdentityVerified for the
+              measurement that removed it and the three places the flag is
+              still read correctly. This one was the mildest of the four — it
+              told a member a fact about herself — and it went with the rest
+              because a flag that is wrong on a public page is not right on a
+              private one. */}
           <p className="text-sm text-muted">
             {isProvider ? 'Stylist account' : 'Model account'}
-            {me.isVerified && ' · Verified'}
           </p>
         </div>
       </div>

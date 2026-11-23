@@ -89,11 +89,12 @@ export default async function StylistPage({
           <div className="min-w-[12rem] flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="font-display text-2xl text-warm-dark">{p.name}</h1>
-              {p.isVerified && (
-                <span className="inline-flex items-center rounded-[999px] bg-soft-pink px-2.5 py-0.5 text-xs font-bold text-rose">
-                  Verified
-                </span>
-              )}
+              {/* ⚠️ A "Verified" pill stood here until 23 Nov 2026 and must
+                  not return. This was the worst of the four: it is the page a
+                  model reads while deciding whether to travel to a stranger's
+                  address, and all seven published stylists carried the badge
+                  while only one had ever submitted anything. See
+                  lib/verification.ts, above isIdentityVerified. */}
               {/* The `level` chip stood here until 24 Sep 2026. See
                   lib/queries/stylist.ts for why it is gone (item 105). */}
             </div>

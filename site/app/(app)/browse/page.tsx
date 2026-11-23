@@ -258,11 +258,12 @@ export default async function BrowsePage({
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-bold text-warm-dark">{s.name}</span>
-                    {s.isVerified && (
-                      <span className="rounded-[999px] bg-soft-pink px-2 py-0.5 text-xs font-bold text-rose">
-                        Verified
-                      </span>
-                    )}
+                    {/* ⚠️ A "Verified" pill stood here until 23 Nov 2026 and
+                        must not return — lib/verification.ts, above
+                        isIdentityVerified, has the measurement. "Slots open"
+                        below is a different kind of claim and stays: it is
+                        read from `availability` rows that exist, so it is
+                        true about the stylist it is attached to. */}
                     {s.hasOpenSlots && (
                       <span className="rounded-[999px] bg-rose px-2 py-0.5 text-xs font-bold text-white">
                         Slots open

@@ -181,9 +181,19 @@ export default async function ForStylists({
               live on a name and one treatment — the selfie holds nothing up.
               Telling a stylist she must wait for us before she is findable
               would add a delay the product no longer has. */}
+          {/* ⚠️ AND THE REST OF THAT SENTENCE WENT 23 Nov 2026, for the same
+              reason one clause up: it named a consequence that stopped
+              following. "which puts a 'photo checked' badge on your shop" was
+              true when it was written and false once every badge was removed —
+              and this is the PUBLIC page, read by someone deciding whether to
+              join at all. See lib/verification.ts above isIdentityVerified.
+
+              ⚠️ IT IS NOT REPLACED WITH A REASON. There is no public benefit
+              to the ID check today, so the sentence offers none; writing one
+              to keep the paragraph persuasive is how the badge got here. */}
           Your shop goes live as soon as it has a name and one treatment. You can also send a
-          selfie for one of us to check by hand, which puts a “photo checked” badge on your
-          shop — it isn’t needed to go live. The full terms are in{' '}
+          selfie for one of us to check by hand — it isn’t needed to go live and it doesn’t put
+          a mark on your shop; we keep the result on your account. The full terms are in{' '}
           <Link href="/terms#5" className="text-rose underline decoration-rose/30 underline-offset-2">
             section 5
           </Link>
