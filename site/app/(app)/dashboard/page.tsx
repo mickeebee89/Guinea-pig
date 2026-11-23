@@ -8,8 +8,10 @@ import { getConversations } from '@/lib/queries/conversations'
 import { getNotifications } from '@/lib/queries/notifications'
 import { getGateState } from '@/lib/verification'
 import { getStylistSetup } from '@/lib/queries/shop'
+import { getModelDemand } from '@/lib/queries/demand'
 import { MonthCalendar, type CalendarMark } from '@/components/MonthCalendar'
 import { StylistSetupPanel } from '@/components/StylistSetup'
+import { ModelDemandPanel } from '@/components/ModelDemandPanel'
 import { Avatar, StatusPill, LoadError } from '@/components/ui'
 import { BOOKINGS_PATH } from '@/lib/routes'
 import { RADII, radiusFromParam } from '@/lib/distance'
@@ -196,6 +198,17 @@ export default async function DashboardPage({
   // The stylist mirror of it: what stands between signing up and being findable.
   const setup = isProvider ? await getStylistSetup(supabase, user.id) : null
 
+  // How many models have signed up, and roughly where. Counts only, never a
+  // person — a stylist cannot contact a model, so a directory would be
+  // look-only exposure. See lib/queries/demand.ts.
+  //
+  // ⚠️ Keyed on `isProvider`, which is strict (role === 'provider') for the
+  // reason documented above, so a 'both' account does not get this panel. That
+  // follows the existing choice on this page rather than quietly diverging
+  // from it; it is the same hole item 116 fixed in the nav, and it is worth
+  // fixing in one place rather than two.
+  const demand = isProvider ? await getModelDemand(supabase, user.id) : null
+
   const activity = (
     <div className="space-y-6">
       <Panel
@@ -380,6 +393,16 @@ export default async function DashboardPage({
       {/* The div carries id="shop-setup": an approved post that is not live
           because the shop is unpublished links here, and this panel already
           knows which step is missing. */}
+      {/* Above the setup panel on purpose. The setup panel tells her what SHE
+          still has to do; this tells her whether doing it is worth anything.
+          Someone who concludes the platform is empty never reaches step one —
+          seven stylists did exactly that and did not come back. */}
+      {demand && (
+        <div className="mb-6">
+          <ModelDemandPanel demand={demand} />
+        </div>
+      )}
+
       {setup && !setup.isPublished && (
         <div id="shop-setup" className="mb-6 scroll-mt-4">
           <StylistSetupPanel setup={setup} />

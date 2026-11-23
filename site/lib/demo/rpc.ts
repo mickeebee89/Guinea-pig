@@ -76,6 +76,33 @@ export function demoRpc(name: string, args: Row, store: DemoStore, user: DemoUse
       return false
 
     /**
+     * Model demand, as counts. Shaped exactly like the real function: one row,
+     * with `areas` as a jsonb array.
+     *
+     * ⚠️ THE FIGURES ARE INVENTED AND MUST STAY PLAUSIBLE-BUT-MODEST. The
+     * demo feeds promo screenshots, and a number here is a claim about how
+     * busy the platform is in a way a made-up stylist's name is not. These
+     * sit near the real ones (85 / 56 / 15 on 22 Nov 2026) rather than above
+     * them — inflating them would advertise a marketplace that does not
+     * exist.
+     *
+     * ⚠️ EVERY BUCKET IS 3 OR MORE, because the real function suppresses
+     * anything smaller. A demo showing '1 model in CT1' would be showing a
+     * screen the product cannot produce.
+     */
+    case 'model_demand_summary':
+      return [{
+        models_total: 85,
+        models_placed: 56,
+        models_in_named_areas: 15,
+        areas: [
+          { area: 'SE', count: 7, distanceMi: 4.2 },
+          { area: 'E',  count: 4, distanceMi: 11.4 },
+          { area: 'W',  count: 4, distanceMi: 12.1 },
+        ],
+      }]
+
+    /**
      * ⚠️ A NO-OP THAT RETURNS, RATHER THAN A THROW. The Salon Floor page calls
      * this on every load to clear its nav dot, so an unknown-function throw
      * would take the whole page down in demo mode — not the dot, the page.
