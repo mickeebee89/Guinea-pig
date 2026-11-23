@@ -86,7 +86,21 @@ function Step({
   )
 }
 
-export function StylistSetupPanel({ setup }: { setup: StylistSetup }) {
+export function StylistSetupPanel({
+  setup,
+  modelsSignedUp = null,
+}: {
+  setup: StylistSetup
+  /**
+   * How many models have signed up, or null when we could not ask.
+   *
+   * ⚠️ ONLY THE DASHBOARD PASSES IT, and only for an unpublished shop. /shop
+   * renders this same panel and does NOT pass it — she is already on the page
+   * that fixes the problem, so a line about who is waiting would be a nudge
+   * where an instruction belongs.
+   */
+  modelsSignedUp?: number | null
+}) {
   if (!setup.providerId) {
     // The signup trigger makes this row, so its absence is a real fault rather
     // than a state to guide someone through. Say so plainly.
@@ -271,6 +285,39 @@ export function StylistSetupPanel({ setup }: { setup: StylistSetup }) {
           </>
         )}
       </p>
+
+      {/* ⚠⚠ THE ONE SENTENCE THAT REPLACED A WHOLE PANEL, 24 Nov 2026.
+          Everything else here tells her WHAT TO DO; nothing told her whether
+          doing it is worth anything, and /models cannot — it is gated on
+          publication, so it shows her nothing until after the work is done.
+
+          ⚠⚠ OUTSIDE THE THREE-WAY PARAGRAPH ABOVE, AND THAT IS THE WHOLE
+          POINT. It was first written inside the "not published yet" branch,
+          which looked like the right one and is not: with the verification
+          flag off, `nothingLeftButHer` is always true, so ANY unpublished shop
+          that still has blockers takes the "Nearly there" branch instead.
+          Measured 24 Nov 2026 — 9 of the 12 unpublished shops have neither a
+          name nor a treatment, so the branch it was in would have missed
+          exactly the nine who need it most. Caught by rendering it, not by
+          reading it.
+
+          ⚠️ IT CLAIMS SIGNED UP, NOT WAITING. They have not been told about
+          her and are not expecting her. "87 models are waiting for you" is the
+          sentence the demand panel existed to avoid, and it would be no truer
+          in a smaller font.
+
+          ⚠️ SKIPPED ENTIRELY WHEN THE COUNT IS NULL, never rendered as a zero
+          — see getSignedUpModelCount. And only the DASHBOARD passes it: /shop
+          renders this same panel without it, because she is already on the
+          page that fixes the problem. */}
+      {modelsSignedUp != null && (
+        <p className="mt-2 text-sm text-muted">
+          <span className="font-bold text-warm-dark">
+            {modelsSignedUp} models have signed up
+          </span>{' '}
+          looking for treatments, and you’ll be able to invite them once your shop is live.
+        </p>
+      )}
 
       {/* Never make someone guess which field. This is the list the database
           actually checks — provider_shop_is_publishable() in 0016 — so an empty

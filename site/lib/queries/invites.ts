@@ -144,8 +144,13 @@ export interface InvitableResult {
 /**
  * ⚠️ RETURNS NULL ON FAILURE, AND THE CALLER MUST SAY SO RATHER THAN RENDER
  * AN EMPTY LIST. "Nobody to invite" and "we could not ask" are different
- * sentences, and only one of them is about the member. Same rule as
- * lib/queries/demand.ts, reached from the other side.
+ * sentences, and only one of them is about the member.
+ *
+ * ⚠️ THE RULE OUTLIVED THE FILE THAT STATED IT. lib/queries/demand.ts
+ * carried the same argument and was deleted on 24 Nov 2026 with the demand
+ * panel; dormant mobile states it too, at provider-dashboard.tsx:621 --
+ * "Don't let a failed RPC render as 'no models nearby' -- that reads as an
+ * empty marketplace rather than a fault." 
  */
 export async function getInvitableModels(
   supabase: SupabaseClient,

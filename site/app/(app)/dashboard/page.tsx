@@ -7,11 +7,9 @@ import {
 import { getConversations } from '@/lib/queries/conversations'
 import { getNotifications } from '@/lib/queries/notifications'
 import { getGateState } from '@/lib/verification'
-import { getStylistSetup } from '@/lib/queries/shop'
-import { getModelDemand } from '@/lib/queries/demand'
+import { getStylistSetup, getSignedUpModelCount } from '@/lib/queries/shop'
 import { MonthCalendar, type CalendarMark } from '@/components/MonthCalendar'
 import { StylistSetupPanel } from '@/components/StylistSetup'
-import { ModelDemandPanel } from '@/components/ModelDemandPanel'
 import { Avatar, StatusPill, LoadError } from '@/components/ui'
 import { BOOKINGS_PATH } from '@/lib/routes'
 import { RADII, radiusFromParam } from '@/lib/distance'
@@ -198,19 +196,27 @@ export default async function DashboardPage({
   // The stylist mirror of it: what stands between signing up and being findable.
   const setup = isProvider ? await getStylistSetup(supabase, user.id) : null
 
-  // How many models have signed up, and roughly where. Counts only, never a
-  // person. A directory is more exposure than "is anyone here?" needs.
+  // ⚠⚠ THE MODEL DEMAND PANEL STOOD HERE FROM 23 Nov 2026 TO 24 Nov 2026,
+  // and what replaced it is /models (0113) -- a real list of people a stylist
+  // can actually invite, which is strictly more than a count of them.
   //
-  // ⚠⚠ THIS SAID "a stylist cannot contact a model" UNTIL 23 Nov 2026, AND
-  // THAT WAS FALSE — invites have been live since 20 June 2026. See migration
-  // 0113's header for the retraction; the reason for aggregates is unchanged.
+  // ⚠️ IT LEFT A GAP FOR UNPUBLISHED SHOPS AND THAT IS NOT YET CLOSED.
+  // `invitable_models` is gated on a published shop, so /models shows an
+  // unpublished stylist nothing -- and 12 of 19 provider rows are in that
+  // state. The panel was the only surface telling them anybody is here at
+  // all, which is the question that made it exist: seven stylists signed up,
+  // saw an empty screen, and did not come back. StylistSetupPanel below tells
+  // them WHAT TO DO and nothing about whether it is worth doing.
   //
-  // ⚠️ Keyed on `isProvider`, which is strict (role === 'provider') for the
-  // reason documented above, so a 'both' account does not get this panel. That
-  // follows the existing choice on this page rather than quietly diverging
-  // from it; it is the same hole item 116 fixed in the nav, and it is worth
-  // fixing in one place rather than two.
-  const demand = isProvider ? await getModelDemand(supabase, user.id) : null
+  // What closed it is ONE SENTENCE inside that panel rather than a second
+  // component, and this is the only thing left of the panel: a number.
+  //
+  // ⚠️ FETCHED ONLY WHEN IT WILL BE SHOWN. An unpublished shop is the only
+  // case that needs it, so a published stylist does not pay for the RPC on
+  // every dashboard load.
+  const modelsSignedUp = setup && !setup.isPublished
+    ? await getSignedUpModelCount(supabase)
+    : null
 
   const activity = (
     <div className="space-y-6">
@@ -402,19 +408,9 @@ export default async function DashboardPage({
       {/* The div carries id="shop-setup": an approved post that is not live
           because the shop is unpublished links here, and this panel already
           knows which step is missing. */}
-      {/* Above the setup panel on purpose. The setup panel tells her what SHE
-          still has to do; this tells her whether doing it is worth anything.
-          Someone who concludes the platform is empty never reaches step one —
-          seven stylists did exactly that and did not come back. */}
-      {demand && (
-        <div className="mb-6">
-          <ModelDemandPanel demand={demand} />
-        </div>
-      )}
-
       {setup && !setup.isPublished && (
         <div id="shop-setup" className="mb-6 scroll-mt-4">
-          <StylistSetupPanel setup={setup} />
+          <StylistSetupPanel setup={setup} modelsSignedUp={modelsSignedUp} />
         </div>
       )}
 

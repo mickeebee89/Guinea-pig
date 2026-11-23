@@ -194,6 +194,49 @@ export interface ShopEditorData {
 
 /* ── setup state ───────────────────────────────────────────────────────── */
 
+/**
+ * How many models have signed up. A number, and nothing else.
+ *
+ * ⚠⚠ THIS IS THE REMNANT OF THE DEMAND PANEL, AND DELIBERATELY ALL THAT IS
+ * LEFT OF IT. The panel was removed on 24 Nov 2026 because /models (0113)
+ * supersedes it — a real list of people a stylist can invite is strictly more
+ * than a count of them. But `invitable_models` is gated on a PUBLISHED shop,
+ * so /models shows an unpublished stylist nothing, and 12 of 19 provider rows
+ * are in that state. Removing the panel outright would have left exactly the
+ * group least committed to the platform with no answer to "is anyone here?",
+ * which is the question that made the panel exist: seven stylists signed up,
+ * saw an empty screen, and did not come back.
+ *
+ * ⚠️ IT CALLS model_demand_summary AND USES ONE FIELD OF IT. `users` is
+ * behind RLS and a stylist cannot count models directly; that SECURITY
+ * DEFINER function (0112) exists precisely to answer this without returning a
+ * person. The areas, distances and the suppression threshold all still work
+ * and are all discarded here — the setup panel needs one number, and asking
+ * for less than the function returns is cheaper than a second function.
+ *
+ * ⚠️ NULL IS "we could not ask", AND THE CALLER MUST RENDER NOTHING FOR IT.
+ * Never 0. Failing into "0 models have signed up" would deliver the exact
+ * false impression this line exists to correct, with full confidence, to the
+ * people most likely to leave over it. Same rule dormant mobile states at
+ * provider-dashboard.tsx:621.
+ */
+export async function getSignedUpModelCount(
+  supabase: SupabaseClient,
+): Promise<number | null> {
+  const { data, error } = await supabase.rpc('model_demand_summary', {
+    p_lat: null,
+    p_lng: null,
+  })
+  if (error) {
+    console.warn('[shop] model_demand_summary →', error.message)
+    return null
+  }
+  // `returns table (...)`, so PostgREST hands back an array of one row.
+  const row = (Array.isArray(data) ? data[0] : data) as { models_total?: number } | undefined
+  const n = Number(row?.models_total ?? 0)
+  return Number.isFinite(n) && n > 0 ? n : null
+}
+
 export async function getStylistSetup(
   supabase: SupabaseClient,
   userId: string,
