@@ -13,8 +13,8 @@ import { Avatar } from '@/components/ui'
  * ⚠️ THE MESSAGE BOX IS OPEN BY A CLICK, NOT ALWAYS SHOWN. A page of ten
  * cards each with a textarea invites ten identical messages, and an identical
  * message is the thing that makes an invite feel like a mailshot. Opening one
- * is a small deliberate act, which is the right amount of friction for
- * something that can only be done once per person, ever.
+ * is a small deliberate act, which is most of the friction left now that the
+ * limit is one a day per person rather than one ever (0114).
  */
 export function InviteCard({ model }: { model: InvitableModel }) {
   const router = useRouter()
@@ -76,7 +76,8 @@ export function InviteCard({ model }: { model: InvitableModel }) {
 
       {sent ? (
         <p role="status" className="mt-3 text-sm font-bold text-rose">
-          Invite sent. They’ll get it in the app and by email.
+          Invite sent. They’ll get it in the app and by email, and you can send another
+          tomorrow if you need to.
         </p>
       ) : open ? (
         <div className="mt-3">

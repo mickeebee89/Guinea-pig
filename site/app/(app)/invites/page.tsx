@@ -39,8 +39,10 @@ export default async function InvitesPage() {
     <>
       <h1 className="mb-2 font-display text-3xl text-warm-dark">Invites</h1>
       <p className="mb-5 max-w-2xl text-sm text-muted">
-        Stylists with a published shop can send you one invite each. You don’t have to answer —
-        and if you’d rather not be asked at all, you can turn invites off in{' '}
+        Stylists with a published shop can invite you, at most once a day each. You don’t have
+        to answer — and{' '}
+        <span className="font-bold text-warm-dark">declining stops that stylist for good</span>,
+        not just today. If you’d rather not be asked at all, you can turn invites off in{' '}
         <Link href="/settings" className="font-bold text-rose hover:underline">Settings</Link>.
       </p>
 

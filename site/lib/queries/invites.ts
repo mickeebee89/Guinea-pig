@@ -52,7 +52,17 @@ export function inviteErrorMessage(code: string | undefined): string {
     case '22023':
       return 'That’s your own account.'
     case '23505':
-      return 'You’ve already invited them. One invite each, so they don’t get chased.'
+      // One per stylist per model per BRITISH day (0114). It was one ever
+      // until 24 Nov 2026, which turned a single unanswered message into a
+      // permanent silence — and most invites go unanswered, because there is
+      // no Accept in this product.
+      return 'You’ve already invited them today. You can send another tomorrow.'
+    case '23P01':
+      // ⚠️ THIS ONE IS TOLD PLAINLY, unlike the four causes 42501 collapses.
+      // A decline is already visible to her: the "stylist reads own sent
+      // invites" policy shows her the declined row on her own list, so
+      // withholding it would buy nothing and leave an unexplained refusal.
+      return 'They declined an earlier invite, so you can’t send another.'
     case '23514':
       return 'That message can’t be sent. Please reword it and try again.'
     case '55000':

@@ -68,9 +68,13 @@ export default async function ModelsPage({
         <h1 className="font-display text-3xl text-warm-dark">Models</h1>
       </div>
       <p className="mb-5 max-w-2xl text-sm text-muted">
-        People who have signed up looking for treatments. You can send each of them{' '}
-        <span className="font-bold text-warm-dark">one invite</span>, ever — so it’s worth saying
-        what you’re offering.
+        People who have signed up looking for treatments. You can invite each of them{' '}
+        <span className="font-bold text-warm-dark">once a day</span> — so it’s worth saying what
+        you’re offering, and worth not asking the same person every morning.
+        {/* ⚠️ SOMEONE YOU INVITED TODAY IS NOT ON THIS LIST, and neither is
+            anyone who has declined you — invitable_models drops both, because
+            a card whose only button cannot work is worse than no card. The
+            first kind comes back tomorrow; the second does not. */}
       </p>
 
       {/* ⚠️ THE FILTER IS DISABLED, NOT HIDDEN, WHEN WE CANNOT PLACE HER.

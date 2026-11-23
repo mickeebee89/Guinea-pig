@@ -1,8 +1,8 @@
 // GENERATED FILE — DO NOT EDIT BY HAND.
 //
 // Written by scripts/gen-supabase-types.mjs from the live database.
-// TYPES_STAMP: 0113
-// TYPES_FILES_AT_GEN: 0113
+// TYPES_STAMP: 0114
+// TYPES_FILES_AT_GEN: 0114
 //
 // TYPES_STAMP is the migration the DATABASE was at when these were generated,
 // stated by whoever ran it (--applied). TYPES_FILES_AT_GEN is the newest
@@ -542,6 +542,7 @@ export type Database = {
           message: string | null
           model_user_id: string
           provider_id: string
+          sent_on: string | null
           status: string
         }
         Insert: {
@@ -551,6 +552,7 @@ export type Database = {
           message?: string | null
           model_user_id: string
           provider_id: string
+          sent_on?: string | null
           status?: string
         }
         Update: {
@@ -560,6 +562,7 @@ export type Database = {
           message?: string | null
           model_user_id?: string
           provider_id?: string
+          sent_on?: string | null
           status?: string
         }
         Relationships: [
@@ -2731,6 +2734,7 @@ export type Database = {
           message: string | null
           model_user_id: string
           provider_id: string
+          sent_on: string | null
           status: string
         }
         SetofOptions: {

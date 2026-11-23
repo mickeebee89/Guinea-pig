@@ -53,8 +53,8 @@ export function DiscoverableSection({ enabled }: { enabled: boolean }) {
           </span>
           <span className="mt-0.5 block text-sm text-muted">
             Stylists with a published shop can see your first name, your photo, roughly how far
-            away you are, and what you’ve filled in about your hair, skin and nails — and send you
-            one invitation each, ever. They never see your email address, your surname or your
+            away you are, and what you’ve filled in about your hair, skin and nails — and invite
+            you, at most once a day each. They never see your email address, your surname or your
             address.
           </span>
         </span>
@@ -65,7 +65,8 @@ export function DiscoverableSection({ enabled }: { enabled: boolean }) {
             switch does, said plainly rather than left to be discovered. */}
         Turning this off doesn’t change anything else: you can still browse stylists, apply for
         treatments and message anyone you’ve booked with. Invitations you’ve already been sent
-        stay on your Invites page, and you can decline them there.
+        stay on your Invites page, and declining one stops that stylist from inviting you again
+        — for good, not just that day.
       </p>
 
       {error && (
