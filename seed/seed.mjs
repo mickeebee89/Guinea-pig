@@ -318,9 +318,14 @@ async function main() {
     const slots = []
     for (let d = 2; d <= 16; d += 3) {
       const day = iso(new Date(Date.now() + d * 864e5))
+      // A PRICE ON EVERY SLOT, and the two kinds on purpose: the morning
+      // carries a figure, the afternoon carries 0, which renders as "Free".
+      // Required of the product since 23 Nov 2026 (see availability/actions.ts),
+      // and a seed that wrote nulls would keep reproducing in dev the exact
+      // blank a model could not read — the thing the requirement removed.
       slots.push(
-        { provider_id: providerId, date: day, start_time: '10:00:00', end_time: '13:00:00', active_treatments: [treats?.[0]?.id].filter(Boolean) },
-        { provider_id: providerId, date: day, start_time: '14:00:00', end_time: '16:30:00', active_treatments: [treats?.[1]?.id ?? treats?.[0]?.id].filter(Boolean) },
+        { provider_id: providerId, date: day, start_time: '10:00:00', end_time: '13:00:00', active_treatments: [treats?.[0]?.id].filter(Boolean), price_pence: 1500 },
+        { provider_id: providerId, date: day, start_time: '14:00:00', end_time: '16:30:00', active_treatments: [treats?.[1]?.id ?? treats?.[0]?.id].filter(Boolean), price_pence: 0 },
       )
     }
     await must('availability insert', db.from('availability').insert(slots))
@@ -405,6 +410,10 @@ async function main() {
         provider_id: st.providerId, date: past,
         start_time: '10:00:00', end_time: '13:00:00',
         active_treatments: [treatment?.id].filter(Boolean),
+        // Priced like the live ones above — sessions.price_pence is copied
+        // from the slot at booking time (0052), so a null here produces a
+        // completed booking that remembers no price.
+        price_pence: 1500,
         is_taken: true,
       }).select('id').single())
 

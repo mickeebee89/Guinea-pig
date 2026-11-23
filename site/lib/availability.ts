@@ -36,6 +36,22 @@ export interface Slot {
    */
   priceInput?: string
   /**
+   * CLIENT ONLY, never written, same rule as `priceInput`: which of the two
+   * answers the stylist has picked for this slot.
+   *
+   * ⚠️ IT EXISTS BECAUSE "FREE" AND "NOT DECIDED YET" BOTH LOOK LIKE AN
+   * EMPTY BOX. Since 23 Nov 2026 a price is REQUIRED, and the only way to
+   * require one without forcing a stylist to charge is to make £0 a thing she
+   * SELECTS rather than types. `'paid'` with no number yet is a real, saveable-
+   * blocking state and cannot be represented by `pricePence` alone, which is
+   * null for both "chose a price, hasn't typed it" and "chose nothing".
+   *
+   * Undefined means she has not chosen, which is only possible on one of the
+   * 67 rows written before the requirement. Those stay as they are until the
+   * day they are edited; nobody decides on their behalf what they cost.
+   */
+  priceMode?: 'free' | 'paid'
+  /**
    * What this particular slot is for, in the stylist's own words. 280
    * characters, enforced by `availability_note_len` (0103) and not only by the
    * textarea.
@@ -84,6 +100,39 @@ export async function loadDay(
     note: r.note,
     isBooked: booked.has(r.id) || !!r.is_taken,
   }))
+}
+
+/**
+ * The (start|end) keys of this date's slots that someone has already booked.
+ *
+ * ⚠️ FOR THE SERVER TO VALIDATE AGAINST, INSTEAD OF TRUSTING `isBooked`.
+ * The editor hides the price control on a booked slot, so a booked row
+ * legitimately arrives carrying the null price it has had since before 0050 —
+ * validating it would lock a stylist out of editing the REST of that day. But
+ * reading `isBooked` off the submitted payload to decide what to skip would
+ * make the requirement a suggestion, since the payload is the thing being
+ * checked. So the answer is read from the database.
+ */
+export async function bookedSlotKeys(
+  supabase: SupabaseClient,
+  providerId: string,
+  date: string,
+): Promise<Set<string>> {
+  const { data, error } = await supabase
+    .from('availability')
+    .select('id, start_time, end_time, is_taken')
+    .eq('provider_id', providerId)
+    .eq('date', date)
+  if (error) throw error
+  const rows = (data ?? []) as {
+    id: string; start_time: string; end_time: string; is_taken: boolean | null
+  }[]
+  const booked = await bookedAmong(supabase, rows.map(r => r.id))
+  return new Set(
+    rows
+      .filter(r => booked.has(r.id) || !!r.is_taken)
+      .map(r => `${hhmm(r.start_time)}|${hhmm(r.end_time)}`),
+  )
 }
 
 /** Which of these availability rows a session points at. */

@@ -325,11 +325,22 @@ export function ApplyWizard({ ctx }: { ctx: ApplyContext }) {
                   }`}
                 >
                   <span>{fmtTime(s.startTime)} – {fmtTime(s.endTime)}</span>
+                  {/* ⚠️ "Price not set" SAID LESS THAN THE SAME SLOT SAYS AT
+                      STEP 3, which has always read "Price not set — agree it in
+                      the chat". On a row she is choosing BETWEEN, the short
+                      version states a gap without saying what closes it, and
+                      next to rows that do carry a figure it reads as an
+                      omission rather than an arrangement.
+
+                      Both halves now say the same thing. Slots posted since
+                      23 Nov 2026 cannot reach this branch at all — the price is
+                      required — but the 67 rows written before it still can,
+                      and they are the ones she is looking at today. */}
                   {s.isTaken ? (
                     <span className="text-xs text-muted">Booked</span>
                   ) : (
                     <span className={p ? 'text-sm font-bold text-rose-dark' : 'text-xs text-muted'}>
-                      {p ?? 'Price not set'}
+                      {p ?? 'Price not set — agreed in the chat'}
                     </span>
                   )}
                 </button>
