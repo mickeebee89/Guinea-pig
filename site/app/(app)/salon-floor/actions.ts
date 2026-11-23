@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createSupabaseServerClient, requireUser } from '@/lib/supabase-server'
+import { inviteErrorMessage } from '@/lib/queries/invites'
 import { FLOOR_MAX } from './constants'
 
 type Result = { ok: true } | { ok: false; error: string }
@@ -105,16 +106,29 @@ export async function inviteFromFloor(modelUserId: string): Promise<Result> {
   })
 
   if (error) {
-    // ⚠️ MAPPED ON SQLSTATE, NOT ON MESSAGE TEXT. The two refusals carry
-    // distinct codes on purpose — 42501 for "not a stylist" and 22023 for
-    // "your own account" — so this does not depend on wording that a later
-    // migration might reword. Matching on sqlerrm is what made 0079's test 5
-    // defensible and a sqlstate match wrong THERE; here it is the reverse,
-    // because here the codes differ and the messages are what might change.
+    // ⚠️ MAPPED ON SQLSTATE, NOT ON MESSAGE TEXT. The refusals carry distinct
+    // codes on purpose, so this does not depend on wording a later migration
+    // might change. Matching on sqlerrm is what made 0079's test 5 defensible
+    // and a sqlstate match wrong THERE; here it is the reverse, because here
+    // the codes differ and the messages are what might change.
+    //
+    // ⚠⚠ THIS MAPPED TWO CODES OUT OF SIX AND WAS LIVE AND WRONG FROM 0113
+    // UNTIL 24 Nov 2026. Four codes were added by that migration — 23505
+    // already invited, 23514 banned words, 55000 unscreenable, 22001 too long
+    // — and all four fell through to "That didn't send". Worse, 42501 CHANGED
+    // MEANING: it had meant "not a stylist", and now also means "your shop is
+    // not published" and "that member cannot be invited". So this file told a
+    // published stylist whose target had turned invites off that only a
+    // stylist can invite someone, which is false, and told an unpublished one
+    // the same thing, which is useless.
+    //
+    // ⚠️ THE LESSON IS THE SHAPE, NOT THE TYPO. Tightening a shared function
+    // changes every caller's error surface, and the caller that is not being
+    // edited is the one that goes wrong quietly. The sentences now live with
+    // the function's contract in lib/queries/invites.ts, so the next code
+    // added there reaches both surfaces at once.
     console.error('[salon-floor] invite failed', { code: error.code, message: error.message })
-    if (error.code === '42501') return { ok: false, error: 'Only a stylist can invite someone.' }
-    if (error.code === '22023') return { ok: false, error: 'That is your own post.' }
-    return { ok: false, error: 'That didn’t send. Nothing has changed.' }
+    return { ok: false, error: inviteErrorMessage(error.code) }
   }
 
   return { ok: true }

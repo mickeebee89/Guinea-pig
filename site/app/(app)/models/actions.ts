@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createSupabaseServerClient, requireUser } from '@/lib/supabase-server'
-import { MAX_INVITE_MESSAGE } from '@/lib/queries/invites'
+import { MAX_INVITE_MESSAGE, inviteErrorMessage } from '@/lib/queries/invites'
 
 type Result = { ok: true } | { ok: false; error: string }
 
@@ -51,41 +51,11 @@ export async function sendInvite(modelUserId: string, message: string): Promise<
   })
 
   if (error) {
-    // ⚠️ MAPPED ON SQLSTATE, NOT ON MESSAGE TEXT — the rule
-    // salon-floor/actions.ts already states in full. The codes are chosen in
-    // 0113 to be distinguishable; the wordings are not promised to anyone.
+    // ⚠️ MAPPED ON SQLSTATE, NOT ON MESSAGE TEXT, and the sentences live in
+    // lib/queries/invites.ts because the Salon Floor refuses the same six
+    // codes from the same function. Its header has the 42501 argument.
     console.error('[models] invite failed', { code: error.code, message: error.message })
-    switch (error.code) {
-      case '42501':
-        // ⚠️ ONE SENTENCE FOR TWO CAUSES, DELIBERATELY. The function returns
-        // 42501 for "your shop is not published" AND for "that member cannot
-        // be invited" (not a model, not discoverable, blocked, suspended) —
-        // and the second group is one code on purpose, so a stylist cannot
-        // probe which. But the FIRST is about her own account and is
-        // actionable, so the two are told apart here by what she can see: if
-        // she reached this page at all her shop is published, because
-        // invitable_models returns nothing otherwise.
-        return {
-          ok: false,
-          error: 'That member can’t be invited. They may have turned off invites, or your shop may '
-            + 'have come unpublished — check your shop page.',
-        }
-      case '23505':
-        return { ok: false, error: 'You’ve already invited them. One invite each, so they don’t get chased.' }
-      case '23514':
-        return { ok: false, error: 'That message can’t be sent. Please reword it and try again.' }
-      case '55000':
-        // ⚠️ NOT HER FAULT, AND IT MUST NOT READ AS IF IT WERE. The screen
-        // could not read its word list, so nothing was sent — the same
-        // distinction lib/postcode.ts draws for 'unavailable'.
-        return { ok: false, error: 'We couldn’t check that message just now, so nothing was sent. Try again in a moment.' }
-      case '22023':
-        return { ok: false, error: 'That’s your own account.' }
-      case '22001':
-        return { ok: false, error: `That message is a bit long — ${MAX_INVITE_MESSAGE} characters or fewer.` }
-      default:
-        return { ok: false, error: 'That didn’t send. Nothing has changed.' }
-    }
+    return { ok: false, error: inviteErrorMessage(error.code) }
   }
 
   revalidatePath('/models')

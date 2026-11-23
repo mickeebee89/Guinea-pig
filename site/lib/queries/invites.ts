@@ -16,6 +16,59 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 export const MAX_INVITE_MESSAGE = 500
 
 /**
+ * What a stylist is told when `invite_model` refuses.
+ *
+ * ⚠⚠ ONE SET OF SENTENCES, TWO SURFACES. /models and the Salon Floor call
+ * the same function and get the same SQLSTATEs, so a second set of wordings
+ * is a second thing to keep in step — and the Salon Floor is how we found
+ * out: it mapped two codes out of six, written before 0113 added four more
+ * and changed what one of them means.
+ *
+ * ⚠️ MAPPED ON CODE, NEVER ON MESSAGE TEXT. The codes are chosen in 0113 to
+ * be distinguishable; the message strings are not promised to anyone and a
+ * later migration may reword them.
+ *
+ * ⚠⚠ 42501 COVERS THREE REFUSALS AND MUST NOT BE SPLIT:
+ *     - the caller is not a stylist
+ *     - the caller's shop is not published
+ *     - that member cannot be invited
+ * and the third is ITSELF four causes the function deliberately collapses —
+ * not a model, not discoverable, blocked, suspended — so that a stylist
+ * cannot probe which. Telling them apart in the app would hand back exactly
+ * the signal the database went out of its way to withhold: an opt-out that
+ * can be confirmed is not an opt-out, and a block that can be detected is a
+ * worse position than no block.
+ *
+ * So the sentence names the two things a STYLIST can act on, and says
+ * nothing about the member. "Your shop page shows whether you're published"
+ * is what lets her tell her own half apart, without us telling her the
+ * other.
+ */
+export function inviteErrorMessage(code: string | undefined): string {
+  switch (code) {
+    case '42501':
+      return 'Either your shop isn’t published — that’s what lets you invite anyone — or this '
+        + 'member can’t be invited. Your shop page shows whether you’re published.'
+    case '22023':
+      return 'That’s your own account.'
+    case '23505':
+      return 'You’ve already invited them. One invite each, so they don’t get chased.'
+    case '23514':
+      return 'That message can’t be sent. Please reword it and try again.'
+    case '55000':
+      // ⚠️ NOT HER FAULT, AND IT MUST NOT READ AS IF IT WERE. The word screen
+      // could not read its list, so nothing was sent — the same distinction
+      // lib/postcode.ts draws for 'unavailable'.
+      return 'We couldn’t check that message just now, so nothing was sent. Try again in a moment.'
+    case '22001':
+      return `That message is a bit long — ${MAX_INVITE_MESSAGE} characters or fewer.`
+    default:
+      return 'That didn’t send. Nothing has changed.'
+  }
+}
+
+
+/**
  * Stylist-to-model invites.
  *
  * ── ⚠️ THE GATE IS IN THE DATABASE, AND THIS FILE CANNOT OPEN IT ──────────
