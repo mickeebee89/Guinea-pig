@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useLoader } from '@/lib/useLoader'
@@ -31,6 +32,15 @@ interface User {
   admin_district: string | null
   bua: string | null
   is_verified: boolean
+  // ── PHOTOS ─────────────────────────────────────────────────────
+  // Both arrive from the select('*') above and are typed here so the Photos
+  // column is not reading fields TypeScript has never heard of.
+  //
+  // ⚠️ profile_pic_reviewed_at IS THE ONLY REVIEW RECORD OF THE THREE PHOTO
+  // SOURCES. portfolio_items has moderation_status; model_photos has nothing
+  // at all. The column renders that asymmetry rather than smoothing it.
+  profile_pic_url: string | null
+  profile_pic_reviewed_at: string | null
   fraud_flagged: boolean
   subscription_status: string
   is_founding_provider: boolean
@@ -41,6 +51,13 @@ interface User {
   session_count?: number
   report_count?: number
   fee_paid?: boolean
+  // Derived in the loader from two batched reads, not from select('*'), so
+  // they are optional like the three above: a row that has not been enriched
+  // yet renders "None" rather than crashing on undefined.
+  model_photo_count?: number
+  model_photo_unreviewed?: number
+  portfolio_count?: number
+  portfolio_pending?: number
   // Current suspension state, derived from the suspensions table. null = active.
   suspension?: { banned: boolean; until: string | null } | null
 }
@@ -148,14 +165,62 @@ export default function UsersPage() {
       .from('providers')
       .select('id, user_id')
       .in('user_id', data.map(u => u.id))
+    // ⚠️ DECLARED OUT HERE, NOT INSIDE THE else. The photo reads below need
+    // it to turn a user into a provider_id, and a map scoped to the success
+    // branch would be invisible to them. Empty on a failed read, which is the
+    // right answer: no provider ids means no shop photos are claimed.
+    const map: Record<string, string> = {}
     if (provErr) {
       setProviderByUser(null)
     } else {
-      const map: Record<string, string> = {}
       for (const r of (provRows ?? []) as unknown as { id: string; user_id: string }[]) {
         map[r.user_id] = r.id
       }
       setProviderByUser(map)
+    }
+
+    // ── PHOTOS ─────────────────────────────────────────────────
+    // ⚠⚠ TWO QUERIES FOR THE WHOLE PAGE, NOT TWO PER ROW. The enrichment
+    // below already fires THREE counts per user — 318 round trips at 106
+    // users — and adding photos to it would have made five. The suspensions
+    // and providers reads above set the pattern; this follows it.
+    const providerIds = Object.values(map)
+
+    // ⚠️ reviewed_at ARRIVES WITH 0115. Until that migration is applied this
+    // select returns a PostgREST error, mpRows is undefined, and the Model
+    // cell reads "None" — it degrades to the state it was in before rather
+    // than taking the page down. Temporary by construction.
+    const { data: mpRows } = await supabase
+      .from('model_photos')
+      .select('user_id, reviewed_at')
+      .in('user_id', data.map(u => u.id))
+
+    const modelPhotoCount: Record<string, number> = {}
+    const modelPhotoUnreviewed: Record<string, number> = {}
+    for (const r of (mpRows ?? []) as unknown as
+         { user_id: string; reviewed_at: string | null }[]) {
+      modelPhotoCount[r.user_id] = (modelPhotoCount[r.user_id] ?? 0) + 1
+      if (!r.reviewed_at) {
+        modelPhotoUnreviewed[r.user_id] = (modelPhotoUnreviewed[r.user_id] ?? 0) + 1
+      }
+    }
+
+    // ⚠️ KEYED ON provider_id, NOT user_id. portfolio_items has no user
+    // column; it hangs off providers. Guarded because .in() with an empty
+    // array is a query that returns nothing and costs a round trip.
+    const portfolioCount: Record<string, number> = {}
+    const portfolioPending: Record<string, number> = {}
+    if (providerIds.length > 0) {
+      const { data: piRows } = await supabase
+        .from('portfolio_items')
+        .select('provider_id, moderation_status')
+        .in('provider_id', providerIds)
+      for (const r of (piRows ?? []) as unknown as { provider_id: string; moderation_status: string | null }[]) {
+        portfolioCount[r.provider_id] = (portfolioCount[r.provider_id] ?? 0) + 1
+        if (r.moderation_status === 'pending') {
+          portfolioPending[r.provider_id] = (portfolioPending[r.provider_id] ?? 0) + 1
+        }
+      }
     }
 
     // Shape copied from the select() three lines above, not assumed.
@@ -171,12 +236,17 @@ export default function UsersPage() {
         supabase.from('reports').select('*', { count: 'exact', head: true }).eq('reported_id', u.id),
         supabase.from('verification_payments').select('*', { count: 'exact', head: true }).eq('user_id', u.id),
       ])
+      const provId = map[u.id]
       return {
         ...u,
         session_count: sc ?? 0,
         report_count: rc ?? 0,
         fee_paid: (pc ?? 0) > 0,
         suspension: activeSuspension(suspByUser[u.id] ?? []),
+        model_photo_count: modelPhotoCount[u.id] ?? 0,
+        model_photo_unreviewed: modelPhotoUnreviewed[u.id] ?? 0,
+        portfolio_count: provId ? (portfolioCount[provId] ?? 0) : 0,
+        portfolio_pending: provId ? (portfolioPending[provId] ?? 0) : 0,
       }
     }))
     if (stale()) return
@@ -490,6 +560,7 @@ export default function UsersPage() {
                 <th className="text-left px-4 py-2">Location</th>
                 <th className="text-left px-4 py-2">On the site</th>
                 <th className="text-left px-4 py-2">Age</th>
+                <th className="text-left px-4 py-2">Photos</th>
                 <th className="text-left px-4 py-2">Verified</th>
                 <th className="text-left px-4 py-2">Fee</th>
                 <th className="text-left px-4 py-2">Subscription</th>
@@ -554,6 +625,111 @@ export default function UsersPage() {
                   </td>
                   <td className="px-4 py-2 text-[#3D2E2E]/60" title={u.date_of_birth ? new Date(u.date_of_birth).toLocaleDateString('en-GB') : 'No date of birth on record'}>
                     {ageFrom(u.date_of_birth) ?? <span className="text-[#3D2E2E]/30">—</span>}
+                  </td>
+                  {/* ── PHOTOS ───────────────────────────────────────────
+                      ⚠⚠ THREE SOURCES, SHOWN SEPARATELY, BECAUSE THEY ARE
+                      MODERATED THREE DIFFERENT WAYS. A single "7 photos" would
+                      hide the only thing this column is for:
+
+                        Avatar  users.profile_pic_url, reviewed by a person and
+                                recorded in profile_pic_reviewed_at. 13 of 13
+                                are reviewed (23 Nov 2026).
+                        Shop    portfolio_items.moderation_status, a real
+                                pending/approved state machine.
+                        Model   model_photos — NO reviewed_at, NO
+                                moderation_status, NO admin surface anywhere.
+                                14 rows across 3 users, none of them ever
+                                looked at, because there is nowhere to look.
+
+                      ⚠️ A DOT MEANS SOMETHING IS WAITING, and only the two
+                      sources that HAVE a review state can earn one. Model
+                      photos get no dot — not because they are fine, but
+                      because nothing records whether they are, and a dot that
+                      never clears teaches people to ignore dots.
+
+                      ⚠⚠ LINKED ONLY WHERE A LINK ACTUALLY LANDS ON THE PHOTO.
+                      The moderation page is four PENDING QUEUES, not a
+                      gallery: Images filters moderation_status = 'pending'
+                      and Profile pictures filters profile_pic_reviewed_at is
+                      null, and its tabs are local state with no URL
+                      parameter. So a link to /moderation for an already
+                      reviewed photo lands on a list that does not contain it.
+                      Measured: the single portfolio item is APPROVED, on an
+                      UNPUBLISHED shop, so it is in neither the queue nor the
+                      public site.
+
+                      Avatar therefore links to the stored image itself —
+                      profile-pics is a public bucket, so the URL opens full
+                      size and always works. Shop links to the queue ONLY
+                      while something of theirs is pending. Model photos link
+                      nowhere and say so, which is the honest rendering of a
+                      gap rather than a dead link dressed as a feature. */}
+                  <td className="px-4 py-2 whitespace-nowrap text-xs">
+                    {u.profile_pic_url
+                      || (u.model_photo_count ?? 0) > 0
+                      || (u.portfolio_count ?? 0) > 0 ? (
+                      <span className="flex items-center gap-2">
+                        {u.profile_pic_url && (
+                          <a
+                            href={u.profile_pic_url}
+                            target="_blank"
+                            rel="noreferrer"
+                            title={u.profile_pic_reviewed_at
+                              ? `Profile picture — looked at ${new Date(u.profile_pic_reviewed_at).toLocaleDateString('en-GB')}`
+                              : 'Profile picture — NOT yet looked at. It is in the Profile pictures queue on Moderation.'}
+                            className="underline decoration-dotted"
+                          >
+                            Avatar{!u.profile_pic_reviewed_at && <span className="ml-0.5 text-amber-600">●</span>}
+                          </a>
+                        )}
+
+                        {(u.portfolio_count ?? 0) > 0 && (
+                          (u.portfolio_pending ?? 0) > 0 ? (
+                            <Link
+                              href="/moderation"
+                              title={`${(u.portfolio_pending ?? 0)} of ${(u.portfolio_count ?? 0)} shop photo(s) waiting in the Images queue`}
+                              className="underline decoration-dotted"
+                            >
+                              Shop {(u.portfolio_count ?? 0)}
+                              <span className="ml-0.5 text-amber-600">●</span>
+                            </Link>
+                          ) : (
+                            <span title={`${(u.portfolio_count ?? 0)} shop photo(s), all reviewed. Reviewed items are not in the Images queue, and there is no per-shop gallery in the console.`}>
+                              Shop {(u.portfolio_count ?? 0)}
+                            </span>
+                          )
+                        )}
+
+                        {/* ⚠️ THIS CELL WAS PLAIN TEXT WITH A TOOLTIP SAYING
+                            THERE WAS NOWHERE TO GO. There is now: 0115 adds
+                            reviewed_at and the Model photos queue lands on
+                            it, so this behaves like Shop above — a dot and a
+                            link while something of theirs is waiting, plain
+                            text once it has all been looked at.
+
+                            ⚠️ THE DOT COUNTS UNREVIEWED, NOT TOTAL. A member
+                            whose photos have all been checked should look
+                            settled, not permanently flagged. */}
+                        {(u.model_photo_count ?? 0) > 0 && (
+                          (u.model_photo_unreviewed ?? 0) > 0 ? (
+                            <Link
+                              href="/moderation"
+                              title={`${(u.model_photo_unreviewed ?? 0)} of ${(u.model_photo_count ?? 0)} model photo(s) not yet looked at — they are in the Model photos queue on Moderation.`}
+                              className="underline decoration-dotted"
+                            >
+                              Model {(u.model_photo_count ?? 0)}
+                              <span className="ml-0.5 text-amber-600">●</span>
+                            </Link>
+                          ) : (
+                            <span title={`${(u.model_photo_count ?? 0)} model photo(s), all looked at. Reviewed photos leave the queue, and there is no per-member gallery in the console.`}>
+                              Model {(u.model_photo_count ?? 0)}
+                            </span>
+                          )
+                        )}
+                      </span>
+                    ) : (
+                      <span className="text-[#3D2E2E]/30">None</span>
+                    )}
                   </td>
                   <td className="px-4 py-2">{badge(u.is_verified, 'Verified', 'No')}</td>
                   <td className="px-4 py-2">{(u.role === 'provider' || u.role === 'both') ? feeStatus(u) : <span className="text-[#3D2E2E]/30">—</span>}</td>

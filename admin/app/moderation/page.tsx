@@ -87,13 +87,14 @@ interface StatusPost {
   hoursLeft: number
 }
 
-type Kind = 'images' | 'text' | 'status' | 'avatars'
+type Kind = 'images' | 'text' | 'status' | 'avatars' | 'models'
 
 const KINDS: { key: Kind; label: string }[] = [
   { key: 'images',  label: 'Images' },
   { key: 'status',  label: 'Status posts' },
   { key: 'text',    label: 'Flagged text' },
   { key: 'avatars', label: 'Profile pictures' },
+  { key: 'models',  label: 'Model photos' },
 ]
 
 /**
@@ -116,6 +117,30 @@ interface UnseenAvatar {
   role: string | null
   profile_pic_url: string
   profile_pic_updated_at: string | null
+}
+
+/**
+ * One model photo nobody has looked at. Migration 0115.
+ *
+ * ⚠⚠ `signedUrl` IS NOT A COLUMN. model-photos is a PRIVATE bucket, so
+ * unlike every other queue on this page there is no URL in the row to render
+ * — photo_url holds a bare object path (`<user_id>/<timestamp>…`, checked:
+ * 14 of 14, none a legacy full URL). It has to be signed before it can be
+ * shown, and it is signed with the ADMIN'S OWN SESSION: the storage policy
+ * `model photos read` already allows `is_admin()`, so no service key is
+ * involved and nothing here widens access.
+ *
+ * Null when signing failed, which the renderer must distinguish from a photo
+ * that is simply missing.
+ */
+interface UnseenModelPhoto {
+  id: string
+  user_id: string
+  photo_url: string
+  caption: string | null
+  created_at: string | null
+  signedUrl: string | null
+  member: { first_name: string | null; email: string | null } | null
 }
 
 /** "4 days" / "6 hours" / "just now" — the bit that stops this drifting. */
@@ -151,6 +176,8 @@ export default function ModerationPage() {
   const [hidden, setHidden]             = useState<Set<Kind>>(new Set())
   const [posts, setPosts]               = useState<StatusPost[]>([])
   const [avatars, setAvatars]           = useState<UnseenAvatar[]>([])
+  const [modelPhotos, setModelPhotos]   = useState<UnseenModelPhoto[]>([])
+  const [modelPhotosError, setModelPhotosError] = useState<string | null>(null)
   // Same lesson as the other two: an empty list and a failed query must not
   // look the same on a page whose whole job is to say what is outstanding.
   const [avatarsError, setAvatarsError] = useState<string | null>(null)
@@ -208,6 +235,78 @@ export default function ModerationPage() {
     // Drop it locally rather than refetching: the row is gone from this query's
     // criteria and a reload would flash the whole list.
     setAvatars(prev => prev.filter(a => a.id !== user.id))
+  }
+
+  const { loading: modelPhotosLoading, reload: reloadModelPhotos } = useLoader('', async stale => {
+    setModelPhotosError(null)
+    const { data, error } = await supabase
+      .from('model_photos')
+      .select('id, user_id, photo_url, caption, created_at')
+      .is('reviewed_at', null)
+      // Oldest first, same as every other queue here. The partial index
+      // added by 0115 is on exactly this: (created_at) where reviewed_at is
+      // null.
+      .order('created_at', { ascending: true, nullsFirst: true })
+      .limit(200)
+    if (stale()) return
+    if (error) { setModelPhotosError(error.message); return }
+
+    const rows = (data ?? []) as unknown as {
+      id: string; user_id: string; photo_url: string
+      caption: string | null; created_at: string | null
+    }[]
+    if (rows.length === 0) { setModelPhotos([]); return }
+
+    // ⚠️ ONE NAME LOOKUP FOR THE WHOLE LIST, not one per photo. Three users
+    // hold the current fourteen rows, so a per-row join would be eleven
+    // wasted round trips.
+    const userIds = [...new Set(rows.map(r => r.user_id))]
+    const { data: memberRows } = await supabase
+      .from('users')
+      .select('id, first_name, email')
+      .in('id', userIds)
+    const members: Record<string, { first_name: string | null; email: string | null }> = {}
+    for (const m of (memberRows ?? []) as unknown as
+         { id: string; first_name: string | null; email: string | null }[]) {
+      members[m.id] = { first_name: m.first_name, email: m.email }
+    }
+
+    // ⚠⚠ SIGNED IN ONE CALL, NOT N. createSignedUrls takes the whole batch.
+    // An hour is long enough to work through a queue and short enough that a
+    // URL pasted somewhere stops working.
+    const paths = rows.map(r => r.photo_url)
+    const { data: signed, error: signErr } = await supabase
+      .storage.from('model-photos').createSignedUrls(paths, 3600)
+    if (stale()) return
+    if (signErr) {
+      // ⚠️ A FAILURE TO SIGN IS NOT AN EMPTY QUEUE. Rendering nothing here
+      // would say "every model photo has been looked at", which is the exact
+      // false all-clear this page exists to avoid.
+      setModelPhotosError(`Could not sign the photo URLs: ${signErr.message}`)
+      return
+    }
+    const urlByPath: Record<string, string | null> = {}
+    for (const s of (signed ?? []) as unknown as
+         { path: string | null; signedUrl: string | null }[]) {
+      if (s.path) urlByPath[s.path] = s.signedUrl ?? null
+    }
+
+    setModelPhotos(rows.map(r => ({
+      ...r,
+      signedUrl: urlByPath[r.photo_url] ?? null,
+      member: members[r.user_id] ?? null,
+    })))
+  })
+
+  async function markModelPhotoSeen(photo: UnseenModelPhoto) {
+    const { error } = await supabase.rpc('admin_mark_model_photo_seen', { p_photo_id: photo.id })
+    if (error) {
+      alert(`Couldn't mark that as seen.\n\n${humanError(error.message)}\n\nNothing has changed.`)
+      return
+    }
+    // Dropped locally rather than refetched — the row has left this query's
+    // criteria, and a reload would re-sign every remaining URL for nothing.
+    setModelPhotos(prev => prev.filter(p => p.id !== photo.id))
   }
 
   const { loading: flaggedLoading, reload: reloadFlagged } = useLoader('', async stale => {
@@ -535,10 +634,13 @@ export default function ModerationPage() {
 
   const counts: Record<Kind, number> = {
     images: items.length, text: flagged.length, status: posts.length,
-    avatars: avatars.length,
+    avatars: avatars.length, models: modelPhotos.length,
   }
-  const anyLoading   = loading || flaggedLoading || postsLoading || avatarsLoading
-  const totalWaiting = counts.images + counts.text + counts.status + counts.avatars
+  const anyLoading   = loading || flaggedLoading || postsLoading || avatarsLoading || modelPhotosLoading
+  // ⚠️ THE NEW KIND IS IN THE TOTAL. That number is the one thing on this
+  // page that always answers "is anything waiting", and a queue missing from
+  // it would be a backlog the heading denies.
+  const totalWaiting = counts.images + counts.text + counts.status + counts.avatars + counts.models
   const hiddenCount  = [...hidden].reduce((n, k) => n + counts[k], 0)
   const show = (k: Kind) => !hidden.has(k)
   const toggle = (k: Kind) => setHidden(prev => {
@@ -807,6 +909,111 @@ export default function ModerationPage() {
                   Full size
                 </a>
                 <button onClick={() => markAvatarSeen(a)}
+                  className="text-xs px-3 py-1.5 rounded-lg text-white font-medium whitespace-nowrap"
+                  style={{ backgroundColor: '#8C4A58' }}>
+                  Looked at it
+                </button>
+              </div>
+            )
+          })}
+          </div>
+        </section>
+      )}
+
+      {show('models') && (
+        <section className="mb-8">
+          <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-[#3D2E2E]/50">
+            Model photos ({modelPhotos.length})
+            {modelPhotos.length > 0 && modelPhotos[0].created_at && (
+              <span className="ml-2 font-medium normal-case tracking-normal text-[#3D2E2E]/40">
+                oldest waiting {waitedFor(modelPhotos[0].created_at).text}
+              </span>
+            )}
+          </h2>
+          {/* ⚠⚠ THE BACKLOG ON DAY ONE IS REAL, NOT A BUG. Nothing recorded a
+              review of these before migration 0115, so every existing row
+              arrives unreviewed — fourteen of them when the column was added.
+              Backfilling reviewed_at would have cleared the list by asserting
+              a review that never happened.
+
+              ⚠️ AND THESE ARE ALREADY LIVE, like the avatars above. A model's
+              photos are shown to a stylist she has booked with; nothing here
+              holds them back. This queue records that somebody looked. */}
+          <p className="mb-3 text-xs text-[#3D2E2E]/50">
+            A model&rsquo;s own photos of herself, shown to stylists she has booked with. These
+            are <strong>already live</strong> — this is what nobody has looked at yet, oldest
+            first. Marking one seen records who looked and when; it does not approve or hide
+            anything.
+          </p>
+          <div className="space-y-2">
+          {modelPhotosLoading ? (
+            <div className="text-[#3D2E2E]/40 text-sm">Loading…</div>
+          ) : modelPhotosError ? (
+            <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-700">
+              <p className="font-medium mb-1">Couldn&rsquo;t load model photos</p>
+              <p className="mb-3 text-red-600">{modelPhotosError}</p>
+              <button onClick={reloadModelPhotos} className="px-3 py-1.5 rounded-lg bg-red-600 text-white text-xs font-medium">Retry</button>
+            </div>
+          ) : modelPhotos.length === 0 ? (
+            <div className="text-[#3D2E2E]/40 text-sm">
+              Every model photo has been looked at.
+            </div>
+          ) : modelPhotos.map(p => {
+            const waited = waitedFor(p.created_at)
+            return (
+              <div key={p.id} className="flex items-center gap-3 bg-white rounded-xl border border-black/5 shadow-sm p-3">
+                {/* ⚠️ A SIGNED URL CAN BE NULL, and that is NOT the same as no
+                    photo. The bucket is private, so a signing failure on one
+                    row leaves a real photo unviewable — saying so beats a
+                    broken image icon, which reads as a deleted file.
+
+                    eslint-disable for the same reason the two queues above
+                    carry one: Supabase storage hosts these and next/image
+                    would need every bucket host in next.config. */}
+                {p.signedUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={p.signedUrl} alt="" className="w-14 h-14 rounded-lg object-cover bg-gray-100" />
+                ) : (
+                  <span
+                    title="The signed URL could not be created for this object. The row exists; the file may not."
+                    className="w-14 h-14 rounded-lg bg-gray-100 grid place-items-center text-[10px] text-[#3D2E2E]/40 text-center leading-tight"
+                  >
+                    no
+                    <br />
+                    preview
+                  </span>
+                )}
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-[#3D2E2E] truncate">
+                    {p.member?.first_name || 'No first name'}
+                  </p>
+                  <p className="text-xs text-[#3D2E2E]/40 truncate">
+                    {p.member?.email ?? 'no email'} · id {p.user_id.slice(0, 8)}
+                  </p>
+                  {/* Her own words about the photo. Shown because it is part of
+                      what a stylist sees, so it is part of what is being
+                      checked — and because text is where the banned-word
+                      problems live. */}
+                  {p.caption && (
+                    <p className="mt-0.5 text-xs text-[#3D2E2E]/60 truncate" title={p.caption}>
+                      &ldquo;{p.caption}&rdquo;
+                    </p>
+                  )}
+                </div>
+                <span className={`text-xs px-2 py-1 rounded-full font-medium whitespace-nowrap ${
+                  waited.days >= 7 ? 'bg-red-100 text-red-700'
+                  : waited.days >= 3 ? 'bg-amber-100 text-amber-800'
+                  : 'bg-gray-100 text-gray-600'
+                }`}>
+                  waiting {waited.text}
+                </span>
+                {p.signedUrl && (
+                  <a href={p.signedUrl} target="_blank" rel="noreferrer"
+                    className="text-xs px-3 py-1.5 rounded-lg bg-gray-100 text-gray-600 font-medium whitespace-nowrap">
+                    Full size
+                  </a>
+                )}
+                <button onClick={() => markModelPhotoSeen(p)}
                   className="text-xs px-3 py-1.5 rounded-lg text-white font-medium whitespace-nowrap"
                   style={{ backgroundColor: '#8C4A58' }}>
                   Looked at it

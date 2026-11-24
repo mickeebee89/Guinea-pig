@@ -1,8 +1,8 @@
 // GENERATED FILE — DO NOT EDIT BY HAND.
 //
 // Written by scripts/gen-supabase-types.mjs from the live database.
-// TYPES_STAMP: 0114
-// TYPES_FILES_AT_GEN: 0114
+// TYPES_STAMP: 0115
+// TYPES_FILES_AT_GEN: 0115
 //
 // TYPES_STAMP is the migration the DATABASE was at when these were generated,
 // stated by whoever ran it (--applied). TYPES_FILES_AT_GEN is the newest
@@ -815,6 +815,8 @@ export type Database = {
           created_at: string
           id: string
           photo_url: string
+          reviewed_at: string | null
+          reviewed_by: string | null
           user_id: string
         }
         Insert: {
@@ -823,6 +825,8 @@ export type Database = {
           created_at?: string
           id?: string
           photo_url: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
           user_id: string
         }
         Update: {
@@ -831,6 +835,8 @@ export type Database = {
           created_at?: string
           id?: string
           photo_url?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
           user_id?: string
         }
         Relationships: [
@@ -839,6 +845,20 @@ export type Database = {
             columns: ["category_id"]
             isOneToOne: false
             referencedRelation: "model_photo_categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "model_photos_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "public_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "model_photos_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "users"
             referencedColumns: ["id"]
           },
           {
@@ -2582,6 +2602,10 @@ export type Database = {
         Returns: Json
       }
       admin_mark_activity_seen: { Args: { p_key: string }; Returns: undefined }
+      admin_mark_model_photo_seen: {
+        Args: { p_photo_id: string }
+        Returns: undefined
+      }
       admin_mark_profile_pic_seen: {
         Args: { p_user_id: string }
         Returns: Json
