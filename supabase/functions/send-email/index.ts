@@ -64,7 +64,23 @@ function respond(body: unknown, status = 200) {
 // email adds a subject, a sentence of context, and where to go. Nothing here
 // invents a second voice for the same event.
 
-interface Copy { subject: string; heading: string; cta: string; path: string }
+/**
+ * `why` is the footer's FIRST SENTENCE, and only a type that can do better
+ * than the default sets it.
+ *
+ * ⚠️ THE DEFAULT EXPLAINS NOTHING, which is why this field exists. "You're
+ * getting this because you have a Cavy account" is true of every email Cavy
+ * sends, so for a notice about a stylist a member has never heard of it gives
+ * no reason at all — an unfamiliar name in the subject and no explanation
+ * underneath is the shape of mail people mark as spam.
+ *
+ * It replaces that one sentence. The Settings link, the unsubscribe link and
+ * the "we'll still email you about your account itself" line are untouched.
+ */
+interface Copy { subject: string; heading: string; cta: string; path: string; why?: string }
+
+/** Said when a type has nothing more specific to offer. */
+const WHY_DEFAULT = 'You’re getting this because you have a Cavy account.'
 
 function copyFor(
   type: string,
@@ -142,12 +158,31 @@ function copyFor(
     // treatments and prices, so the one thing she needs next is the shop. The
     // fallback exists for the 82 rows written before 0116, whose `data` may
     // predate the provider_id (item 143); 0116 always writes it.
+    // ⚠️⚠️ AND IT IS THE ONE TYPE THAT SAYS WHY IT ARRIVED. See `why` on Copy:
+    // the default footer sentence explains nothing, and this is the notice
+    // where that matters most, because the shop's name may mean nothing to her.
+    //
+    // ⚠️ THE REASON IS READ FROM THE ROW, NOT ASSUMED. The audience is a UNION
+    // of favourites and distance, so a fixed "this stylist works near you"
+    // would be FALSE for a favouriter who lives further away — measured on
+    // 26 Nov 2026: Taty Tint's one favouriter is outside the ten miles and is
+    // in the audience anyway. 0117 writes `data.reason` per recipient.
+    //
+    // ⚠️ THE FALLBACK IS THE DEFAULT SENTENCE, NOT A GUESS. The 82 rows written
+    // before 0116 carry no reason, and nor does anything written between 0117
+    // and this deploy. Guessing 'nearby' for those would tell somebody we
+    // matched her on a location we never checked. No reason means no claim.
     case 'new_availability': {
       const id = data?.provider_id
       const subject = title.trim() !== '' ? title.trim() : 'New times on Cavy'
+      const reason = data?.reason
+      const why =
+        reason === 'favourite' ? 'You’re getting this because you saved this stylist on Cavy.'
+        : reason === 'nearby'  ? 'You’re getting this because this stylist works near you.'
+        : undefined
       return typeof id === 'string' && id.length > 0
-        ? { subject, heading: subject, cta: 'See their times', path: `/stylist/${id}` }
-        : { subject, heading: subject, cta: 'Find a stylist', path: '/browse' }
+        ? { subject, heading: subject, cta: 'See their times', path: `/stylist/${id}`, why }
+        : { subject, heading: subject, cta: 'Find a stylist', path: '/browse', why }
     }
 
     // ⚠️ THE ONLY CASE THAT READS `data`, AND THE WHOLE REASON `data` IS NOW
@@ -321,15 +356,24 @@ const FOOTER_TEXT =
   'Registered address: 75 Aintree Road, Chatham, Kent, ME5 8PQ.'
 
 /** The whole email. One template, so every message looks the same. */
-function render(o: { heading: string; body: string; cta: string; url: string; unsubscribeUrl: string }) {
+function render(o: {
+  heading: string; body: string; cta: string; url: string; unsubscribeUrl: string
+  why?: string
+}) {
   // unsubscribeUrl is the PAGE (a click is a GET, and it asks first). The
   // one-click POST address is built from the same token in send().
+
+  // ⚠️ ONE SENTENCE, BOTH PARTS, FROM ONE VALUE. The plain-text and HTML
+  // footers are written out separately below, which is exactly how a line gets
+  // changed in one and not the other — so the sentence itself is a variable
+  // and neither copy holds the words.
+  const why = o.why ?? WHY_DEFAULT
 
   const paragraphs = o.body.split('\n').map(s => s.trim()).filter(Boolean)
   const text = [
     o.heading, '', ...paragraphs, '',
     `${o.cta}: ${o.url}`, '',
-    'You’re getting this because you have a Cavy account. Turn these emails off in Settings, or unsubscribe here:',
+    `${why} Turn these emails off in Settings, or unsubscribe here:`,
     o.unsubscribeUrl, '',
     FOOTER_TEXT,
   ].join('\n')
@@ -345,7 +389,7 @@ function render(o: { heading: string; body: string; cta: string; url: string; un
       </p>
     </div>
     <p style="margin:20px 0 8px;font-size:12px;line-height:1.5;color:#6E6675">
-      You’re getting this because you have a Cavy account. You can turn these emails off in
+      ${escapeHtml(why)} You can turn these emails off in
       <a href="${SITE}/settings" style="color:#C23A71">Settings</a>, or
       <a href="${o.unsubscribeUrl}" style="color:#C23A71">unsubscribe</a>.
       We’ll still email you about your account itself, such as resetting your password.
@@ -387,7 +431,10 @@ const unsubscribeLinks = (token: string) => {
 }
 
 async function send(o: {
-  to: string; subject: string; heading: string; body: string; cta: string; path: string; unsubscribeToken: string
+  to: string; subject: string; heading: string; body: string; cta: string; path: string
+  unsubscribeToken: string
+  /** The footer's first sentence. Omitted falls back to WHY_DEFAULT. */
+  why?: string
 }): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
   const key = Deno.env.get('RESEND_API_KEY')
   if (!key) return { ok: false, error: 'RESEND_API_KEY not configured' }
@@ -604,6 +651,9 @@ Deno.serve(async (req) => {
       const sent = await send({
         to: who.email, subject: c.subject, heading: c.heading,
         body: (note.body ?? note.title ?? '') + quoted, cta: c.cta, path: c.path,
+        // undefined for every type but new_availability, which is the default
+        // sentence. See `why` on Copy.
+        why: c.why,
         unsubscribeToken: await unsubscribeTokenFor(note.user_id),
       })
       await log({
