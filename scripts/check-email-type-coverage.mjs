@@ -72,7 +72,15 @@ const stripTs = s =>
  * of here AND out of the three lists is the thing axis 4 refuses to let pass.
  */
 const NOT_EMAILED = {
-  new_availability:  '0047: a mass send — one per favouriter — so an email each is an interruption per stylist post',
+  // ⚠️ new_availability LEFT THIS TABLE ON 26 Nov 2026 (0116), and the entry is
+  // kept as a comment rather than deleted so the reversal is legible in older
+  // notes. It read: "0047: a mass send — one per favouriter — so an email each
+  // is an interruption per stylist post". Both halves were overturned by
+  // measurement, not by preference: 0116 debounces to one per stylist per model
+  // per London day in the database, and the audience is bounded — 21 models at
+  // the largest shop, 60 if all nine published shops posted on one day. The
+  // type's audience before 0116 was THREE favourite rows, which is why the
+  // volume argument had never been tested.
   session_completed: '0047: "not worth an interruption". ⚠ CONTESTED — its body carries the ONLY review prompt in the product, and reviews feed providers.rating/review_count, the fields a stylist builds credibility with. A prompt that reaches only people who open the app is a weak version of the thing it is for. Item 159, UNDECIDED',
 }
 

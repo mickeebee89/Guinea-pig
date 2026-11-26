@@ -332,11 +332,16 @@ export function demoRpc(name: string, args: Row, store: DemoStore, user: DemoUse
      * and fixtures seed whatever notifications a walkthrough needs.
      *
      * ⚠️ ITS ABSENCE WAS NOT A VISIBLE BREAK, and the distinction is worth
-     * keeping: `notifyFavourites` wraps the call in try/catch and only
-     * console.warns, so saving a day in demo mode logged a warning rather than
-     * failing. Mocked anyway — a warning on every save is noise that hides the
-     * next real one.
+     * keeping: the caller wraps it in try/catch and only console.warns, so
+     * saving a day in demo mode logged a warning rather than failing. Mocked
+     * anyway — a warning on every save is noise that hides the next real one.
+     *
+     * ⚠️ BOTH NAMES, BECAUSE BOTH EXIST (0116). `notify_models_of_availability`
+     * is what site/ calls now; `notify_favourites_of_availability` survives in
+     * the database as a delegate for the dormant mobile caller, and is kept
+     * here so a walkthrough of an older build does not throw on the default.
      */
+    case 'notify_models_of_availability':
     case 'notify_favourites_of_availability':
       return null
 

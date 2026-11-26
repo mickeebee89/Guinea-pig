@@ -41,10 +41,16 @@ export function EmailNotificationsSection({ enabled }: { enabled: boolean }) {
           <span className="block text-sm font-bold text-warm-dark">
             Email me when something happens on Cavy
           </span>
+          {/* ⚠️ THE LIST HAS TO MATCH WHAT IS ACTUALLY EMAILED. New times
+              joined it in 0116; leaving the sentence alone would have made the
+              one switch people use to decide understate what it controls. The
+              frequency line now covers both throttles, because they are
+              different: one an hour per conversation, one a day per stylist. */}
           <span className="mt-0.5 block text-sm text-muted">
             Applications, bookings accepted, declined or cancelled, new messages, your ID check,
-            a failed payment, and anything official from us. At most one email an hour per
-            conversation.
+            a failed payment, new times from stylists near you or ones you’ve saved, and
+            anything official from us. At most one email an hour per conversation, and one a
+            day per stylist about new times.
           </span>
         </span>
       </label>

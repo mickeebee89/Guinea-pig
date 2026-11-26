@@ -116,7 +116,8 @@ export interface StylistProfile {
    * The viewer has saved this stylist.
    *
    * Not a bookmark: the row is what subscribes her to `new_availability`
-   * notifications (notifyFavourites). See favourite-actions.ts.
+   * notifications and now the matching email (notifyModelsOfAvailability,
+   * 0116). See favourite-actions.ts.
    */
   isFavourite: boolean
   /**

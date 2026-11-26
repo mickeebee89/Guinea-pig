@@ -8,16 +8,23 @@ import { createSupabaseServerClient, requireUser } from '@/lib/supabase-server'
  *
  * ── WHAT THIS IS NOT: A BOOKMARK ──────────────────────────────────────────
  * A row in `favourites` is what subscribes a model to `new_availability`
- * notifications: `notifyFavourites` (lib/availability.ts) writes one to every
- * favouriter each time this stylist posts times. So the control has a
+ * notifications: `notifyModelsOfAvailability` (lib/availability.ts) writes one
+ * to every favouriter each time this stylist posts times. So the control has a
  * consequence beyond her own list, and the copy has to say so — mobile's heart
  * says nothing at all, and a model tapping it has no way to know she has just
  * asked to be told things.
  *
- * ⚠️ IT IS NOT AN EMAIL, AND MUST NEVER BE DESCRIBED AS ONE. 0047 lists
- * new_availability among the types that are deliberately NOT emailed, because
- * it is a mass send — one per favouriter, every time. It reaches her
- * notifications list, and a push on the app.
+ * ⚠️⚠️ IT IS AN EMAIL AS OF 0116 (26 Nov 2026). This docblock said the exact
+ * opposite — "IT IS NOT AN EMAIL, AND MUST NEVER BE DESCRIBED AS ONE", citing
+ * 0047's mass-send reasoning — and that reasoning was overturned by
+ * measurement: the notice is debounced to one per stylist per model per London
+ * day in the database, and the largest audience in the product is 21 models.
+ * The old sentence is recorded here rather than deleted because the copy under
+ * the button was written to obey it.
+ *
+ * ⚠️ AND IT IS NO LONGER THE ONLY SUBSCRIPTION. 0116 reaches every model within
+ * ten miles of a published shop, favourite or not, so a favourite now means
+ * "this one, wherever I am" rather than "the only stylist I will hear about".
  *
  * ── AND THE STYLIST CAN SEE IT ────────────────────────────────────────────
  * `fav_select` permits the favourited stylist to read her own favouriters

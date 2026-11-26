@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createSupabaseServerClient, requireUser } from '@/lib/supabase-server'
-import { saveDay, notifyFavourites, bookedSlotKeys, type Slot } from '@/lib/availability'
+import { saveDay, notifyModelsOfAvailability, bookedSlotKeys, type Slot } from '@/lib/availability'
 import { MAX_PRICE_PENCE, formatPrice } from '@/lib/price'
 
 type Result =
@@ -76,11 +76,16 @@ export async function saveAvailability(date: string, slots: Slot[]): Promise<Res
   }
 
   try {
-    const { skippedBooked } = await saveDay(supabase, provider.id, date, slots)
-    // Only shout about it when slots were actually added.
-    if (slots.length > 0) {
-      await notifyFavourites(supabase)
-    }
+    const { skippedBooked, savedIds } = await saveDay(supabase, provider.id, date, slots)
+    // ⚠️ THE IDS, NOT A BOOLEAN. The notice lists the slots it is about, so
+    // "something was saved" is no longer enough to send one.
+    //
+    // ⚠️ AND THIS STILL FIRES ON AN EDIT, NOT ONLY ON AN ADDITION — a price
+    // change on an existing day comes through here too. That is deliberately
+    // NOT corrected in this file: the once-per-stylist-per-model-per-day
+    // constraint in 0116 is what stops three edits becoming three notices, and
+    // it stops them for every caller rather than for this one.
+    await notifyModelsOfAvailability(supabase, savedIds)
     revalidatePath('/availability')
     revalidatePath('/dashboard')
     return { ok: true, skippedBooked }

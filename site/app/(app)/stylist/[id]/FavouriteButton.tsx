@@ -9,12 +9,19 @@ import { attempt } from '@/lib/attempt'
  *
  * ── IT SAYS WHAT IT DOES, WHICH THE APP'S HEART DOES NOT ──────────────────
  * Saving subscribes her to `new_availability` notifications: every time this
- * stylist posts times, `notifyFavourites` writes her one. Mobile's heart
- * carries no such sentence, so a model tapping it cannot know she has asked to
- * be told things. This one says it in the line underneath, once saved.
+ * stylist posts times, `notifyModelsOfAvailability` writes her one. Mobile's
+ * heart carries no such sentence, so a model tapping it cannot know she has
+ * asked to be told things. This one says it in the line underneath, once saved.
  *
- * ⚠️ Not "we'll email you". 0047 excludes new_availability from email on
- * purpose — it is a mass send, one per favouriter, every time.
+ * ⚠️ IT IS AN EMAIL NOW, AND THE COPY HAD TO CHANGE WITH IT. This docblock said
+ * the opposite until 26 Nov 2026 — "Not 'we'll email you'. 0047 excludes
+ * new_availability from email on purpose" — and 0116 overturned that. The line
+ * under the button says "and email you" because she can turn that off in
+ * Settings, and a promise she cannot find the switch for is the worse failure.
+ *
+ * ⚠️ SAVING IS NOT THE ONLY WAY SHE HEARS ANY MORE. 0116 also notifies models
+ * within ten miles of a published shop, so this control is now "tell me about
+ * THIS one wherever I am" rather than the only subscription there is.
  *
  * ── AND IT FAILS OUT LOUD ─────────────────────────────────────────────────
  * Mobile's toggle sets the state and fires the write with no error handling at
@@ -70,7 +77,8 @@ export function FavouriteButton({
 
       {saved && !error && (
         <p className="max-w-[16rem] text-right text-xs text-muted">
-          We’ll tell you when {stylistName} posts new times.
+          We’ll tell you and email you when {stylistName} posts new times. You can turn
+          the emails off in Settings.
         </p>
       )}
       {error && <p role="alert" className="max-w-[16rem] text-right text-xs text-danger">{error}</p>}

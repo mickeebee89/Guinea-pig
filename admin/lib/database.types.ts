@@ -1,8 +1,8 @@
 // GENERATED FILE — DO NOT EDIT BY HAND.
 //
 // Written by scripts/gen-supabase-types.mjs from the live database.
-// TYPES_STAMP: 0115
-// TYPES_FILES_AT_GEN: 0115
+// TYPES_STAMP: 0116
+// TYPES_FILES_AT_GEN: 0116
 //
 // TYPES_STAMP is the migration the DATABASE was at when these were generated,
 // stated by whoever ran it (--applied). TYPES_FILES_AT_GEN is the newest
@@ -201,6 +201,66 @@ export type Database = {
           },
           {
             foreignKeyName: "availability_provider_id_fkey"
+            columns: ["provider_id"]
+            isOneToOne: false
+            referencedRelation: "public_stylists"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      availability_notices: {
+        Row: {
+          created_at: string
+          id: string
+          model_user_id: string
+          notified_on: string | null
+          provider_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          model_user_id: string
+          notified_on?: string | null
+          provider_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          model_user_id?: string
+          notified_on?: string | null
+          provider_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "availability_notices_model_user_id_fkey"
+            columns: ["model_user_id"]
+            isOneToOne: false
+            referencedRelation: "public_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "availability_notices_model_user_id_fkey"
+            columns: ["model_user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "availability_notices_provider_id_fkey"
+            columns: ["provider_id"]
+            isOneToOne: false
+            referencedRelation: "providers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "availability_notices_provider_id_fkey"
+            columns: ["provider_id"]
+            isOneToOne: false
+            referencedRelation: "public_stylist_reviews"
+            referencedColumns: ["provider_id"]
+          },
+          {
+            foreignKeyName: "availability_notices_provider_id_fkey"
             columns: ["provider_id"]
             isOneToOne: false
             referencedRelation: "public_stylists"
@@ -2632,6 +2692,14 @@ export type Database = {
         }
         Returns: undefined
       }
+      availability_notice_audience: {
+        Args: { p_provider_id: string }
+        Returns: {
+          by_distance: boolean
+          by_favourite: boolean
+          model_user_id: string
+        }[]
+      }
       banned_word_hit: { Args: { p_text: string }; Returns: string }
       banned_words_check: { Args: { p_text: string }; Returns: string }
       bio_is_publishable: { Args: { p_bio: string }; Returns: boolean }
@@ -2813,6 +2881,10 @@ export type Database = {
         Returns: undefined
       }
       notify_favourites_of_availability: { Args: never; Returns: number }
+      notify_models_of_availability: {
+        Args: { p_slot_ids?: string[] }
+        Returns: number
+      }
       notify_session_applied: {
         Args: { p_session_id: string }
         Returns: undefined

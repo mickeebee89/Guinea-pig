@@ -119,6 +119,37 @@ function copyFor(
       return { subject: 'Someone saved your shop', heading: 'Someone saved your shop',
         cta: 'Post your times', path: '/availability' }
 
+    // ⚠️⚠️ THIS TYPE WAS DELIBERATELY NOT EMAILED UNTIL 0116, and 0047's reason
+    // was good: "a mass send — one per favouriter — so an email each is an
+    // interruption per stylist post". Two things changed, both measured:
+    //
+    //   * 0116 debounces it to ONE PER STYLIST PER MODEL PER DAY, in the
+    //     database (availability_notices_one_per_day). "Per post" was the
+    //     interruption 0047 feared and it no longer exists.
+    //   * The audience is now bounded and known: the largest in the product is
+    //     21 models, and 60 notices if all nine published shops posted on the
+    //     same day. "A mass send" meant unbounded.
+    //
+    // ⚠️ THE SUBJECT IS THE ROW'S TITLE, WHICH CARRIES THE SHOP NAME — the
+    // same exception stylist_invite makes to the "names stay out of subjects"
+    // rule, for the same reason, and with the same mitigation: 0116 writes
+    // 'New times at ' || name, so OUR words come first and a crafted shop name
+    // cannot make the line read as a message from us. notifications is closed
+    // to direct INSERT (notifications_insert_denied, 0101), so only that one
+    // function writes this title.
+    //
+    // ⚠️ THE CTA GOES WHERE THE SLOTS ARE. The body lists the actual times,
+    // treatments and prices, so the one thing she needs next is the shop. The
+    // fallback exists for the 82 rows written before 0116, whose `data` may
+    // predate the provider_id (item 143); 0116 always writes it.
+    case 'new_availability': {
+      const id = data?.provider_id
+      const subject = title.trim() !== '' ? title.trim() : 'New times on Cavy'
+      return typeof id === 'string' && id.length > 0
+        ? { subject, heading: subject, cta: 'See their times', path: `/stylist/${id}` }
+        : { subject, heading: subject, cta: 'Find a stylist', path: '/browse' }
+    }
+
     // ⚠️ THE ONLY CASE THAT READS `data`, AND THE WHOLE REASON `data` IS NOW
     // SELECTED. An invite carries no session, so until 2 Oct 2026 it fell
     // through to the default below and sent her to **/dashboard** — told that

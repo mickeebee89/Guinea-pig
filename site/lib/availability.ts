@@ -156,13 +156,23 @@ async function bookedAmong(
 /**
  * Save one date. Returns how many booked slots were kept back, so the caller
  * can tell the user rather than letting them think a deletion happened.
+ *
+ * ⚠️ AND THE IDS IT WROTE, which `notifyModelsOfAvailability` needs. The notice
+ * lists the actual slots — treatment, day and time, price — so it has to be
+ * told which rows this save was about. Without them it would describe every
+ * open slot the stylist has, which is a different and larger claim.
+ *
+ * ⚠️ THEY ARE NOT A PERMISSION. The RPC filters on `provider_id = <the
+ * caller's>` before it looks at this list, so an id belonging to somebody else
+ * narrows the set to nothing rather than reaching into their diary.
  */
 export async function saveDay(
   supabase: SupabaseClient,
   providerId: string,
   date: string,
   slots: Slot[],
-): Promise<{ skippedBooked: number }> {
+): Promise<{ skippedBooked: number; savedIds: string[] }> {
+  const savedIds: string[] = []
   // 1. Upsert first — a failure here leaves the existing day untouched.
   if (slots.length > 0) {
     const rows = slots.map(s => ({
@@ -186,7 +196,7 @@ export async function saveDay(
       // to decide whether to render. One representation of "nothing said".
       note: s.note?.trim() ? s.note.trim() : null,
     }))
-    const { error } = await supabase
+    const { data: saved, error } = await supabase
       .from('availability')
       // FOUR columns. The unique index on availability is
       // (provider_id, date, start_time, end_time) -- see booking-guard.sql:30 and
@@ -194,7 +204,14 @@ export async function saveDay(
       // fails every save with 42P10, "no unique or exclusion constraint matching
       // the ON CONFLICT specification".
       .upsert(rows, { onConflict: 'provider_id,date,start_time,end_time', ignoreDuplicates: false })
+      // ⚠️ `.select()` TURNS THE UPSERT INTO A RETURNING, which is the only way
+      // to learn the ids of rows PostgREST may have either inserted or updated.
+      // It covers both, deliberately: a slot whose price or treatment changed is
+      // as worth announcing as a brand-new one, and distinguishing them would
+      // mean trusting `dbId`'s absence in a payload the client controls.
+      .select('id')
     if (error) throw error
+    for (const r of (saved ?? []) as { id: string }[]) savedIds.push(r.id)
   }
 
   // 2. Then remove only what is genuinely gone, compared against the DATABASE
@@ -211,7 +228,8 @@ export async function saveDay(
     .filter(r => !desired.has(`${hhmm(r.start_time)}|${hhmm(r.end_time)}`))
     .map(r => r.id)
 
-  return deleteSlots(supabase, toRemove)
+  const { skippedBooked } = await deleteSlots(supabase, toRemove)
+  return { skippedBooked, savedIds }
 }
 
 /** Delete slots, skipping any a session references. */
@@ -230,28 +248,45 @@ export async function deleteSlots(
 }
 
 /**
- * Tell models who favourited this stylist that new slots are up.
+ * Tell models that new slots are up: the ones who favourited this stylist, and
+ * every model within ten miles of a published shop. 0116.
  *
- * ⚠️ ONE LINE, BECAUSE THE RULE LIVES IN THE DATABASE NOW (0075). The payload —
- * type, title, body and `data.provider_id` — was written twice, once per
+ * ⚠️ ONE LINE, BECAUSE THE RULE LIVES IN THE DATABASE (0075, 0116). The payload
+ * — type, title, body and `data.provider_id` — was written twice, once per
  * client, and the web copy omitted provider_id for 54 days while its own body
  * said "tap to view their shop" (item 143). Mobile's copy carried the field
  * under a comment reading "don't drop it". A comment is the weakest mechanism
  * available; a single call site is the one that has worked every time here.
  *
- * The RPC TAKES NO ARGUMENT: it derives the stylist from auth.uid(), so it
- * cannot be aimed at anyone else's favourites. Nothing to pass means nothing to
- * pass wrongly.
+ * The RPC STILL TAKES NO PROVIDER: it derives the stylist from auth.uid(), so
+ * it cannot be aimed at anyone else's audience. The only argument is the list
+ * of slots this save wrote, and that can only NARROW a set already filtered to
+ * the caller's own rows.
+ *
+ * ⚠️ THE ONCE-A-DAY RULE IS NOT HERE AND MUST NOT COME HERE. It is a UNIQUE
+ * constraint on `availability_notices` claimed by an ON CONFLICT inside the
+ * function, so three edits to one day produce one notice whoever is calling and
+ * however fast. A count in this file would be a rule only this file obeys.
  *
  * Still best-effort, and still called once per save action rather than per
  * statement — a trigger would have sent several notices where one was sent,
  * because applySlotsToDates saves a date at a time.
+ *
+ * ⚠️ `notify_favourites_of_availability` still exists as a delegate, for the
+ * dormant mobile caller only. Nothing live should call it: the name says
+ * favourites and the behaviour no longer stops there.
  */
-export async function notifyFavourites(supabase: SupabaseClient): Promise<void> {
+export async function notifyModelsOfAvailability(
+  supabase: SupabaseClient,
+  slotIds: string[],
+): Promise<void> {
+  // Nothing written means nothing to describe. The RPC would return 0 anyway;
+  // not making the call is one fewer round trip on a save that changed nothing.
+  if (slotIds.length === 0) return
   try {
-    const { error } = await supabase.rpc('notify_favourites_of_availability')
-    if (error) console.warn('[availability] favourite notify failed', error.message)
+    const { error } = await supabase.rpc('notify_models_of_availability', { p_slot_ids: slotIds })
+    if (error) console.warn('[availability] new-times notify failed', error.message)
   } catch (e) {
-    console.warn('[availability] notifying favourites failed', e)
+    console.warn('[availability] notifying models failed', e)
   }
 }
