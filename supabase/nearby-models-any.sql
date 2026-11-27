@@ -26,65 +26,51 @@
 -- Distance is computed ONCE in a lateral join instead of three times, so the
 -- select, the filter and the sort can never disagree.
 --
--- CREATE OR REPLACE can't change a function's return type, so drop first.
--- Dropping also drops privileges — hence the re-grant at the end.
---
 -- NOTE: LEFT JOIN on model_attributes stays deliberate. An inner join would drop
 -- every model who hasn't filled in their attributes (most of them at launch).
 -- ============================================================================
 
-drop function if exists public.nearby_models(double precision, double precision, double precision);
-
--- MIGRATION-OWNS: nearby_models 0018 — ✅ BROUGHT FORWARD 25 Sep 2026.
+-- ============================================================================
+-- ⚠️⚠️ RETIRED 27 Nov 2026. THIS FILE IS NO LONGER RE-RUNNABLE, AND EVERYTHING
+-- EXECUTABLE HAS BEEN REMOVED FROM IT. What is above is kept as the record of
+-- why "Any" was made to mean everyone; what was below it would now do harm.
 --
--- The body below was read from `pg_get_functiondef` on 25 Sep 2026, not
--- written from this file's own history. Migration 0018 owns this function;
--- this copy exists so the rest of the file can still be re-run, and it is
--- only safe to re-run because the two now agree.
+-- It held a `drop function` + `create or replace` + `grant` for
+-- public.nearby_models. Pasting that into the SQL editor today would undo TWO
+-- separate hardenings in one go:
 --
--- ⚠️ IF YOU CHANGE THIS FUNCTION, CHANGE IT IN A MIGRATION AND THEN BRING
--- THIS COPY FORWARD AGAIN. scripts/check-handrun-drift.mjs will keep
--- telling you the overlap exists; it cannot tell you the copy is current.
--- Audit item 123.
-CREATE OR REPLACE FUNCTION public.nearby_models(p_lat double precision DEFAULT NULL::double precision, p_lng double precision DEFAULT NULL::double precision, p_radius_mi double precision DEFAULT NULL::double precision)
- RETURNS TABLE(id uuid, first_name text, last_initial text, profile_pic_url text, is_verified boolean, distance_mi double precision, hair_colour text, hair_type text, hair_length text, skin_tone text)
- LANGUAGE sql
- STABLE SECURITY DEFINER
- SET search_path TO 'public'
-AS $function$
-  select
-    u.id, u.first_name, u.last_initial, u.profile_pic_url, u.is_verified,
-    dist.d as distance_mi,
-    ma.hair_colour, ma.hair_type, ma.hair_length, ma.skin_tone
-  from public.users u
-  left join public.model_attributes ma on ma.user_id = u.id
-  cross join lateral (
-    select case
-      when p_lat is null or p_lng is null
-        or u.latitude is null or u.longitude is null
-      then null::double precision
-      else 3959 * acos(
-        greatest(-1.0, least(1.0,
-          cos(radians(p_lat)) * cos(radians(u.latitude)) *
-          cos(radians(u.longitude) - radians(p_lng)) +
-          sin(radians(p_lat)) * sin(radians(u.latitude))
-        ))
-      )
-    end as d
-  ) dist
-  where u.role = 'model'
-    and (
-      p_radius_mi is null
-      or (dist.d is not null and dist.d <= p_radius_mi)
-    )
-    -- NEW: never surface someone either party has blocked.
-    and not public.is_blocked_pair(auth.uid(), u.id)
-  order by dist.d asc nulls last, u.created_at desc nulls last, u.id
-  limit 200;
-$function$;
-
-grant execute on function public.nearby_models(double precision, double precision, double precision) to authenticated;
-
--- Verify (expect: a row count > 0 for BOTH, and the second >= the first):
+--   1. ⚠️ IT WOULD REVERT 0118. The copy carried `where u.role = 'model'`.
+--      0118 widened that to `role in ('model','both')` across six functions,
+--      because site/lib/roles.ts has always counted a 'both' account as a
+--      model. Re-running this would have put the narrow predicate back in the
+--      one function the mistake was originally written in — and 0119's guard,
+--      public.narrow_model_role_predicates(), would then report it.
+--
+--   2. ⚠️⚠️ IT WOULD UNDO 0097. The file ended with
+--      `grant execute on function public.nearby_models(...) to authenticated`.
+--      The live ACL is `postgres=X/postgres | service_role=X/postgres` — read
+--      27 Nov 2026 — so authenticated CANNOT execute this function, which is
+--      what 0097 settled. Re-running this file would hand that privilege back
+--      to every signed-in member, silently, as a side effect of a file whose
+--      stated purpose is a radius rule.
+--
+--   It would also drop `pg_temp` from the function's search_path, which the
+--   copy predates.
+--
+-- ⚠️ AND THE FILE'S OWN HEADER USED TO CLAIM IT WAS SAFE. The marker read
+-- "MIGRATION-OWNS: nearby_models 0018 — ✅ BROUGHT FORWARD 25 Sep 2026", and
+-- said the copy "is only safe to re-run because the two now agree". They
+-- stopped agreeing the moment 0118 ran. A brought-forward copy is only true on
+-- the day it is brought forward, and nothing re-checks it — which is the
+-- argument for holding no copy at all rather than for refreshing this one.
+--
+-- WHERE THE DEFINITION LIVES NOW: migration 0118. Read it with
+-- `select pg_get_functiondef('public.nearby_models(float8,float8,float8)'::regprocedure)`
+-- if you need the live text; do not reconstruct it from here.
+--
+-- ⚠️ THE VERIFY QUERIES BELOW ARE KEPT AS A RECORD AND WILL NOT RUN FOR A
+-- MEMBER. authenticated has no EXECUTE, so only postgres or service_role can
+-- call them at all:
 --   select count(*) from public.nearby_models(51.2787, 0.5217, 10);   -- Maidstone, 10 mi
 --   select count(*) from public.nearby_models(null, null, null);      -- no location, Any
+-- ============================================================================
