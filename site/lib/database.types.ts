@@ -1,8 +1,8 @@
 // GENERATED FILE — DO NOT EDIT BY HAND.
 //
 // Written by scripts/gen-supabase-types.mjs from the live database.
-// TYPES_STAMP: 0117
-// TYPES_FILES_AT_GEN: 0117
+// TYPES_STAMP: 0119
+// TYPES_FILES_AT_GEN: 0119
 //
 // TYPES_STAMP is the migration the DATABASE was at when these were generated,
 // stated by whoever ran it (--applied). TYPES_FILES_AT_GEN is the newest
@@ -2859,6 +2859,12 @@ export type Database = {
           banned: boolean
           message: string
           suspended_until: string
+        }[]
+      }
+      narrow_model_role_predicates: {
+        Args: never
+        Returns: {
+          fn: string
         }[]
       }
       nearby_models: {

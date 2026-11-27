@@ -148,9 +148,12 @@ function copyFor(
     //
     // ⚠️ THE SUBJECT IS THE ROW'S TITLE, WHICH CARRIES THE SHOP NAME — the
     // same exception stylist_invite makes to the "names stay out of subjects"
-    // rule, for the same reason, and with the same mitigation: 0116 writes
-    // 'New times at ' || name, so OUR words come first and a crafted shop name
-    // cannot make the line read as a message from us. notifications is closed
+    // rule, for the same reason, and with the same mitigation: the title is
+    // 'New times with ' || name ("at" until 0118 — four of nine shops are a
+    // person's name and "at Nadia" is wrong), so OUR words come first and a
+    // crafted shop name cannot make the line read as a message from us.
+    // ⚠️ THIS IS A COMMENT ONLY AND NEEDS NO DEPLOY: the title is built in the
+    // database and this function uses the row's. notifications is closed
     // to direct INSERT (notifications_insert_denied, 0101), so only that one
     // function writes this title.
     //
