@@ -28,7 +28,17 @@ interface Row {
   role: string
   latitude: number | null
   longitude: number | null
-  /** Local authority. Present on every plottable row — measured, 25 of 25. */
+  /**
+   * Local authority. The ONS lookup has filled it for every plottable row so
+   * far, but nothing guarantees it — `townOf` prefers the built-up area, falls
+   * back to this, and then to "town unknown", so nothing here depends on
+   * either column being set.
+   *
+   * ⚠️ This said "measured, 25 of 25" until 7 Nov 2026. It had been true and
+   * was then simply a stale number: there were 40 plottable rows by then. The
+   * claim worth making is that the code copes either way, which does not go
+   * out of date. See the note above DOT_R.
+   */
   admin_district: string | null
   /** Built-up area. ONS holds none for many postcodes, so it falls through. */
   bua: string | null
@@ -91,10 +101,18 @@ const nameOf = (r: Row) =>
  * ⚠️ IT DID NOT WORK BECAUSE THE PIN RADIUS WAS NOT DERIVED FROM ANYTHING.
  * `GROUP_R` was a fixed 9 while the merge distance moved with `DOT_R`, so
  * shrinking the dot pulled the merge distance below the pin radius and the
- * pins began overlapping EACH OTHER. Rendered and looked at in inner London:
- * two badges legible, one cut in half behind its neighbour, two more almost
- * entirely hidden. A count that cannot be read is worse than no count, because
- * it still occupies the space where the people were.
+ * pins began overlapping EACH OTHER. That is a fact about the two constants
+ * and it did not depend on who had signed up.
+ *
+ * What it looked like on the day (6 Nov 2026, inner London, that evening's
+ * members): two badges legible, one cut in half behind its neighbour, two more
+ * almost entirely hidden. ⚠️ THAT SENTENCE IS EVIDENCE, NOT A STANDING CLAIM
+ * — it describes a design that no longer runs, against a population that has
+ * already changed. It is dated so it reads as the reason for a decision rather
+ * than as a description of anything current.
+ *
+ * A count that cannot be read is worse than no count, because it still
+ * occupies the space where the people were.
  *
  * ⚠️ AND THE COUNT WAS ALWAYS A SECOND CLAIM ON TOP OF THE DATA. A badge of
  * five said "five members under one mark at this scale" — a rendering fact
@@ -114,6 +132,28 @@ const nameOf = (r: Row) =>
  * neighbour makes the map say something false about where somebody lives, and
  * there is no way to tell a jittered dot from a real one. An unreadable pile
  * is honest. A readable lie is not.
+ *
+ * ── ⚠️⚠️ NO POPULATION COUNTS IN THIS FILE'S COMMENTS. 7 Nov 2026. ─────
+ * How many members there are, how many have a postcode, how many are inside
+ * the M25 — none of it is written down here any more, because all of it is
+ * wrong within days and a wrong number in a comment is read as a fact.
+ *
+ * This file had three. "The nine members inside the M25" was written when
+ * there were nine and was 20 by the time anybody looked. "Measured, 25 of 25"
+ * was 40 of 40. "Twenty-seven of the fifty-two real members" was 26 of 66 —
+ * and the 27 had been correct the previous evening, which is how fast this
+ * rots.
+ *
+ * ⚠️ EVERY ONE OF THOSE NUMBERS IS ALREADY ON THE SCREEN, computed from the
+ * rows in `view`: the panel above the map gives plotted, unplotted and the
+ * total, the tiles give models and stylists, and the sentence beside the
+ * legend gives the overlap. The comments say WHY the page is shaped this way
+ * and the page says WHAT is true today. Keep it that way.
+ *
+ * What may stay: numbers that describe the CODE rather than the members. The
+ * 379 px render width, 0.63 px per unit, `1 unit ≈ 1.11 km`, `2r`, the value
+ * `GROUP_R` used to hold. Those follow from the constants and the projection
+ * above, and change only when somebody edits them deliberately.
  */
 const DOT_R = 3
 
@@ -257,12 +297,17 @@ export default function MapPage() {
       {/* ──────────────────────────────────────────────────────────────────
           ⚠️⚠️ THE MEMBERS WHO ARE NOT ON THE MAP GO ABOVE THE MAP.
 
-          Twenty-seven of the fifty-two real members have no postcode, so the
-          picture below is slightly under half of them. A map is uniquely good
-          at reading as "this is everyone" — it has edges, and everything
-          inside the edges looks complete — and the only reliable fix is to
-          say the number before the picture is seen rather than in a footnote
-          under it.
+          A sizeable minority of real members have no postcode, so the picture
+          below is not everybody. A map is uniquely good at reading as "this is
+          everyone" — it has edges, and everything inside the edges looks
+          complete — and the only reliable fix is to say the number before the
+          picture is seen rather than in a footnote under it.
+
+          ⚠️ THE NUMBER IS BELOW, COMPUTED, NOT HERE. This read "Twenty-seven of
+          the fifty-two real members" until 7 Nov 2026, by which time it was 26
+          of 66 — and the 27 had been right the previous evening. The panel it
+          introduces has always rendered the live figures three lines down.
+          There was never a reason to write them here as well.
 
           It is a full-width panel rather than a tile for the same reason.
           ────────────────────────────────────────────────────────────────── */}
